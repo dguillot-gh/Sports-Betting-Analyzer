@@ -94,39 +94,128 @@ class NASCARSport(BaseSport):
         """Apply NASCAR-specific preprocessing and target creation."""
         df = df.copy()
 
+        # Normalize column names - handle case variations
+        df.columns = [c.strip() for c in df.columns]
+        col_lower = {c.lower(): c for c in df.columns}
+
         # Ensure expected columns exist; create if missing
-        # Map dataset 'fin' to standardized target 'finishing_position'
-        if 'fin' in df.columns and 'finishing_position' not in df.columns:
-            df['finishing_position'] = pd.to_numeric(df['fin'], errors='coerce')
+        # Map various finish position column names to standardized 'finishing_position'
+        if 'finishing_position' not in df.columns:
+            # Try different possible column names for finish position
+            finish_cols = ['fin', 'finish', 'finishing_position']
+            found = None
+            for fc in finish_cols:
+                if fc in df.columns:
+                    found = fc
+                    break
+                elif fc in col_lower:
+                    found = col_lower[fc]
+                    break
+            
+            if found:
+                df['finishing_position'] = pd.to_numeric(df[found], errors='coerce')
+            else:
+                # If none exists, we can't determine finishing position
+                raise ValueError(
+                    f"Missing required column: no finish position column found. "
+                    f"Looked for: {finish_cols}. Available columns: {list(df.columns)}"
+                )
 
         # Classification target: race win flag
         if 'race_win' not in df.columns:
-            df['race_win'] = (df['finishing_position'] == 1).astype(int)
+            # Check if 'Win' column exists (some series have this pre-calculated)
+            if 'Win' in df.columns or 'win' in col_lower:
+                win_col = 'Win' if 'Win' in df.columns else col_lower['win']
+                df['race_win'] = pd.to_numeric(df[win_col], errors='coerce').fillna(0).astype(int)
+            elif 'finishing_position' in df.columns:
+                df['race_win'] = (df['finishing_position'] == 1).astype(int)
+            else:
+                raise ValueError("Cannot create 'race_win' target without 'finishing_position' or 'Win' column")
 
         # Standardize season column expected by generic trainer
         if 'schedule_season' not in df.columns:
-            # Use 'year' column from dataset
-            if 'year' in df.columns:
-                df['schedule_season'] = pd.to_numeric(df['year'], errors='coerce')
+            # Try various season column names
+            season_cols = ['year', 'season', 'Year', 'Season']
+            found_season = None
+            for sc in season_cols:
+                if sc in df.columns:
+                    found_season = sc
+                    break
+            
+            if found_season:
+                df['schedule_season'] = pd.to_numeric(df[found_season], errors='coerce')
+                # Log how many valid seasons we got
+                valid_seasons = df['schedule_season'].notna().sum()
+                print(f"Created schedule_season from '{found_season}': {valid_seasons} valid values out of {len(df)} rows")
+                if valid_seasons == 0:
+                    print(f"WARNING: No valid season values found. Sample of '{found_season}' column: {df[found_season].head(10).tolist()}")
             else:
-                # Fallback: try to infer from race identifier if present
+                # Fallback: set to NA
+                print(f"WARNING: No season column found. Available columns: {list(df.columns)}")
                 df['schedule_season'] = pd.NA
 
-        # Coerce numerics
-        numeric_cols = [
-            'year', 'race_num', 'start', 'car_num', 'laps', 'laps_led',
-            'points', 'stage_1', 'stage_2', 'stage_3_or_duel', 'stage_points',
-            'finishing_position', 'schedule_season'
-        ]
-        for col in numeric_cols:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
+        # Coerce numerics - handle different column name variations
+        numeric_mapping = {
+            'year': ['year', 'Year', 'season', 'Season'],
+            'race_num': ['race_num', 'Race', 'race', 'race_number'],
+            'start': ['start', 'Start'],
+            'car_num': ['car_num', 'Car', 'car', 'car_number'],
+            'laps': ['laps', 'Laps'],
+            'laps_led': ['laps_led', 'Led', 'led'],
+            'points': ['points', 'Pts', 'pts'],
+            'stage_1': ['stage_1', 'S1', 's1'],
+            'stage_2': ['stage_2', 'S2', 's2'],
+            'stage_3_or_duel': ['stage_3_or_duel', 'S3', 's3'],
+            'stage_points': ['stage_points', 'Seg Points', 'seg_points'],
+        }
+        
+        # Map columns to standardized names
+        for std_name, variations in numeric_mapping.items():
+            if std_name not in df.columns:
+                for var in variations:
+                    if var in df.columns:
+                        df[std_name] = pd.to_numeric(df[var], errors='coerce')
+                        break
+        
+        # Always ensure these core columns are numeric
+        core_numeric = ['year', 'race_num', 'start', 'car_num', 'laps', 'laps_led',
+                       'points', 'stage_1', 'stage_2', 'stage_3_or_duel', 'stage_points',
+                       'finishing_position', 'schedule_season']
+        
+        # Add configured numeric features
+        features = self.get_feature_columns()
+        core_numeric.extend(features.get('numeric', []))
+        
+        # Remove duplicates
+        core_numeric = list(set(core_numeric))
 
-        # Fill simple categorical text fields with strings
-        for col in ['driver', 'track', 'track_type', 'manu', 'team_name', 'status']:
+        for col in core_numeric:
             if col in df.columns:
-                df[col] = df[col].astype(str).fillna('Unknown')
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
+        # Fill simple categorical text fields with strings - handle variations
+        categorical_mapping = {
+            'driver': ['driver', 'Driver'],
+            'track': ['track', 'Track'],
+            'track_type': ['track_type', 'Surface', 'surface'],
+            'manu': ['manu', 'Make', 'make', 'manufacturer'],
+            'team_name': ['team_name', 'Team', 'team'],
+            'status': ['status', 'Status'],
+        }
+        
+        for std_name, variations in categorical_mapping.items():
+            if std_name not in df.columns:
+                for var in variations:
+                    if var in df.columns:
+                        df[std_name] = df[var].astype(str).fillna('Unknown')
+                        break
+            else:
+                df[std_name] = df[std_name].astype(str).fillna('Unknown')
+
+        # Debug: print final columns
+        print(f"Final preprocessed columns: {sorted(df.columns.tolist())}")
+        print(f"Sample row: {df.iloc[0].to_dict()}")
+        
         return df
 
     def get_feature_columns(self) -> Dict[str, List[str]]:

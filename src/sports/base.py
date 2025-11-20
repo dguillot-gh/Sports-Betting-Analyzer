@@ -44,7 +44,13 @@ class BaseSport(ABC):
         if 'data' in self.config:
             for key, filename in self.config['data'].items():
                 if key.endswith('_file'):
-                    paths[key] = self.data_dir / 'raw' / filename
+                    # Check root data dir first (for enhanced files)
+                    p = self.data_dir / filename
+                    if p.exists():
+                        paths[key] = p
+                    else:
+                        # Fallback to raw dir (for original files)
+                        paths[key] = self.data_dir / 'raw' / filename
         return paths
 
     def validate_data_files(self) -> None:

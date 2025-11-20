@@ -113,23 +113,25 @@ def nascar_data(series: Optional[str] = None, limit: int = 1000,
                 track_type: Optional[str] = None):
     sport, _ = build_nascar(series)
     df = load_sport_data(sport)
-    
-    # Debug: print initial data info
-    print(f"Initial DataFrame shape: {df.shape}")
-    print(f"Initial DataFrame columns: {df.columns.tolist()}")
-    print(f"First few rows:\n{df.head()}")
-    
     if 'year' in df.columns:
         if year_min is not None:
             df = df[df['year'] >= year_min]
-            print(f"After year_min filter: {df.shape}")
         if year_max is not None:
             df = df[df['year'] <= year_max]
-            print(f"After year_max filter: {df.shape}")
     if track_type and 'track_type' in df.columns:
         df = df[df['track_type'] == track_type]
-        print(f"After track_type filter: {df.shape}")
-    
+    out = df.head(limit)
+    return {
+        'columns': out.columns.tolist(),
+        'rows': out.to_dict(orient='records'),
+        'total_rows': int(len(df))
+    }
+
+
+@app.post('/nascar/train/{task}')
+def nascar_train(task: str, series: Optional[str] = None, test_start: Optional[int] = None):
+    if task not in ('classification', 'regression'):
+        raise HTTPException(status_code=400, detail='task must be classification or regression')
 
     sport, label = build_nascar(series)
     out_dir = MODELS_DIR / 'nascar' / label
@@ -201,10 +203,6 @@ def nfl_data(limit: int = 1000, season_min: Optional[int] = None, season_max: Op
         if season_max is not None:
             df = df[df['schedule_season'] <= season_max]
     out = df.head(limit)
-    
-    # Fix NaN values before JSON serialization
-    out = out.replace({pd.NA: None, float('nan'): None})
-    
     return {'columns': out.columns.tolist(), 'rows': out.to_dict(orient='records'), 'total_rows': int(len(df))}
 
 

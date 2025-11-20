@@ -1,6 +1,6 @@
 name: nascar
 data:
-  results_file: nascar race data.csv
+  results_file: cup_enhanced.csv
 features:
   categorical:
     - driver
@@ -17,11 +17,33 @@ features:
     - car_num
     - laps
     - laps_led
-    - points
     - stage_1
     - stage_2
-    - stage_3_or_duel
-    - stage_points
+    # New Enhanced Features
+    - pole_position
+    - qualified_top5
+    - qualified_top10
+    - is_road_course
+    - is_superspeedway
+    - is_short_track
+    - career_races
+    - career_wins
+    - career_win_pct
+    - career_top5
+    - career_top10
+    - career_avg_finish
+    - races_at_track
+    - wins_at_track
+    - avg_finish_at_track
+    - best_finish_at_track
+    - avg_finish_last_3
+    - avg_finish_last_5
+    - avg_finish_last_10
+    - team_wins_this_season
+    - team_top5_this_season
+    - team_avg_finish_this_season
+    - manu_wins_this_season
+    - manu_win_pct_this_season
 targets:
   classification: race_win
   regression: finishing_position
