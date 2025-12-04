@@ -105,7 +105,45 @@ def generate_static_data():
     if 'Unknown' in active_teams: active_teams.remove('Unknown')
     if 'Unknown' in active_drivers: active_drivers.remove('Unknown')
 
+    # --- NEW: Driver Rosters by Series with Metadata ---
+    active_drivers_by_series = {}
+    
+    for series in active_df['series'].unique():
+        series_df = active_df[active_df['series'] == series]
+        driver_roster = []
+        
+        for driver_name in series_df['driver'].unique():
+            if driver_name == 'Unknown':
+                continue
+                
+            driver_df = series_df[series_df['driver'] == driver_name]
+            
+            # Get most recent team and make
+            latest_entry = driver_df.sort_values('year_num', ascending=False).iloc[0]
+            team = latest_entry['team_name'] if 'team_name' in latest_entry else 'Unknown'
+            make = latest_entry['Make'] if 'Make' in latest_entry else latest_entry.get('make', 'Unknown')
+            
+            # Count races by year
+            races_2024 = len(driver_df[driver_df['year_num'] == 2024])
+            races_2025 = len(driver_df[driver_df['year_num'] == 2025])
+            total_races = len(driver_df)
+            
+            driver_roster.append({
+                'name': str(driver_name),
+                'team': str(team),
+                'manufacturer': str(make),
+                'races_2024': int(races_2024),
+                'races_2025': int(races_2025),
+                'total_races': int(total_races)
+            })
+        
+        # Sort by total races descending (most active first)
+        driver_roster.sort(key=lambda x: x['total_races'], reverse=True)
+        active_drivers_by_series[series] = driver_roster
+
     print(f"Found {len(active_teams)} active teams and {len(active_drivers)} active drivers.")
+    for series, drivers in active_drivers_by_series.items():
+        print(f"  {series}: {len(drivers)} drivers")
 
     # --- Historical Data (2012+) ---
     # We keep data from 2012 onwards for the profile history
@@ -127,6 +165,7 @@ def generate_static_data():
         "active_teams": active_teams,
         "active_teams_by_series": active_teams_by_series,
         "active_drivers": active_drivers,
+        "active_drivers_by_series": active_drivers_by_series,
         "records": records
     }
     

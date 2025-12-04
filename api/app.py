@@ -104,26 +104,6 @@ def get_teams(sport: str, series: Optional[str] = None):
 
 @app.get('/{sport}/drivers')
 def get_drivers(sport: str, series: Optional[str] = None, team: Optional[str] = None):
-    """
-    Get list of drivers, optionally filtered by team.
-    """
-    try:
-        s, _ = SportFactory.get_sport(sport, series)
-        # Decode team if it contains special characters
-        if team:
-            from urllib.parse import unquote
-            team = unquote(team)
-            
-        return s.get_drivers(team_id=team)
-    except Exception as e:
-        logger.error(f"Error getting drivers for {sport}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ---------- Generic Sport Endpoints ----------
-
-@app.get('/{sport}/schema')
-def get_schema(sport: str, series: Optional[str] = None):
     try:
         s, _ = SportFactory.get_sport(sport, series)
         return {

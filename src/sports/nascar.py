@@ -35,6 +35,7 @@ class NASCARSport(BaseSport):
             self._active_teams = data.get('active_teams', [])
             self._active_teams_by_series = data.get('active_teams_by_series', {})
             self._active_drivers = data.get('active_drivers', [])
+            self._active_drivers_by_series = data.get('active_drivers_by_series', {})
             
             # Load records into DataFrame
             records = data.get('records', [])
@@ -42,11 +43,70 @@ class NASCARSport(BaseSport):
                 return pd.DataFrame()
                 
             df = pd.DataFrame(records)
-            return self.preprocess_data(df)
+            self.df = self.preprocess_data(df)
+            return self.df
             
         except Exception as e:
             print(f"Error loading static data: {e}")
             return self._load_raw_data()
+
+    def get_roster(self, series: str = "cup", min_races: int = 1, year: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Return driver roster for given series, filtered by minimum races and optionally year."""
+        # Ensure data is loaded
+        if not hasattr(self, '_active_drivers_by_series'):
+            self.load_data()
+        
+        # If year is not specified, use the pre-calculated active list (default behavior)
+        if year is None:
+            if not hasattr(self, '_active_drivers_by_series'):
+                return []
+            roster = self._active_drivers_by_series.get(series, [])
+            if min_races > 1:
+                roster = [d for d in roster if d['total_races'] >= min_races]
+            return roster
+
+        # If year IS specified, calculate from historical data
+        if not hasattr(self, 'df') or self.df is None:
+            return []
+
+        # Filter by year and series
+        # Note: series in df is lowercase
+        series_lower = series.lower()
+        year_df = self.df[(self.df['year_num'] == year) & (self.df['series'] == series_lower)]
+        
+        if year_df.empty:
+            return []
+
+        driver_roster = []
+        for driver_name in year_df['driver'].unique():
+            if driver_name == 'Unknown':
+                continue
+                
+            driver_df = year_df[year_df['driver'] == driver_name]
+            
+            # Get most recent team and make for that year
+            # Sort by race number if available, or just take the last one
+            # Assuming the data is somewhat ordered or we can just take the mode
+            latest_entry = driver_df.iloc[-1] # Simple approach
+            
+            team = latest_entry['team_name'] if 'team_name' in latest_entry else 'Unknown'
+            make = latest_entry['Make'] if 'Make' in latest_entry else latest_entry.get('make', 'Unknown')
+            
+            total_races = len(driver_df)
+            
+            if total_races >= min_races:
+                driver_roster.append({
+                    'name': str(driver_name),
+                    'team': str(team),
+                    'manufacturer': str(make),
+                    'races_2024': 0, # Not relevant for specific year view
+                    'races_2025': 0, # Not relevant for specific year view
+                    'total_races': int(total_races)
+                })
+        
+        # Sort by total races descending
+        driver_roster.sort(key=lambda x: x['total_races'], reverse=True)
+        return driver_roster
 
     def get_teams(self) -> List[str]:
         """Return a list of all available teams."""
