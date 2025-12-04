@@ -104,15 +104,12 @@ def get_teams(sport: str, series: Optional[str] = None):
 
 @app.get('/{sport}/drivers')
 def get_drivers(sport: str, series: Optional[str] = None, team: Optional[str] = None):
+    """Get list of drivers/players for a sport, optionally filtered by team."""
     try:
         s, _ = SportFactory.get_sport(sport, series)
-        return {
-            'features': s.get_feature_columns(),
-            'targets': s.get_target_columns(),
-            'series': series or 'default'
-        }
+        return s.get_drivers(team)
     except Exception as e:
-        logger.error(f"Error getting schema for {sport}: {e}")
+        logger.error(f"Error getting drivers for {sport}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

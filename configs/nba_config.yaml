@@ -1,24 +1,40 @@
 name: nba
 data:
-  scores_file: nba_scores.csv
-  teams_file: nba_teams.csv
+  player_per_game_file: "Player Per Game.csv"
+  team_summaries_file: "Team Summaries.csv"
+  team_abbrev_file: "Team Abbrev.csv"
+  player_totals_file: "Player Totals.csv"
+  advanced_file: "Advanced.csv"
 features:
   categorical:
-    - home_id
-    - away_id
-    - team_favorite_id
-    - arena
-  boolean:
-    - playoff_flag
-    - neutral_site
+    - player_name
+    - team_abbrev
+    - position
+  boolean: []
   numeric:
     - season
-    - game_number
-    - temperature
-    - spread_favorite
-    - over_under
+    - age
+    - games
+    - games_started
+    - mp_per_game
+    - fg_per_game
+    - fga_per_game
+    - fg_percent
+    - x3p_per_game
+    - x3pa_per_game
+    - x3p_percent
+    - ft_per_game
+    - fta_per_game
+    - ft_percent
+    - orb_per_game
+    - drb_per_game
+    - trb_per_game
+    - ast_per_game
+    - stl_per_game
+    - blk_per_game
+    - tov_per_game
+    - pf_per_game
+    - pts_per_game
 targets:
-  classification: home_team_win
-  regression: point_diff
-preprocessing:
-  team_mapping: team_name -> team_id
+  classification: is_all_star
+  regression: pts_per_game
