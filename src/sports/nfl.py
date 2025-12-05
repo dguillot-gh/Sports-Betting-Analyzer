@@ -107,6 +107,15 @@ class NFLSport(BaseSport):
         teams = set(df['team_home'].dropna().unique()) | set(df['team_away'].dropna().unique())
         return sorted(list(teams))
 
+    def get_teams(self) -> List[str]:
+        """Return list of all teams (same as entities for NFL)."""
+        return self.get_entities()
+
+    def get_drivers(self, team_id: str = None) -> List[str]:
+        """Return list of players. NFL doesn't track individual players in this dataset."""
+        # NFL betting data doesn't include individual player info
+        return []
+
     def get_entity_stats(self, entity_id: str) -> Dict[str, Any]:
         """Return comprehensive stats for a team."""
         df = self.load_data()

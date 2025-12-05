@@ -30,3 +30,4 @@ obj/
 # The following are commonly ignored:
 *.tmp
 *.bak
+/models/nfl/default/classification_model.joblib
