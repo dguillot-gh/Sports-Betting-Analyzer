@@ -9,7 +9,7 @@ import joblib
 
 from sports.base import BaseSport
 from data_loader import load_sport_data, chronological_split
-from model_pipeline import build_pipeline, evaluate_model
+from model_pipeline import build_pipeline, evaluate_model, sanitize_metrics
 
 
 def train_and_evaluate_sport(
@@ -84,6 +84,9 @@ def train_and_evaluate_sport(
     # Save hyperparameters used
     if hyperparameters:
         metrics['hyperparameters'] = hyperparameters
+
+    # Final sanitization of all metrics including those added above
+    metrics = sanitize_metrics(metrics)
 
     # Save model and metrics
     out_dir.mkdir(parents=True, exist_ok=True)

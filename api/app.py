@@ -184,8 +184,64 @@ def train_model(sport: str, task: str, payload: Optional[TrainPayload] = None, t
         
         hyperparams = payload.hyperparameters if payload else None
         
-        metrics, model_path, metrics_path = train_mod.train_and_evaluate_sport(
+        # Determine output directory
+        out_dir = MODELS_DIR / sport / label
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        # Check if sport has multiple classification targets (e.g., NASCAR)
+        target_config = s.get_target_columns()
+        classification_targets = target_config.get('classification', None)
+        
+        # If classification is a list and task is classification, train all targets
+        if task == 'classification' and isinstance(classification_targets, list):
+            results = {}
+            all_metrics = {}
+            
+            for target_name in classification_targets:
+                # Create target-specific output directory
+                target_out_dir = out_dir / target_name
+                target_out_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Temporarily override the target column for training
+                original_method = s.get_target_columns
+                s.get_target_columns = lambda t=target_name: {'classification': t, 'regression': target_config.get('regression', 'finishing_position')}
+                
+                try:
+                    model_path, metrics_path, metrics = train_mod.train_and_evaluate_sport(
+                        s, task, 
+                        out_dir=target_out_dir,
+                        test_start_season=test_start,
+                        train_start_season=train_start,
+                        hyperparameters=hyperparams
+                    )
+                    
+                    results[target_name] = {
+                        "model_path": str(model_path),
+                        "metrics_path": str(metrics_path)
+                    }
+                    all_metrics[target_name] = metrics
+                    
+                    # Clear cache
+                    key = (sport, label, f"{task}_{target_name}")
+                    with CACHE_LOCK:
+                        if key in MODEL_CACHE:
+                            del MODEL_CACHE[key]
+                            
+                finally:
+                    s.get_target_columns = original_method
+            
+            return {
+                "status": "success",
+                "multi_target": True,
+                "targets_trained": list(classification_targets),
+                "results": results,
+                "metrics": all_metrics
+            }
+        
+        # Standard single-target training
+        model_path, metrics_path, metrics = train_mod.train_and_evaluate_sport(
             s, task, 
+            out_dir=out_dir,
             test_start_season=test_start,
             train_start_season=train_start,
             hyperparameters=hyperparams
@@ -645,6 +701,19 @@ def get_data_status():
 @app.get('/data/datasets/{sport}')
 def get_datasets(sport: str):
     return DATASET_MANAGER.get_datasets(sport)
+
+@app.get('/data/datasets/{sport}/{dataset_id:path}/metadata')
+def get_dataset_metadata(sport: str, dataset_id: str):
+    """Get metadata for a specific dataset including Kaggle last update date."""
+    metadata = DATASET_MANAGER.get_kaggle_metadata(dataset_id)
+    update_check = DATASET_MANAGER.check_for_updates(sport, dataset_id)
+    
+    return {
+        "dataset_id": dataset_id,
+        "metadata": metadata,
+        "update_status": update_check
+    }
+
 
 class AddDatasetRequest(BaseModel):
     dataset_id: str

@@ -409,6 +409,15 @@ class NASCARSport(BaseSport):
              else:
                  df['race_win'] = 0 # Default
 
+        # Additional classification targets with better class balance
+        # top5_finish: ~12.6% positive rate - good for ML
+        # top10_finish: ~25% positive rate - best for ML
+        if 'finishing_position' in df.columns:
+            if 'top5_finish' not in df.columns:
+                df['top5_finish'] = (df['finishing_position'] <= 5).astype(int)
+            if 'top10_finish' not in df.columns:
+                df['top10_finish'] = (df['finishing_position'] <= 10).astype(int)
+
         # Standardize season column expected by generic trainer
         if 'schedule_season' not in df.columns:
             # Try various season column names

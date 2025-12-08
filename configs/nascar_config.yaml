@@ -45,6 +45,11 @@ features:
     - manu_wins_this_season
     - manu_win_pct_this_season
 targets:
-  classification: race_win
+  # NASCAR supports multiple classification targets (unique to this sport)
+  # Each will produce its own model when training
+  classification:
+    - race_win        # 2.6% positive - outright winner (hard)
+    - top5_finish     # 13% positive - top 5 bets (balanced)
+    - top10_finish    # 26% positive - top 10 bets (easier)
   regression: finishing_position
 preprocessing: {}

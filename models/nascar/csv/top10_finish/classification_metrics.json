@@ -1,0 +1,101 @@
+{
+  "task": "classification",
+  "accuracy": 0.8025857059848925,
+  "report": "              precision    recall  f1-score   support\n\n           0       0.84      0.91      0.87      5024\n           1       0.67      0.52      0.59      1860\n\n    accuracy                           0.80      6884\n   macro avg       0.76      0.71      0.73      6884\nweighted avg       0.79      0.80      0.79      6884\n",
+  "pred_prob_mean": 0.2455887347459793,
+  "roc_auc": 0.8654635705602356,
+  "confusion_matrix": {
+    "tn": 4558,
+    "fp": 466,
+    "fn": 893,
+    "tp": 967
+  },
+  "feature_importance": [
+    {
+      "feature": "cat__status_running",
+      "importance": 0.18514426052570343
+    },
+    {
+      "feature": "num__career_avg_finish",
+      "importance": 0.0605279840528965
+    },
+    {
+      "feature": "num__stage_2",
+      "importance": 0.017679313197731972
+    },
+    {
+      "feature": "num__laps_led",
+      "importance": 0.01753142476081848
+    },
+    {
+      "feature": "cat__track_type_Superspeedway",
+      "importance": 0.011723079718649387
+    },
+    {
+      "feature": "num__start",
+      "importance": 0.008490992709994316
+    },
+    {
+      "feature": "num__avg_finish_last_10",
+      "importance": 0.00831023883074522
+    },
+    {
+      "feature": "num__laps",
+      "importance": 0.007890410721302032
+    },
+    {
+      "feature": "cat__status_spindle",
+      "importance": 0.007238536141812801
+    },
+    {
+      "feature": "cat__driver_Josh Berry",
+      "importance": 0.007103840354830027
+    },
+    {
+      "feature": "cat__driver_Trevor Bayne",
+      "importance": 0.0066863372921943665
+    },
+    {
+      "feature": "cat__track_Talladega Superspeedway",
+      "importance": 0.0064564961940050125
+    },
+    {
+      "feature": "cat__track_World Wide Technology Raceway at Gateway",
+      "importance": 0.006360250990837812
+    },
+    {
+      "feature": "num__team_avg_finish_this_season",
+      "importance": 0.006049920804798603
+    },
+    {
+      "feature": "cat__team_name_Hendrick Motorsports",
+      "importance": 0.00596862006932497
+    },
+    {
+      "feature": "cat__team_name_RFK Racing",
+      "importance": 0.005902992095798254
+    },
+    {
+      "feature": "cat__driver_Ty Gibbs",
+      "importance": 0.005825932137668133
+    },
+    {
+      "feature": "cat__driver_Marcos Ambrose",
+      "importance": 0.005813610274344683
+    },
+    {
+      "feature": "cat__track_Phoenix Raceway",
+      "importance": 0.005484394263476133
+    },
+    {
+      "feature": "cat__team_name_Roush Fenway Racing",
+      "importance": 0.00531882606446743
+    }
+  ],
+  "test_start_season": 2024,
+  "hyperparameters": {
+    "model_type": "xgboost",
+    "n_estimators": 200,
+    "class_weight": "balanced"
+  }
+}

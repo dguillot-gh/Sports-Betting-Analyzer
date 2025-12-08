@@ -1,0 +1,101 @@
+{
+  "task": "classification",
+  "accuracy": 0.8757989540964556,
+  "report": "              precision    recall  f1-score   support\n\n           0       0.90      0.96      0.93      5954\n           1       0.57      0.31      0.41       930\n\n    accuracy                           0.88      6884\n   macro avg       0.74      0.64      0.67      6884\nweighted avg       0.86      0.88      0.86      6884\n",
+  "pred_prob_mean": 0.11297216266393661,
+  "roc_auc": 0.8725029888644483,
+  "confusion_matrix": {
+    "tn": 5738,
+    "fp": 216,
+    "fn": 639,
+    "tp": 291
+  },
+  "feature_importance": [
+    {
+      "feature": "cat__status_running",
+      "importance": 0.11437160521745682
+    },
+    {
+      "feature": "num__laps_led",
+      "importance": 0.0435769222676754
+    },
+    {
+      "feature": "num__career_avg_finish",
+      "importance": 0.031771041452884674
+    },
+    {
+      "feature": "cat__team_name_Michael Waltrip Racing",
+      "importance": 0.01667679473757744
+    },
+    {
+      "feature": "cat__team_name_Trackhouse Racing",
+      "importance": 0.014263550750911236
+    },
+    {
+      "feature": "num__stage_2",
+      "importance": 0.014009706676006317
+    },
+    {
+      "feature": "cat__team_name_Red Horse Racing",
+      "importance": 0.009742346592247486
+    },
+    {
+      "feature": "cat__driver_Sheldon Creed",
+      "importance": 0.009238101541996002
+    },
+    {
+      "feature": "cat__team_name_Team Penske",
+      "importance": 0.008297205902636051
+    },
+    {
+      "feature": "cat__track_type_Superspeedway",
+      "importance": 0.008206882514059544
+    },
+    {
+      "feature": "num__avg_finish_last_10",
+      "importance": 0.0077825505286455154
+    },
+    {
+      "feature": "cat__team_name_Roush Fenway Racing",
+      "importance": 0.007629849947988987
+    },
+    {
+      "feature": "cat__driver_Kyle Larson",
+      "importance": 0.00707177584990859
+    },
+    {
+      "feature": "num__start",
+      "importance": 0.007066467776894569
+    },
+    {
+      "feature": "cat__driver_Riley Herbst",
+      "importance": 0.006989034358412027
+    },
+    {
+      "feature": "cat__track_Daytona International Speedway",
+      "importance": 0.006788427475839853
+    },
+    {
+      "feature": "cat__driver_Ross Chastain",
+      "importance": 0.006784308236092329
+    },
+    {
+      "feature": "cat__driver_Kyle Busch",
+      "importance": 0.006739340256899595
+    },
+    {
+      "feature": "num__team_avg_finish_this_season",
+      "importance": 0.006581495050340891
+    },
+    {
+      "feature": "num__laps",
+      "importance": 0.006391611881554127
+    }
+  ],
+  "test_start_season": 2024,
+  "hyperparameters": {
+    "model_type": "xgboost",
+    "n_estimators": 200,
+    "class_weight": "balanced"
+  }
+}

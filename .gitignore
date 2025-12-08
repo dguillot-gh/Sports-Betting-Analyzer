@@ -1,34 +1,64 @@
 ﻿################################################################################
-# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+# This .gitignore file prevents large files from being tracked in Git
 ################################################################################
 
-/SportsBettingAnalyzer/nul
+# CSV Data files (DO NOT COMMIT - these are large)
+*.csv
+data/
+!data/*.json
+!data/**/*.json
 
-# Environment
+# ML Model files (IMPORTANT: Keep locally, do NOT commit)
+*.joblib
+*.pkl
+*.h5
+*.pt
+*.pth
+*.model
+*.bin
+models/
+
+# Python cache and pyc files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 env/
 venv/
 .venv/
-__pycache__/
-*.pyc
+.env
 
-# IDE
+# IDE and Editor
 .idea/
 .vscode/
+.vs/
 *.suo
 *.user
+*.sln.docstates
+.DS_Store
 
-# Build artifacts  
+# Build artifacts
 bin/
 obj/
 *.dll
 *.exe
+*.o
+*.a
 
-# Logs
+# Logs and temp files
 *.log
-
-# Note: JSON data files in data/ are NOT ignored - they should be committed
-# The following are commonly ignored:
 *.tmp
 *.bak
-/models/nfl/default/classification_model.joblib
-*.joblib
+*.swp
+*.swo
+
+# OS specific
+Thumbs.db
+.DS_Store
+nul
+
+# Node modules (if applicable)
+node_modules/
+
+# SportsBettingAnalyzer specific
+/SportsBettingAnalyzer/nul

@@ -1,0 +1,92 @@
+{
+  "task": "regression",
+  "mae": 5.42836332321167,
+  "r2": 0.5823642015457153,
+  "feature_importance": [
+    {
+      "feature": "cat__status_running",
+      "importance": 0.24358995258808136
+    },
+    {
+      "feature": "num__avg_finish_last_10",
+      "importance": 0.04158848524093628
+    },
+    {
+      "feature": "cat__status_spindle",
+      "importance": 0.030721496790647507
+    },
+    {
+      "feature": "num__career_avg_finish",
+      "importance": 0.026753202080726624
+    },
+    {
+      "feature": "num__laps_led",
+      "importance": 0.020638644695281982
+    },
+    {
+      "feature": "num__stage_2",
+      "importance": 0.01674213632941246
+    },
+    {
+      "feature": "num__team_avg_finish_this_season",
+      "importance": 0.012994246557354927
+    },
+    {
+      "feature": "cat__track_type_Superspeedway",
+      "importance": 0.012342046946287155
+    },
+    {
+      "feature": "num__start",
+      "importance": 0.011247938498854637
+    },
+    {
+      "feature": "cat__team_name_TriStar Motorsports",
+      "importance": 0.008517325855791569
+    },
+    {
+      "feature": "cat__team_name_Kenny Grimes Racing",
+      "importance": 0.006697734817862511
+    },
+    {
+      "feature": "cat__driver_Norm Benning",
+      "importance": 0.0059401546604931355
+    },
+    {
+      "feature": "num__laps",
+      "importance": 0.005832728464156389
+    },
+    {
+      "feature": "cat__track_Darlington Raceway",
+      "importance": 0.005446946248412132
+    },
+    {
+      "feature": "num__is_short_track",
+      "importance": 0.005139262415468693
+    },
+    {
+      "feature": "cat__driver_Ryan Reed",
+      "importance": 0.004954278003424406
+    },
+    {
+      "feature": "cat__driver_Timothy Peters",
+      "importance": 0.004669028799980879
+    },
+    {
+      "feature": "cat__track_Nashville Superspeedway",
+      "importance": 0.004409864544868469
+    },
+    {
+      "feature": "cat__track_type_Speedway",
+      "importance": 0.004160425625741482
+    },
+    {
+      "feature": "cat__track_type_Short Track",
+      "importance": 0.004008742049336433
+    }
+  ],
+  "test_start_season": 2024,
+  "hyperparameters": {
+    "model_type": "xgboost",
+    "n_estimators": 200
+  }
+}

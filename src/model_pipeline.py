@@ -56,29 +56,54 @@ def build_pipeline(sport_features: Dict[str, List[str]], task: str, hyperparamet
     max_depth = hyperparameters.get('max_depth')
     if max_depth is not None:
         max_depth = int(max_depth)
+        
+    model_type = hyperparameters.get('model_type', 'rf').lower()
     
     if task == 'classification':
         from sklearn.ensemble import RandomForestClassifier
-        class_weight = hyperparameters.get('class_weight', 'balanced')
-        # Handle 'None' string from UI
-        if class_weight == 'None':
-            class_weight = None
+        
+        if model_type == 'xgboost':
+            from xgboost import XGBClassifier
+            # Map sklearn params to XGBoost params if needed, or use kwargs
+            # XGBClassifier handles n_estimators and max_depth natively
+            model = XGBClassifier(
+                n_estimators=n_estimators,
+                max_depth=max_depth if max_depth else 6, # XGBoost default is 6
+                eval_metric='logloss',
+                random_state=42,
+                n_jobs=-1
+            )
+        else:
+            # Default to Random Forest
+            class_weight = hyperparameters.get('class_weight', 'balanced')
+            if class_weight == 'None':
+                class_weight = None
 
-        model = RandomForestClassifier(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            class_weight=class_weight,
-            random_state=42,
-            n_jobs=-1
-        )
+            model = RandomForestClassifier(
+                n_estimators=n_estimators,
+                max_depth=max_depth,
+                class_weight=class_weight,
+                random_state=42,
+                n_jobs=-1
+            )
         pipeline = Pipeline(steps=[('prep', preprocessor), ('clf', model)])
+        
     elif task == 'regression':
-        model = RandomForestRegressor(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            random_state=42,
-            n_jobs=-1
-        )
+        if model_type == 'xgboost':
+            from xgboost import XGBRegressor
+            model = XGBRegressor(
+                n_estimators=n_estimators,
+                max_depth=max_depth if max_depth else 6,
+                random_state=42,
+                n_jobs=-1
+            )
+        else:
+            model = RandomForestRegressor(
+                n_estimators=n_estimators,
+                max_depth=max_depth,
+                random_state=42,
+                n_jobs=-1
+            )
         pipeline = Pipeline(steps=[('prep', preprocessor), ('reg', model)])
     else:
         raise ValueError("task must be 'classification' or 'regression'")
@@ -179,4 +204,51 @@ def evaluate_model(pipeline: Pipeline, X_test: Any, y_test: Any, task: str) -> D
             print(f"Error extracting feature importance: {e}")
             pass
 
-    return metrics
+    return sanitize_metrics(metrics)
+
+
+def sanitize_metrics(metrics: Any) -> Any:
+    """
+    Recursively convert numpy types to python types and handle NaNs/Infs.
+    """
+    if isinstance(metrics, dict):
+        return {k: sanitize_metrics(v) for k, v in metrics.items()}
+    elif isinstance(metrics, list):
+        return [sanitize_metrics(v) for v in metrics]
+    else:
+        return _sanitize_value(metrics)
+
+
+def _sanitize_value(v: Any) -> Any:
+    # Handle numpy integer types (removed np.int_ for NumPy 2.0 compat)
+    if isinstance(v, (np.integer,)):
+        return int(v)
+    # Handle numpy floating types (removed np.float_ for NumPy 2.0 compat)
+    elif isinstance(v, (np.floating,)):
+        if np.isnan(v) or np.isinf(v):
+            return None
+        return float(v)
+    elif isinstance(v, float):
+        if np.isnan(v) or np.isinf(v):
+            return None
+        return v
+    elif isinstance(v, int):
+        # Native Python int - preserve as-is
+        return v
+    elif isinstance(v, (np.bool_, bool)):
+        return bool(v)
+    elif isinstance(v, np.ndarray):
+        return v.tolist()
+    
+    # Check for NaN/Inf in any other number types
+    try:
+        f = float(v)
+        if np.isnan(f) or np.isinf(f):
+            return None
+        return f
+    except (ValueError, TypeError):
+        # Fallback: if it's not a number, but valid object, return it.
+        # If it is something complex, str() it to be safe for JSON.
+        if isinstance(v, str):
+            return v
+        return str(v)

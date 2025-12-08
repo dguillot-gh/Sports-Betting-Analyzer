@@ -55,11 +55,17 @@ class NBASport(BaseSport):
         return self._team_name_map.get(full_name, full_name)
 
     def load_data(self) -> pd.DataFrame:
-        """Load NBA data from CSV files."""
+        """Load NBA data from CSV files. Tries game-level data first, falls back to player data."""
         if self.df is not None:
             return self.df
+        
+        # Try loading game-level data first (for game predictions)
+        game_df = self._load_game_data()
+        if game_df is not None and not game_df.empty:
+            self.df = game_df
+            return self.df
             
-        # Load player per game stats (main dataset)
+        # Fall back to player per game stats (original behavior)
         player_file = self.data_dir / 'raw' / 'Player Per Game.csv'
         if not player_file.exists():
             raise FileNotFoundError(f"NBA player data not found at {player_file}")
@@ -74,6 +80,108 @@ class NBASport(BaseSport):
         
         self.df = df
         return df
+    
+    def _load_game_data(self) -> Optional[pd.DataFrame]:
+        """Load game-level team statistics for game predictions."""
+        # Check for box_scores data from Kaggle - use project root
+        project_root = Path(__file__).resolve().parents[2]
+        box_scores_dir = project_root / 'data' / 'nba' / 'box_scores'
+        team_stats_file = box_scores_dir / 'TeamStatistics.csv'
+        
+        if not team_stats_file.exists():
+            print(f"DEBUG: NBA TeamStatistics not found at {team_stats_file}")
+            return None
+            
+        try:
+            print(f"DEBUG: Loading NBA TeamStatistics from {team_stats_file}")
+            ts = pd.read_csv(team_stats_file)
+            print(f"DEBUG: Loaded {len(ts)} team-game records")
+            
+            # Parse date and sort
+            ts['game_date'] = pd.to_datetime(ts['gameDateTimeEst'], errors='coerce')
+            ts = ts.sort_values(['teamName', 'game_date'])
+            
+            # Calculate rolling averages for key stats (last 5 games)
+            rolling_cols = ['teamScore', 'assists', 'reboundsTotal', 'turnovers', 
+                           'fieldGoalsPercentage', 'threePointersPercentage']
+            
+            for col in rolling_cols:
+                ts[f'{col}_rolling5'] = ts.groupby('teamName')[col].transform(
+                    lambda x: x.shift(1).rolling(5, min_periods=1).mean()
+                )
+            
+            # Add opponent score rolling average
+            ts['opponentScore_rolling5'] = ts.groupby('teamName')['opponentScore'].transform(
+                lambda x: x.shift(1).rolling(5, min_periods=1).mean()
+            )
+            
+            # Calculate rest days (important for NBA)
+            ts['days_rest'] = ts.groupby('teamName')['game_date'].diff().dt.days.fillna(7)
+            ts['back_to_back'] = (ts['days_rest'] <= 1).astype(int)
+            
+            # Now pivot to create matchup-level records
+            # Filter to home games only (each game appears twice, once per team)
+            home_games = ts[ts['home'] == True].copy()
+            away_games = ts[ts['home'] == False].copy()
+            
+            # Rename columns for merge
+            home_cols = {
+                'teamName': 'home_team', 'opponentTeamName': 'away_team',
+                'teamScore': 'home_score', 'opponentScore': 'away_score',
+                'teamScore_rolling5': 'home_ppg_rolling5',
+                'opponentScore_rolling5': 'home_opp_ppg_rolling5',
+                'assists_rolling5': 'home_assists_rolling5',
+                'reboundsTotal_rolling5': 'home_rebounds_rolling5',
+                'turnovers_rolling5': 'home_turnovers_rolling5',
+                'fieldGoalsPercentage_rolling5': 'home_fg_pct_rolling5',
+                'threePointersPercentage_rolling5': 'home_three_pct_rolling5',
+                'days_rest': 'home_days_rest',
+                'back_to_back': 'home_back_to_back',
+                'win': 'home_team_win',
+                'game_date': 'schedule_date',
+                'gameId': 'game_id'
+            }
+            
+            home_games = home_games.rename(columns=home_cols)
+            
+            # Get away team rolling stats
+            away_rolling = away_games[['gameId', 'teamName', 'teamScore_rolling5', 
+                                       'opponentScore_rolling5', 'assists_rolling5', 
+                                       'reboundsTotal_rolling5', 'turnovers_rolling5',
+                                       'fieldGoalsPercentage_rolling5', 'threePointersPercentage_rolling5',
+                                       'days_rest', 'back_to_back']].copy()
+            away_rolling.columns = ['game_id', 'away_team_check', 'away_ppg_rolling5', 
+                                    'away_opp_ppg_rolling5', 'away_assists_rolling5',
+                                    'away_rebounds_rolling5', 'away_turnovers_rolling5',
+                                    'away_fg_pct_rolling5', 'away_three_pct_rolling5',
+                                    'away_days_rest', 'away_back_to_back']
+            
+            # Merge away stats to home games
+            games = home_games.merge(away_rolling, on='game_id', how='left')
+            
+            # Extract season from date
+            games['schedule_season'] = games['schedule_date'].dt.year
+            # Adjust for NBA season spanning years (games before June are previous season)
+            games.loc[games['schedule_date'].dt.month < 6, 'schedule_season'] -= 1
+            
+            # Add differential features
+            games['ppg_diff_rolling5'] = games['home_ppg_rolling5'] - games['away_ppg_rolling5']
+            games['fg_pct_diff_rolling5'] = games['home_fg_pct_rolling5'] - games['away_fg_pct_rolling5']
+            
+            # Convert home_team_win to int
+            games['home_team_win'] = games['home_team_win'].astype(int)
+            games['point_diff'] = games['home_score'] - games['away_score']
+            
+            print(f"DEBUG: Created {len(games)} NBA game records with rolling features")
+            print(f"DEBUG: Non-null home_ppg_rolling5: {games['home_ppg_rolling5'].notna().sum()}")
+            
+            return games
+            
+        except Exception as e:
+            print(f"DEBUG: Error loading NBA game data: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
 
     def preprocess_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """Apply NBA-specific preprocessing."""
@@ -119,24 +227,55 @@ class NBASport(BaseSport):
 
     def get_feature_columns(self) -> Dict[str, List[str]]:
         """Return NBA feature column groupings."""
-        return {
-            'categorical': ['player_name', 'team_abbrev', 'position'],
-            'boolean': [],
-            'numeric': ['season', 'age', 'games', 'games_started', 'mp_per_game',
-                       'fg_per_game', 'fga_per_game', 'fg_percent',
-                       'x3p_per_game', 'x3pa_per_game', 'x3p_percent',
-                       'ft_per_game', 'fta_per_game', 'ft_percent',
-                       'orb_per_game', 'drb_per_game', 'trb_per_game',
-                       'ast_per_game', 'stl_per_game', 'blk_per_game',
-                       'tov_per_game', 'pf_per_game', 'pts_per_game']
-        }
+        # Check if we have game-level data
+        if self.df is not None and 'home_ppg_rolling5' in self.df.columns:
+            # Game-level features for win prediction
+            return {
+                'categorical': ['home_team', 'away_team'],
+                'boolean': ['home_back_to_back', 'away_back_to_back'],
+                'numeric': [
+                    'schedule_season',
+                    # Rolling averages - home team
+                    'home_ppg_rolling5', 'home_opp_ppg_rolling5', 'home_assists_rolling5',
+                    'home_rebounds_rolling5', 'home_turnovers_rolling5',
+                    'home_fg_pct_rolling5', 'home_three_pct_rolling5',
+                    'home_days_rest',
+                    # Rolling averages - away team
+                    'away_ppg_rolling5', 'away_opp_ppg_rolling5', 'away_assists_rolling5',
+                    'away_rebounds_rolling5', 'away_turnovers_rolling5',
+                    'away_fg_pct_rolling5', 'away_three_pct_rolling5',
+                    'away_days_rest',
+                    # Differentials
+                    'ppg_diff_rolling5', 'fg_pct_diff_rolling5'
+                ]
+            }
+        else:
+            # Player-level features (original)
+            return {
+                'categorical': ['player_name', 'team_abbrev', 'position'],
+                'boolean': [],
+                'numeric': ['season', 'age', 'games', 'games_started', 'mp_per_game',
+                           'fg_per_game', 'fga_per_game', 'fg_percent',
+                           'x3p_per_game', 'x3pa_per_game', 'x3p_percent',
+                           'ft_per_game', 'fta_per_game', 'ft_percent',
+                           'orb_per_game', 'drb_per_game', 'trb_per_game',
+                           'ast_per_game', 'stl_per_game', 'blk_per_game',
+                           'tov_per_game', 'pf_per_game', 'pts_per_game']
+            }
 
     def get_target_columns(self) -> Dict[str, str]:
         """Return NBA target column names."""
-        return {
-            'classification': 'is_all_star',  # Can be derived
-            'regression': 'pts_per_game'
-        }
+        # Check if we have game-level data
+        if self.df is not None and 'home_team_win' in self.df.columns:
+            return {
+                'classification': 'home_team_win',
+                'regression': 'point_diff'
+            }
+        else:
+            return {
+                'classification': 'is_all_star',
+                'regression': 'pts_per_game'
+            }
 
     def get_entities(self) -> List[str]:
         """Return list of all players."""

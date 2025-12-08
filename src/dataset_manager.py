@@ -133,3 +133,82 @@ class DatasetManager:
         except Exception as e:
             logger.error(f"Validation error: {e}")
             return False
+
+    def get_kaggle_metadata(self, dataset_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch metadata from Kaggle API including last update date."""
+        try:
+            from kaggle.api.kaggle_api_extended import KaggleApi
+            api = KaggleApi()
+            api.authenticate()
+            
+            # Parse owner/dataset format
+            parts = dataset_id.split('/')
+            if len(parts) != 2:
+                return None
+                
+            owner, dataset_name = parts
+            
+            # Get dataset metadata
+            datasets = api.dataset_list(search=dataset_name, user=owner)
+            for ds in datasets:
+                if ds.ref == dataset_id:
+                    return {
+                        "title": ds.title,
+                        "last_updated": ds.lastUpdated.isoformat() if ds.lastUpdated else None,
+                        "size": ds.totalBytes,
+                        "downloads": ds.downloadCount,
+                        "usability": ds.usabilityRating
+                    }
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching Kaggle metadata for {dataset_id}: {e}")
+            return None
+
+    def check_for_updates(self, sport: str, dataset_id: str) -> Dict[str, Any]:
+        """Check if a Kaggle dataset has been updated since last download."""
+        # Find the dataset entry
+        entry = None
+        for ds in self.config.get(sport, []):
+            if ds['id'] == dataset_id:
+                entry = ds
+                break
+        
+        if not entry:
+            return {"has_update": False, "error": "Dataset not found in config"}
+        
+        # Fetch latest metadata from Kaggle
+        metadata = self.get_kaggle_metadata(dataset_id)
+        if not metadata:
+            return {"has_update": False, "error": "Could not fetch Kaggle metadata"}
+        
+        kaggle_updated = metadata.get("last_updated")
+        local_updated = entry.get("last_updated")
+        
+        if not local_updated:
+            # Never downloaded, so yes there's an update
+            return {
+                "has_update": True,
+                "kaggle_updated": kaggle_updated,
+                "local_updated": None,
+                "message": "Never downloaded"
+            }
+        
+        # Compare dates
+        from datetime import datetime
+        kaggle_dt = datetime.fromisoformat(kaggle_updated.replace('Z', '+00:00')) if kaggle_updated else None
+        local_dt = datetime.fromisoformat(local_updated) if local_updated else None
+        
+        if kaggle_dt and local_dt and kaggle_dt > local_dt:
+            return {
+                "has_update": True,
+                "kaggle_updated": kaggle_updated,
+                "local_updated": local_updated,
+                "message": "New version available"
+            }
+        
+        return {
+            "has_update": False,
+            "kaggle_updated": kaggle_updated,
+            "local_updated": local_updated,
+            "message": "Up to date"
+        }

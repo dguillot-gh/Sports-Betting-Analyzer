@@ -5,6 +5,12 @@
       "type": "kaggle",
       "added_at": "2025-12-06T15:45:58.541683",
       "last_updated": "2025-12-06T15:59:48.064564"
+    },
+    {
+      "id": "cviaxmiwnptr/nfl-team-stats-20022019-espn",
+      "type": "kaggle",
+      "added_at": "2024-12-08T10:30:00",
+      "last_updated": "2024-12-08T10:30:00"
     }
   ],
   "nba": [
@@ -13,6 +19,12 @@
       "type": "kaggle",
       "added_at": "2025-12-06T15:45:58.541713",
       "last_updated": "2025-12-06T15:59:52.603146"
+    },
+    {
+      "id": "eoinamoore/historical-nba-data-and-player-box-scores",
+      "type": "kaggle",
+      "added_at": "2024-12-08T10:30:00",
+      "last_updated": "2024-12-08T10:30:00"
     }
   ]
 }

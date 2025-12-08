@@ -14,7 +14,7 @@ class NFLSport(BaseSport):
         super().__init__(config)
 
     def load_data(self) -> pd.DataFrame:
-        """Load NFL data from CSV files."""
+        """Load NFL data from CSV files and merge with enhanced team stats."""
         self.validate_data_files()
         paths = self.get_data_paths()
 
@@ -37,7 +37,139 @@ class NFLSport(BaseSport):
 
         # Add team mappings
         df = self._add_team_mappings(df, teams)
+        
+        # Try to load enhanced team stats and merge
+        df = self._merge_team_stats(df)
+        
+        # Calculate rolling features
+        df = self._calculate_rolling_features(df)
 
+        return df
+    
+    def _get_team_name_map(self) -> dict:
+        """Get mapping from short team names (ESPN) to full team names (spreadspoke)."""
+        return {
+            # Short name (ESPN team_stats) -> Full name (spreadspoke_scores)
+            'Cardinals': 'Arizona Cardinals', '49ers': 'San Francisco 49ers',
+            'Falcons': 'Atlanta Falcons', 'Ravens': 'Baltimore Ravens',
+            'Bills': 'Buffalo Bills', 'Panthers': 'Carolina Panthers',
+            'Bears': 'Chicago Bears', 'Bengals': 'Cincinnati Bengals',
+            'Browns': 'Cleveland Browns', 'Cowboys': 'Dallas Cowboys',
+            'Broncos': 'Denver Broncos', 'Lions': 'Detroit Lions',
+            'Packers': 'Green Bay Packers', 'Texans': 'Houston Texans',
+            'Colts': 'Indianapolis Colts', 'Jaguars': 'Jacksonville Jaguars',
+            'Chiefs': 'Kansas City Chiefs', 'Raiders': 'Las Vegas Raiders',
+            'Chargers': 'Los Angeles Chargers', 'Rams': 'Los Angeles Rams',
+            'Dolphins': 'Miami Dolphins', 'Vikings': 'Minnesota Vikings',
+            'Patriots': 'New England Patriots', 'Saints': 'New Orleans Saints',
+            'Giants': 'New York Giants', 'Jets': 'New York Jets',
+            'Eagles': 'Philadelphia Eagles', 'Steelers': 'Pittsburgh Steelers',
+            'Seahawks': 'Seattle Seahawks', 'Buccaneers': 'Tampa Bay Buccaneers',
+            'Titans': 'Tennessee Titans', 'Commanders': 'Washington Commanders',
+            # Historical names
+            'Redskins': 'Washington Redskins', 'Football Team': 'Washington Football Team',
+            'Oilers': 'Houston Oilers', 'St. Louis Rams': 'St. Louis Rams',
+            'San Diego Chargers': 'San Diego Chargers', 'Oakland Raiders': 'Oakland Raiders',
+        }
+    
+    def _merge_team_stats(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Merge enhanced team stats from Kaggle dataset."""
+        team_stats_path = self.data_dir / 'team_stats' / 'nfl_team_stats_2002-2024.csv'
+        
+        if not team_stats_path.exists():
+            print(f"DEBUG: Team stats file not found at {team_stats_path}, skipping merge")
+            return df
+            
+        try:
+            stats = pd.read_csv(team_stats_path)
+            print(f"DEBUG: Loaded team stats with {len(stats)} rows")
+            
+            # Map short team names to full names
+            team_map = self._get_team_name_map()
+            stats['home_full'] = stats['home'].map(team_map).fillna(stats['home'])
+            stats['away_full'] = stats['away'].map(team_map).fillna(stats['away'])
+            
+            # Parse dates
+            if 'schedule_date' in df.columns:
+                df['schedule_date'] = pd.to_datetime(df['schedule_date'], errors='coerce')
+            if 'date' in stats.columns:
+                stats['date'] = pd.to_datetime(stats['date'], errors='coerce')
+            
+            # Create game-level stats for home and away teams (using full names now)
+            home_stats = stats[['date', 'home_full', 'score_home', 'yards_home', 'first_downs_home', 
+                               'rush_yards_home', 'pass_yards_home', 'fumbles_home', 'interceptions_home']].copy()
+            home_stats.columns = ['date', 'team', 'pts', 'yards', 'first_downs', 'rush_yards', 
+                                 'pass_yards', 'fumbles', 'interceptions']
+            
+            away_stats = stats[['date', 'away_full', 'score_away', 'yards_away', 'first_downs_away',
+                               'rush_yards_away', 'pass_yards_away', 'fumbles_away', 'interceptions_away']].copy()
+            away_stats.columns = ['date', 'team', 'pts', 'yards', 'first_downs', 'rush_yards',
+                                 'pass_yards', 'fumbles', 'interceptions']
+            
+            # Combine home and away stats
+            all_team_stats = pd.concat([home_stats, away_stats], ignore_index=True)
+            all_team_stats = all_team_stats.dropna(subset=['date', 'team'])
+            all_team_stats = all_team_stats.sort_values(['team', 'date'])
+            
+            # Store for rolling calculation
+            self._team_game_stats = all_team_stats
+            print(f"DEBUG: Prepared {len(all_team_stats)} team-game records for rolling stats")
+            
+        except Exception as e:
+            print(f"DEBUG: Error loading team stats: {e}")
+            self._team_game_stats = None
+            
+        return df
+    
+    def _calculate_rolling_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Calculate rolling average features for each team."""
+        if not hasattr(self, '_team_game_stats') or self._team_game_stats is None:
+            print("DEBUG: No team game stats available, skipping rolling features")
+            return df
+            
+        team_stats = self._team_game_stats
+        
+        # Calculate rolling means for each team (last 5 games)
+        rolling_cols = ['pts', 'yards', 'first_downs', 'rush_yards', 'pass_yards']
+        
+        for col in rolling_cols:
+            team_stats[f'{col}_rolling5'] = team_stats.groupby('team')[col].transform(
+                lambda x: x.shift(1).rolling(5, min_periods=1).mean()
+            )
+        
+        # Also add turnovers (fumbles + interceptions)
+        team_stats['turnovers'] = team_stats['fumbles'].fillna(0) + team_stats['interceptions'].fillna(0)
+        team_stats['turnovers_rolling5'] = team_stats.groupby('team')['turnovers'].transform(
+            lambda x: x.shift(1).rolling(5, min_periods=1).mean()
+        )
+        
+        # Now merge rolling stats into main dataframe
+        df = df.copy()
+        if 'schedule_date' in df.columns:
+            df['schedule_date'] = pd.to_datetime(df['schedule_date'], errors='coerce')
+        
+        # Merge for home team
+        home_rolling = team_stats[['date', 'team', 'pts_rolling5', 'yards_rolling5', 
+                                   'first_downs_rolling5', 'turnovers_rolling5']].copy()
+        home_rolling.columns = ['schedule_date', 'team_home', 'home_ppg_rolling5', 'home_yards_rolling5',
+                               'home_first_downs_rolling5', 'home_turnovers_rolling5']
+        
+        df = df.merge(home_rolling, on=['schedule_date', 'team_home'], how='left')
+        
+        # Merge for away team
+        away_rolling = team_stats[['date', 'team', 'pts_rolling5', 'yards_rolling5',
+                                   'first_downs_rolling5', 'turnovers_rolling5']].copy()
+        away_rolling.columns = ['schedule_date', 'team_away', 'away_ppg_rolling5', 'away_yards_rolling5',
+                               'away_first_downs_rolling5', 'away_turnovers_rolling5']
+        
+        df = df.merge(away_rolling, on=['schedule_date', 'team_away'], how='left')
+        
+        # Add differential features
+        df['ppg_diff_rolling5'] = df['home_ppg_rolling5'] - df['away_ppg_rolling5']
+        df['yards_diff_rolling5'] = df['home_yards_rolling5'] - df['away_yards_rolling5']
+        
+        print(f"DEBUG: Added rolling features. Non-null home_ppg_rolling5: {df['home_ppg_rolling5'].notna().sum()}")
+        
         return df
 
     def preprocess_data(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -90,8 +222,15 @@ class NFLSport(BaseSport):
         return {
             'categorical': ['home_id', 'away_id', 'team_favorite_id', 'stadium', 'weather_detail'],
             'boolean': ['schedule_playoff', 'stadium_neutral'],
-            'numeric': ['schedule_season', 'schedule_week', 'weather_temperature',
-                       'weather_wind_mph', 'weather_humidity', 'spread_favorite', 'over_under_line']
+            'numeric': [
+                # Original features
+                'schedule_season', 'schedule_week', 'weather_temperature',
+                'weather_wind_mph', 'weather_humidity', 'spread_favorite', 'over_under_line',
+                # Rolling average features (from enhanced team stats)
+                'home_ppg_rolling5', 'home_yards_rolling5', 'home_first_downs_rolling5', 'home_turnovers_rolling5',
+                'away_ppg_rolling5', 'away_yards_rolling5', 'away_first_downs_rolling5', 'away_turnovers_rolling5',
+                'ppg_diff_rolling5', 'yards_diff_rolling5'
+            ]
         }
 
     def get_target_columns(self) -> Dict[str, str]:
