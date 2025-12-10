@@ -44,6 +44,14 @@ features:
     - team_avg_finish_this_season
     - manu_wins_this_season
     - manu_win_pct_this_season
+    # Scraped Speed Features (from ifantasyrace.com)
+    - scraped_avg_speed_rank
+    - scraped_avg_finish
+    - scraped_best_finish
+    - scraped_races_count
+    - track_specific_speed
+    - track_specific_finish
+    - track_experience
 targets:
   # NASCAR supports multiple classification targets (unique to this sport)
   # Each will produce its own model when training

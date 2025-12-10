@@ -1,96 +1,96 @@
 {
   "task": "classification",
-  "accuracy": 0.9910607866507747,
-  "report": "              precision    recall  f1-score   support\n\n           0       0.99      1.00      1.00      6254\n           1       1.00      0.87      0.93       458\n\n    accuracy                           0.99      6712\n   macro avg       1.00      0.93      0.96      6712\nweighted avg       0.99      0.99      0.99      6712\n",
-  "pred_prob_mean": 0.05280765792610251,
-  "roc_auc": 0.9999989526353789,
+  "accuracy": 0.5807603778077626,
+  "report": "              precision    recall  f1-score   support\n\n           0       0.58      0.15      0.24      5518\n           1       0.58      0.92      0.71      7081\n\n    accuracy                           0.58     12599\n   macro avg       0.58      0.53      0.47     12599\nweighted avg       0.58      0.58      0.50     12599\n",
+  "pred_prob_mean": 0.6260568299071354,
+  "roc_auc": 0.6156603884456356,
   "confusion_matrix": {
-    "tn": 6254,
-    "fp": 0,
-    "fn": 60,
-    "tp": 398
+    "tn": 814,
+    "fp": 4704,
+    "fn": 578,
+    "tp": 6503
   },
   "feature_importance": [
     {
-      "feature": "num__pts_per_game",
-      "importance": 0.15807182476744258
+      "feature": "num__home_opp_ppg_rolling5",
+      "importance": 0.06812833974816469
     },
     {
-      "feature": "num__fga_per_game",
-      "importance": 0.11384072176590532
+      "feature": "num__away_opp_ppg_rolling5",
+      "importance": 0.06698039852878765
     },
     {
-      "feature": "num__fg_per_game",
-      "importance": 0.10222705468187004
+      "feature": "num__ppg_diff_rolling5",
+      "importance": 0.06354711798799324
     },
     {
-      "feature": "num__ft_per_game",
-      "importance": 0.09983431095470319
+      "feature": "num__home_ppg_rolling5",
+      "importance": 0.059346750036593406
     },
     {
-      "feature": "num__fta_per_game",
-      "importance": 0.09045845806055738
+      "feature": "num__away_ppg_rolling5",
+      "importance": 0.057331302158292484
     },
     {
-      "feature": "num__mp_per_game",
-      "importance": 0.07307538407324733
+      "feature": "num__schedule_season",
+      "importance": 0.047187598734835905
     },
     {
-      "feature": "num__ast_per_game",
-      "importance": 0.04356148546887441
+      "feature": "num__fg_pct_diff_rolling5",
+      "importance": 0.040523356606075554
     },
     {
-      "feature": "num__trb_per_game",
-      "importance": 0.036620786271734464
+      "feature": "num__home_fg_pct_rolling5",
+      "importance": 0.03804690529859069
     },
     {
-      "feature": "num__tov_per_game",
-      "importance": 0.0326658707724626
+      "feature": "num__away_fg_pct_rolling5",
+      "importance": 0.03713475658851173
     },
     {
-      "feature": "num__pf_per_game",
-      "importance": 0.025204614151268904
+      "feature": "num__home_rebounds_rolling5",
+      "importance": 0.03431695669153571
     },
     {
-      "feature": "num__games_started",
-      "importance": 0.023251942828069652
+      "feature": "num__away_three_pct_rolling5",
+      "importance": 0.03355866094261024
     },
     {
-      "feature": "num__games",
-      "importance": 0.021308146482027328
+      "feature": "num__away_rebounds_rolling5",
+      "importance": 0.033407362392479545
     },
     {
-      "feature": "num__drb_per_game",
-      "importance": 0.020983332697886357
+      "feature": "num__home_three_pct_rolling5",
+      "importance": 0.03329265818280432
     },
     {
-      "feature": "num__stl_per_game",
-      "importance": 0.02001161486961685
+      "feature": "num__home_assists_rolling5",
+      "importance": 0.032892314631113785
     },
     {
-      "feature": "num__fg_percent",
-      "importance": 0.017835948302431754
+      "feature": "num__away_assists_rolling5",
+      "importance": 0.03197714192237473
     },
     {
-      "feature": "num__ft_percent",
-      "importance": 0.01367777632786117
+      "feature": "num__away_turnovers_rolling5",
+      "importance": 0.030378555792195516
     },
     {
-      "feature": "num__orb_per_game",
-      "importance": 0.01261636421819179
+      "feature": "num__home_turnovers_rolling5",
+      "importance": 0.02998339393595038
     },
     {
-      "feature": "num__blk_per_game",
-      "importance": 0.009197262752970248
+      "feature": "num__home_days_rest",
+      "importance": 0.02311013120840234
     },
     {
-      "feature": "num__x3pa_per_game",
-      "importance": 0.006655675427138834
+      "feature": "num__away_days_rest",
+      "importance": 0.020174583324349935
     },
     {
-      "feature": "num__season",
-      "importance": 0.006591970685178977
+      "feature": "bool__away_back_to_back_1",
+      "importance": 0.0064926491771029335
     }
   ],
-  "test_start_season": 2017
+  "test_start_season": 2016
 }

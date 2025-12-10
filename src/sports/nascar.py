@@ -45,7 +45,11 @@ class NASCARSport(BaseSport):
                 self._populate_active_entities(df)
                 # Note: Enhanced data is already preprocessed, but running it through
                 # preprocess_data ensures specific columns like race_win are set if missing
-                return self.preprocess_data(df)
+                df = self.preprocess_data(df)
+                # Merge scraped historical features from ifantasyrace.com
+                df = self._load_scraped_features(df)
+                self.df = df
+                return df
 
         # 2. Fallback to existing JSON method
         json_path = self.data_dir / 'nascar_data.json'
@@ -77,6 +81,119 @@ class NASCARSport(BaseSport):
         except Exception as e:
             print(f"Error loading static data: {e}")
             return self._load_raw_data()
+    
+    def _load_scraped_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Load and merge scraped speed features from ifantasyrace.com."""
+        try:
+            # Find the integrated features directory
+            integrated_dir = self.data_dir.parent / 'integrated'
+            
+            if not integrated_dir.exists():
+                # Try alternative path
+                integrated_dir = Path(__file__).parent.parent.parent / 'data' / 'nascar' / 'integrated'
+            
+            if not integrated_dir.exists():
+                print("DEBUG: Scraped features directory not found, skipping merge")
+                return df
+            
+            # Load driver features
+            driver_file = integrated_dir / 'driver_speed_features.csv'
+            if driver_file.exists():
+                driver_features = pd.read_csv(driver_file)
+                print(f"DEBUG: Loaded {len(driver_features)} driver speed features")
+                
+                # Find the driver column in main df
+                driver_col = None
+                for col in ['driver', 'Driver', 'driver_name']:
+                    if col in df.columns:
+                        driver_col = col
+                        break
+                
+                if driver_col:
+                    # Rename columns to avoid conflicts
+                    driver_features = driver_features.rename(columns={
+                        'driver': 'merge_driver',
+                        'avg_speed_rank': 'scraped_avg_speed_rank',
+                        'avg_overall_speed_rank': 'scraped_overall_speed',
+                        'avg_finish_position': 'scraped_avg_finish',
+                        'best_finish': 'scraped_best_finish',
+                        'races_tracked': 'scraped_races_count'
+                    })
+                    
+                    # Merge on driver name
+                    df = df.merge(
+                        driver_features,
+                        left_on=driver_col,
+                        right_on='merge_driver',
+                        how='left'
+                    )
+                    
+                    # Drop merge key
+                    if 'merge_driver' in df.columns:
+                        df = df.drop(columns=['merge_driver'])
+                    
+                    # Fill NaN with reasonable defaults for scraped features
+                    for col in ['scraped_avg_speed_rank', 'scraped_avg_finish', 'scraped_best_finish', 'scraped_races_count']:
+                        if col in df.columns:
+                            df[col] = df[col].fillna(df[col].median() if df[col].notna().any() else 20)
+                    
+                    print(f"DEBUG: Merged driver features. Columns now: {len(df.columns)}")
+            
+            # Load track-specific features
+            track_file = integrated_dir / 'track_speed_features.csv'
+            if track_file.exists():
+                track_features = pd.read_csv(track_file)
+                print(f"DEBUG: Loaded {len(track_features)} track-specific features")
+                
+                # Find track column in main df
+                track_col = None
+                for col in ['track', 'Track', 'track_name', 'circuit']:
+                    if col in df.columns:
+                        track_col = col
+                        break
+                
+                driver_col = None
+                for col in ['driver', 'Driver', 'driver_name']:
+                    if col in df.columns:
+                        driver_col = col
+                        break
+                
+                if track_col and driver_col:
+                    # Rename for merge
+                    track_features = track_features.rename(columns={
+                        'driver': 'merge_driver',
+                        'track': 'merge_track',
+                        'track_avg_speed_rank': 'track_specific_speed',
+                        'track_avg_finish': 'track_specific_finish',
+                        'track_races': 'track_experience'
+                    })
+                    
+                    # Merge on driver + track
+                    df = df.merge(
+                        track_features,
+                        left_on=[driver_col, track_col],
+                        right_on=['merge_driver', 'merge_track'],
+                        how='left'
+                    )
+                    
+                    # Drop merge keys
+                    for col in ['merge_driver', 'merge_track']:
+                        if col in df.columns:
+                            df = df.drop(columns=[col])
+                    
+                    # Fill NaN
+                    for col in ['track_specific_speed', 'track_specific_finish', 'track_experience']:
+                        if col in df.columns:
+                            df[col] = df[col].fillna(df[col].median() if df[col].notna().any() else 0)
+                    
+                    print(f"DEBUG: Merged track features. Columns now: {len(df.columns)}")
+            
+            return df
+            
+        except Exception as e:
+            print(f"DEBUG: Error loading scraped features: {e}")
+            return df
+
 
     def _populate_active_entities(self, df: pd.DataFrame) -> None:
         """Populate active teams and drivers lists from the loaded dataframe."""

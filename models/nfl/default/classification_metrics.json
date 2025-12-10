@@ -1,101 +1,96 @@
 {
   "task": "classification",
-  "accuracy": 0.573474001507159,
-  "report": "              precision    recall  f1-score   support\n\n           0       0.53      0.48      0.50      1194\n           1       0.60      0.65      0.63      1460\n\n    accuracy                           0.57      2654\n   macro avg       0.57      0.57      0.56      2654\nweighted avg       0.57      0.57      0.57      2654\n",
-  "pred_prob_mean": 0.5648688077926636,
-  "roc_auc": 0.60967967692343,
+  "accuracy": 0.591183119819141,
+  "report": "              precision    recall  f1-score   support\n\n           0       0.56      0.43      0.48      1194\n           1       0.61      0.73      0.66      1460\n\n    accuracy                           0.59      2654\n   macro avg       0.58      0.58      0.57      2654\nweighted avg       0.59      0.59      0.58      2654\n",
+  "pred_prob_mean": 0.5584853051996986,
+  "roc_auc": 0.6437966086138456,
   "confusion_matrix": {
-    "tn": 575,
-    "fp": 619,
-    "fn": 513,
-    "tp": 947
+    "tn": 510,
+    "fp": 684,
+    "fn": 401,
+    "tp": 1059
   },
   "feature_importance": [
     {
-      "feature": "cat__team_favorite_id_SF",
-      "importance": 0.017139744013547897
+      "feature": "num__schedule_season",
+      "importance": 0.07820160987990984
     },
     {
-      "feature": "cat__stadium_War Memorial Stadium",
-      "importance": 0.014925140887498856
+      "feature": "num__schedule_week",
+      "importance": 0.06772376304425054
     },
     {
-      "feature": "cat__stadium_FirstEnergy Stadium",
-      "importance": 0.01223885640501976
+      "feature": "num__spread_favorite",
+      "importance": 0.06338263971352448
     },
     {
-      "feature": "cat__team_favorite_id_CIN",
-      "importance": 0.011652749963104725
+      "feature": "num__weather_humidity",
+      "importance": 0.06220844813163437
     },
     {
-      "feature": "cat__stadium_Ralph Wilson Stadium",
-      "importance": 0.010377760045230389
+      "feature": "num__weather_temperature",
+      "importance": 0.06203965694037225
     },
     {
-      "feature": "cat__stadium_Houlihan's Stadium",
-      "importance": 0.010001340880990028
+      "feature": "num__over_under_line",
+      "importance": 0.05535688941200286
     },
     {
-      "feature": "cat__away_id_NO",
-      "importance": 0.009637721814215183
+      "feature": "num__weather_wind_mph",
+      "importance": 0.05229379752579079
     },
     {
-      "feature": "cat__weather_detail_indoor",
-      "importance": 0.009335823357105255
+      "feature": "num__away_yards_rolling5",
+      "importance": 0.01694167719989933
     },
     {
-      "feature": "cat__team_favorite_id_DAL",
-      "importance": 0.009317541494965553
+      "feature": "num__home_ppg_rolling5",
+      "importance": 0.016507289550444216
     },
     {
-      "feature": "cat__away_id_DET",
-      "importance": 0.009105706587433815
+      "feature": "num__home_yards_rolling5",
+      "importance": 0.016363423088273696
     },
     {
-      "feature": "cat__stadium_Oakland Coliseum",
-      "importance": 0.009047755971550941
+      "feature": "num__away_ppg_rolling5",
+      "importance": 0.016042866548387838
     },
     {
-      "feature": "cat__team_favorite_id_BUF",
-      "importance": 0.009042761288583279
+      "feature": "num__ppg_diff_rolling5",
+      "importance": 0.01536078397294663
     },
     {
-      "feature": "cat__home_id_BAL",
-      "importance": 0.008811691775918007
+      "feature": "num__yards_diff_rolling5",
+      "importance": 0.01501110982851788
     },
     {
-      "feature": "cat__team_favorite_id_TB",
-      "importance": 0.008808188140392303
+      "feature": "num__home_first_downs_rolling5",
+      "importance": 0.014544412864194027
     },
     {
-      "feature": "cat__stadium_Three Rivers Stadium",
-      "importance": 0.008796587586402893
+      "feature": "num__away_first_downs_rolling5",
+      "importance": 0.014518579159116108
     },
     {
-      "feature": "cat__home_id_PIT",
-      "importance": 0.008688836358487606
+      "feature": "num__home_turnovers_rolling5",
+      "importance": 0.01257387127311306
     },
     {
-      "feature": "cat__stadium_Paul Brown Stadium",
-      "importance": 0.008428584784269333
+      "feature": "num__away_turnovers_rolling5",
+      "importance": 0.012205772739512852
     },
     {
-      "feature": "cat__team_favorite_id_BAL",
-      "importance": 0.008335961028933525
+      "feature": "cat__away_id_NYJ",
+      "importance": 0.00556447615740382
     },
     {
-      "feature": "cat__team_favorite_id_IND",
-      "importance": 0.008180130273103714
+      "feature": "cat__away_id_DEN",
+      "importance": 0.005513425406094566
     },
     {
-      "feature": "cat__stadium_Seattle Kingdome",
-      "importance": 0.00808289460837841
+      "feature": "cat__away_id_MIN",
+      "importance": 0.005391911424852983
     }
   ],
-  "test_start_season": 2016,
-  "hyperparameters": {
-    "model_type": "xgboost",
-    "n_estimators": 200,
-    "class_weight": "balanced"
-  }
+  "test_start_season": 2016
 }

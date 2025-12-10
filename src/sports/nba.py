@@ -119,6 +119,58 @@ class NBASport(BaseSport):
             ts['days_rest'] = ts.groupby('teamName')['game_date'].diff().dt.days.fillna(7)
             ts['back_to_back'] = (ts['days_rest'] <= 1).astype(int)
             
+            # --- Schedule Fatigue Features (Vectorized for speed) ---
+            # Sort by team and date for proper sequential calculations
+            ts = ts.sort_values(['teamName', 'game_date']).reset_index(drop=True)
+            
+            # Games in last 7 days - use rolling count with a 7-day window
+            # Create a game counter (1 for each game)
+            ts['game_marker'] = 1
+            # For games_last_7, we count games in the 7 days BEFORE this game (excluding current)
+            ts['games_last_7'] = ts.groupby('teamName')['game_marker'].transform(
+                lambda x: x.shift(1).rolling(7, min_periods=0).sum()
+            ).fillna(0).astype(int)
+            
+            # 3-in-4 nights: Look at the gap from 3 games ago
+            # If the game 3 positions ago was within 3 days, we're playing 3-in-4
+            ts['days_since_3_ago'] = ts.groupby('teamName')['game_date'].transform(
+                lambda x: (x - x.shift(2)).dt.days
+            )
+            ts['three_in_4'] = ((ts['days_since_3_ago'].notna()) & (ts['days_since_3_ago'] <= 3)).astype(int)
+            
+            # 4-in-5 nights: Look at the gap from 4 games ago
+            ts['days_since_4_ago'] = ts.groupby('teamName')['game_date'].transform(
+                lambda x: (x - x.shift(3)).dt.days
+            )
+            ts['four_in_5'] = ((ts['days_since_4_ago'].notna()) & (ts['days_since_4_ago'] <= 4)).astype(int)
+            
+            # Road trip game number: Count consecutive away games
+            # When home=True, reset to 0. When home=False, increment counter.
+            ts['is_away'] = (~ts['home']).astype(int)
+            
+            # Create groups that reset when we have a home game
+            ts['home_reset'] = ts['home'].astype(int)
+            ts['road_trip_group'] = ts.groupby('teamName')['home_reset'].transform('cumsum')
+            
+            # Count within each road trip
+            ts['road_trip_game'] = ts.groupby(['teamName', 'road_trip_group'])['is_away'].transform('cumsum')
+            # Zero out for home games
+            ts.loc[ts['home'] == True, 'road_trip_game'] = 0
+            
+            # Days since last home game
+            # Forward fill the date of the last home game
+            ts['last_home_date'] = ts['game_date'].where(ts['home'] == True)
+            ts['last_home_date'] = ts.groupby('teamName')['last_home_date'].transform(lambda x: x.ffill())
+            ts['days_since_home'] = (ts['game_date'] - ts['last_home_date']).dt.days.fillna(0).astype(int)
+            # For home games, days_since_home should be 0
+            ts.loc[ts['home'] == True, 'days_since_home'] = 0
+            
+            # Clean up temp columns
+            ts = ts.drop(columns=['game_marker', 'days_since_3_ago', 'days_since_4_ago', 
+                                  'is_away', 'home_reset', 'road_trip_group', 'last_home_date'], errors='ignore')
+            
+
+
             # Now pivot to create matchup-level records
             # Filter to home games only (each game appears twice, once per team)
             home_games = ts[ts['home'] == True].copy()
@@ -137,6 +189,9 @@ class NBASport(BaseSport):
                 'threePointersPercentage_rolling5': 'home_three_pct_rolling5',
                 'days_rest': 'home_days_rest',
                 'back_to_back': 'home_back_to_back',
+                'games_last_7': 'home_games_last_7',
+                'three_in_4': 'home_three_in_4',
+                'four_in_5': 'home_four_in_5',
                 'win': 'home_team_win',
                 'game_date': 'schedule_date',
                 'gameId': 'game_id'
@@ -144,17 +199,21 @@ class NBASport(BaseSport):
             
             home_games = home_games.rename(columns=home_cols)
             
-            # Get away team rolling stats
+            # Get away team rolling stats (including fatigue features)
             away_rolling = away_games[['gameId', 'teamName', 'teamScore_rolling5', 
                                        'opponentScore_rolling5', 'assists_rolling5', 
                                        'reboundsTotal_rolling5', 'turnovers_rolling5',
                                        'fieldGoalsPercentage_rolling5', 'threePointersPercentage_rolling5',
-                                       'days_rest', 'back_to_back']].copy()
+                                       'days_rest', 'back_to_back',
+                                       'games_last_7', 'three_in_4', 'four_in_5',
+                                       'road_trip_game', 'days_since_home']].copy()
             away_rolling.columns = ['game_id', 'away_team_check', 'away_ppg_rolling5', 
                                     'away_opp_ppg_rolling5', 'away_assists_rolling5',
                                     'away_rebounds_rolling5', 'away_turnovers_rolling5',
                                     'away_fg_pct_rolling5', 'away_three_pct_rolling5',
-                                    'away_days_rest', 'away_back_to_back']
+                                    'away_days_rest', 'away_back_to_back',
+                                    'away_games_last_7', 'away_three_in_4', 'away_four_in_5',
+                                    'away_road_trip_game', 'away_days_since_home']
             
             # Merge away stats to home games
             games = home_games.merge(away_rolling, on='game_id', how='left')
@@ -232,19 +291,23 @@ class NBASport(BaseSport):
             # Game-level features for win prediction
             return {
                 'categorical': ['home_team', 'away_team'],
-                'boolean': ['home_back_to_back', 'away_back_to_back'],
+                'boolean': ['home_back_to_back', 'away_back_to_back',
+                           'home_three_in_4', 'home_four_in_5',
+                           'away_three_in_4', 'away_four_in_5'],
                 'numeric': [
                     'schedule_season',
                     # Rolling averages - home team
                     'home_ppg_rolling5', 'home_opp_ppg_rolling5', 'home_assists_rolling5',
                     'home_rebounds_rolling5', 'home_turnovers_rolling5',
                     'home_fg_pct_rolling5', 'home_three_pct_rolling5',
-                    'home_days_rest',
+                    'home_days_rest', 'home_games_last_7',
                     # Rolling averages - away team
                     'away_ppg_rolling5', 'away_opp_ppg_rolling5', 'away_assists_rolling5',
                     'away_rebounds_rolling5', 'away_turnovers_rolling5',
                     'away_fg_pct_rolling5', 'away_three_pct_rolling5',
-                    'away_days_rest',
+                    'away_days_rest', 'away_games_last_7',
+                    # Away team road trip fatigue
+                    'away_road_trip_game', 'away_days_since_home',
                     # Differentials
                     'ppg_diff_rolling5', 'fg_pct_diff_rolling5'
                 ]
