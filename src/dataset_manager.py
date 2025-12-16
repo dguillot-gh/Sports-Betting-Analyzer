@@ -33,27 +33,36 @@ class DatasetManager:
 
     def _ensure_defaults(self):
         """Ensure default datasets are configured if missing."""
+        # Default datasets per sport - multiple per sport for comprehensive data
         defaults = {
-            "nfl": "tobycrabtree/nfl-scores-and-betting-data",
-            "nba": "sumitrodatta/nba-aba-baa-stats"
+            "nfl": [
+                "tobycrabtree/nfl-scores-and-betting-data",
+                "philiphyde1/nfl-stats-1999-2022"  # Player-level stats
+            ],
+            "nba": [
+                "sumitrodatta/nba-aba-baa-stats",
+                "eoinamoore/historical-nba-data-and-player-box-scores"  # Player box scores (daily updates)
+            ]
         }
         
         updated = False
-        for sport, dataset_id in defaults.items():
+        for sport, dataset_ids in defaults.items():
             if sport not in self.config:
                 self.config[sport] = []
-                
-            # If no datasets configured for this sport, add the default
-            # This preserves the "original" behavior while allowing additions or removals
-            if not self.config[sport]:
-                entry = {
-                    "id": dataset_id,
-                    "type": "kaggle",
-                    "added_at": datetime.utcnow().isoformat(),
-                    "last_updated": None
-                }
-                self.config[sport].append(entry)
-                updated = True
+            
+            # Add any missing default datasets
+            existing_ids = [ds['id'] for ds in self.config[sport]]
+            for dataset_id in dataset_ids:
+                if dataset_id not in existing_ids:
+                    entry = {
+                        "id": dataset_id,
+                        "type": "kaggle",
+                        "added_at": datetime.utcnow().isoformat(),
+                        "last_updated": None
+                    }
+                    self.config[sport].append(entry)
+                    updated = True
+                    logger.info(f"Added default dataset {dataset_id} for {sport}")
                 
         if updated:
             self._save_config()
@@ -119,20 +128,48 @@ class DatasetManager:
                     return
 
     def _validate_kaggle_dataset(self, dataset: str) -> bool:
-        """Check if Kaggle dataset exists using generic shell command or python API."""
+        """Check if Kaggle dataset exists and is accessible."""
         try:
-            # We can reuse similar logic to KaggleDataSource
-            # Assuming Kaggle API credentials are set in env
-            import subprocess
-            result = subprocess.run(
-                ["python", "-m", "kaggle", "datasets", "status", dataset],
-                capture_output=True,
-                text=True
-            )
-            return result.returncode == 0
-        except Exception as e:
-            logger.error(f"Validation error: {e}")
+            # First try using the Kaggle Python API directly
+            from kaggle.api.kaggle_api_extended import KaggleApi
+            api = KaggleApi()
+            api.authenticate()
+            
+            # Parse the owner/dataset format
+            parts = dataset.split('/')
+            if len(parts) != 2:
+                logger.error(f"Invalid dataset format: {dataset}. Expected 'owner/dataset-name'")
+                return False
+            
+            owner, dataset_name = parts
+            
+            # Try to find the dataset
+            datasets_found = api.dataset_list(search=dataset_name, user=owner)
+            for ds in datasets_found:
+                if ds.ref.lower() == dataset.lower():
+                    logger.info(f"Validated Kaggle dataset: {dataset}")
+                    return True
+            
+            # Fallback: try listing files (some datasets may not show in search)
+            try:
+                files = api.dataset_list_files(dataset)
+                if files and len(files.files) > 0:
+                    logger.info(f"Validated Kaggle dataset via file list: {dataset}")
+                    return True
+            except Exception:
+                pass
+            
+            logger.warning(f"Could not validate Kaggle dataset: {dataset}")
             return False
+            
+        except ImportError:
+            logger.warning("Kaggle API not installed, skipping validation")
+            return True  # Allow if we can't validate
+        except Exception as e:
+            logger.error(f"Validation error for {dataset}: {e}")
+            # If validation fails due to API issues, allow the add anyway
+            # The download will fail later if invalid
+            return True
 
     def get_kaggle_metadata(self, dataset_id: str) -> Optional[Dict[str, Any]]:
         """Fetch metadata from Kaggle API including last update date."""

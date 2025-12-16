@@ -25,3 +25,10 @@ targets:
   regression: point_diff
 preprocessing:
   team_mapping: team_name -> team_id
+kaggle_datasets:
+  - id: philiphyde1/nfl-stats-1999-2022
+    description: "NFL Stats 2012-2024 (player-level)"
+    files:
+      - "players.csv"
+      - "player_stats.csv"
+

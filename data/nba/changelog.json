@@ -1,5 +1,17 @@
 [
   {
+    "date": "2025-12-15T12:40:45.447418",
+    "topic": "Updated chrismunch/nba-game-team-statistics",
+    "details": {
+      "files_added": [
+        "processed",
+        "data_dictionary.csv",
+        "cumulative_scraped"
+      ],
+      "dataset": "chrismunch/nba-game-team-statistics"
+    }
+  },
+  {
     "date": "2025-12-06T15:59:52.601192",
     "topic": "Updated sumitrodatta/nba-aba-baa-stats",
     "details": {

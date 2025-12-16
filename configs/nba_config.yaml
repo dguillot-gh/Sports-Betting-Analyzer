@@ -38,3 +38,11 @@ features:
 targets:
   classification: is_all_star
   regression: pts_per_game
+kaggle_datasets:
+  - id: eoinamoore/historical-nba-data-and-player-box-scores
+    description: "NBA Box Scores 1947-Today (daily updates)"
+    files:
+      - "box_scores.csv"
+      - "games.csv"
+      - "players.csv"
+
