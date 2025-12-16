@@ -11,3 +11,4 @@ kaggle
 pyreadr
 httpx
 aiohttp
+python-multipart
