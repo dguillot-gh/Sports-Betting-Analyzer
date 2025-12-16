@@ -1,0 +1,743 @@
+@page "/data-management"
+@using SportsBettingAnalyzer.Services
+@inject PythonMLServiceClient MLClient
+@inject ISnackbar Snackbar
+@inject ILogger<DataManagement> Logger
+@rendermode InteractiveServer
+
+<PageTitle>Data Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <div>
+            <MudText Typo="Typo.h4" GutterBottom="true">Data Management</MudText>
+            <MudText Typo="Typo.subtitle1">
+                Manage data sources, check for updates, and retrain models.
+            </MudText>
+        </div>
+        <div>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" 
+                       StartIcon="@Icons.Material.Filled.Refresh" 
+                       OnClick="LoadStatus" 
+                       Disabled="_isLoading">
+                Refresh Status
+            </MudButton>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+
+    <MudGrid>
+        <!-- NASCAR Card (GitHub) -->
+        <MudItem xs="12" md="6" lg="4">
+            <MudCard Elevation="3" Class="h-100">
+                <MudCardHeader>
+                    <CardHeaderAvatar>
+                        <MudAvatar Color="Color.Error">
+                            <MudIcon Icon="@Icons.Material.Filled.DirectionsCar" />
+                        </MudAvatar>
+                    </CardHeaderAvatar>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">NASCAR</MudText>
+                        <MudText Typo="Typo.caption">nascaR.data (GitHub)</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    @if (_dataStatus?.Nascar != null)
+                    {
+                        <MudStack Spacing="2">
+                            <MudText Typo="Typo.body2">
+                                <MudIcon Icon="@Icons.Material.Filled.Storage" Size="Size.Small" Class="mr-1" />
+                                Files: @GetFileCount(_dataStatus.Nascar.Files)
+                            </MudText>
+                             @if (!string.IsNullOrEmpty(_dataStatus.Nascar.LastCommit))
+                            {
+                                <MudText Typo="Typo.body2">
+                                    <MudIcon Icon="@Icons.Material.Filled.Update" Size="Size.Small" Class="mr-1" />
+                                    Last Commit: @FormatDate(_dataStatus.Nascar.LastCommit)
+                                </MudText>
+                            }
+                            
+                            <MudDivider Class="my-2"/>
+                            
+                            <MudText Typo="Typo.body2">
+                                <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Small" Class="mr-1" />
+                                Models: @_dataStatus.Nascar.Models
+                                @if (_dataStatus.Nascar.ModelAccuracy.HasValue)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Class="ml-2">
+                                        @(_dataStatus.Nascar.ModelAccuracy.Value * 100).ToString("F1")% acc
+                                    </MudChip>
+                                }
+                            </MudText>
+                        </MudStack>
+                    }
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" 
+                               StartIcon="@Icons.Material.Filled.CloudDownload"
+                               OnClick="@(() => UpdateData("nascar"))" 
+                               Disabled="@_isUpdating">
+                        Update
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Info"
+                               StartIcon="@Icons.Material.Filled.AutoFixHigh"
+                               OnClick="@(() => EnhanceData("nascar"))"
+                               Disabled="@_isUpdating">
+                        Enhance
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
+                               StartIcon="@Icons.Material.Filled.ModelTraining"
+                               OnClick="@(() => RetrainModel("nascar"))"
+                               Disabled="@_isUpdating">
+                        Train
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <!-- Dynamic Sports Cards -->
+        @foreach (var sport in new[] { "nfl", "nba" })
+        {
+            var status = sport == "nfl" ? _dataStatus?.Nfl : _dataStatus?.Nba;
+            var color = sport == "nfl" ? Color.Success : Color.Warning;
+            var icon = sport == "nfl" ? Icons.Material.Filled.SportsFootball : Icons.Material.Filled.SportsBasketball;
+            
+            <MudItem xs="12" md="6" lg="4">
+                <MudCard Elevation="3" Class="h-100">
+                    <MudCardHeader>
+                        <CardHeaderAvatar>
+                            <MudAvatar Color="@color">
+                                <MudIcon Icon="@icon" />
+                            </MudAvatar>
+                        </CardHeaderAvatar>
+                        <CardHeaderContent>
+                            <div class="d-flex justify-space-between">
+                                <div>
+                                    <MudText Typo="Typo.h6">@sport.ToUpper()</MudText>
+                                    <MudText Typo="Typo.caption">Kaggle Datasets</MudText>
+                                </div>
+                                <MudIconButton Icon="@Icons.Material.Filled.Sync" 
+                                               Size="Size.Small" 
+                                               OnClick="@(() => CheckUpdates(sport))" 
+                                               Title="Check for Updates" />
+                            </div>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @if (status != null)
+                        {
+                            <MudStack Spacing="2">
+                                <!-- Datasets List -->
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">CONFIGURED DATASETS</MudText>
+                                
+                                @if (status.Datasets != null && status.Datasets.Any())
+                                {
+                                    @foreach (var ds in status.Datasets)
+                                    {
+                                        <MudPaper Class="pa-2 d-flex justify-space-between align-center" Elevation="0" Outlined="true">
+                                            <div style="overflow: hidden; text-overflow: ellipsis;">
+                                                <MudText Typo="Typo.body2" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                                    <b>@ds.Id</b>
+                                                </MudText>
+                                                @if (!string.IsNullOrEmpty(ds.LastUpdated))
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Default">
+                                                        <MudIcon Icon="@Icons.Material.Filled.CloudDone" Size="Size.Small" Class="mr-1" />
+                                                        Downloaded: @FormatDate(ds.LastUpdated)
+                                                    </MudText>
+                                                }
+                                                @if (_updatesAvailable.ContainsKey(ds.Id))
+                                                {
+                                                    var updateInfo = _updatesAvailable[ds.Id];
+                                                    <MudTooltip Text="@($"Kaggle updated: {updateInfo}. Click to download new version.")">
+                                                        <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.NewReleases">Update Available</MudChip>
+                                                    </MudTooltip>
+                                                }
+                                            </div>
+                                            <div class="d-flex">
+                                                <MudIconButton Icon="@Icons.Material.Filled.CloudDownload" 
+                                                               Size="Size.Small" 
+                                                               Color="Color.Primary"
+                                                               OnClick="@(() => UpdateData(sport, ds.Id))"
+                                                               Disabled="@_isUpdating"
+                                                               Title="Update this dataset" />
+                                                               
+                                                <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                                               Size="Size.Small" 
+                                                               Color="Color.Error"
+                                                               OnClick="@(() => RemoveDataset(sport, ds.Id))"
+                                                               Disabled="@_isUpdating"
+                                                               Title="Remove dataset" />
+                                            </div>
+                                        </MudPaper>
+                                    }
+                                }
+                                else
+                                {
+                                    <MudAlert Severity="Severity.Info" Dense="true" Class="py-1">No datasets configured.</MudAlert>
+                                }
+
+                                <!-- Add Dataset Inline Form -->
+                                @if (_addingDatasetSport == sport)
+                                {
+                                    <MudPaper Class="pa-2 mt-2" Elevation="0" Outlined="true" Style="background-color: var(--mud-palette-background-grey);">
+                                        <MudTextField @bind-Value="_newDatasetId" 
+                                                      Label="Kaggle Dataset ID" 
+                                                      Placeholder="owner/dataset" 
+                                                      Margin="Margin.Dense" 
+                                                      Variant="Variant.Outlined" 
+                                                      Class="mb-2"
+                                                      AutoFocus="true" />
+                                        <div class="d-flex justify-end gap-2">
+                                            <MudButton Size="Size.Small" OnClick="@(() => _addingDatasetSport = null)">Cancel</MudButton>
+                                            <MudButton Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled" 
+                                                       OnClick="@(() => AddDataset(sport))"
+                                                       Disabled="@(string.IsNullOrWhiteSpace(_newDatasetId))">Add</MudButton>
+                                        </div>
+                                    </MudPaper>
+                                }
+                                else
+                                {
+                                    <MudButton StartIcon="@Icons.Material.Filled.Add" 
+                                               Size="Size.Small" 
+                                               Variant="Variant.Text" 
+                                               Color="Color.Primary"
+                                               OnClick="@(() => { _addingDatasetSport = sport; _newDatasetId = ""; })">
+                                        Add Dataset
+                                    </MudButton>
+                                }
+
+                                <MudDivider Class="my-2"/>
+                                
+                                <MudText Typo="Typo.body2">
+                                    <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Small" Class="mr-1" />
+                                    Models: @status.Models
+                                </MudText>
+                            </MudStack>
+                        }
+                    </MudCardContent>
+                    <MudCardActions>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" FullWidth="true"
+                                   StartIcon="@Icons.Material.Filled.ModelTraining"
+                                   OnClick="@(() => RetrainModel(sport))"
+                                   Disabled="@_isUpdating">
+                            Train Model
+                        </MudButton>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6" Class="mt-4">
+        <MudTabPanel Text="Update History" Icon="@Icons.Material.Filled.History">
+            @if (_history.Any())
+            {
+                 <MudTable Items="@_history" Dense="true" Hover="true" Striped="true">
+                    <HeaderContent>
+                        <MudTh>Date</MudTh>
+                        <MudTh>Topic</MudTh>
+                        <MudTh>Details</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Date">@FormatDate(context["date"]?.ToString())</MudTd>
+                        <MudTd DataLabel="Topic">@context["topic"]</MudTd>
+                        <MudTd DataLabel="Details">
+                            <MudText Typo="Typo.caption" Style="font-family: monospace;">
+                                @System.Text.Json.JsonSerializer.Serialize(context["details"])
+                            </MudText>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+            else
+            {
+                <MudText>No history available.</MudText>
+            }
+        </MudTabPanel>
+        
+        <MudTabPanel Text="Column Scan" Icon="@Icons.Material.Filled.ViewColumn">
+            <MudStack Spacing="4">
+                <MudText Typo="Typo.subtitle1">Column Mapping Status</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Scan your data to see which columns are mapped to standard names and which need attention.
+                </MudText>
+                
+                <MudButtonGroup Variant="Variant.Outlined" Color="Color.Primary">
+                    @foreach (var sport in new[] { "nba", "nfl", "nascar" })
+                    {
+                        <MudButton OnClick="@(() => ScanColumns(sport))" Disabled="@_isScanning">
+                            Scan @sport.ToUpper()
+                        </MudButton>
+                    }
+                </MudButtonGroup>
+                
+                @if (_isScanning)
+                {
+                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                }
+                
+                @if (_scanReport != null)
+                {
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudText Typo="Typo.h6" Class="mb-2">@_scanReport.Sport.ToUpper() Column Report</MudText>
+                        <MudStack Row="true" Spacing="4" Class="mb-3">
+                            <MudChip T="string" Color="Color.Success" Size="Size.Small">
+                                ✅ @_scanReport.MappedCount Mapped
+                            </MudChip>
+                            <MudChip T="string" Color="@(_scanReport.UnmappedCount > 0 ? Color.Warning : Color.Default)" Size="Size.Small">
+                                ⚠️ @_scanReport.UnmappedCount Unmapped
+                            </MudChip>
+                            <MudChip T="string" Color="Color.Info" Size="Size.Small">
+                                📊 @_scanReport.TotalColumns Total
+                            </MudChip>
+                        </MudStack>
+                        
+                        @if (_scanReport.Unmapped.Any())
+                        {
+                            <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+                                <strong>Unmapped columns:</strong> These are extra columns in your data not recognized by the alias system.
+                            </MudAlert>
+                            <MudPaper Class="pa-2" Outlined="true" Style="max-height: 150px; overflow-y: auto;">
+                                @foreach (var col in _scanReport.Unmapped.Take(30))
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ma-1">@col</MudChip>
+                                }
+                                @if (_scanReport.Unmapped.Count > 30)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary">+@(_scanReport.Unmapped.Count - 30) more</MudChip>
+                                }
+                            </MudPaper>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Success" Dense="true">
+                                All columns are mapped! ✅
+                            </MudAlert>
+                        }
+                        
+                        @* Required Columns Section *@
+                        @if (_scanReport.RequiredColumns != null)
+                        {
+                            <MudDivider Class="my-3" />
+                            <MudText Typo="Typo.subtitle2" Class="mb-2">
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Class="mr-1" />
+                                Required Columns for @_scanReport.Sport.ToUpper()
+                            </MudText>
+                            
+                            <MudStack Row="true" Spacing="4" Class="mb-2">
+                                <MudChip T="string" Color="Color.Success" Size="Size.Small">
+                                    ✅ @_scanReport.RequiredColumns.Found / @_scanReport.RequiredColumns.Total Found
+                                </MudChip>
+                                @if (_scanReport.RequiredColumns.Missing > 0)
+                                {
+                                    <MudChip T="string" Color="Color.Error" Size="Size.Small">
+                                        ❌ @_scanReport.RequiredColumns.Missing Missing
+                                    </MudChip>
+                                }
+                            </MudStack>
+                            
+                            @if (_scanReport.RequiredColumns.MissingList.Any())
+                            {
+                                <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">
+                                    <strong>Missing required columns:</strong> These columns are needed but not found in your data.
+                                </MudAlert>
+                                <MudPaper Class="pa-2" Outlined="true">
+                                    @foreach (var col in _scanReport.RequiredColumns.MissingList)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="ma-1">@col</MudChip>
+                                    }
+                                </MudPaper>
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Success" Dense="true">
+                                    All required columns found! Ready for ML training. ✅
+                                </MudAlert>
+                            }
+                        }
+                        
+                        <MudStack Row="true" Spacing="2" Class="mt-4">
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.Refresh"
+                                       OnClick="@(() => RefreshData(_scanReport.Sport))"
+                                       Disabled="@_isUpdating">
+                                Refresh Data
+                            </MudButton>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
+                                       StartIcon="@Icons.Material.Filled.AutoFixHigh"
+                                       OnClick="@(() => StandardizeData(_scanReport.Sport))"
+                                       Disabled="@_isUpdating">
+                                Standardize Columns
+                            </MudButton>
+                        </MudStack>
+                    </MudPaper>
+                }
+            </MudStack>
+        </MudTabPanel>
+        
+        <MudTabPanel Text="Configuration Help" Icon="@Icons.Material.Filled.Help">
+             <MudText Typo="Typo.subtitle2" GutterBottom="true">Kaggle API Setup</MudText>
+            <MudText Typo="Typo.body2" Class="mb-2">
+                To download NFL/NBA data, set these environment variables:
+            </MudText>
+            <MudPaper Class="pa-3 mb-3" Style="background: #1e1e1e; font-family: monospace;">
+                <code style="color: #9cdcfe;">KAGGLE_USERNAME</code>=<span style="color: #ce9178;">your-username</span><br/>
+                <code style="color: #9cdcfe;">KAGGLE_KEY</code>=<span style="color: #ce9178;">your-api-key</span>
+            </MudPaper>
+        </MudTabPanel>
+    </MudTabs>
+
+</MudContainer>
+
+@code {
+    private DataStatusResponse? _dataStatus;
+    private bool _isLoading = true;
+    private bool _isUpdating = false;
+    
+    // UI State for Adding Dataset
+    private string? _addingDatasetSport;
+    private string _newDatasetId = "";
+    
+    // Updates
+    private Dictionary<string, object> _updatesAvailable = new();
+    
+    // History
+    private List<Dictionary<string, object>> _history = new();
+    
+    // Column Scan
+    private bool _isScanning = false;
+    private ColumnScanReport? _scanReport;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStatus();
+        await LoadHistory();
+    }
+
+    private async Task LoadStatus()
+    {
+        try
+        {
+            _isLoading = true;
+            _dataStatus = await MLClient.GetDataStatusAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading status");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+    
+    private async Task LoadHistory()
+    {
+        // Load history for all sports and merge?
+        // Or just show generic list. For now let's load NASCAr + NBA history
+        var allHistory = new List<Dictionary<string, object>>();
+        foreach(var sport in new[]{"nascar", "nba", "nfl"})
+        {
+            var h = await MLClient.GetHistoryAsync(sport);
+            allHistory.AddRange(h);
+        }
+        
+        // Sort by date desc
+        _history = allHistory.OrderByDescending(x => x.ContainsKey("date") ? x["date"].ToString() : "").ToList();
+    }
+
+    private async Task AddDataset(string sport)
+    {
+        if (string.IsNullOrWhiteSpace(_newDatasetId)) return;
+        
+        try
+        {
+            _isUpdating = true;
+            var success = await MLClient.AddDatasetAsync(sport, _newDatasetId);
+            if (success)
+            {
+                Snackbar.Add($"Dataset {_newDatasetId} added!", Severity.Success);
+                _addingDatasetSport = null;
+                _newDatasetId = "";
+                await LoadStatus();
+            }
+            else
+            {
+                Snackbar.Add("Failed to add dataset. Check ID and permissions.", Severity.Error);
+            }
+        }
+        catch(Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isUpdating = false;
+        }
+    }
+    
+    private async Task RemoveDataset(string sport, string id)
+    {
+        // Confirm?
+        try
+        {
+            _isUpdating = true;
+            var success = await MLClient.RemoveDatasetAsync(sport, id);
+            if (success)
+            {
+                Snackbar.Add("Dataset removed.", Severity.Success);
+                await LoadStatus();
+            }
+            else
+            {
+                 Snackbar.Add("Failed to remove dataset.", Severity.Error);
+            }
+        }
+        catch(Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isUpdating = false;
+        }
+    }
+
+    private async Task UpdateData(string sport, string? dataset = null)
+    {
+        try
+        {
+            _isUpdating = true;
+            Snackbar.Add($"Updating {sport}{(dataset!=null ? " - "+dataset : "")}...", Severity.Info);
+            
+            var result = await MLClient.UpdateDataAsync(sport, dataset);
+            
+            if (result.Success)
+            {
+                Snackbar.Add("Update successful!", Severity.Success);
+                await LoadStatus();
+                await LoadHistory();
+            }
+            else
+            {
+                Snackbar.Add("Update failed.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isUpdating = false;
+        }
+    }
+
+    private async Task CheckUpdates(string sport)
+    {
+        try
+        {
+            Snackbar.Add($"Checking for updates ({sport})...", Severity.Info);
+            var updates = await MLClient.CheckUpdatesAsync(sport);
+            
+            int count = 0;
+            if (updates != null)
+            {
+                foreach(var kvp in updates)
+                {
+                    // Logic to check if newer?
+                    // For now just assume if present in response it might be relevant
+                    _updatesAvailable[kvp.Key] = kvp.Value;
+                    count++;
+                }
+            }
+            
+            if (count > 0)
+                 Snackbar.Add($"Found updates for {count} datasets!", Severity.Success);
+            else
+                 Snackbar.Add("No updates found.", Severity.Success);
+        }
+        catch(Exception ex)
+        {
+            Snackbar.Add($"Error checking updates: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task RetrainModel(string sport)
+    {
+         try
+        {
+            _isUpdating = true;
+            Snackbar.Add($"Starting Training for {sport}...", Severity.Info);
+            var result = await MLClient.RetrainModelAsync(sport);
+            if (result.Success)
+            {
+                Snackbar.Add("Training Complete!", Severity.Success);
+                await LoadStatus();
+            }
+            else
+            {
+                 Snackbar.Add("Training Failed.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isUpdating = false;
+        }
+    }
+    
+    private async Task EnhanceData(string sport)
+    {
+         // Same as before...
+         try
+        {
+            _isUpdating = true;
+            Snackbar.Add($"Enhancing {sport}...", Severity.Info);
+            var result = await MLClient.EnhanceDataAsync(sport);
+            if (result.Success)
+            {
+                Snackbar.Add("Enhanced successfully!", Severity.Success);
+                await LoadStatus();
+            }
+            else
+            {
+                 Snackbar.Add("Enhance Failed.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isUpdating = false;
+        }
+    }
+
+    private string FormatDate(string? isoDate)
+    {
+        if (string.IsNullOrEmpty(isoDate)) return "";
+        if (DateTime.TryParse(isoDate, out var date))
+            return date.ToLocalTime().ToString("MMM d, HH:mm");
+        return isoDate;
+    }
+    
+    private int GetFileCount(System.Text.Json.JsonElement? files)
+    {
+        if (files == null || !files.HasValue) return 0;
+        var elem = files.Value;
+        if (elem.ValueKind == System.Text.Json.JsonValueKind.Array) return elem.GetArrayLength();
+        if (elem.ValueKind == System.Text.Json.JsonValueKind.Object) return elem.EnumerateObject().Count();
+        return 0;
+    }
+    
+    // ===== Column Scan Methods =====
+    
+    private async Task ScanColumns(string sport)
+    {
+        _isScanning = true;
+        _scanReport = null;
+        StateHasChanged();
+        
+        try
+        {
+            using var http = new HttpClient();
+            var response = await http.GetFromJsonAsync<ColumnScanReport>($"http://localhost:8000/data/scan/{sport}");
+            _scanReport = response;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Scan failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isScanning = false;
+        }
+    }
+    
+    private async Task RefreshData(string sport)
+    {
+        _isUpdating = true;
+        try
+        {
+            using var http = new HttpClient();
+            var response = await http.PostAsync($"http://localhost:8000/data/refresh/{sport}", null);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"{sport.ToUpper()} data refreshed!", Severity.Success);
+                await ScanColumns(sport);
+            }
+            else
+            {
+                Snackbar.Add("Refresh failed", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isUpdating = false;
+        }
+    }
+    
+    private async Task StandardizeData(string sport)
+    {
+        _isUpdating = true;
+        try
+        {
+            using var http = new HttpClient();
+            var response = await http.PostAsync($"http://localhost:8000/data/standardize/{sport}?save=true", null);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"{sport.ToUpper()} columns standardized!", Severity.Success);
+                await ScanColumns(sport);
+            }
+            else
+            {
+                Snackbar.Add("Standardize failed", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isUpdating = false;
+        }
+    }
+    
+    // Model for scan report
+    public class ColumnScanReport
+    {
+        public string Sport { get; set; } = "";
+        public int TotalColumns { get; set; }
+        public int MappedCount { get; set; }
+        public int UnmappedCount { get; set; }
+        public Dictionary<string, string> Mapped { get; set; } = new();
+        public List<string> Unmapped { get; set; } = new();
+        public Dictionary<string, string> Suggestions { get; set; } = new();
+        public RequiredColumnsInfo? RequiredColumns { get; set; }
+    }
+    
+    public class RequiredColumnsInfo
+    {
+        public int Total { get; set; }
+        public int Found { get; set; }
+        public int Missing { get; set; }
+        public List<string> FoundList { get; set; } = new();
+        public List<string> MissingList { get; set; } = new();
+    }
+}
+

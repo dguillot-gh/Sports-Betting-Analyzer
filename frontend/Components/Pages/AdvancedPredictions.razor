@@ -1,0 +1,482 @@
+@page "/advanced-predictions"
+@rendermode InteractiveServer
+@using SportsBettingAnalyzer.Services
+@using System.Text.Json
+@inject PythonMLServiceClient MLService
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h3" GutterBottom="true">Interactive Prediction Simulator</MudText>
+    <MudText Typo="Typo.subtitle1" Class="mb-4">Simulate race scenarios by selecting feature values to get real-time predictions.</MudText>
+
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4">
+                <MudText Typo="Typo.h6" GutterBottom="true">Model Configuration</MudText>
+                
+                <MudSelect T="string" Label="Sport" @bind-Value="_selectedSport" SelectedValuesChanged="OnSportChanged" Variant="Variant.Outlined" Class="mb-3">
+                    @foreach (var sport in _sports)
+                    {
+                        <MudSelectItem Value="@sport">@sport.ToUpper()</MudSelectItem>
+                    }
+                </MudSelect>
+
+                @if (_selectedSport == "nascar")
+                {
+                    <MudSelect T="string" Label="Series" @bind-Value="_selectedSeries" SelectedValuesChanged="OnSeriesChanged" Variant="Variant.Outlined" Class="mb-3">
+                        @foreach (var series in _nascarSeries)
+                        {
+                            <MudSelectItem Value="@series">@series.ToUpper()</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+
+                <MudSelect T="string" Label="Task" @bind-Value="_selectedTask" Variant="Variant.Outlined" Class="mb-3">
+                    <MudSelectItem Value="@("classification")">Classification (Win/Loss)</MudSelectItem>
+                    <MudSelectItem Value="@("regression")">Regression (Position)</MudSelectItem>
+                </MudSelect>
+
+                <MudDivider Class="my-4" />
+
+                <MudButton Variant="Variant.Filled" 
+                           Color="Color.Primary" 
+                           OnClick="LoadFeatures" 
+                           Disabled="@_isLoadingFeatures"
+                           FullWidth="true"
+                           Class="mb-2">
+                    @(_isLoadingFeatures ? "Loading Features..." : "Load Features")
+                </MudButton>
+
+                <MudButton Variant="Variant.Outlined" 
+                           Color="Color.Secondary" 
+                           OnClick="LoadUpcomingRace" 
+                           Disabled="@(!_featuresLoaded)"
+                           FullWidth="true"
+                           Class="mb-2">
+                    Load Upcoming Race
+                </MudButton>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="8">
+            <MudPaper Class="pa-4" Style="min-height: 400px;">
+                <MudText Typo="Typo.h6" GutterBottom="true">Feature Inputs</MudText>
+                
+                @if (_isLoadingFeatures)
+                {
+                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                }
+                else if (_featuresLoaded)
+                {
+                    <MudGrid>
+                        <!-- Scenario Keys -->
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.subtitle2" Color="Color.Primary">Scenario Setup (Autofill Enabled)</MudText>
+                        </MudItem>
+
+                        <!-- Year Selection -->
+                        @if (_numericFeatures.Contains("schedule_season") || _numericFeatures.Contains("year"))
+                        {
+                            var yearFeat = _numericFeatures.Contains("schedule_season") ? "schedule_season" : "year";
+                            <MudItem xs="12" sm="4">
+                                <MudSelect T="double?" Label="Year" Value="@_numericInputs[yearFeat]" ValueChanged="@(v => OnYearChanged(yearFeat, v))" Variant="Variant.Outlined" Dense="true">
+                                    @foreach (var year in _availableYears)
+                                    {
+                                        <MudSelectItem T="double?" Value="@((double?)year)">@year</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                        }
+
+                        <!-- Track Selection -->
+                        @if (_categoricalFeatures.Contains("track"))
+                        {
+                             <MudItem xs="12" sm="4">
+                                <MudSelect T="string" Label="Track" Value="@_categoricalInputs["track"]" ValueChanged="@(v => OnTrackChanged(v))" Variant="Variant.Outlined" Dense="true">
+                                    @if (_featureValues.ContainsKey("track"))
+                                    {
+                                        @foreach (var val in _featureValues["track"])
+                                        {
+                                            <MudSelectItem Value="@val.ToString()">@val</MudSelectItem>
+                                        }
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                        }
+
+                        <!-- Driver Selection -->
+                        @if (_categoricalFeatures.Contains("driver"))
+                        {
+                             <MudItem xs="12" sm="4">
+                                <MudSelect T="string" Label="Driver" Value="@_categoricalInputs["driver"]" ValueChanged="@(v => OnDriverChanged(v))" Variant="Variant.Outlined" Dense="true">
+                                    @if (_featureValues.ContainsKey("driver"))
+                                    {
+                                        @foreach (var val in _featureValues["driver"])
+                                        {
+                                            <MudSelectItem Value="@val.ToString()">@val</MudSelectItem>
+                                        }
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                        }
+
+                        <MudItem xs="12">
+                            <MudDivider Class="my-2" />
+                        </MudItem>
+
+                        <!-- Remaining Categorical Features -->
+                        @foreach (var feature in _categoricalFeatures.Where(f => f != "track" && f != "driver"))
+                        {
+                            <MudItem xs="12" sm="6">
+                                <MudSelect T="string" Label="@FormatLabel(feature)" @bind-Value="_categoricalInputs[feature]" Variant="Variant.Outlined" Dense="true">
+                                    @if (_featureValues.ContainsKey(feature))
+                                    {
+                                        @foreach (var val in _featureValues[feature])
+                                        {
+                                            <MudSelectItem Value="@val.ToString()">@val</MudSelectItem>
+                                        }
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                        }
+
+                        <!-- Remaining Numeric Features -->
+                        @foreach (var feature in _numericFeatures.Where(f => f != "schedule_season" && f != "year"))
+                        {
+                            <MudItem xs="12" sm="6">
+                                <MudNumericField T="double?" Label="@FormatLabel(feature)" @bind-Value="_numericInputs[feature]" Variant="Variant.Outlined" Dense="true" />
+                            </MudItem>
+                        }
+                        
+                        <!-- Boolean Features -->
+                        @foreach (var feature in _booleanFeatures)
+                        {
+                             <MudItem xs="12" sm="6">
+                                <MudCheckBox T="bool" Label="@FormatLabel(feature)" @bind-Value="_booleanInputs[feature]" Color="Color.Primary" />
+                            </MudItem>
+                        }
+                    </MudGrid>
+
+                    <MudDivider Class="my-4" />
+
+                    <MudButton Variant="Variant.Filled" 
+                               Color="Color.Secondary" 
+                               OnClick="RunPrediction" 
+                               Disabled="@_isPredicting"
+                               FullWidth="true"
+                               Size="Size.Large">
+                        @(_isPredicting ? "Predicting..." : "Run Prediction")
+                    </MudButton>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body1" Color="Color.Secondary">Select a model and click "Load Features" to start.</MudText>
+                }
+            </MudPaper>
+            
+            @if (_predictionResult != null)
+            {
+                <MudPaper Class="pa-4 mt-4" Elevation="4">
+                    <MudText Typo="Typo.h5" Color="Color.Primary" GutterBottom="true">Prediction Result</MudText>
+                    <MudGrid>
+                        <MudItem xs="6">
+                            <MudText Typo="Typo.subtitle1">Prediction:</MudText>
+                            <MudText Typo="Typo.h4">@_predictionResult.Prediction</MudText>
+                        </MudItem>
+                        @if (_predictionResult.Probability.HasValue)
+                        {
+                            <MudItem xs="6">
+                                <MudText Typo="Typo.subtitle1">Probability:</MudText>
+                                <MudText Typo="Typo.h4">@($"{_predictionResult.Probability:P1}")</MudText>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                </MudPaper>
+            }
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    private List<string> _sports = new();
+    private List<string> _nascarSeries = new();
+    private string _selectedSport = "nascar";
+    private string _selectedSeries = "cup";
+    private string _selectedTask = "classification";
+    
+    private bool _isLoadingFeatures;
+    private bool _featuresLoaded;
+    private bool _isPredicting;
+
+    private List<string> _categoricalFeatures = new();
+    private List<string> _numericFeatures = new();
+    private List<string> _booleanFeatures = new();
+    
+    private Dictionary<string, List<object>> _featureValues = new();
+    private Dictionary<string, Dictionary<string, object>> _driverMappings = new();
+    private List<int> _availableYears = Enumerable.Range(2018, 8).Reverse().ToList(); // 2025 down to 2018
+    
+    // Inputs
+    private Dictionary<string, string> _categoricalInputs = new();
+    private Dictionary<string, double?> _numericInputs = new();
+    private Dictionary<string, bool> _booleanInputs = new();
+
+    private PredictResponse? _predictionResult;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _sports = await MLService.GetAvailableSportsAsync();
+            _nascarSeries = await MLService.GetNASCARSeriesAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void OnSportChanged()
+    {
+        if (_selectedSport != "nascar") _selectedSeries = "";
+        else if (string.IsNullOrEmpty(_selectedSeries) && _nascarSeries.Any()) _selectedSeries = _nascarSeries.First();
+        _featuresLoaded = false;
+        _predictionResult = null;
+    }
+
+    private void OnSeriesChanged()
+    {
+        _featuresLoaded = false;
+        _predictionResult = null;
+    }
+
+    private async Task LoadFeatures()
+    {
+        _isLoadingFeatures = true;
+        _featuresLoaded = false;
+        _predictionResult = null;
+
+        try
+        {
+            // 1. Get Schema
+            var schema = await MLService.GetSchemaAsync(_selectedSport);
+            if (schema.Features != null)
+            {
+                _categoricalFeatures = schema.Features.GetValueOrDefault("categorical", new List<string>());
+                _numericFeatures = schema.Features.GetValueOrDefault("numeric", new List<string>());
+                _booleanFeatures = schema.Features.GetValueOrDefault("boolean", new List<string>());
+            }
+
+            // 2. Get Feature Values for Dropdowns
+            _featureValues = await MLService.GetFeatureValuesAsync(_selectedSport, _selectedSport == "nascar" ? _selectedSeries : null);
+
+            // 3. Get Driver Mappings
+            if (_categoricalFeatures.Contains("driver"))
+            {
+                _driverMappings = await MLService.GetDriverMappingsAsync(_selectedSport, _selectedSport == "nascar" ? _selectedSeries : null);
+            }
+
+            // 4. Initialize Inputs
+            _categoricalInputs.Clear();
+            foreach (var f in _categoricalFeatures) _categoricalInputs[f] = "";
+            
+            _numericInputs.Clear();
+            foreach (var f in _numericFeatures) _numericInputs[f] = null;
+            
+            _booleanInputs.Clear();
+            foreach (var f in _booleanFeatures) _booleanInputs[f] = false;
+
+            _featuresLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load features: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoadingFeatures = false;
+        }
+    }
+
+    private void OnDriverChanged(string driver)
+    {
+        _categoricalInputs["driver"] = driver;
+        
+        // Autofill Team/Manu
+        if (_driverMappings.TryGetValue(driver, out var mapping))
+        {
+            if (mapping.TryGetValue("manu", out var manu) && _categoricalFeatures.Contains("manu"))
+            {
+                _categoricalInputs["manu"] = manu.ToString() ?? "";
+            }
+            if (mapping.TryGetValue("team_name", out var team) && _categoricalFeatures.Contains("team_name"))
+            {
+                _categoricalInputs["team_name"] = team.ToString() ?? "";
+            }
+            Snackbar.Add($"Autofilled profile for {driver}", Severity.Info);
+        }
+
+        CheckHistoricalData();
+    }
+
+    private void OnTrackChanged(string track)
+    {
+        _categoricalInputs["track"] = track;
+        CheckHistoricalData();
+    }
+
+    private void OnYearChanged(string feature, double? year)
+    {
+        _numericInputs[feature] = year;
+        CheckHistoricalData();
+    }
+
+    private async void CheckHistoricalData()
+    {
+        // Check if we have Year, Track, and Driver selected
+        var yearKey = _numericFeatures.Contains("schedule_season") ? "schedule_season" : "year";
+        
+        if (!_numericInputs.ContainsKey(yearKey) || !_numericInputs[yearKey].HasValue) return;
+        if (!_categoricalInputs.ContainsKey("track") || string.IsNullOrEmpty(_categoricalInputs["track"])) return;
+        if (!_categoricalInputs.ContainsKey("driver") || string.IsNullOrEmpty(_categoricalInputs["driver"])) return;
+
+        var year = (int)_numericInputs[yearKey]!.Value;
+        var track = _categoricalInputs["track"];
+        var driver = _categoricalInputs["driver"];
+
+        await LoadHistoricalData(year, track, driver);
+    }
+
+    private async Task LoadHistoricalData(int year, string track, string driver)
+    {
+        try
+        {
+            var data = await MLService.GetDataAsync(
+                _selectedSport, 
+                limit: 100, 
+                seasonMin: year, 
+                seasonMax: year, 
+                series: _selectedSport == "nascar" ? _selectedSeries : null,
+                driver: driver,
+                trackType: null // We don't filter by track type here, but we could if we had track->type mapping
+            );
+
+            // Filter in memory for exact track match (since API filters by track_type, not track name)
+            var raceData = data.Rows.FirstOrDefault(r => 
+                r.ContainsKey("track") && r["track"].ToString() == track &&
+                r.ContainsKey("driver") && r["driver"].ToString() == driver
+            );
+
+            if (raceData != null)
+            {
+                // Autofill all fields
+                foreach (var key in raceData.Keys)
+                {
+                    if (_categoricalInputs.ContainsKey(key))
+                    {
+                        _categoricalInputs[key] = raceData[key]?.ToString() ?? "";
+                    }
+                    else if (_numericInputs.ContainsKey(key))
+                    {
+                        if (double.TryParse(raceData[key]?.ToString(), out double val))
+                        {
+                            _numericInputs[key] = val;
+                        }
+                    }
+                    else if (_booleanInputs.ContainsKey(key))
+                    {
+                         if (bool.TryParse(raceData[key]?.ToString(), out bool val))
+                        {
+                            _booleanInputs[key] = val;
+                        }
+                    }
+                }
+                Snackbar.Add($"Loaded historical data for {driver} at {track} ({year})", Severity.Success);
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading historical data: {ex.Message}");
+        }
+    }
+
+    private async Task RunPrediction()
+    {
+        _isPredicting = true;
+        _predictionResult = null;
+
+        try
+        {
+            var features = new Dictionary<string, object>();
+            
+            foreach (var kvp in _categoricalInputs)
+                if (!string.IsNullOrEmpty(kvp.Value)) features[kvp.Key] = kvp.Value;
+                
+            foreach (var kvp in _numericInputs)
+                if (kvp.Value.HasValue) features[kvp.Key] = kvp.Value.Value;
+                
+            foreach (var kvp in _booleanInputs)
+                features[kvp.Key] = kvp.Value;
+
+            var request = new PredictRequest { Features = features };
+            
+            _predictionResult = await MLService.PredictAsync(
+                _selectedSport, 
+                _selectedTask, 
+                request, 
+                _selectedSport == "nascar" ? _selectedSeries : null
+            );
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Prediction failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isPredicting = false;
+        }
+    }
+
+    private async Task LoadUpcomingRace()
+    {
+        try
+        {
+            var race = await MLService.GetUpcomingRaceAsync(_selectedSport);
+            if (race != null)
+            {
+                // Set Track
+                if (_categoricalInputs.ContainsKey("track"))
+                {
+                    _categoricalInputs["track"] = race.Track;
+                    // Trigger change handler if needed, but simple assignment binds to UI
+                    // If we want to trigger side effects (like historical data load), we might need to call OnTrackChanged
+                    // But OnTrackChanged expects a string.
+                    // Let's just set it.
+                }
+                
+                // Set Year
+                var yearKey = _numericFeatures.Contains("schedule_season") ? "schedule_season" : "year";
+                if (_numericInputs.ContainsKey(yearKey))
+                {
+                    _numericInputs[yearKey] = race.Year;
+                }
+
+                Snackbar.Add($"Loaded upcoming race: {race.RaceName} at {race.Track}", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("No upcoming race found", Severity.Info);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading upcoming race: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private string FormatLabel(string name)
+    {
+        return System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(name.Replace("_", " "));
+    }
+}

@@ -1,0 +1,398 @@
+@page "/model-insights"
+@using SportsBettingAnalyzer.Services
+@using System.Text.Json
+@inject PythonMLServiceClient MLService
+@inject ISnackbar Snackbar
+@inject ILogger<ModelInsights> Logger
+@inject FileExportService FileExportService
+@rendermode InteractiveServer
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" GutterBottom="true">Model Insights</MudText>
+    <MudText Typo="Typo.body1" Class="mb-4">Explore trained models, performance metrics, and feature importance.</MudText>
+
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" md="4">
+             <MudSelect T="string" Label="Select Sport" Value="_selectedSport" ValueChanged="OnSportChanged" Variant="Variant.Outlined" Dense="true">
+                @foreach (var sport in _availableSports)
+                {
+                    <MudSelectItem Value="@sport">@sport.ToUpper()</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+    </MudGrid>
+
+    @if (_isLoading)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_models.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">No trained models found for @_selectedSport.ToUpper(). Go to "Feature Engineering" or "Train Models" to create one.</MudAlert>
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudPaper Class="p-4" Elevation="3">
+                    <MudText Typo="Typo.h6" GutterBottom="true">Select Model</MudText>
+                    <div class="d-flex flex-column gap-2">
+                        @foreach (var model in _models)
+                        {
+                            <MudPaper Class="@($"p-3 {(model == _selectedModel ? "mud-theme-primary" : "")}")" 
+                                      @onclick="@(() => OnModelSelected(model))"
+                                      Style="cursor: pointer;"
+                                      Elevation="@(model == _selectedModel ? 4 : 1)">
+                                <MudText Typo="Typo.subtitle1"><b>@model.Series.ToUpper()</b> - @model.Task</MudText>
+                                <MudText Typo="Typo.caption">Updated: @DateTimeOffset.FromUnixTimeSeconds((long)model.LastUpdated).ToLocalTime().ToString("g")</MudText>
+                            </MudPaper>
+                        }
+                    </div>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="8">
+                @if (_selectedModel != null)
+                {
+                    <MudPaper Class="p-4" Elevation="3">
+                        <MudText Typo="Typo.h5" Color="Color.Primary" GutterBottom="true">@_selectedModel.Series.ToUpper() - @_selectedModel.Task.ToUpper()</MudText>
+                        <MudDivider Class="mb-4" />
+
+                        <MudGrid>
+                            <!-- Performance Metrics -->
+                            <MudItem xs="12" md="6">
+                                <MudText Typo="Typo.h6">Performance</MudText>
+                                <MudList T="string" Dense="true">
+                                    @if (_selectedModel.Metrics.ContainsKey("accuracy"))
+                                    {
+                                        <MudListItem>
+                                            <MudTooltip Text="Percentage of predictions correct. >52% breaks even, >55% is profitable.">
+                                                <MudText><b>Accuracy:</b> @GetMetric("accuracy") <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Color="Color.Default" /></MudText>
+                                            </MudTooltip>
+                                        </MudListItem>
+                                    }
+                                    @if (_selectedModel.Metrics.ContainsKey("roc_auc"))
+                                    {
+                                        <MudListItem>
+                                            <MudTooltip Text="How well the model separates winners from losers. >0.55 is good, >0.65 is great.">
+                                                <MudText><b>ROC AUC:</b> @GetMetric("roc_auc") <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Color="Color.Default" /></MudText>
+                                            </MudTooltip>
+                                        </MudListItem>
+                                    }
+                                    @if (_selectedModel.Metrics.ContainsKey("mae"))
+                                    {
+                                        <MudListItem>
+                                            <MudTooltip Text="Mean Absolute Error. Lower is better. Shows average prediction error in points.">
+                                                <MudText><b>MAE:</b> @GetMetric("mae") <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Color="Color.Default" /></MudText>
+                                            </MudTooltip>
+                                        </MudListItem>
+                                    }
+                                    @if (_selectedModel.Metrics.ContainsKey("r2"))
+                                    {
+                                        <MudListItem>
+                                            <MudTooltip Text="R² Score. 1.0 = perfect, 0 = random. Shows how much variance the model explains.">
+                                                <MudText><b>R² Score:</b> @GetMetric("r2") <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Color="Color.Default" /></MudText>
+                                            </MudTooltip>
+                                        </MudListItem>
+                                    }
+                                    @if (_selectedModel.Metrics.ContainsKey("test_start_season"))
+                                    {
+                                        <MudListItem>
+                                            <MudTooltip Text="The season where test data starts. Model was trained on data before this.">
+                                                <MudText><b>Test Data Start:</b> @_selectedModel.Metrics["test_start_season"] <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Color="Color.Default" /></MudText>
+                                            </MudTooltip>
+                                        </MudListItem>
+                                    }
+                                </MudList>
+                            </MudItem>
+
+                            <!-- Confusion Matrix (Classification Only) -->
+                            @if (_selectedModel.Task == "classification" && _selectedModel.Metrics.ContainsKey("confusion_matrix"))
+                            {
+                                <MudItem xs="12" md="6">
+                                    <MudText Typo="Typo.h6">Confusion Matrix</MudText>
+                                    @{
+                                        var cmElement = (JsonElement)_selectedModel.Metrics["confusion_matrix"];
+                                        var cm = JsonSerializer.Deserialize<Dictionary<string, int>>(cmElement.GetRawText());
+                                        
+                                        // Calculate max value for heatmap scaling
+                                        var maxVal = cm.Values.Max();
+                                        string GetColor(int val) 
+                                        {
+                                            var alpha = (double)val / maxVal;
+                                            return $"background-color: rgba(76, 175, 80, {alpha:F2})"; // Green base
+                                        }
+                                    }
+                                    @if (cm != null)
+                                    {
+                                        <MudPaper Class="pa-4 d-flex justify-center" Elevation="0">
+                                            <MudGrid Spacing="1" Class="justify-center" Style="max-width: 300px;">
+                                                <MudItem xs="6" Class="d-flex justify-center align-center"><MudText><b>Actual Loss</b></MudText></MudItem>
+                                                <MudItem xs="6" Class="d-flex justify-center align-center"><MudText><b>Actual Win</b></MudText></MudItem>
+                                                
+                                                <MudItem xs="6">
+                                                    <MudTooltip Text="True Negative: Predicted Loss, Actual Loss ✅ (Correctly avoided a bad bet)">
+                                                        <MudPaper Class="d-flex flex-column justify-center align-center py-4" Style="@GetColor(cm["tn"])">
+                                                            <MudText Typo="Typo.h5">@cm["tn"]</MudText>
+                                                            <MudText Typo="Typo.caption">True Neg ✅</MudText>
+                                                        </MudPaper>
+                                                    </MudTooltip>
+                                                </MudItem>
+                                                <MudItem xs="6">
+                                                    <MudTooltip Text="False Positive: Predicted Win, Actual Loss ❌ (Lost money on this bet)">
+                                                        <MudPaper Class="d-flex flex-column justify-center align-center py-4" Style="@GetColor(cm["fp"])">
+                                                            <MudText Typo="Typo.h5">@cm["fp"]</MudText>
+                                                            <MudText Typo="Typo.caption">False Pos ❌</MudText>
+                                                        </MudPaper>
+                                                    </MudTooltip>
+                                                </MudItem>
+                                                
+                                                <MudItem xs="6">
+                                                    <MudTooltip Text="False Negative: Predicted Loss, Actual Win ❌ (Missed a winning opportunity)">
+                                                        <MudPaper Class="d-flex flex-column justify-center align-center py-4" Style="@GetColor(cm["fn"])">
+                                                            <MudText Typo="Typo.h5">@cm["fn"]</MudText>
+                                                            <MudText Typo="Typo.caption">False Neg ⚠️</MudText>
+                                                        </MudPaper>
+                                                    </MudTooltip>
+                                                </MudItem>
+                                                <MudItem xs="6">
+                                                    <MudTooltip Text="True Positive: Predicted Win, Actual Win ✅ (Won money on this bet!)">
+                                                        <MudPaper Class="d-flex flex-column justify-center align-center py-4" Style="@GetColor(cm["tp"])">
+                                                            <MudText Typo="Typo.h5">@cm["tp"]</MudText>
+                                                            <MudText Typo="Typo.caption">True Pos ✅</MudText>
+                                                        </MudPaper>
+                                                    </MudTooltip>
+                                                </MudItem>
+                                            </MudGrid>
+                                        </MudPaper>
+                                    }
+                                </MudItem>
+                            }
+                        </MudGrid>
+
+                        <MudDivider Class="my-4" />
+
+                        <!-- Feature Importance -->
+                        <div class="d-flex justify-space-between align-center mb-2">
+                            <MudText Typo="Typo.h6">Top 20 Important Features</MudText>
+                            @if (_selectedModel.Metrics.ContainsKey("feature_importance"))
+                            {
+                                <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportFeatures">Export Features</MudButton>
+                            }
+                        </div>
+                        
+                        <!-- DEBUG: List all keys -->
+                        <MudText Typo="Typo.caption" Color="Color.Default">Available Metrics Keys: @string.Join(", ", _selectedModel.Metrics.Keys)</MudText>
+
+                        @if (_selectedModel.Metrics.ContainsKey("feature_importance"))
+                        {
+                            var fiElement = (JsonElement)_selectedModel.Metrics["feature_importance"];
+                            var features = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(fiElement.GetRawText());
+                            
+                            if (features != null && features.Any())
+                            {
+                                <!-- Chart for Top 10 -->
+                                <MudText Typo="Typo.subtitle1" Class="mt-4">Top 10 Features</MudText>
+                                <MudChart ChartType="ChartType.Bar" ChartSeries="@GetFeatureImportanceSeries(features)" XAxisLabels="@GetFeatureImportanceLabels(features)" Width="100%" Height="350px"></MudChart>
+
+                                <!-- Detailed Table -->
+                                <MudText Typo="Typo.subtitle1" Class="mt-4">Detailed Feature List</MudText>
+                                <MudTable Items="@features" Dense="true" Hover="true" Striped="true" Height="400px" FixedHeader="true">
+                                    <HeaderContent>
+                                        <MudTh>Feature</MudTh>
+                                        <MudTh>Importance</MudTh>
+                                    </HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd DataLabel="Feature">@context["feature"]</MudTd>
+                                        <MudTd DataLabel="Importance">
+                                            @{
+                                                var imp = ((JsonElement)context["importance"]).GetDouble();
+                                                var width = Math.Min(100, Math.Abs(imp) * 100 * 5); // Scale for visual
+                                                var color = imp >= 0 ? "background-color: #4caf50" : "background-color: #f44336";
+                                            }
+                                            <div style="display: flex; align-items: center;">
+                                                <div style="width: @((int)width)px; height: 10px; @color; margin-right: 8px; border-radius: 2px;"></div>
+                                                <MudText Typo="Typo.caption">@imp.ToString("F4")</MudText>
+                                            </div>
+                                        </MudTd>
+                                    </RowTemplate>
+                                </MudTable>
+                            }
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Warning">Feature importance data not available for this model. Re-train to generate.</MudAlert>
+                        }
+
+                    </MudPaper>
+                }
+                else
+                {
+                    <MudPaper Class="p-4 d-flex justify-center align-center" Elevation="3" Height="400px">
+                        <MudText Typo="Typo.h6" Color="Color.Secondary">Select a model to view insights</MudText>
+                    </MudPaper>
+                }
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    private bool _isLoading = false;
+    private List<ModelInfo> _models = new();
+    private object? _selectedModelObj;
+    private List<string> _availableSports = new();
+    private string _selectedSport = "";
+    
+    private ModelInfo? _selectedModel 
+    { 
+        get => _selectedModelObj as ModelInfo; 
+        set => _selectedModelObj = value; 
+    }
+
+    [SupplyParameterFromQuery]
+    public string? Sport { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? Series { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? Task { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try 
+        {
+            _availableSports = await MLService.GetAvailableSportsAsync();
+            if (_availableSports.Any())
+            {
+                // Use query param if valid, otherwise default
+                if (!string.IsNullOrEmpty(Sport) && _availableSports.Contains(Sport.ToLower()))
+                {
+                    _selectedSport = Sport.ToLower();
+                }
+                else
+                {
+                    _selectedSport = _availableSports.First();
+                }
+                
+                await LoadModels();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initializing Model Insights");
+            Snackbar.Add("Error loading sports", Severity.Error);
+        }
+    }
+
+    private async Task OnSportChanged(string sport)
+    {
+        _selectedSport = sport;
+        _selectedModel = null;
+        await LoadModels();
+    }
+
+    private async Task LoadModels()
+    {
+        if (string.IsNullOrEmpty(_selectedSport)) return;
+
+        _isLoading = true;
+        try
+        {
+            _models = await MLService.GetModelsAsync(_selectedSport);
+            if (_models.Any())
+            {
+                // Try to find requested model from query params
+                if (!string.IsNullOrEmpty(Series) && !string.IsNullOrEmpty(Task))
+                {
+                    var match = _models.FirstOrDefault(m => 
+                        m.Series.Equals(Series, StringComparison.OrdinalIgnoreCase) && 
+                        m.Task.Equals(Task, StringComparison.OrdinalIgnoreCase));
+                    
+                    _selectedModel = match ?? _models.First();
+                }
+                else
+                {
+                    _selectedModel = _models.First();
+                }
+            }
+            else 
+            {
+                _selectedModel = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading models for {Sport}", _selectedSport);
+            Snackbar.Add($"Error loading models: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void OnModelSelected(object model)
+    {
+        if (model is ModelInfo info)
+        {
+            _selectedModel = info;
+            StateHasChanged();
+        }
+    }
+
+    private string GetMetric(string key)
+    {
+        if (_selectedModel == null || !_selectedModel.Metrics.ContainsKey(key)) return "N/A";
+        
+        var el = (JsonElement)_selectedModel.Metrics[key];
+        if (el.ValueKind == JsonValueKind.Number)
+        {
+            return el.GetDouble().ToString("F4");
+        }
+        return el.ToString();
+    }
+    private List<ChartSeries> GetFeatureImportanceSeries(List<Dictionary<string, object>> features)
+    {
+        var top10 = features.Take(10).ToList();
+        var data = top10.Select(f => ((JsonElement)f["importance"]).GetDouble()).ToArray();
+        
+        return new List<ChartSeries>
+        {
+            new ChartSeries { Name = "Importance", Data = data }
+        };
+    }
+
+    private string[] GetFeatureImportanceLabels(List<Dictionary<string, object>> features)
+    {
+        return features.Take(10).Select(f => f["feature"].ToString()).ToArray();
+    }
+
+    private async Task ExportFeatures()
+    {
+        if (_selectedModel == null || !_selectedModel.Metrics.ContainsKey("feature_importance")) return;
+        
+        try 
+        {
+            var fiElement = (JsonElement)_selectedModel.Metrics["feature_importance"];
+            var features = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(fiElement.GetRawText());
+            
+            if (features != null)
+            {
+                // Flatten for CSV: feature, importance
+                var flatFeatures = features.Select(f => new { 
+                    Feature = f["feature"].ToString(), 
+                    Importance = ((JsonElement)f["importance"]).GetDouble() 
+                });
+                
+                await FileExportService.ExportToCsv(flatFeatures, $"feature_importance_{_selectedModel.Series}_{_selectedModel.Task}.csv");
+                Snackbar.Add("Features exported to CSV", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+        }
+    }
+}

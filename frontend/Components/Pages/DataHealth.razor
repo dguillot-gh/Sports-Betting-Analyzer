@@ -1,0 +1,478 @@
+@page "/data-health"
+@rendermode InteractiveServer
+@using System.Text.Json
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+<PageTitle>Data Health</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudStack Spacing="4">
+        <!-- Header -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <div class="d-flex justify-space-between align-center">
+                <div>
+                    <MudText Typo="Typo.h4">
+                        <MudIcon Icon="@Icons.Material.Filled.HealthAndSafety" Class="mr-2" />
+                        Data Health Dashboard
+                    </MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Analyze data quality, identify issues, and get improvement recommendations
+                    </MudText>
+                </div>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" 
+                           StartIcon="@Icons.Material.Filled.Refresh" 
+                           OnClick="RefreshAllSports" 
+                           Disabled="_loading">
+                    @if (_loading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        <span>Scanning...</span>
+                    }
+                    else
+                    {
+                        <span>Refresh All</span>
+                    }
+                </MudButton>
+            </div>
+        </MudPaper>
+
+        <!-- Sport Tabs -->
+        <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" 
+                 PanelClass="pa-4" ActivePanelIndex="_activeTab" ActivePanelIndexChanged="OnTabChanged">
+            @foreach (var sport in _sports)
+            {
+                <MudTabPanel Text="@sport.DisplayName" Icon="@sport.Icon" BadgeData="@GetBadgeData(sport.Key)">
+                    @if (_sportData.ContainsKey(sport.Key))
+                    {
+                        var data = _sportData[sport.Key];
+                        <MudGrid Spacing="3">
+                            <!-- Summary Cards -->
+                            <MudItem xs="12" md="3">
+                                <MudPaper Class="pa-4 text-center" Elevation="1">
+                                    <MudText Typo="Typo.h3" Color="@GetScoreColor(data.SufficiencyScore)">
+                                        @data.SufficiencyScore
+                                    </MudText>
+                                    <MudText Typo="Typo.body2">Sufficiency Score</MudText>
+                                    <MudProgressLinear Value="@data.SufficiencyScore" Color="@GetScoreColor(data.SufficiencyScore)" Class="mt-2" />
+                                </MudPaper>
+                            </MudItem>
+                            <MudItem xs="12" md="3">
+                                <MudPaper Class="pa-4 text-center" Elevation="1">
+                                    <MudText Typo="Typo.h3" Color="Color.Info">@data.TotalRows.ToString("N0")</MudText>
+                                    <MudText Typo="Typo.body2">Total Rows</MudText>
+                                </MudPaper>
+                            </MudItem>
+                            <MudItem xs="12" md="3">
+                                <MudPaper Class="pa-4 text-center" Elevation="1">
+                                    <MudText Typo="Typo.h3" Color="Color.Secondary">@data.FeaturesAvailable</MudText>
+                                    <MudText Typo="Typo.body2">Features</MudText>
+                                </MudPaper>
+                            </MudItem>
+                            <MudItem xs="12" md="3">
+                                <MudPaper Class="pa-4 text-center" Elevation="1">
+                                    <MudText Typo="Typo.h3" Color="@(data.IssuesCount > 0 ? Color.Warning : Color.Success)">
+                                        @data.IssuesCount
+                                    </MudText>
+                                    <MudText Typo="Typo.body2">Issues Found</MudText>
+                                </MudPaper>
+                            </MudItem>
+
+                            <!-- Rating -->
+                            <MudItem xs="12">
+                                <MudAlert Severity="@GetRatingSeverity(data.Rating)" Variant="Variant.Outlined">
+                                    <strong>Rating:</strong> @data.Rating
+                                </MudAlert>
+                            </MudItem>
+
+                            <!-- Issues & Recommendations -->
+                            <MudItem xs="12" md="6">
+                                <MudPaper Class="pa-4" Elevation="1" Style="height: 100%;">
+                                    <MudText Typo="Typo.h6" Class="mb-3">
+                                        <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-2" />
+                                        Issues
+                                    </MudText>
+                                    @if (data.Issues.Any())
+                                    {
+                                        <MudList T="string" Dense="true">
+                                            @foreach (var issue in data.Issues)
+                                            {
+                                                <MudListItem Icon="@Icons.Material.Filled.Error" IconColor="Color.Error">
+                                                    @issue
+                                                </MudListItem>
+                                            }
+                                        </MudList>
+                                    }
+                                    else
+                                    {
+                                        <MudText Color="Color.Success">No issues found!</MudText>
+                                    }
+                                </MudPaper>
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <MudPaper Class="pa-4" Elevation="1" Style="height: 100%;">
+                                    <MudText Typo="Typo.h6" Class="mb-3">
+                                        <MudIcon Icon="@Icons.Material.Filled.Lightbulb" Color="Color.Info" Class="mr-2" />
+                                        Recommendations
+                                    </MudText>
+                                    @if (data.Recommendations.Any())
+                                    {
+                                        <MudList T="string" Dense="true">
+                                            @foreach (var rec in data.Recommendations)
+                                            {
+                                                <MudListItem Icon="@Icons.Material.Filled.TipsAndUpdates" IconColor="Color.Info">
+                                                    @rec
+                                                </MudListItem>
+                                            }
+                                        </MudList>
+                                    }
+                                    else
+                                    {
+                                        <MudText Color="Color.Success">Data looks good!</MudText>
+                                    }
+                                </MudPaper>
+                            </MudItem>
+
+                            <!-- Feature Coverage -->
+                            <MudItem xs="12">
+                                <MudExpansionPanels>
+                                    <MudExpansionPanel Text="Feature Coverage Details">
+                                        <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                            <thead>
+                                                <tr>
+                                                    <th>Feature</th>
+                                                    <th>Coverage %</th>
+                                                    <th>Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var fc in data.FeatureCoverage.Take(15))
+                                                {
+                                                    <tr>
+                                                        <td>@fc.Key</td>
+                                                        <td>
+                                                            <MudProgressLinear Value="@fc.Value" Color="@GetCoverageColor(fc.Value)" 
+                                                                              Size="Size.Small" Style="width: 100px; display: inline-block;" />
+                                                            @fc.Value.ToString("F1")%
+                                                        </td>
+                                                        <td>
+                                                            @if (fc.Value >= 90)
+                                                            {
+                                                                <MudChip T="string" Color="Color.Success" Size="Size.Small">Good</MudChip>
+                                                            }
+                                                            else if (fc.Value >= 70)
+                                                            {
+                                                                <MudChip T="string" Color="Color.Warning" Size="Size.Small">Moderate</MudChip>
+                                                            }
+                                                            else
+                                                            {
+                                                                <MudChip T="string" Color="Color.Error" Size="Size.Small">Low</MudChip>
+                                                            }
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </MudSimpleTable>
+                                    </MudExpansionPanel>
+
+                                    @if (data.ClassBalance.Any())
+                                    {
+                                        <MudExpansionPanel Text="Class Balance">
+                                            <MudGrid>
+                                                @foreach (var cb in data.ClassBalance)
+                                                {
+                                                    <MudItem xs="6" md="3">
+                                                        <MudPaper Class="pa-3 text-center" Elevation="0">
+                                                            <MudText Typo="Typo.h5">@cb.Value.ToString("F1")%</MudText>
+                                                            <MudText Typo="Typo.caption">@cb.Key</MudText>
+                                                        </MudPaper>
+                                                    </MudItem>
+                                                }
+                                            </MudGrid>
+                                        </MudExpansionPanel>
+                                    }
+
+                                    @if (data.MissingValues.Any())
+                                    {
+                                        <MudExpansionPanel Text="Missing Values">
+                                            <MudSimpleTable Dense="true" Hover="true">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Feature</th>
+                                                        <th>Missing %</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var mv in data.MissingValues.OrderByDescending(x => x.Value).Take(10))
+                                                    {
+                                                        <tr>
+                                                            <td>@mv.Key</td>
+                                                            <td>
+                                                                <MudChip T="string" Color="@(mv.Value > 50 ? Color.Error : mv.Value > 20 ? Color.Warning : Color.Default)" 
+                                                                        Size="Size.Small">
+                                                                    @mv.Value.ToString("F1")%
+                                                                </MudChip>
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </MudSimpleTable>
+                                        </MudExpansionPanel>
+                                    }
+                                </MudExpansionPanels>
+                            </MudItem>
+                        </MudGrid>
+                    }
+                    else if (_sportLoading.ContainsKey(sport.Key) && _sportLoading[sport.Key])
+                    {
+                        <div class="d-flex flex-column align-center justify-center" style="min-height: 200px;">
+                            <MudProgressCircular Indeterminate="true" Size="Size.Large" Color="Color.Primary" />
+                            <MudText Typo="Typo.body1" Class="mt-4">@(_sportLoadingStatus.GetValueOrDefault(sport.Key, "Loading..."))</MudText>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="d-flex flex-column align-center justify-center" style="min-height: 200px;">
+                            <MudIcon Icon="@Icons.Material.Filled.CloudDownload" Size="Size.Large" Color="Color.Secondary" />
+                            <MudText Typo="Typo.body1" Class="mt-2">Click to load @sport.DisplayName data</MudText>
+                            @if (_sportLoadingStatus.ContainsKey(sport.Key) && !string.IsNullOrEmpty(_sportLoadingStatus[sport.Key]))
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Error">@_sportLoadingStatus[sport.Key]</MudText>
+                            }
+                        </div>
+                    }
+                </MudTabPanel>
+            }
+        </MudTabs>
+
+        <!-- Last Updated -->
+        @if (_lastUpdated.HasValue)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Center">
+                Last scanned: @_lastUpdated.Value.ToString("g")
+            </MudText>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    private bool _loading = false;
+    private int _activeTab = 0;
+    private DateTime? _lastUpdated;
+    private Dictionary<string, SportQualityData> _sportData = new();
+    private Dictionary<string, bool> _sportLoading = new();
+    private Dictionary<string, string> _sportLoadingStatus = new();
+    private string _currentLoadingSport = "";
+
+    private List<SportInfo> _sports = new()
+    {
+        new SportInfo { Key = "nfl", DisplayName = "NFL", Icon = Icons.Material.Filled.SportsCricket },
+        new SportInfo { Key = "nba", DisplayName = "NBA", Icon = Icons.Material.Filled.SportsBasketball },
+        new SportInfo { Key = "nascar", DisplayName = "NASCAR", Icon = Icons.Material.Filled.DirectionsCar }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Initialize loading states
+        foreach (var sport in _sports)
+        {
+            _sportLoading[sport.Key] = false;
+            _sportLoadingStatus[sport.Key] = "";
+        }
+        
+        // Only load the first sport initially (lazy load)
+        await LoadSportData(_sports[0].Key);
+    }
+
+    private async Task OnTabChanged(int index)
+    {
+        _activeTab = index;
+        var sport = _sports[index];
+        
+        // Load data if not already loaded
+        if (!_sportData.ContainsKey(sport.Key))
+        {
+            await LoadSportData(sport.Key);
+        }
+    }
+
+    private async Task RefreshAllSports()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        foreach (var sport in _sports)
+        {
+            _currentLoadingSport = sport.DisplayName;
+            StateHasChanged();
+            await LoadSportData(sport.Key, forceRefresh: true);
+        }
+
+        _currentLoadingSport = "";
+        _lastUpdated = DateTime.Now;
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadSportData(string sportKey, bool forceRefresh = false)
+    {
+        if (_sportData.ContainsKey(sportKey) && !forceRefresh)
+            return;
+            
+        var sport = _sports.First(s => s.Key == sportKey);
+        _sportLoading[sportKey] = true;
+        _sportLoadingStatus[sportKey] = "Connecting...";
+        StateHasChanged();
+
+        try
+        {
+            _sportLoadingStatus[sportKey] = $"Loading {sport.DisplayName} data...";
+            StateHasChanged();
+            
+            var series = sportKey == "nascar" ? "?series=cup" : "";
+            
+            // Use HttpClient with timeout
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+            var response = await Http.GetAsync($"http://localhost:8000/data/quality/{sportKey}{series}", cts.Token);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                _sportLoadingStatus[sportKey] = "Processing results...";
+                StateHasChanged();
+                
+                var json = await response.Content.ReadAsStringAsync();
+                var data = JsonSerializer.Deserialize<JsonElement>(json);
+                
+                _sportData[sportKey] = new SportQualityData
+                {
+                    SufficiencyScore = data.GetProperty("summary").GetProperty("sufficiency_score").GetInt32(),
+                    TotalRows = data.GetProperty("summary").GetProperty("total_rows").GetInt32(),
+                    FeaturesAvailable = data.GetProperty("summary").GetProperty("features_available").GetInt32(),
+                    Rating = data.GetProperty("summary").GetProperty("rating").GetString() ?? "",
+                    Issues = ParseStringArray(data, "issues"),
+                    Recommendations = ParseStringArray(data, "recommendations"),
+                    FeatureCoverage = ParseDictionary(data, "feature_coverage"),
+                    ClassBalance = ParseClassBalance(data),
+                    MissingValues = ParseDictionary(data, "missing_values")
+                };
+                _sportData[sportKey].IssuesCount = _sportData[sportKey].Issues.Count;
+                _sportLoadingStatus[sportKey] = "Complete!";
+            }
+            else
+            {
+                _sportLoadingStatus[sportKey] = $"Error: {response.StatusCode}";
+                Snackbar.Add($"Error loading {sport.DisplayName}: {response.StatusCode}", Severity.Error);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _sportLoadingStatus[sportKey] = "Timeout - data loading took too long";
+            Snackbar.Add($"{sport.DisplayName} loading timed out. Try refreshing.", Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            _sportLoadingStatus[sportKey] = $"Error: {ex.Message}";
+            Snackbar.Add($"Error loading {sport.DisplayName}: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _sportLoading[sportKey] = false;
+            StateHasChanged();
+        }
+    }
+
+
+    private List<string> ParseStringArray(JsonElement data, string property)
+    {
+        if (data.TryGetProperty(property, out var arr) && arr.ValueKind == JsonValueKind.Array)
+        {
+            return arr.EnumerateArray().Select(x => x.GetString() ?? "").ToList();
+        }
+        return new List<string>();
+    }
+
+    private Dictionary<string, double> ParseDictionary(JsonElement data, string property)
+    {
+        var result = new Dictionary<string, double>();
+        if (data.TryGetProperty(property, out var obj) && obj.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in obj.EnumerateObject())
+            {
+                if (prop.Value.TryGetDouble(out var val))
+                {
+                    result[prop.Name] = val;
+                }
+            }
+        }
+        return result;
+    }
+
+    private Dictionary<string, double> ParseClassBalance(JsonElement data)
+    {
+        var result = new Dictionary<string, double>();
+        if (data.TryGetProperty("class_balance", out var cb))
+        {
+            if (cb.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var prop in cb.EnumerateObject())
+                {
+                    if (prop.Value.ValueKind == JsonValueKind.Number && prop.Value.TryGetDouble(out var val))
+                    {
+                        result[prop.Name == "True" ? "Win" : prop.Name == "False" ? "Loss" : prop.Name] = val;
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    private string? GetBadgeData(string key)
+    {
+        if (_sportData.TryGetValue(key, out var data) && data.IssuesCount > 0)
+            return data.IssuesCount.ToString();
+        return null;
+    }
+
+    private Color GetScoreColor(int score)
+    {
+        if (score >= 80) return Color.Success;
+        if (score >= 60) return Color.Warning;
+        return Color.Error;
+    }
+
+    private Color GetCoverageColor(double coverage)
+    {
+        if (coverage >= 90) return Color.Success;
+        if (coverage >= 70) return Color.Warning;
+        return Color.Error;
+    }
+
+    private Severity GetRatingSeverity(string rating)
+    {
+        if (rating.Contains("GOOD")) return Severity.Success;
+        if (rating.Contains("MODERATE")) return Severity.Warning;
+        return Severity.Error;
+    }
+
+    private class SportInfo
+    {
+        public string Key { get; set; } = "";
+        public string DisplayName { get; set; } = "";
+        public string Icon { get; set; } = "";
+    }
+
+    private class SportQualityData
+    {
+        public int SufficiencyScore { get; set; }
+        public int TotalRows { get; set; }
+        public int FeaturesAvailable { get; set; }
+        public int IssuesCount { get; set; }
+        public string Rating { get; set; } = "";
+        public List<string> Issues { get; set; } = new();
+        public List<string> Recommendations { get; set; } = new();
+        public Dictionary<string, double> FeatureCoverage { get; set; } = new();
+        public Dictionary<string, double> ClassBalance { get; set; } = new();
+        public Dictionary<string, double> MissingValues { get; set; } = new();
+    }
+}

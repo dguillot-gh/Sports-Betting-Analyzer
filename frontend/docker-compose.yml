@@ -1,0 +1,60 @@
+# Docker Compose for Sports Betting Analyzer
+# Run: docker-compose up -d
+# Access: http://localhost
+
+version: '3.8'
+
+services:
+  # Python ML Backend
+  backend:
+    build:
+      context: ../PythonMLService
+      dockerfile: Dockerfile
+    container_name: sports-ml-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - backend-data:/app/data
+      - backend-models:/app/models
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Blazor Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sports-betting-frontend
+    ports:
+      - "80:8080"
+    environment:
+      - PythonApiUrl=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Watchtower - Auto-update containers (optional)
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=300
+    restart: unless-stopped
+    profiles:
+      - production
+
+volumes:
+  backend-data:
+  backend-models:
+
+networks:
+  default:
+    name: sports-betting-network

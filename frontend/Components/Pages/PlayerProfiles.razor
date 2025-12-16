@@ -1,0 +1,374 @@
+@page "/player-profiles"
+@rendermode InteractiveServer
+@using MudBlazor
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+<PageTitle>Player Profiles - Sports Betting Analyzer</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">
+        <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-2" />
+        Player Profiles
+    </MudText>
+
+    <!-- Sport Toggle & Controls -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudStack Row="true" Spacing="4" AlignItems="AlignItems.Center">
+            <MudButtonGroup Color="Color.Primary" Variant="Variant.Outlined">
+                <MudButton Variant="@(_selectedSport == "nba" ? Variant.Filled : Variant.Outlined)"
+                           OnClick="@(() => SelectSport("nba"))">
+                    <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Class="mr-1" /> NBA
+                </MudButton>
+                <MudButton Variant="@(_selectedSport == "nfl" ? Variant.Filled : Variant.Outlined)"
+                           OnClick="@(() => SelectSport("nfl"))">
+                    <MudIcon Icon="@Icons.Material.Filled.SportsFootball" Class="mr-1" /> NFL
+                </MudButton>
+            </MudButtonGroup>
+        </MudStack>
+    </MudPaper>
+
+    <!-- Tabs: Individual Stats | Compare Players -->
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
+        <!-- Individual Stats Tab -->
+        <MudTabPanel Text="Individual Stats" Icon="@Icons.Material.Filled.Person">
+            <MudGrid>
+                <MudItem xs="12" md="5">
+                    <MudAutocomplete T="string" Label="Search Player"
+                                     Value="_selectedPlayer"
+                                     ValueChanged="OnPlayerSelected"
+                                     SearchFunc="SearchPlayers"
+                                     MaxItems="50"
+                                     AdornmentIcon="@Icons.Material.Filled.Search"
+                                     Variant="Variant.Outlined"
+                                     Dense="true"
+                                     Immediate="true"
+                                     Placeholder="Type player name..." />
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudNumericField T="int" @bind-Value="_season" Label="Season" Min="2015" Max="2025"
+                                     Variant="Variant.Outlined" Dense="true" />
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" 
+                               OnClick="LoadPlayerStats" Disabled="@(string.IsNullOrEmpty(_selectedPlayer))"
+                               Class="mt-2">
+                        Load Stats
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+
+            @if (_isLoading)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="my-4" />
+            }
+            else if (_playerStats != null)
+            {
+                <MudDivider Class="my-4" />
+                
+                <!-- Player Header -->
+                <MudPaper Class="pa-4 mb-4" Elevation="1" Style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
+                        <MudAvatar Size="Size.Large" Color="Color.Secondary">
+                            @(_playerStats.Player?.Substring(0, 1) ?? "?")
+                        </MudAvatar>
+                        <div>
+                            <MudText Typo="Typo.h5" Style="color: white;">@_playerStats.Player</MudText>
+                            <MudText Typo="Typo.subtitle1" Style="color: rgba(255,255,255,0.8);">
+                                @_playerStats.Team • @_playerStats.Position
+                            </MudText>
+                        </div>
+                    </MudStack>
+                </MudPaper>
+
+                <!-- Season Stats Cards -->
+                <MudText Typo="Typo.h6" Class="mb-2">@_season Season Stats</MudText>
+                <MudGrid>
+                    @foreach (var stat in _playerStats.SeasonStats)
+                    {
+                        <MudItem xs="6" md="2">
+                            <MudPaper Class="pa-3 text-center" Elevation="2">
+                                <MudText Typo="Typo.h5" Color="Color.Primary">@stat.Value</MudText>
+                                <MudText Typo="Typo.caption">@stat.Key</MudText>
+                            </MudPaper>
+                        </MudItem>
+                    }
+                </MudGrid>
+
+                <!-- Last 5 Games -->
+                @if (_playerStats.Last5Games.Any())
+                {
+                    <MudText Typo="Typo.h6" Class="mt-4 mb-2">Last 5 Games</MudText>
+                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Opponent</th>
+                                @foreach (var header in _last5Headers)
+                                {
+                                    <th>@header</th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var game in _playerStats.Last5Games)
+                            {
+                                <tr>
+                                    <td>@game.Date</td>
+                                    <td>@game.Opponent</td>
+                                    @foreach (var stat in game.Stats)
+                                    {
+                                        <td>@stat</td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+            }
+            else if (!string.IsNullOrEmpty(_selectedPlayer))
+            {
+                <MudAlert Severity="Severity.Info" Class="mt-4">
+                    Click "Load Stats" to view @_selectedPlayer's profile.
+                </MudAlert>
+            }
+        </MudTabPanel>
+
+        <!-- Compare Players Tab -->
+        <MudTabPanel Text="Compare Players" Icon="@Icons.Material.Filled.Compare">
+            <MudGrid>
+                <MudItem xs="12" md="5">
+                    <MudAutocomplete T="string" Label="Player 1"
+                                     Value="_comparePlayer1"
+                                     ValueChanged="@((s) => { _comparePlayer1 = s; })"
+                                     SearchFunc="SearchPlayers"
+                                     MaxItems="50"
+                                     AdornmentIcon="@Icons.Material.Filled.Person"
+                                     Variant="Variant.Outlined"
+                                     Dense="true" />
+                </MudItem>
+                <MudItem xs="12" md="2" Class="d-flex align-center justify-center">
+                    <MudText Typo="Typo.h5">VS</MudText>
+                </MudItem>
+                <MudItem xs="12" md="5">
+                    <MudAutocomplete T="string" Label="Player 2"
+                                     Value="_comparePlayer2"
+                                     ValueChanged="@((s) => { _comparePlayer2 = s; })"
+                                     SearchFunc="SearchPlayers"
+                                     MaxItems="50"
+                                     AdornmentIcon="@Icons.Material.Filled.Person"
+                                     Variant="Variant.Outlined"
+                                     Dense="true" />
+                </MudItem>
+            </MudGrid>
+
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4"
+                       OnClick="LoadComparison" 
+                       Disabled="@(string.IsNullOrEmpty(_comparePlayer1) || string.IsNullOrEmpty(_comparePlayer2))">
+                Compare Players
+            </MudButton>
+
+            @if (_comparisonData != null)
+            {
+                <MudDivider Class="my-4" />
+                
+                <MudGrid>
+                    <!-- Player 1 Stats -->
+                    <MudItem xs="12" md="5">
+                        <MudPaper Class="pa-4" Elevation="2" Style="border-left: 4px solid #2196f3;">
+                            <MudText Typo="Typo.h6">@_comparisonData.Player1.Player</MudText>
+                            <MudText Typo="Typo.caption" Class="mb-3">@_comparisonData.Player1.Team</MudText>
+                            @foreach (var stat in _comparisonData.Player1.SeasonStats)
+                            {
+                                var isBetter = IsStatBetter(stat.Key, stat.Value, _comparisonData.Player2.SeasonStats.GetValueOrDefault(stat.Key));
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mb-1">
+                                    <MudText>@stat.Key</MudText>
+                                    <MudText Color="@(isBetter ? Color.Success : Color.Default)">
+                                        <strong>@stat.Value</strong>
+                                    </MudText>
+                                </MudStack>
+                            }
+                        </MudPaper>
+                    </MudItem>
+                    
+                    <!-- VS Column -->
+                    <MudItem xs="12" md="2" Class="d-flex flex-column align-center justify-center">
+                        <MudText Typo="Typo.h4" Color="Color.Secondary">VS</MudText>
+                    </MudItem>
+                    
+                    <!-- Player 2 Stats -->
+                    <MudItem xs="12" md="5">
+                        <MudPaper Class="pa-4" Elevation="2" Style="border-left: 4px solid #f44336;">
+                            <MudText Typo="Typo.h6">@_comparisonData.Player2.Player</MudText>
+                            <MudText Typo="Typo.caption" Class="mb-3">@_comparisonData.Player2.Team</MudText>
+                            @foreach (var stat in _comparisonData.Player2.SeasonStats)
+                            {
+                                var isBetter = IsStatBetter(stat.Key, stat.Value, _comparisonData.Player1.SeasonStats.GetValueOrDefault(stat.Key));
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mb-1">
+                                    <MudText>@stat.Key</MudText>
+                                    <MudText Color="@(isBetter ? Color.Success : Color.Default)">
+                                        <strong>@stat.Value</strong>
+                                    </MudText>
+                                </MudStack>
+                            }
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+            }
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
+
+@code {
+    private string _selectedSport = "nba";
+    private string _selectedPlayer = "";
+    private int _season = DateTime.Now.Year;
+    private bool _isLoading = false;
+    
+    private List<string> _availablePlayers = new();
+    private PlayerStatsData? _playerStats;
+    private string[] _last5Headers = Array.Empty<string>();
+    
+    // Comparison
+    private string _comparePlayer1 = "";
+    private string _comparePlayer2 = "";
+    private ComparisonData? _comparisonData;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Player list will load when user selects a sport or searches
+    }
+
+    private async Task SelectSport(string sport)
+    {
+        _selectedSport = sport;
+        _selectedPlayer = "";
+        _playerStats = null;
+        _comparePlayer1 = "";
+        _comparePlayer2 = "";
+        _comparisonData = null;
+        await LoadPlayerList();
+    }
+
+    private async Task LoadPlayerList()
+    {
+        try
+        {
+            var url = $"http://localhost:8000/players/{_selectedSport}/list";
+            var response = await Http.GetFromJsonAsync<PlayerListResponse>(url);
+            _availablePlayers = response?.Players ?? new();
+        }
+        catch
+        {
+            _availablePlayers = new();
+        }
+    }
+
+    private Task<IEnumerable<string>> SearchPlayers(string value, CancellationToken token)
+    {
+        if (string.IsNullOrEmpty(value))
+            return Task.FromResult(_availablePlayers.Take(50).AsEnumerable());
+        
+        return Task.FromResult(_availablePlayers
+            .Where(p => p.Contains(value, StringComparison.OrdinalIgnoreCase))
+            .Take(50)
+            .AsEnumerable());
+    }
+
+    private async Task OnPlayerSelected(string player)
+    {
+        _selectedPlayer = player;
+        _playerStats = null;
+    }
+
+    private async Task LoadPlayerStats()
+    {
+        if (string.IsNullOrEmpty(_selectedPlayer)) return;
+        
+        _isLoading = true;
+        try
+        {
+            var url = $"http://localhost:8000/players/{_selectedSport}/{Uri.EscapeDataString(_selectedPlayer)}/stats?season={_season}";
+            _playerStats = await Http.GetFromJsonAsync<PlayerStatsData>(url);
+            
+            if (_playerStats?.Last5Games.Any() == true)
+            {
+                _last5Headers = _selectedSport == "nba" 
+                    ? new[] { "PTS", "REB", "AST", "STL", "BLK" }
+                    : new[] { "Pass Yds", "Rush Yds", "Rec Yds", "TDs" };
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadComparison()
+    {
+        if (string.IsNullOrEmpty(_comparePlayer1) || string.IsNullOrEmpty(_comparePlayer2)) return;
+        
+        _isLoading = true;
+        try
+        {
+            var url = $"http://localhost:8000/players/{_selectedSport}/compare?p1={Uri.EscapeDataString(_comparePlayer1)}&p2={Uri.EscapeDataString(_comparePlayer2)}&season={_season}";
+            _comparisonData = await Http.GetFromJsonAsync<ComparisonData>(url);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private bool IsStatBetter(string statName, object value1, object? value2)
+    {
+        if (value2 == null) return true;
+        
+        try
+        {
+            var v1 = Convert.ToDouble(value1);
+            var v2 = Convert.ToDouble(value2);
+            return v1 > v2;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    // Response classes
+    public class PlayerListResponse
+    {
+        public List<string> Players { get; set; } = new();
+    }
+
+    public class PlayerStatsData
+    {
+        public string Player { get; set; } = "";
+        public string Team { get; set; } = "";
+        public string Position { get; set; } = "";
+        public Dictionary<string, object> SeasonStats { get; set; } = new();
+        public List<GameLog> Last5Games { get; set; } = new();
+    }
+
+    public class GameLog
+    {
+        public string Date { get; set; } = "";
+        public string Opponent { get; set; } = "";
+        public List<string> Stats { get; set; } = new();
+    }
+
+    public class ComparisonData
+    {
+        public PlayerStatsData Player1 { get; set; } = new();
+        public PlayerStatsData Player2 { get; set; } = new();
+    }
+}

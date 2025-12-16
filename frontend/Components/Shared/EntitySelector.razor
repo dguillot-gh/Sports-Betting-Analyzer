@@ -1,0 +1,314 @@
+@using SportsBettingAnalyzer.Services
+@inject PythonMLServiceClient MLClient
+
+<MudPaper Class="pa-4">
+    <!-- Sport Selection -->
+    <MudSelect T="string" Label="Select Sport" Value="@SelectedSport" ValueChanged="OnSportChanged" Variant="Variant.Outlined" Class="mb-4">
+        @foreach (var sport in Sports)
+        {
+            <MudSelectItem Value="@sport.Key">@sport.Label</MudSelectItem>
+        }
+    </MudSelect>
+
+    @if (SelectedSport == "nascar")
+    {
+        <!-- NASCAR: Series -> Team -> Driver -->
+        <MudSelect T="string" Label="Select Series" Value="@_selectedSeries" ValueChanged="OnSeriesChanged" Variant="Variant.Outlined" Class="mb-4" Disabled="@_isLoading">
+            <MudSelectItem Value="@("cup")">Cup Series</MudSelectItem>
+            <MudSelectItem Value="@("xfinity")">Xfinity Series</MudSelectItem>
+            <MudSelectItem Value="@("truck")">Truck Series</MudSelectItem>
+        </MudSelect>
+
+        <MudSelect T="string" Label="Select Team" Value="@_selectedTeam" ValueChanged="OnTeamChanged" Variant="Variant.Outlined" Class="mb-4" 
+                   Disabled="@(string.IsNullOrEmpty(_selectedSeries) || _isLoading)">
+            @foreach (var team in _teams)
+            {
+                <MudSelectItem Value="@team">@team</MudSelectItem>
+            }
+        </MudSelect>
+
+        <MudSelect T="string" Label="Select Driver" Value="@_selectedEntity" ValueChanged="OnEntityChanged" Variant="Variant.Outlined" Class="mb-4" 
+                   Disabled="@(string.IsNullOrEmpty(_selectedTeam) || _isLoading)">
+            @foreach (var driver in _entities)
+            {
+                <MudSelectItem Value="@driver">@driver</MudSelectItem>
+            }
+        </MudSelect>
+    }
+    else if (SelectedSport == "nba")
+    {
+        <!-- NBA: Team -> Player (with search) -->
+        <MudSelect T="string" Label="Select Team" Value="@_selectedTeam" ValueChanged="OnTeamChanged" Variant="Variant.Outlined" Class="mb-4"
+                   Disabled="@_isLoading">
+            <MudSelectItem Value="@((string?)null)">All Teams</MudSelectItem>
+            @foreach (var team in _teams)
+            {
+                <MudSelectItem Value="@team">@team</MudSelectItem>
+            }
+        </MudSelect>
+
+        <MudAutocomplete T="string" Label="Search Player" Value="@_selectedEntity" ValueChanged="OnEntityChanged"
+                         SearchFunc="@SearchEntities"
+                         ResetValueOnEmptyText="true"
+                         CoerceText="true"
+                         CoerceValue="true"
+                         AdornmentIcon="@Icons.Material.Filled.Search"
+                         AdornmentColor="Color.Primary"
+                         Disabled="@_isLoading"
+                         Class="mb-4" />
+    }
+    else
+    {
+        <!-- Default: Generic entity search -->
+        <MudAutocomplete T="string" Label="Search Entity" Value="@_selectedEntity" ValueChanged="OnEntityChanged"
+                         SearchFunc="@SearchEntities"
+                         ResetValueOnEmptyText="true"
+                         CoerceText="true"
+                         CoerceValue="true"
+                         AdornmentIcon="@Icons.Material.Filled.Search"
+                         AdornmentColor="Color.Primary"
+                         Disabled="@_isLoading"
+                         Class="mb-4" />
+    }
+
+    <!-- Year/Season Selection (when entity is selected) -->
+    @if (!string.IsNullOrEmpty(_selectedEntity) && AvailableYears.Any())
+    {
+        <MudSelect T="int?" Label="@(SelectedSport == "nba" ? "Select Season" : "Select Year")" Value="@SelectedYear" ValueChanged="OnYearChanged" 
+                   Variant="Variant.Outlined" Class="mb-4" Clearable="true">
+            @foreach (var year in AvailableYears)
+            {
+                <MudSelectItem Value="@((int?)year)">@year</MudSelectItem>
+            }
+        </MudSelect>
+    }
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-2" />
+    }
+</MudPaper>
+
+@code {
+    /// <summary>
+    /// Available sports with key and display label.
+    /// </summary>
+    [Parameter]
+    public List<(string Key, string Label)> Sports { get; set; } = new()
+    {
+        ("nascar", "NASCAR"),
+        ("nfl", "NFL"),
+        ("nba", "NBA")
+    };
+
+    /// <summary>
+    /// Currently selected sport key.
+    /// </summary>
+    [Parameter]
+    public string SelectedSport { get; set; } = "nascar";
+
+    [Parameter]
+    public EventCallback<string> SelectedSportChanged { get; set; }
+
+    /// <summary>
+    /// Currently selected entity (driver/player name).
+    /// </summary>
+    [Parameter]
+    public string? SelectedEntity { get; set; }
+
+    [Parameter]
+    public EventCallback<string> SelectedEntityChanged { get; set; }
+
+    /// <summary>
+    /// Currently selected team (optional).
+    /// </summary>
+    [Parameter]
+    public string? SelectedTeam { get; set; }
+
+    [Parameter]
+    public EventCallback<string> SelectedTeamChanged { get; set; }
+
+    /// <summary>
+    /// Currently selected series (for NASCAR).
+    /// </summary>
+    [Parameter]
+    public string? SelectedSeries { get; set; }
+
+    [Parameter]
+    public EventCallback<string> SelectedSeriesChanged { get; set; }
+
+    /// <summary>
+    /// Currently selected year/season.
+    /// </summary>
+    [Parameter]
+    public int? SelectedYear { get; set; }
+
+    [Parameter]
+    public EventCallback<int?> SelectedYearChanged { get; set; }
+
+    /// <summary>
+    /// Available years for the selected entity.
+    /// </summary>
+    [Parameter]
+    public List<int> AvailableYears { get; set; } = new();
+
+    // Internal state
+    private string? _selectedSeries;
+    private string? _selectedTeam;
+    private string? _selectedEntity;
+    private List<string> _teams = new();
+    private List<string> _entities = new();
+    private bool _isLoading = false;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Sync internal state with parameters
+        if (_selectedSeries != SelectedSeries) _selectedSeries = SelectedSeries;
+        if (_selectedTeam != SelectedTeam) _selectedTeam = SelectedTeam;
+        if (_selectedEntity != SelectedEntity) _selectedEntity = SelectedEntity;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadInitialData();
+    }
+
+    private async Task LoadInitialData()
+    {
+        if (SelectedSport == "nba")
+        {
+            await LoadTeams();
+            await LoadEntities();
+        }
+        else if (SelectedSport != "nascar")
+        {
+            await LoadEntities();
+        }
+    }
+
+    private async Task OnSportChanged(string sport)
+    {
+        if (SelectedSport == sport) return;
+
+        SelectedSport = sport;
+        await SelectedSportChanged.InvokeAsync(sport);
+
+        // Reset selections
+        _selectedSeries = null;
+        _selectedTeam = null;
+        _selectedEntity = null;
+        _teams.Clear();
+        _entities.Clear();
+
+        await SelectedSeriesChanged.InvokeAsync(null);
+        await SelectedTeamChanged.InvokeAsync(null);
+        await SelectedEntityChanged.InvokeAsync(null);
+        await SelectedYearChanged.InvokeAsync(null);
+
+        // Load initial data for new sport
+        await LoadInitialData();
+        StateHasChanged();
+    }
+
+    private async Task OnSeriesChanged(string series)
+    {
+        _selectedSeries = series;
+        await SelectedSeriesChanged.InvokeAsync(series);
+
+        _selectedTeam = null;
+        _selectedEntity = null;
+        await SelectedTeamChanged.InvokeAsync(null);
+        await SelectedEntityChanged.InvokeAsync(null);
+
+        if (!string.IsNullOrEmpty(series))
+        {
+            await LoadTeams();
+        }
+    }
+
+    private async Task OnTeamChanged(string team)
+    {
+        _selectedTeam = team;
+        await SelectedTeamChanged.InvokeAsync(team);
+
+        if (SelectedSport == "nascar")
+        {
+            _selectedEntity = null;
+            await SelectedEntityChanged.InvokeAsync(null);
+            if (!string.IsNullOrEmpty(team))
+            {
+                await LoadEntities();
+            }
+        }
+        else if (SelectedSport == "nba")
+        {
+            // For NBA, changing team filters players
+            await LoadEntities();
+        }
+    }
+
+    private async Task OnEntityChanged(string entity)
+    {
+        _selectedEntity = entity;
+        await SelectedEntityChanged.InvokeAsync(entity);
+    }
+
+    private async Task OnYearChanged(int? year)
+    {
+        await SelectedYearChanged.InvokeAsync(year);
+    }
+
+    private async Task LoadTeams()
+    {
+        try
+        {
+            _isLoading = true;
+            StateHasChanged();
+
+            var teams = await MLClient.GetTeamsAsync(SelectedSport, _selectedSeries);
+            _teams = teams?.ToList() ?? new List<string>();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading teams: {ex.Message}");
+            _teams = new List<string>();
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadEntities()
+    {
+        try
+        {
+            _isLoading = true;
+            StateHasChanged();
+
+            var entities = await MLClient.GetDriversAsync(SelectedSport, _selectedSeries, _selectedTeam);
+            _entities = entities?.ToList() ?? new List<string>();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading entities: {ex.Message}");
+            _entities = new List<string>();
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task<IEnumerable<string>> SearchEntities(string searchText, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(searchText))
+            return _entities.Take(20);
+
+        return _entities
+            .Where(e => e.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+            .Take(20);
+    }
+}

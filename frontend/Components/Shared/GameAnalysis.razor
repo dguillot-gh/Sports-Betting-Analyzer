@@ -1,0 +1,507 @@
+@using SportsBettingAnalyzer.Models
+@using SportsBettingAnalyzer.Services
+@using MudBlazor
+@inject BallDontLieService StatsService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudContainer MaxWidth="MaxWidth.Medium">
+            <MudGrid Class="mb-4">
+                <MudItem xs="12" Class="d-flex justify-center">
+                    <MudText Typo="Typo.h5">@Event.AwayTeam vs @Event.HomeTeam</MudText>
+                </MudItem>
+                <MudItem xs="12" Class="d-flex justify-center">
+                    <MudText Typo="Typo.caption">@Event.CommenceTime.ToLocalTime().ToString("f")</MudText>
+                </MudItem>
+            </MudGrid>
+
+            @if (_isLoading)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+                <MudText Align="Align.Center">Fetching stats from BallDontLie...</MudText>
+            }
+            else if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                 <MudAlert Severity="Severity.Error">@_errorMessage</MudAlert>
+            }
+            else if (_statsMissing)
+            {
+                <MudAlert Severity="Severity.Warning">Could not find stats for one or both teams.</MudAlert>
+            }
+            else
+            {
+                <MudGrid>
+                    <!-- Away Team -->
+                    <MudItem xs="4" Class="d-flex flex-column align-center">
+                        <MudText Typo="Typo.h6">@Event.AwayTeam</MudText>
+                        <MudText Typo="Typo.subtitle1">@(_awayStats?.AveragePoints.ToString("F1")) PPG</MudText>
+                         <MudText Typo="Typo.caption">Allowed: @(_awayStats?.AveragePointsAllowed.ToString("F1"))</MudText>
+                    </MudItem>
+
+                    <!-- Comparison Labels -->
+                    <MudItem xs="4" Class="d-flex flex-column align-center justify-center">
+                        <MudText Typo="Typo.body2" Class="mb-1">Points Per Game</MudText>
+                        <MudDivider Class="my-2" Width="100%" />
+                        <MudText Typo="Typo.body2" Class="mb-1">Opp. PPG</MudText>
+                        <MudDivider Class="my-2" Width="100%" />
+                         <MudText Typo="Typo.body2" Class="mb-1">Recent Form (Last 5)</MudText>
+                    </MudItem>
+
+                    <!-- Home Team -->
+                    <MudItem xs="4" Class="d-flex flex-column align-center">
+                        <MudText Typo="Typo.h6">@Event.HomeTeam</MudText>
+                        <MudText Typo="Typo.subtitle1">@(_homeStats?.AveragePoints.ToString("F1")) PPG</MudText>
+                        <MudText Typo="Typo.caption">Allowed: @(_homeStats?.AveragePointsAllowed.ToString("F1"))</MudText>
+                    </MudItem>
+                </MudGrid>
+                
+                <!-- Form Comparison -->
+                <MudGrid Class="mt-4">
+                     <MudItem xs="6" Class="d-flex justify-center gap-1">
+                        @if (_awayStats != null) {
+                            @foreach(var res in _awayStats.RecentForm) {
+                                <MudChip T="string" Color="@(res == "W" ? Color.Success : Color.Error)" Size="Size.Small" Class="mx-0">@res</MudChip>
+                            }
+                        }
+                    </MudItem>
+                    <MudItem xs="6" Class="d-flex justify-center gap-1">
+                         @if (_homeStats != null) {
+                            @foreach(var res in _homeStats.RecentForm) {
+                                <MudChip T="string" Color="@(res == "W" ? Color.Success : Color.Error)" Size="Size.Small" Class="mx-0">@res</MudChip>
+                            }
+                        }
+                    </MudItem>
+                </MudGrid>
+                
+                <!-- H2H Comparison -->
+                @if (_h2hGames.Any())
+                {
+                    <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">Head to Head (Last 5)</MudText>
+                    <MudTable Items="@_h2hGames" Dense="true" Hover="true" Striped="true" Elevation="0">
+                        <HeaderContent>
+                            <MudTh>Date</MudTh>
+                            <MudTh>Matchup</MudTh>
+                            <MudTh>Score</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                             <MudTd DataLabel="Date">@DateTime.Parse(context.Date).ToString("yyyy-MM-dd")</MudTd>
+                             <MudTd DataLabel="Matchup">@context.VisitorTeam.Abbreviation @@ @context.HomeTeam.Abbreviation</MudTd>
+                             <MudTd DataLabel="Score">
+                                 @if ((context.HomeTeam.Id == _homeId && context.HomeTeamScore > context.VisitorTeamScore) || 
+                                      (context.VisitorTeam.Id == _homeId && context.VisitorTeamScore > context.HomeTeamScore))
+                                 {
+                                     <MudText Color="Color.Success">@context.VisitorTeamScore - @context.HomeTeamScore</MudText>
+                                 }
+                                 else if (_homeId.HasValue) 
+                                 {
+                                      <MudText Color="Color.Error">@context.VisitorTeamScore - @context.HomeTeamScore</MudText>
+                                 }
+                                 else
+                                 {
+                                      <MudText>@context.VisitorTeamScore - @context.HomeTeamScore</MudText>
+                                 }
+                             </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+                <!-- Top Performers (Last Game) -->
+                @if (_homeTopPlayers.Any() || _awayTopPlayers.Any())
+                {
+                     <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">Top Performers (Last Game)</MudText>
+                     <MudGrid>
+                        <MudItem xs="6">
+                            @foreach(var p in _awayTopPlayers)
+                            {
+                                <MudText Typo="Typo.caption" Class="d-block">@p.Player.FirstName @p.Player.LastName: <b>@p.Pts</b> pts</MudText>
+                            }
+                        </MudItem>
+                        <MudItem xs="6">
+                            @foreach(var p in _homeTopPlayers)
+                            {
+                                <MudText Typo="Typo.caption" Class="d-block">@p.Player.FirstName @p.Player.LastName: <b>@p.Pts</b> pts</MudText>
+                            }
+                        </MudItem>
+                     </MudGrid>
+                }
+                
+                <!-- Value Analysis with Edge Meters -->
+                @if (_homeStats != null && _awayStats != null)
+                {
+                    <MudPaper Outlined="true" Class="pa-4 mt-4">
+                        <MudText Typo="Typo.h6" Class="mb-3">
+                            <MudIcon Icon="@Icons.Material.Filled.Speed" Class="mr-2" />
+                            Edge Analysis
+                        </MudText>
+                        
+                        <MudGrid>
+                            <!-- Spread Edge Meter -->
+                            <MudItem xs="12" md="6">
+                                <div class="text-center">
+                                    <MudText Typo="Typo.subtitle2" Class="mb-2">Spread Edge</MudText>
+                                    <div style="position: relative; width: 150px; height: 80px; margin: 0 auto;">
+                                        <!-- Edge Meter Arc -->
+                                        <svg viewBox="0 0 100 50" style="width: 100%; height: 100%;">
+                                            <!-- Background arc -->
+                                            <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#e0e0e0" stroke-width="8" stroke-linecap="round"/>
+                                            <!-- Value arc -->
+                                            <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" 
+                                                  stroke="@GetEdgeMeterColor(_spreadEdge)" 
+                                                  stroke-width="8" 
+                                                  stroke-linecap="round"
+                                                  stroke-dasharray="@GetEdgeDashArray(_spreadEdge)"
+                                                  stroke-dashoffset="0"/>
+                                            <!-- Center indicator -->
+                                            <line x1="50" y1="50" x2="50" y2="15" stroke="#666" stroke-width="2" opacity="0.5"/>
+                                        </svg>
+                                        <div style="position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%);">
+                                            <MudText Typo="Typo.h5" Color="@GetEdgeTextColor(_spreadEdge)">
+                                                @(_spreadEdge > 0 ? "+" : "")@_spreadEdge.ToString("F1")
+                                            </MudText>
+                                        </div>
+                                    </div>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        Line: @_bettingSpread.ToString("F1") | Proj: @_projectedSpread.ToString("F1")
+                                    </MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="@GetEdgeChipColor(_spreadEdge)" Class="mt-1">
+                                        @GetEdgeLabel(_spreadEdge)
+                                    </MudChip>
+                                </div>
+                            </MudItem>
+
+                            <!-- Total Edge Meter -->
+                            <MudItem xs="12" md="6">
+                                <div class="text-center">
+                                    <MudText Typo="Typo.subtitle2" Class="mb-2">Total Edge</MudText>
+                                    <div style="position: relative; width: 150px; height: 80px; margin: 0 auto;">
+                                        <!-- Edge Meter Arc -->
+                                        <svg viewBox="0 0 100 50" style="width: 100%; height: 100%;">
+                                            <!-- Background arc -->
+                                            <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#e0e0e0" stroke-width="8" stroke-linecap="round"/>
+                                            <!-- Value arc -->
+                                            <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" 
+                                                  stroke="@GetEdgeMeterColor(_totalEdge)" 
+                                                  stroke-width="8" 
+                                                  stroke-linecap="round"
+                                                  stroke-dasharray="@GetEdgeDashArray(_totalEdge)"
+                                                  stroke-dashoffset="0"/>
+                                            <!-- Center indicator -->
+                                            <line x1="50" y1="50" x2="50" y2="15" stroke="#666" stroke-width="2" opacity="0.5"/>
+                                        </svg>
+                                        <div style="position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%);">
+                                            <MudText Typo="Typo.h5" Color="@GetEdgeTextColor(_totalEdge)">
+                                                @(_totalEdge > 0 ? "+" : "")@_totalEdge.ToString("F1")
+                                            </MudText>
+                                        </div>
+                                    </div>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        O/U: @_bettingTotal.ToString("F1") | Proj: @_projectedTotal.ToString("F1")
+                                    </MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="@GetEdgeChipColor(_totalEdge)" Class="mt-1">
+                                        @(_totalEdge > 0 ? "OVER" : _totalEdge < 0 ? "UNDER" : "PUSH")
+                                    </MudChip>
+                                </div>
+                            </MudItem>
+                        </MudGrid>
+
+                        <MudDivider Class="my-3" />
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Center">
+                            Edge = Projected - Line. Positive edge suggests value opportunity.
+                        </MudText>
+                    </MudPaper>
+                }
+            }
+            
+            <MudExpansionPanels Class="mt-4">
+                <MudExpansionPanel Text="Betting Odds Details">
+                    <MudGrid>
+                        @foreach(var book in Event.Bookmakers)
+                        {
+                            <MudItem xs="12" sm="6">
+                                <MudCard Outlined="true" Class="pa-2">
+                                     <MudText Typo="Typo.subtitle2">@book.Title</MudText>
+                                     @foreach(var market in book.Markets)
+                                     {
+                                         <div class="d-flex justify-space-between mt-1">
+                                             <MudText Typo="Typo.caption">@FormatMarketKey(market.Key)</MudText>
+                                             <div class="d-flex gap-2">
+                                                 @foreach(var outcome in market.Outcomes)
+                                                 {
+                                                     <MudText Typo="Typo.caption">
+                                                         @outcome.Name: <b>@FormatPrice(outcome.Price)</b> 
+                                                         @(outcome.Point.HasValue ? $"({(outcome.Point>0?"+":"")}{outcome.Point})" : "")
+                                                     </MudText>
+                                                 }
+                                             </div>
+                                         </div>
+                                     }
+                                </MudCard>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+
+        </MudContainer>
+    </DialogContent>
+    <DialogActions>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] dynamic DialogInstance { get; set; }
+    [Parameter] public OddsEvent Event { get; set; }
+    [Parameter] public string Sport { get; set; } = "basketball_nba";
+
+    private TeamSeasonStats? _homeStats;
+    private TeamSeasonStats? _awayStats;
+    private List<BallDontLieGame> _h2hGames = new();
+    private bool _isLoading = true;
+    private bool _statsMissing = false;
+    private string? _errorMessage;
+    private int? _homeId;
+    private int? _awayId;
+    
+    // Advanced Stats
+    private List<BallDontLiePlayerStat> _homeTopPlayers = new();
+    private List<BallDontLiePlayerStat> _awayTopPlayers = new();
+    private double _projectedSpread;
+    private double _projectedTotal;
+    
+    // Edge Meter variables
+    private double _bettingSpread;
+    private double _bettingTotal;
+    private double _spreadEdge => _projectedSpread - _bettingSpread;
+    private double _totalEdge => _projectedTotal - _bettingTotal;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStats();
+    }
+
+    private async Task LoadStats()
+    {
+        try
+        {
+            _isLoading = true;
+            _errorMessage = null;
+            
+            _homeId = await StatsService.GetTeamIdAsync(Event.HomeTeam, Sport);
+            _awayId = await StatsService.GetTeamIdAsync(Event.AwayTeam, Sport);
+
+            if (_homeId.HasValue && _awayId.HasValue)
+            {
+                // 2. Fetch Stats (Parallel)
+                var homeTask = StatsService.GetTeamStatsAsync(_homeId.Value, Sport);
+                var awayTask = StatsService.GetTeamStatsAsync(_awayId.Value, Sport);
+                var h2hTask = StatsService.GetHeadToHeadAsync(_homeId.Value, _awayId.Value, Sport);
+
+                await Task.WhenAll(homeTask, awayTask, h2hTask);
+                
+                _homeStats = await homeTask;
+                _awayStats = await awayTask;
+                _h2hGames = await h2hTask;
+                
+                if (_homeStats != null && _awayStats != null) 
+                {
+                    // 3. fetch top players from last game
+                    // SKIP for NFL (API restricts player stats on free/standard key)
+                    bool isNfl = Sport.Contains("nfl", StringComparison.OrdinalIgnoreCase) || Sport.Contains("americanfootball", StringComparison.OrdinalIgnoreCase);
+                    
+                    if (!isNfl)
+                    {
+                        if (_homeStats.LastGameId > 0)
+                            _homeTopPlayers = (await StatsService.GetGameStatsAsync(_homeStats.LastGameId, Sport))
+                                .Where(p => p.Team.Id == _homeId.Value)
+                                .OrderByDescending(p => p.Pts)
+                                .Take(3).ToList();
+
+                        if (_awayStats.LastGameId > 0)
+                            _awayTopPlayers = (await StatsService.GetGameStatsAsync(_awayStats.LastGameId, Sport))
+                                .Where(p => p.Team.Id == _awayId.Value)
+                                .OrderByDescending(p => p.Pts)
+                                .Take(3).ToList();
+                    }
+                            
+                    // 4. Calculate Projections
+                    // Projected Home Score = (Home Avg Scored + Away Avg Allowed) / 2
+                    var projHome = (_homeStats.AveragePoints + _awayStats.AveragePointsAllowed) / 2.0;
+                    var projAway = (_awayStats.AveragePoints + _homeStats.AveragePointsAllowed) / 2.0;
+                    
+                    _projectedTotal = projHome + projAway;
+                    _projectedSpread = projHome - projAway; // Positive = Home favored
+                    
+                    // 5. Extract betting lines from odds
+                    ExtractBettingLines();
+                }
+                else
+                {
+                    _statsMissing = true;
+                }
+            }
+            else
+            {
+                _statsMissing = true;
+            }
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+             {
+                 _errorMessage = "Rate limit exceeded. Please wait a moment before trying again.";
+                 Snackbar.Add("BallDontLie Rate Limit Hit", Severity.Warning);
+             }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error loading stats: {ex.Message}";
+            Snackbar.Add($"Error loading stats: {ex.Message}", Severity.Error);
+            _statsMissing = true;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        try
+        {
+            if (DialogInstance == null)
+            {
+                Console.WriteLine("DialogInstance is null");
+                return;
+            }
+
+            var type = (Type)DialogInstance.GetType();
+            Console.WriteLine($"DialogInstance Type: {type.FullName}");
+            foreach (var method in type.GetMethods())
+            {
+                Console.WriteLine($"Method: {method.Name}");
+            }
+
+            // Attempt to call Close or Cancel if found
+            if (type.GetMethod("Cancel") != null)
+            {
+                DialogInstance.Cancel();
+            }
+            else if (type.GetMethod("Close") != null)
+            {
+                 // Try Close with no args or default
+                 try 
+                 { 
+                     DialogInstance.Close(); 
+                 } 
+                 catch 
+                 { 
+                     // Try with DialogResult.Cancel() if possible, but we need the type
+                     // For now just logging what's available
+                 }
+            }
+            else 
+            {
+                 Console.WriteLine("No Close or Cancel method found!");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in Cancel: {ex}");
+        }
+    }
+    
+    private string FormatPrice(double? price) => price.HasValue ? (price > 0 ? $"+{price}" : price.ToString()) : "-";
+    
+    private string FormatMarketKey(string key)
+    {
+        return key switch
+        {
+            "h2h" => "Moneyline",
+            "spreads" => "Spread",
+            "totals" => "Total",
+            _ => key
+        };
+    }
+
+    private void ExtractBettingLines()
+    {
+        // Extract spread and total from first available bookmaker
+        var bookmaker = Event.Bookmakers.FirstOrDefault();
+        if (bookmaker == null) return;
+
+        // Extract spread (for home team)
+        var spreadMarket = bookmaker.Markets.FirstOrDefault(m => m.Key == "spreads");
+        if (spreadMarket != null)
+        {
+            var homeSpread = spreadMarket.Outcomes.FirstOrDefault(o => o.Name == Event.HomeTeam);
+            if (homeSpread?.Point.HasValue == true)
+            {
+                _bettingSpread = -homeSpread.Point.Value; // Negate: -3.5 line means book expects home to win by 3.5
+            }
+        }
+
+        // Extract total (O/U line)
+        var totalMarket = bookmaker.Markets.FirstOrDefault(m => m.Key == "totals");
+        if (totalMarket != null)
+        {
+            var overOutcome = totalMarket.Outcomes.FirstOrDefault(o => o.Name == "Over");
+            if (overOutcome?.Point.HasValue == true)
+            {
+                _bettingTotal = overOutcome.Point.Value;
+            }
+        }
+    }
+
+    private Color GetEdgeColor(double spread)
+    {
+        // Simple heuristic: if spread > 3 or < -3, it's a "significant" projection
+        if (Math.Abs(spread) > 7.0) return Color.Success; // Strong opinion
+        if (Math.Abs(spread) > 3.0) return Color.Warning; // Moderate
+        return Color.Default;
+    }
+
+    // Edge Meter Helper Methods
+    private string GetEdgeMeterColor(double edge)
+    {
+        if (edge >= 3) return "#4caf50";  // Green - strong value
+        if (edge >= 1) return "#8bc34a";  // Light green - some value
+        if (edge <= -3) return "#f44336"; // Red - bad value
+        if (edge <= -1) return "#ff9800"; // Orange - slight concern
+        return "#9e9e9e";                 // Gray - neutral
+    }
+
+    private string GetEdgeDashArray(double edge)
+    {
+        // Arc length is ~125.6 (half circle with radius 40)
+        // Map edge (-10 to +10) to arc fill percentage
+        var arcLength = 125.6;
+        var normalized = Math.Clamp(edge / 10.0, -1.0, 1.0); // -1 to 1
+        var fillPercent = 50 + (normalized * 50); // 0 to 100
+        var filled = arcLength * (fillPercent / 100.0);
+        return $"{filled} {arcLength}";
+    }
+
+    private Color GetEdgeTextColor(double edge)
+    {
+        if (edge >= 3) return Color.Success;
+        if (edge >= 1) return Color.Info;
+        if (edge <= -3) return Color.Error;
+        if (edge <= -1) return Color.Warning;
+        return Color.Default;
+    }
+
+    private Color GetEdgeChipColor(double edge)
+    {
+        if (edge >= 3) return Color.Success;
+        if (edge >= 1) return Color.Info;
+        if (edge <= -3) return Color.Error;
+        if (edge <= -1) return Color.Warning;
+        return Color.Default;
+    }
+
+    private string GetEdgeLabel(double edge)
+    {
+        if (edge >= 5) return "STRONG VALUE";
+        if (edge >= 2) return "VALUE";
+        if (edge <= -5) return "AVOID";
+        if (edge <= -2) return "NO VALUE";
+        return "NEUTRAL";
+    }
+}

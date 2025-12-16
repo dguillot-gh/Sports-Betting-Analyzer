@@ -1,0 +1,74 @@
+@page "/upcoming-race"
+@using SportsBettingAnalyzer.Services
+@inject PythonMLServiceClient MLClient
+@inject ISnackbar Snackbar
+@rendermode InteractiveServer
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Upcoming Race</MudText>
+
+    @if (_isLoading)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_raceInfo != null)
+    {
+        <MudPaper Class="pa-4 mb-4">
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.h5">@_raceInfo.RaceName</MudText>
+                    <MudText Typo="Typo.subtitle1">@_raceInfo.Track</MudText>
+                    <MudText Typo="Typo.body1">Year: @_raceInfo.Year</MudText>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-2">Participating Drivers</MudText>
+            @if (_raceInfo.Drivers != null && _raceInfo.Drivers.Any())
+            {
+                <MudList T="string">
+                    @foreach (var driver in _raceInfo.Drivers)
+                    {
+                        <MudListItem Text="@driver" Icon="@Icons.Material.Filled.SportsMotorsports" />
+                    }
+                </MudList>
+            }
+            else
+            {
+                <MudText>No drivers listed.</MudText>
+            }
+        </MudPaper>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Info">No upcoming race information available.</MudAlert>
+    }
+</MudContainer>
+
+@code {
+    private UpcomingRaceInfo? _raceInfo;
+    private bool _isLoading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRaceInfo();
+    }
+
+    private async Task LoadRaceInfo()
+    {
+        _isLoading = true;
+        try
+        {
+            _raceInfo = await MLClient.GetUpcomingRaceAsync("nascar");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading upcoming race: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}

@@ -1,0 +1,35 @@
+@using MudBlazor
+
+
+<MudNavMenu>
+    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">Home</MudNavLink>
+    <MudNavLink Href="/history" Icon="@Icons.Material.Filled.History">Bet History</MudNavLink>
+    <MudNavLink Href="/analytics" Icon="@Icons.Material.Filled.Analytics">Analytics</MudNavLink>
+    <MudNavLink Href="/trends" Icon="@Icons.Material.Filled.TrendingUp">Trends</MudNavLink>
+    <MudNavLink Href="/power-rankings" Icon="@Icons.Material.Filled.EmojiEvents">Power Rankings</MudNavLink>
+    <MudNavLink Href="/odds" Icon="@Icons.Material.Filled.AttachMoney">Live Odds</MudNavLink>
+    
+    <MudNavGroup Title="ML & Data" Icon="@Icons.Material.Filled.Psychology" Expanded="true">
+        <MudNavLink Href="/ml-training" Icon="@Icons.Material.Filled.School">ML Training</MudNavLink>
+        <MudNavLink Href="/feature-engineering" Icon="@Icons.Material.Filled.Build">Feature Engineering</MudNavLink>
+        <MudNavLink Href="/model-insights" Icon="@Icons.Material.Filled.Insights">Model Insights</MudNavLink>
+        <MudNavLink Href="/data-management" Icon="@Icons.Material.Filled.Storage">Data Management</MudNavLink>
+    </MudNavGroup>
+    
+    <MudNavGroup Title="Predictions" Icon="@Icons.Material.Filled.TrendingUp" Expanded="true">
+        <MudNavLink Href="/predictions" Icon="@Icons.Material.Filled.Dashboard">Predictions</MudNavLink>
+        <MudNavLink Href="/edge-predictions" Icon="@Icons.Material.Filled.Whatshot">Edge Predictions</MudNavLink>
+        <MudNavLink Href="/advanced-predictions" Icon="@Icons.Material.Filled.CloudUpload">Advanced Simulator</MudNavLink>
+        <MudNavLink Href="/simulation" Icon="@Icons.Material.Filled.ShowChart">Monte Carlo</MudNavLink>
+    </MudNavGroup>
+    
+    <MudNavGroup Title="Profiles" Icon="@Icons.Material.Filled.Person" Expanded="true">
+        <MudNavLink Href="/driver-profiles" Icon="@Icons.Material.Filled.SportsMotorsports">Driver Profiles (NASCAR)</MudNavLink>
+        <MudNavLink Href="/player-profiles" Icon="@Icons.Material.Filled.SportsBasketball">Player Profiles (NBA/NFL)</MudNavLink>
+    </MudNavGroup>
+    <MudNavLink Href="/upcoming-race" Icon="@Icons.Material.Filled.Flag">Upcoming Race</MudNavLink>
+    
+    <MudDivider Class="my-2" />
+    <MudNavLink Href="/data-health" Icon="@Icons.Material.Filled.HealthAndSafety">Data Health</MudNavLink>
+    <MudNavLink Href="/about" Icon="@Icons.Material.Filled.Info">About</MudNavLink>
+</MudNavMenu>

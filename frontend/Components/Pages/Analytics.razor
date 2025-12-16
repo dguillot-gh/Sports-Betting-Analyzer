@@ -1,0 +1,379 @@
+@page "/analytics"
+@rendermode InteractiveServer
+@using System.Text.Json
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+<PageTitle>Analytics Dashboard</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudStack Spacing="4">
+        <!-- Header -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <div class="d-flex justify-space-between align-center">
+                <div>
+                    <MudText Typo="Typo.h4">
+                        <MudIcon Icon="@Icons.Material.Filled.Analytics" Class="mr-2" />
+                        Analytics Dashboard
+                    </MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Model performance insights and data visualizations
+                    </MudText>
+                </div>
+                <MudButtonGroup>
+                    @foreach (var sport in _sports)
+                    {
+                        <MudButton Variant="@(sport == _selectedSport ? Variant.Filled : Variant.Outlined)" 
+                                   Color="Color.Primary"
+                                   OnClick="@(() => SelectSport(sport))">
+                            @sport.ToUpper()
+                        </MudButton>
+                    }
+                </MudButtonGroup>
+            </div>
+        </MudPaper>
+
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+
+        <!-- Charts Row 1: Class Distribution & Coverage -->
+        <MudGrid Spacing="3">
+            <!-- Class Distribution -->
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-3">
+                        <MudIcon Icon="@Icons.Material.Filled.PieChart" Class="mr-2" />
+                        Target Class Distribution
+                    </MudText>
+                    @if (_distribution != null && _distribution.Distributions.Any())
+                    {
+                        @foreach (var dist in _distribution.Distributions)
+                        {
+                            <MudText Typo="Typo.subtitle2" Class="mb-2">@dist.Target</MudText>
+                            <MudChart ChartType="ChartType.Donut" 
+                                      InputData="@dist.Values.Select(v => (double)v).ToArray()" 
+                                      InputLabels="@dist.Labels.ToArray()"
+                                      Width="300px" Height="300px" />
+                            @if (dist.PositiveRate.HasValue)
+                            {
+                                <MudText Typo="Typo.caption" Class="mt-2">
+                                    Positive Rate: <strong>@((dist.PositiveRate.Value * 100).ToString("F1"))%</strong>
+                                </MudText>
+                            }
+                        }
+                    }
+                    else
+                    {
+                        <MudText Color="Color.Secondary">No distribution data available</MudText>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <!-- Feature Coverage -->
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-3">
+                        <MudIcon Icon="@Icons.Material.Filled.BarChart" Class="mr-2" />
+                        Feature Coverage
+                    </MudText>
+                    @if (_coverage != null && _coverage.Coverage.Any())
+                    {
+                        <MudText Typo="Typo.subtitle2" Class="mb-3">
+                            Average Coverage: <strong>@_coverage.AvgCoverage%</strong>
+                        </MudText>
+                        <MudChart ChartType="ChartType.Bar" 
+                                  ChartSeries="@(new List<ChartSeries> { new ChartSeries { Name = "Coverage %", Data = _coverage.Coverage.Take(12).Select(c => c.Coverage).ToArray() } })"
+                                  XAxisLabels="@_coverage.Coverage.Take(12).Select(c => c.Feature.Length > 10 ? c.Feature.Substring(0, 10) : c.Feature).ToArray()"
+                                  Width="100%" Height="300px"
+                                  ChartOptions="@(new ChartOptions { YAxisTicks = 10 })" />
+                    }
+                    else
+                    {
+                        <MudText Color="Color.Secondary">No coverage data available</MudText>
+                    }
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- Charts Row 2: Correlation Matrix -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Filled.GridOn" Class="mr-2" />
+                Feature Correlation Matrix
+            </MudText>
+            @if (IsCorrelationValid())
+            {
+                <div style="overflow-x: auto;">
+                    <MudSimpleTable Dense="true" Hover="true" Style="min-width: 600px;">
+                        <thead>
+                            <tr>
+                                <th style="position: sticky; left: 0; background: var(--mud-palette-surface);"></th>
+                                @foreach (var feat in _correlation!.Features)
+                                {
+                                    <th style="text-align: center; font-size: 0.7rem; max-width: 70px;">
+                                        @(feat.Length > 6 ? feat.Substring(0, 6) : feat)
+                                    </th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @{ var features = _correlation!.Features; var matrix = _correlation!.CorrelationMatrix; }
+                            @for (int idx = 0; idx < features.Count; idx++)
+                            {
+                                var i = idx;  // Local copy for Blazor
+                                if (i >= matrix.Count) continue;
+                                var row = matrix[i];
+                                <tr>
+                                    <td style="font-weight: bold; font-size: 0.7rem; position: sticky; left: 0; background: var(--mud-palette-surface);">
+                                        @(features[i].Length > 8 ? features[i].Substring(0, 8) : features[i])
+                                    </td>
+                                    @for (int jdx = 0; jdx < features.Count; jdx++)
+                                    {
+                                        var j = jdx;  // Local copy for Blazor
+                                        if (j >= row.Count) continue;
+                                        var val = row[j];
+                                        var color = GetCorrelationColor(val);
+                                        <td style="text-align: center; background-color: @color; color: @(Math.Abs(val) > 0.5 ? "white" : "inherit"); font-size: 0.7rem; padding: 4px;">
+                                            @val.ToString("F1")
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                </div>
+                <MudStack Row="true" Class="mt-3" Justify="Justify.Center">
+                    <MudChip T="string" Style="background: #ef5350; color: white;" Size="Size.Small">-1.0</MudChip>
+                    <MudChip T="string" Style="background: #ffcdd2;" Size="Size.Small">-0.5</MudChip>
+                    <MudChip T="string" Style="background: #e8e8e8;" Size="Size.Small">0</MudChip>
+                    <MudChip T="string" Style="background: #c8e6c9;" Size="Size.Small">+0.5</MudChip>
+                    <MudChip T="string" Style="background: #4caf50; color: white;" Size="Size.Small">+1.0</MudChip>
+                </MudStack>
+            }
+            else
+            {
+                <MudText Color="Color.Secondary">No correlation data available. Select a sport above.</MudText>
+            }
+        </MudPaper>
+
+        <!-- Model Performance Overview -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Filled.Speed" Class="mr-2" />
+                Model Performance Summary
+            </MudText>
+            @if (_models.Any())
+            {
+                <MudGrid>
+                    @foreach (var model in _models)
+                    {
+                        <MudItem xs="12" md="4">
+                            <MudCard Elevation="1">
+                                <MudCardHeader>
+                                    <CardHeaderContent>
+                                        <MudText Typo="Typo.h6">@FormatTargetName(model.TargetName)</MudText>
+                                        <MudText Typo="Typo.caption">@model.Sport - @model.Task</MudText>
+                                    </CardHeaderContent>
+                                    <CardHeaderActions>
+                                        <MudChip T="string" Color="Color.Primary" Size="Size.Small">@model.ModelType</MudChip>
+                                    </CardHeaderActions>
+                                </MudCardHeader>
+                                <MudCardContent>
+                                    <MudStack Spacing="2">
+                                        @if (model.Accuracy.HasValue)
+                                        {
+                                            <div class="d-flex justify-space-between">
+                                                <MudText>Accuracy</MudText>
+                                                <MudText Color="Color.Success"><strong>@((model.Accuracy.Value * 100).ToString("F1"))%</strong></MudText>
+                                            </div>
+                                        }
+                                        @if (model.TrainedAt != null)
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                Trained: @model.TrainedAt
+                                            </MudText>
+                                        }
+                                    </MudStack>
+                                </MudCardContent>
+                            </MudCard>
+                        </MudItem>
+                    }
+                </MudGrid>
+            }
+            else
+            {
+                <MudText Color="Color.Secondary">No trained models found. Train a model first.</MudText>
+            }
+        </MudPaper>
+    </MudStack>
+</MudContainer>
+
+@code {
+    private string[] _sports = { "nfl", "nba", "nascar" };
+    private string _selectedSport = "nfl";
+    private bool _loading = false;
+    
+    private CorrelationData? _correlation;
+    private DistributionData? _distribution;
+    private CoverageData? _coverage;
+    private List<ModelSummary> _models = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAllData();
+    }
+
+    private async Task SelectSport(string sport)
+    {
+        _selectedSport = sport;
+        await LoadAllData();
+    }
+
+    private async Task LoadAllData()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            await Task.WhenAll(LoadCorrelation(), LoadDistribution(), LoadCoverage(), LoadModels());
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading data: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadCorrelation()
+    {
+        try { _correlation = await Http.GetFromJsonAsync<CorrelationData>($"http://localhost:8000/data/charts/{_selectedSport}/correlation"); }
+        catch { _correlation = null; }
+    }
+
+    private async Task LoadDistribution()
+    {
+        try { _distribution = await Http.GetFromJsonAsync<DistributionData>($"http://localhost:8000/data/charts/{_selectedSport}/distribution"); }
+        catch { _distribution = null; }
+    }
+
+    private async Task LoadCoverage()
+    {
+        try { _coverage = await Http.GetFromJsonAsync<CoverageData>($"http://localhost:8000/data/charts/{_selectedSport}/coverage"); }
+        catch { _coverage = null; }
+    }
+
+    private async Task LoadModels()
+    {
+        try
+        {
+            // API returns array directly, not wrapped in {models:[]}
+            var models = await Http.GetFromJsonAsync<List<ModelApiResponse>>($"http://localhost:8000/{_selectedSport}/models");
+            _models = models?.Select(m => new ModelSummary
+            {
+                Sport = _selectedSport.ToUpper(),
+                Task = m.Task ?? "Unknown",
+                TargetName = m.Series ?? "default",
+                ModelType = m.Metrics?.Hyperparameters?.ModelType ?? "Random Forest",
+                Accuracy = m.Metrics?.Accuracy,
+                TrainedAt = m.LastUpdated.HasValue ? DateTimeOffset.FromUnixTimeSeconds((long)m.LastUpdated.Value).ToString("g") : null
+            }).ToList() ?? new();
+        }
+        catch (Exception ex) 
+        { 
+            Console.WriteLine($"LoadModels error: {ex.Message}");
+            _models = new(); 
+        }
+    }
+
+    private string GetCorrelationColor(double val)
+    {
+        if (val >= 0.7) return "#4caf50";
+        if (val >= 0.3) return "#c8e6c9";
+        if (val <= -0.7) return "#ef5350";
+        if (val <= -0.3) return "#ffcdd2";
+        return "#e8e8e8";
+    }
+
+    private bool IsCorrelationValid()
+    {
+        if (_correlation == null) return false;
+        if (_correlation.Features == null || _correlation.Features.Count == 0) return false;
+        if (_correlation.CorrelationMatrix == null || _correlation.CorrelationMatrix.Count == 0) return false;
+        // Check matrix has rows and columns (equal dimensions are valid)
+        return _correlation.CorrelationMatrix.Count > 0 
+               && _correlation.CorrelationMatrix.All(row => row != null && row.Count > 0);
+    }
+
+    public class CorrelationData 
+    { 
+        [System.Text.Json.Serialization.JsonPropertyName("features")]
+        public List<string> Features { get; set; } = new(); 
+        [System.Text.Json.Serialization.JsonPropertyName("correlation_matrix")]
+        public List<List<double>> CorrelationMatrix { get; set; } = new(); 
+    }
+    public class DistributionData { public List<DistributionItem> Distributions { get; set; } = new(); }
+    public class DistributionItem { public string Target { get; set; } = ""; public List<string> Labels { get; set; } = new(); public List<int> Values { get; set; } = new(); public double? PositiveRate { get; set; } }
+    public class CoverageData { public List<CoverageItem> Coverage { get; set; } = new(); public double AvgCoverage { get; set; } }
+    public class CoverageItem { public string Feature { get; set; } = ""; public double Coverage { get; set; } }
+    public class ModelsResponse { public List<ModelInfo> Models { get; set; } = new(); }
+    public class ModelInfo { public string? Task { get; set; } public string? ModelType { get; set; } public double? Accuracy { get; set; } public string? TrainedAt { get; set; } }
+    public class ModelSummary { public string Sport { get; set; } = ""; public string Task { get; set; } = ""; public string TargetName { get; set; } = ""; public string ModelType { get; set; } = ""; public double? Accuracy { get; set; } public string? TrainedAt { get; set; } }
+    
+    private string FormatTargetName(string targetName)
+    {
+        if (string.IsNullOrEmpty(targetName) || targetName == "default")
+            return "Default";
+        
+        // Remove "csv/" prefix if present
+        var name = targetName.Replace("csv/", "");
+        
+        // Map common target names
+        return name switch
+        {
+            "race_win" => "Race Win",
+            "top5_finish" => "Top 5 Finish",
+            "top10_finish" => "Top 10 Finish",
+            "home_win" => "Home Win",
+            "finishing_position" => "Finish Position",
+            _ => System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(name.Replace("_", " "))
+        };
+    }
+    
+    // API response classes
+    public class ModelApiResponse 
+    { 
+        [System.Text.Json.Serialization.JsonPropertyName("sport")]
+        public string? Sport { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("series")]
+        public string? Series { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("task")]
+        public string? Task { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("metrics")]
+        public MetricsData? Metrics { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("last_updated")]
+        public double? LastUpdated { get; set; }
+    }
+    public class MetricsData 
+    { 
+        [System.Text.Json.Serialization.JsonPropertyName("accuracy")]
+        public double? Accuracy { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("mae")]
+        public double? Mae { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("r2")]
+        public double? R2 { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("hyperparameters")]
+        public HyperparamsData? Hyperparameters { get; set; }
+    }
+    public class HyperparamsData
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("model_type")]
+        public string? ModelType { get; set; }
+    }
+}

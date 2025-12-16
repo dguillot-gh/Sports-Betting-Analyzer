@@ -1,0 +1,333 @@
+@page "/feature-engineering"
+@using SportsBettingAnalyzer.Services
+@using System.Text.Json
+@inject PythonMLServiceClient MLService
+@inject ISnackbar Snackbar
+@rendermode InteractiveServer
+
+<PageTitle>Feature Engineering</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h3" GutterBottom="true">Feature Engineering Pipeline</MudText>
+    <MudText Typo="Typo.subtitle1" Class="mb-4">
+        Manage and enhance your data with advanced predictive features.
+    </MudText>
+
+    <MudGrid>
+        <!-- Control Panel -->
+        <MudItem xs="12" md="4">
+            <MudPaper Class="p-4" Elevation="3">
+                <MudText Typo="Typo.h6" GutterBottom="true">Actions</MudText>
+                <MudText Typo="Typo.body2" Class="mb-4">
+                    Run the enhancement pipeline to calculate new features (e.g., career stats, rolling averages) for all NASCAR series.
+                </MudText>
+
+                @if (_isEnhancing)
+                {
+                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" Class="mb-3" />
+                    <MudText>Processing data... This may take a moment.</MudText>
+                }
+                else
+                {
+                    <MudButton Variant="Variant.Filled" 
+                               Color="Color.Primary" 
+                               StartIcon="@Icons.Material.Filled.AutoFixHigh"
+                               OnClick="RunEnhancement"
+                               FullWidth="true"
+                               Size="Size.Large">
+                        Run Feature Enhancement
+                    </MudButton>
+                }
+
+                @if (!string.IsNullOrEmpty(_lastRunMessage))
+                {
+                    <MudAlert Severity="@(_lastRunSuccess ? Severity.Success : Severity.Error)" Class="mt-4">
+                        @_lastRunMessage
+                    </MudAlert>
+                    
+                    @if (_lastRunSuccess && _enhancedSeries.Any())
+                    {
+                        <MudList T="string" Dense="true" Class="mt-2">
+                            @foreach (var seriesName in _enhancedSeries)
+                            {
+                                <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">
+                                    <MudText Typo="Typo.body2"><b>@seriesName</b>: Enhanced</MudText>
+                                </MudListItem>
+                            }
+                        </MudList>
+                    }
+                }
+            </MudPaper>
+            
+            <MudPaper Class="p-4 mt-4" Elevation="3">
+                <MudText Typo="Typo.h6" GutterBottom="true">Pipeline Info</MudText>
+                <MudList T="string" Dense="true">
+                    <MudListItem Icon="@Icons.Material.Filled.Source">
+                        <MudText Typo="Typo.caption">Input: Raw .rda files (data/nascar/raw)</MudText>
+                    </MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.Output">
+                        <MudText Typo="Typo.caption">Output: Enhanced .csv files (data/nascar)</MudText>
+                    </MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.Functions">
+                        <MudText Typo="Typo.caption">Features: 27+ New Contextual Features</MudText>
+                    </MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.FilterAlt">
+                        <MudText Typo="Typo.caption">Filter: Modern Era (2012-2025)</MudText>
+                    </MudListItem>
+                </MudList>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Data Preview -->
+        <MudItem xs="12" md="8">
+            <MudPaper Class="p-4" Elevation="3">
+                <MudGrid Class="mb-4 align-center">
+                    <MudItem xs="12" sm="3">
+                        <MudText Typo="Typo.h6">Data Preview</MudText>
+                    </MudItem>
+                    <MudItem xs="12" sm="3">
+                        <MudSelect T="int?" Label="Filter by Season" Value="@_selectedSeason" ValueChanged="OnSeasonChanged" Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense" Clearable="true">
+                            <MudSelectItem T="int?" Value="null">All Seasons</MudSelectItem>
+                            @for (int year = DateTime.Now.Year + 1; year >= 2012; year--)
+                            {
+                                var y = year;
+                                <MudSelectItem T="int?" Value="@y">@y</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="3">
+                        <MudSelect T="string" Label="Track Type" Value="@_selectedTrackType" ValueChanged="OnTrackTypeChanged" Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense" Clearable="true">
+                            <MudSelectItem T="string" Value="null">All Types</MudSelectItem>
+                            @foreach (var type in _trackTypes)
+                            {
+                                <MudSelectItem T="string" Value="@type">@type</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="3">
+                        <MudTextField T="string" Label="Driver Filter" Value="@_driverFilter" ValueChanged="OnDriverFilterChanged" Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search" DebounceInterval="500" />
+                    </MudItem>
+                </MudGrid>
+                
+                <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
+                    <MudTabPanel Text="Cup Series" OnClick="@(() => LoadData("cup"))">
+                        @if (_isLoadingData)
+                        {
+                            <MudProgressLinear Color="Color.Secondary" Indeterminate="true" />
+                        }
+                        else
+                        {
+                            <MudTable Items="@_cupData" Dense="true" Hover="true" Striped="true" FixedHeader="true" Height="400px">
+                                <HeaderContent>
+                                    @foreach (var col in _displayColumns)
+                                    {
+                                        <MudTh>@col</MudTh>
+                                    }
+                                </HeaderContent>
+                                <RowTemplate>
+                                    @foreach (var col in _displayColumns)
+                                    {
+                                        <MudTd DataLabel="@col">@context[col]</MudTd>
+                                    }
+                                </RowTemplate>
+                                <PagerContent>
+                                    <MudTablePager />
+                                </PagerContent>
+                            </MudTable>
+                            <MudText Typo="Typo.caption" Class="mt-2">Showing top 1000 rows. Total rows: @_totalRows</MudText>
+                        }
+                    </MudTabPanel>
+                    
+                    <MudTabPanel Text="Xfinity Series" OnClick="@(() => LoadData("xfinity"))">
+                        <!-- Same structure, just re-uses _cupData for now as we load on click -->
+                         @if (_isLoadingData)
+                        {
+                            <MudProgressLinear Color="Color.Secondary" Indeterminate="true" />
+                        }
+                        else
+                        {
+                            <MudTable Items="@_cupData" Dense="true" Hover="true" Striped="true" FixedHeader="true" Height="400px">
+                                <HeaderContent>
+                                    @foreach (var col in _displayColumns)
+                                    {
+                                        <MudTh>@col</MudTh>
+                                    }
+                                </HeaderContent>
+                                <RowTemplate>
+                                    @foreach (var col in _displayColumns)
+                                    {
+                                        <MudTd DataLabel="@col">@context[col]</MudTd>
+                                    }
+                                </RowTemplate>
+                                <PagerContent>
+                                    <MudTablePager />
+                                </PagerContent>
+                            </MudTable>
+                             <MudText Typo="Typo.caption" Class="mt-2">Showing top 1000 rows. Total rows: @_totalRows</MudText>
+                        }
+                    </MudTabPanel>
+                    
+                    <MudTabPanel Text="Truck Series" OnClick="@(() => LoadData("truck"))">
+                         @if (_isLoadingData)
+                        {
+                            <MudProgressLinear Color="Color.Secondary" Indeterminate="true" />
+                        }
+                        else
+                        {
+                            <MudTable Items="@_cupData" Dense="true" Hover="true" Striped="true" FixedHeader="true" Height="400px">
+                                <HeaderContent>
+                                    @foreach (var col in _displayColumns)
+                                    {
+                                        <MudTh>@col</MudTh>
+                                    }
+                                </HeaderContent>
+                                <RowTemplate>
+                                    @foreach (var col in _displayColumns)
+                                    {
+                                        <MudTd DataLabel="@col">@context[col]</MudTd>
+                                    }
+                                </RowTemplate>
+                                <PagerContent>
+                                    <MudTablePager />
+                                </PagerContent>
+                            </MudTable>
+                             <MudText Typo="Typo.caption" Class="mt-2">Showing top 1000 rows. Total rows: @_totalRows</MudText>
+                        }
+                    </MudTabPanel>
+                </MudTabs>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    private bool _isEnhancing = false;
+    private bool _lastRunSuccess = false;
+    private string _lastRunMessage = "";
+    private List<string> _enhancedSeries = new();
+
+    private bool _isLoadingData = false;
+    private List<Dictionary<string, object>> _cupData = new();
+    private List<string> _displayColumns = new();
+    private int _totalRows = 0;
+    private string _currentSeries = "cup";
+    private int? _selectedSeason = null;
+    private string? _selectedTrackType = null;
+    private string? _driverFilter = null;
+    
+    private readonly List<string> _trackTypes = new() { "Short Track", "Speedway", "Superspeedway", "Road Course", "Dirt" };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData("cup");
+    }
+
+    private async Task OnSeasonChanged(int? season)
+    {
+        _selectedSeason = season;
+        await LoadData(_currentSeries);
+    }
+
+    private async Task OnTrackTypeChanged(string? trackType)
+    {
+        _selectedTrackType = trackType;
+        await LoadData(_currentSeries);
+    }
+
+    private async Task OnDriverFilterChanged(string? driver)
+    {
+        _driverFilter = driver;
+        await LoadData(_currentSeries);
+    }
+
+    private async Task RunEnhancement()
+    {
+        _isEnhancing = true;
+        _lastRunMessage = "";
+        _enhancedSeries = new();
+        StateHasChanged();
+
+        try
+        {
+            var result = await MLService.EnhanceDataAsync("nascar");
+            
+            if (result.Success)
+            {
+                _lastRunSuccess = true;
+                _lastRunMessage = result.Message ?? "Enhancement completed successfully!";
+                _enhancedSeries = result.SeriesEnhanced ?? new List<string>();
+                
+                Snackbar.Add("Data Enhancement Successful", Severity.Success);
+                // Reload data to show new features
+                await LoadData(_currentSeries);
+            }
+            else
+            {
+                _lastRunSuccess = false;
+                _lastRunMessage = result.Message ?? "Enhancement failed.";
+                Snackbar.Add("Data Enhancement Failed", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            _lastRunSuccess = false;
+            _lastRunMessage = $"Error: {ex.Message}";
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isEnhancing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadData(string series)
+    {
+        _currentSeries = series;
+        _isLoadingData = true;
+        StateHasChanged();
+
+        try
+        {
+            // Load data for the specific series
+            // Note: We use the 'series' parameter in GetDataAsync which maps to the config override
+            // If a specific season is selected, filter by it (min=max=season). If null, show all (or default limit).
+            var data = await MLService.GetDataAsync("nascar", limit: 100, series: series, seasonMin: _selectedSeason, seasonMax: _selectedSeason, trackType: _selectedTrackType, driver: _driverFilter); 
+            
+            if (data != null && data.Rows.Count > 0)
+            {
+                _cupData = data.Rows;
+                _totalRows = data.TotalRows;
+                
+                // Select key columns to display
+                var allCols = data.Columns;
+                var priorityCols = new[] { "year", "race_num", "driver", "finishing_position", "start", "track", "career_wins", "avg_finish_last_5" };
+                
+                _displayColumns = priorityCols.Where(c => allCols.Contains(c)).ToList();
+                
+                // Add a few more if available
+                foreach(var col in allCols.Take(5))
+                {
+                    if (!_displayColumns.Contains(col))
+                    {
+                        _displayColumns.Add(col);
+                    }
+                }
+            }
+            else
+            {
+                _cupData = new();
+                _totalRows = 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading data: {ex.Message}", Severity.Warning);
+        }
+        finally
+        {
+            _isLoadingData = false;
+            StateHasChanged();
+        }
+    }
+}
