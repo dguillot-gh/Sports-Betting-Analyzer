@@ -12,7 +12,7 @@ services:
       dockerfile: Dockerfile
     container_name: sports-ml-backend
     ports:
-      - "8000:8000"
+      - "8003:8000"
     volumes:
       - ./data:/app/data
       - ./models:/app/models
