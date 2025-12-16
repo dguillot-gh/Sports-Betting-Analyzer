@@ -1,0 +1,319 @@
+@page "/odds"
+@using SportsBettingAnalyzer.Services
+@using SportsBettingAnalyzer.Models
+@inject OddsService OddsService
+@inject BallDontLieService StatsService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject FileExportService FileExportService
+@using SportsBettingAnalyzer.Components.Shared
+@rendermode InteractiveServer
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <div>
+            <MudText Typo="Typo.h4" GutterBottom="true">Live Betting Odds</MudText>
+            <MudText Typo="Typo.body1">Real-time odds from DraftKings and FanDuel.</MudText>
+        </div>
+        <div class="d-flex gap-4 align-center">
+            @if (OddsService.LastQuotaUsage.RequestsRemaining > 0 || OddsService.LastQuotaUsage.RequestsUsed > 0)
+            {
+                <MudTooltip Text="Odds API Quota: Used / Remaining">
+                    <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined" Size="Size.Small" Icon="@Icons.Material.Filled.DataUsage">
+                        Odds API: @OddsService.LastQuotaUsage.RequestsUsed / @OddsService.LastQuotaUsage.RequestsRemaining
+                    </MudChip>
+                </MudTooltip>
+            }
+            @if (StatsService.LastQuotaUsage.RequestsRemaining > 0 || StatsService.LastQuotaUsage.RequestsLast > 0)
+            {
+                <MudTooltip Text="BallDontLie API Quota: Remaining / Limit">
+                    <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined" Size="Size.Small" Icon="@Icons.Material.Filled.Speed">
+                        BallDontLie: @StatsService.LastQuotaUsage.RequestsRemaining / @StatsService.LastQuotaUsage.RequestsLast
+                    </MudChip>
+                </MudTooltip>
+            }
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportOdds" Disabled="@(!_events.Any())">Export CSV</MudButton>
+        </div>
+    </div>
+
+    <MudPaper Class="pa-4 mb-4">
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudSelect T="string" Label="Select Sport" Value="@_selectedSportKey" ValueChanged="OnSportChanged" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                    @foreach (var sport in _filteredSports)
+                    {
+                        <MudSelectItem Value="@sport.Key">@sport.Title</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex align-center">
+                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadOdds" Disabled="@(string.IsNullOrEmpty(_selectedSportKey) || _isLoading)">
+                    @if (_isLoading)
+                    {
+                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                        <MudText Class="ms-2">Loading...</MudText>
+                    }
+                    else
+                    {
+                        <MudText>Refresh Odds</MudText>
+                    }
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (_events.Any())
+    {
+        var validEvents = _events.Where(e => !string.IsNullOrEmpty(e.HomeTeam) && !string.IsNullOrEmpty(e.AwayTeam)).ToList();
+        
+        @if (validEvents.Any())
+        {
+            <MudPaper Class="pa-4">
+                <MudTable Items="@validEvents" Hover="true" Dense="true" Striped="true">
+                    <HeaderContent>
+                        <MudTh>Time</MudTh>
+                        <MudTh>Matchup</MudTh>
+                        <MudTh>DraftKings</MudTh>
+                        <MudTh>FanDuel</MudTh>
+                        <MudTh>Analysis</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Time">@context.CommenceTime.ToLocalTime().ToString("MM/dd HH:mm")</MudTd>
+                        <MudTd DataLabel="Matchup">
+                            <div class="d-flex flex-column">
+                                <MudText Typo="Typo.body2"><b>@context.AwayTeam</b></MudText>
+                                <MudText Typo="Typo.caption">vs</MudText>
+                                <MudText Typo="Typo.body2"><b>@context.HomeTeam</b></MudText>
+                            </div>
+                        </MudTd>
+                        <MudTd DataLabel="DraftKings">
+                            @GetBookmakerOdds(context, "DraftKings")
+                        </MudTd>
+                        <MudTd DataLabel="FanDuel">
+                            @GetBookmakerOdds(context, "FanDuel")
+                        </MudTd>
+                        <MudTd DataLabel="Analysis">
+                            <MudButton Variant="Variant.Outlined" Color="Color.Info" Size="Size.Small" 
+                                       OnClick="@(() => OpenAnalysis(context))"
+                                       StartIcon="@Icons.Material.Filled.Analytics">
+                                Analyze
+                            </MudButton>
+                        </MudTd>
+
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
+                </MudTable>
+            </MudPaper>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Info">This sport only has futures/outright markets available. Try selecting a different sport with upcoming games.</MudAlert>
+        }
+    }
+    else if (!string.IsNullOrEmpty(_selectedSportKey) && !_isLoading)
+    {
+        <MudAlert Severity="Severity.Info">No active events found for this sport.</MudAlert>
+    }
+</MudContainer>
+
+@code {
+    private List<SportInfo> _sports = new();
+    private List<SportInfo> _filteredSports = new();
+    private List<OddsEvent> _events = new();
+    private string _selectedSportKey = "";
+    private bool _isLoading = false;
+
+    // Major US sports to filter by
+    private readonly HashSet<string> _majorSports = new() 
+    { 
+        "americanfootball_nfl", 
+        "basketball_nba", 
+        "baseball_mlb", 
+        "icehockey_nhl", 
+        "motorsports_nascar_cup" 
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _sports = await OddsService.GetSportsAsync();
+            
+            // Filter for major sports
+            _filteredSports = _sports
+                .Where(s => s.Active && (_majorSports.Contains(s.Key) || s.Group == "American Football" || s.Group == "Basketball" || s.Group == "Baseball"))
+                .ToList();
+            
+            // Default to NFL or NBA if available
+            var defaultSport = _filteredSports.FirstOrDefault(s => s.Key == "americanfootball_nfl") 
+                            ?? _filteredSports.FirstOrDefault(s => s.Key == "basketball_nba")
+                            ?? _filteredSports.FirstOrDefault();
+                            
+            if (defaultSport != null)
+            {
+                _selectedSportKey = defaultSport.Key;
+                await LoadOdds();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading sports: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task OnSportChanged(string sportKey)
+    {
+        _selectedSportKey = sportKey;
+        await LoadOdds();
+    }
+
+    private async Task LoadOdds()
+    {
+        if (string.IsNullOrEmpty(_selectedSportKey)) return;
+
+        _isLoading = true;
+        try
+        {
+            _events = await OddsService.GetOddsAsync(_selectedSportKey);
+            Snackbar.Add($"Loaded {_events.Count} events", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading odds: {ex.Message}", Severity.Error);
+            Console.WriteLine($"Error: {ex}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+
+
+    private void OpenAnalysis(OddsEvent ev)
+    {
+        var parameters = new DialogParameters 
+        { 
+            { "Event", ev },
+            { "Sport", _selectedSportKey }
+        };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+        DialogService.Show<GameAnalysis>("Game Analysis", parameters, options);
+    }
+
+    private async Task ExportOdds()
+    {
+        if (!_events.Any()) return;
+
+        var exportData = _events.Select(e => new 
+        {
+            Time = e.CommenceTime.ToLocalTime().ToString("g"),
+            Matchup = $"{e.AwayTeam} vs {e.HomeTeam}",
+            DK_ML_Home = GetOddsValue(e, "DraftKings", "h2h", e.HomeTeam),
+            DK_ML_Away = GetOddsValue(e, "DraftKings", "h2h", e.AwayTeam),
+            DK_Spread = GetSpreadValue(e, "DraftKings", e.HomeTeam),
+            DK_Total = GetTotalValue(e, "DraftKings"),
+            FD_ML_Home = GetOddsValue(e, "FanDuel", "h2h", e.HomeTeam),
+            FD_ML_Away = GetOddsValue(e, "FanDuel", "h2h", e.AwayTeam),
+            FD_Spread = GetSpreadValue(e, "FanDuel", e.HomeTeam),
+            FD_Total = GetTotalValue(e, "FanDuel")
+        }).ToList();
+
+        await FileExportService.ExportToCsv(exportData, $"odds_{_selectedSportKey}_{DateTime.Now:yyyyMMdd}.csv");
+        Snackbar.Add("Odds exported successfully", Severity.Success);
+    }
+
+    private string GetOddsValue(OddsEvent ev, string bookmaker, string marketKey, string outcomeName)
+    {
+        var book = ev.Bookmakers.FirstOrDefault(b => b.Title.Contains(bookmaker, StringComparison.OrdinalIgnoreCase));
+        var market = book?.Markets.FirstOrDefault(m => m.Key == marketKey);
+        var outcome = market?.Outcomes.FirstOrDefault(o => o.Name == outcomeName);
+        return FormatPrice(outcome?.Price);
+    }
+
+    private string GetSpreadValue(OddsEvent ev, string bookmaker, string teamName)
+    {
+        var book = ev.Bookmakers.FirstOrDefault(b => b.Title.Contains(bookmaker, StringComparison.OrdinalIgnoreCase));
+        var market = book?.Markets.FirstOrDefault(m => m.Key == "spreads");
+        var outcome = market?.Outcomes.FirstOrDefault(o => o.Name == teamName);
+        if (outcome == null) return "-";
+        return $"{FormatPoint(outcome.Point)} ({FormatPrice(outcome.Price)})";
+    }
+
+    private string GetTotalValue(OddsEvent ev, string bookmaker)
+    {
+        var book = ev.Bookmakers.FirstOrDefault(b => b.Title.Contains(bookmaker, StringComparison.OrdinalIgnoreCase));
+        var market = book?.Markets.FirstOrDefault(m => m.Key == "totals");
+        var outcome = market?.Outcomes.FirstOrDefault(o => o.Name == "Over");
+        if (outcome == null) return "-";
+        return $"O {outcome.Point} ({FormatPrice(outcome.Price)})";
+    }
+
+    private RenderFragment GetBookmakerOdds(OddsEvent ev, string bookmakerName) => builder =>
+    {
+        var book = ev.Bookmakers.FirstOrDefault(b => b.Title.Contains(bookmakerName, StringComparison.OrdinalIgnoreCase));
+        if (book == null)
+        {
+            builder.AddContent(0, "-");
+            return;
+        }
+
+        // Moneyline (h2h)
+        var h2h = book.Markets.FirstOrDefault(m => m.Key == "h2h");
+        if (h2h != null)
+        {
+            var away = h2h.Outcomes.FirstOrDefault(o => o.Name == ev.AwayTeam);
+            var home = h2h.Outcomes.FirstOrDefault(o => o.Name == ev.HomeTeam);
+            
+            builder.OpenElement(1, "div");
+            builder.AddAttribute(2, "class", "d-flex justify-space-between mb-1");
+            builder.AddContent(3, $"ML: {FormatPrice(away?.Price)} / {FormatPrice(home?.Price)}");
+            builder.CloseElement();
+        }
+
+        // Spread
+        var spread = book.Markets.FirstOrDefault(m => m.Key == "spreads");
+        if (spread != null)
+        {
+            var away = spread.Outcomes.FirstOrDefault(o => o.Name == ev.AwayTeam);
+            var home = spread.Outcomes.FirstOrDefault(o => o.Name == ev.HomeTeam);
+            
+            if (away != null && home != null)
+            {
+                builder.OpenElement(4, "div");
+                builder.AddAttribute(5, "class", "d-flex justify-space-between mb-1");
+                builder.AddContent(6, $"Spr: {FormatPoint(away.Point)} ({FormatPrice(away.Price)})");
+                builder.CloseElement();
+            }
+        }
+
+        // Total
+        var total = book.Markets.FirstOrDefault(m => m.Key == "totals");
+        if (total != null)
+        {
+            var over = total.Outcomes.FirstOrDefault(o => o.Name == "Over");
+            
+            if (over != null)
+            {
+                builder.OpenElement(7, "div");
+                builder.AddAttribute(8, "class", "d-flex justify-space-between");
+                builder.AddContent(9, $"Tot: {over.Point} ({FormatPrice(over.Price)})");
+                builder.CloseElement();
+            }
+        }
+    };
+
+    private string FormatPrice(double? price)
+    {
+        if (!price.HasValue) return "-";
+        return price > 0 ? $"+{price}" : price.ToString();
+    }
+
+    private string FormatPoint(double? point)
+    {
+        if (!point.HasValue) return "";
+        return point > 0 ? $"+{point}" : point.ToString();
+    }
+}

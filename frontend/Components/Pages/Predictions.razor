@@ -1,0 +1,375 @@
+﻿@page "/predictions"
+@using MudBlazor
+@using SportsBettingAnalyzer.Services
+@inject PythonMLServiceClient MLClient
+@inject ILogger<Predictions> Logger
+@inject ISnackbar Snackbar
+@rendermode InteractiveServer
+
+<PageTitle>Race Predictions</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Race Predictions & Model Accuracy</MudText>
+<MudText Typo="Typo.body1" GutterBottom="true" Class="mb-4">
+    Make predictions for upcoming races and verify model accuracy
+</MudText>
+
+<!-- Service Status Alert -->
+@if (!_isPythonServiceAvailable)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">
+        Python ML Service is not available. Please ensure the service is running and models are trained.
+    </MudAlert>
+}
+
+<!-- Sport Selection Tabs -->
+<MudTabs ActivePanelIndex="_activeSport" Class="mt-4">
+    <!-- NASCAR Tab -->
+    <MudTabPanel Text="NASCAR" Icon="@Icons.Material.Filled.DirectionsCar">
+        <div class="pa-4">
+            <MudGrid>
+                <!-- Prediction Input -->
+                <MudItem xs="12" md="6">
+                    <MudCard Elevation="2">
+                        <MudCardHeader>
+                            <MudText Typo="Typo.h6">Make a Prediction</MudText>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            <MudStack Spacing="3">
+                                <!-- Series Selection -->
+                                <MudSelect @bind-Value="_nascarSeries" Label="Series" Dense="true">
+                                    <MudSelectItem Value="@("cup")">Cup Series</MudSelectItem>
+                                    <MudSelectItem Value="@("truck")">Truck Series</MudSelectItem>
+                                    <MudSelectItem Value="@("xfinity")">Xfinity Series</MudSelectItem>
+                                </MudSelect>
+
+                                <!-- Task Selection -->
+                                <MudSelect @bind-Value="_predictionTask" Label="Prediction Type" Dense="true">
+                                    <MudSelectItem Value="@("classification")">Win Probability</MudSelectItem>
+                                    <MudSelectItem Value="@("regression")">Finishing Position</MudSelectItem>
+                                </MudSelect>
+
+                                <MudDivider />
+                                <MudText Typo="Typo.subtitle2">Race & Driver Details</MudText>
+
+                                <!-- Driver Info -->
+                                <MudTextField @bind-Value="_driver" Label="Driver Name" />
+                                <MudTextField @bind-Value="_track" Label="Track Name" />
+                                <MudTextField @bind-Value="_trackType" Label="Track Type"
+                                              Hint="e.g., superspeedway, short track, road course, intermediate" />
+
+                                <!-- Numeric Inputs -->
+                                <MudNumericField @bind-Value="_year" Label="Season Year" Min="1949" Max="2025" />
+                                <MudNumericField @bind-Value="_raceNum" Label="Race Number" Min="1" />
+                                <MudNumericField @bind-Value="_startPos" Label="Starting Position" Min="1" Max="40" />
+                                <MudNumericField @bind-Value="_carNum" Label="Car Number" Min="0" />
+
+                                <!-- Additional Info -->
+                                <MudTextField @bind-Value="_manufacturer" Label="Manufacturer"
+                                              Hint="e.g., Chevrolet, Ford, Toyota" />
+                                <MudTextField @bind-Value="_teamName" Label="Team Name" />
+
+                                <!-- Stats -->
+                                <MudNumericField @bind-Value="_laps" Label="Expected Laps" Min="0" />
+                                <MudNumericField @bind-Value="_lapsLed" Label="Laps Led (Historical Average)" Min="0" />
+                                <MudNumericField @bind-Value="_stage1" Label="Stage 1 Points (Est.)" Min="0" />
+                                <MudNumericField @bind-Value="_stage2" Label="Stage 2 Points (Est.)" Min="0" />
+
+                                <!-- Predict Button -->
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Primary"
+                                           FullWidth="true"
+                                           Size="Size.Large"
+                                           @onclick="MakePrediction"
+                                           Disabled="@(_isPredicting || !_isPythonServiceAvailable || string.IsNullOrEmpty(_driver))">
+                                    @if (_isPredicting)
+                                    {
+                                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                                        <MudText Class="ms-2">Predicting...</MudText>
+                                    }
+                                    else
+                                    {
+                                        <span>Get Prediction</span>
+                                    }
+                                </MudButton>
+                            </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+
+                <!-- Prediction Results -->
+                <MudItem xs="12" md="6">
+                    @if (_predictionResult != null)
+                    {
+                        <MudCard Elevation="2">
+                            <MudCardHeader>
+                                <MudText Typo="Typo.h6">Prediction Results</MudText>
+                            </MudCardHeader>
+                            <MudCardContent>
+                                <MudAlert Severity="Severity.Success" Class="mb-3">
+                                    Prediction completed successfully!
+                                </MudAlert>
+
+                                <MudText Typo="Typo.subtitle2" Class="mb-2">Driver: <strong>@_driver</strong></MudText>
+                                <MudText Typo="Typo.caption" Class="mb-3">Track: @_track (@_trackType)</MudText>
+
+                                <MudDivider Class="my-3" />
+
+                                @if (_predictionTask == "classification")
+                                {
+                                    <MudText Typo="Typo.h5" Class="mb-2">
+                                        Win Prediction: <strong>@(_predictionResult.Prediction?.ToString() == "1" ? "WIN" : "NO WIN")</strong>
+                                    </MudText>
+                                    @if (_predictionResult.Probability.HasValue)
+                                    {
+                                        var prob = _predictionResult.Probability.Value * 100;
+                                        var color = prob >= 50 ? Color.Success : prob >= 30 ? Color.Warning : Color.Error;
+                                        <MudProgressLinear Color="@color" Value="@prob" Class="my-3" />
+                                        <MudText Typo="Typo.h6">Win Probability: <strong>@prob.ToString("F1")%</strong></MudText>
+
+                                        @* Confidence Indicator *@
+                                        @if (!string.IsNullOrEmpty(_predictionResult.Confidence))
+                                        {
+                                            var confidenceColor = _predictionResult.Confidence switch
+                                            {
+                                                "high" => Color.Success,
+                                                "medium" => Color.Warning,
+                                                _ => Color.Error
+                                            };
+                                            <div class="d-flex align-center mt-3">
+                                                <MudText Typo="Typo.body2" Class="mr-2">Model Confidence:</MudText>
+                                                <MudChip T="string" Color="@confidenceColor" Size="Size.Small">
+                                                    @_predictionResult.Confidence.ToUpper() (@_predictionResult.ConfidencePercent%)
+                                                </MudChip>
+                                            </div>
+                                        }
+
+                                        <MudDivider Class="my-3" />
+
+                                        <MudText Typo="Typo.subtitle2" Class="mb-2">Betting Analysis</MudText>
+                                        <MudText Typo="Typo.body2">
+                                            Implied odds: <strong>+@(((100.0 / prob) - 1) * 100).ToString("F0")</strong>
+                                        </MudText>
+                                        <MudText Typo="Typo.caption" Class="mt-2">
+                                            Compare this to actual betting odds to find value bets!
+                                        </MudText>
+                                    }
+                                }
+                                else
+                                {
+                                    var position = Convert.ToInt32(_predictionResult.Prediction);
+                                    var color = position <= 5 ? Color.Success : position <= 10 ? Color.Info : position <= 20 ? Color.Warning : Color.Error;
+                                    <MudText Typo="Typo.h5" Class="mb-2">
+                                        Predicted Finish: <MudChip T="string" Color="@color" Size="Size.Large">P@position</MudChip>
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Class="mt-3">
+                                        Use this to evaluate position-based bets (top 5, top 10, etc.)
+                                    </MudText>
+                                }
+
+                                <MudDivider Class="my-3" />
+
+                                <MudText Typo="Typo.caption">
+                                    Series: <strong>@_nascarSeries.ToUpper()</strong>
+                                </MudText>
+                            </MudCardContent>
+                        </MudCard>
+                    }
+                    else if (!_isPredicting)
+                    {
+                        <MudCard Elevation="2">
+                            <MudCardContent>
+                                <MudText Typo="Typo.body2" Align="Align.Center" Class="pa-4">
+                                    Fill in the race details and click "Get Prediction" to see the model's forecast
+                                </MudText>
+                            </MudCardContent>
+                        </MudCard>
+                    }
+
+                    <!-- Model Accuracy Card -->
+                    @if (_modelAccuracy != null)
+                    {
+                        <MudCard Elevation="2" Class="mt-4">
+                            <MudCardHeader>
+                                <MudText Typo="Typo.h6">Model Accuracy</MudText>
+                            </MudCardHeader>
+                            <MudCardContent>
+                                <MudText Typo="Typo.body2" Class="mb-2">
+                                    Based on test data from @_modelAccuracy.TestStartYear onwards:
+                                </MudText>
+                                <MudSimpleTable Dense="true">
+                                    <tbody>
+                                        @foreach (var metric in _modelAccuracy.Metrics)
+                                        {
+                                            <tr>
+                                                <td><strong>@FormatMetricName(metric.Key)</strong></td>
+                                                <td>@FormatMetricValue(metric.Value)</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            </MudCardContent>
+                        </MudCard>
+                    }
+                </MudItem>
+            </MudGrid>
+        </div>
+    </MudTabPanel>
+
+    <!-- NFL Tab (Placeholder) -->
+    <MudTabPanel Text="NFL" Icon="@Icons.Material.Filled.SportsFootball">
+        <div class="pa-4">
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Class="mb-2">NFL Predictions</MudText>
+                    <MudText Typo="Typo.body2">
+                        NFL prediction features coming soon. Train an NFL model first in the ML Training section.
+                    </MudText>
+                </MudCardContent>
+            </MudCard>
+        </div>
+    </MudTabPanel>
+
+    <!-- NBA Tab (Placeholder) -->
+    <MudTabPanel Text="NBA" Icon="@Icons.Material.Filled.SportsBasketball">
+        <div class="pa-4">
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Class="mb-2">NBA Predictions</MudText>
+                    <MudText Typo="Typo.body2">
+                        NBA prediction features coming soon.
+                    </MudText>
+                </MudCardContent>
+            </MudCard>
+        </div>
+    </MudTabPanel>
+</MudTabs>
+
+@code {
+    private int _activeSport = 0;
+    private bool _isPythonServiceAvailable = false;
+
+    // NASCAR Prediction Fields
+    private string _nascarSeries = "cup";
+    private string _predictionTask = "classification";
+    private bool _isPredicting = false;
+    private PredictResponse? _predictionResult;
+    private ModelAccuracy? _modelAccuracy;
+
+    // Input Fields
+    private string _driver = "";
+    private string _track = "";
+    private string _trackType = "";
+    private int _year = 2025;
+    private int _raceNum = 1;
+    private int _startPos = 15;
+    private double _carNum = 5;
+    private string _manufacturer = "";
+    private string _teamName = "";
+    private double _laps = 200;
+    private double _lapsLed = 0;
+    private double _stage1 = 0;
+    private double _stage2 = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _isPythonServiceAvailable = await MLClient.IsHealthyAsync();
+
+            if (_isPythonServiceAvailable)
+            {
+                Snackbar.Add("Python ML Service connected", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Python ML Service unavailable", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initializing Predictions page");
+            Snackbar.Add("Error connecting to ML service", Severity.Error);
+        }
+    }
+
+    private async Task MakePrediction()
+    {
+        try
+        {
+            _isPredicting = true;
+            _predictionResult = null;
+
+            // Build feature dictionary
+            var features = new Dictionary<string, object>
+            {
+                ["driver"] = _driver,
+                ["track"] = _track,
+                ["track_type"] = _trackType,
+                ["year"] = _year,
+                ["race_num"] = _raceNum,
+                ["start"] = _startPos,
+                ["car_num"] = _carNum,
+                ["manu"] = _manufacturer,
+                ["team_name"] = _teamName,
+                ["laps"] = _laps,
+                ["laps_led"] = _lapsLed,
+                ["stage_1"] = _stage1,
+                ["stage_2"] = _stage2,
+                ["status"] = "running"
+            };
+
+            var request = new PredictRequest { Features = features };
+
+            _predictionResult = await MLClient.PredictAsync(
+                sport: "nascar",
+                task: _predictionTask,
+                request: request,
+                series: _nascarSeries
+            );
+
+            Snackbar.Add("Prediction completed!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error making prediction");
+            Snackbar.Add($"Prediction failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isPredicting = false;
+        }
+    }
+
+    private string FormatMetricName(string name)
+    {
+        return name switch
+        {
+            "accuracy" => "Accuracy",
+            "precision" => "Precision",
+            "recall" => "Recall",
+            "f1" => "F1 Score",
+            "roc_auc" => "ROC AUC",
+            "mae" => "Mean Absolute Error",
+            "rmse" => "Root Mean Squared Error",
+            "r2" => "R² Score",
+            _ => name
+        };
+    }
+
+    private string FormatMetricValue(object value)
+    {
+        return value switch
+        {
+            double d => d.ToString("F4"),
+            int i => i.ToString(),
+            _ => value?.ToString() ?? "N/A"
+        };
+    }
+
+    // Model to hold accuracy info (you can load this from training results)
+    private class ModelAccuracy
+    {
+        public int TestStartYear { get; set; }
+        public Dictionary<string, object> Metrics { get; set; } = new();
+    }
+}l

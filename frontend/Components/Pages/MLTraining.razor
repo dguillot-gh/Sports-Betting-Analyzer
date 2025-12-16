@@ -1,0 +1,629 @@
+@page "/ml-training"
+@using MudBlazor
+@using SportsBettingAnalyzer.Services
+@inject PythonMLServiceClient MLClient
+@inject ILogger<MLTraining> Logger
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@rendermode InteractiveServer
+
+<PageTitle>ML Model Training</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">ML Model Training & Management</MudText>
+<MudText Typo="Typo.body1" GutterBottom="true" Class="mb-4">
+    Train machine learning models using professional sports datasets
+</MudText>
+
+<!-- Service Status Alert -->
+@if (!_isPythonServiceAvailable)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">
+  Python ML Service is not available. Please ensure the service is running at @_pythonServiceUrl
+    </MudAlert>
+}
+
+<!-- Tabs for different sections -->
+<MudTabs @bind-ActivePanelIndex="_activeTab" Class="mt-4">
+    <!-- Dataset Explorer Tab -->
+    <MudTabPanel Text="Dataset Explorer" Icon="@Icons.Material.Filled.Storage">
+        <div class="pa-4">
+            <MudGrid>
+                <MudItem xs="12" md="3">
+                    <MudCard Elevation="2">
+                        <MudCardHeader>
+                            <MudText Typo="Typo.h6">Configuration</MudText>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            <MudStack Spacing="3">
+                                <MudSelect T="string" Label="Sport" Value="@_selectedSport" ValueChanged="SelectSport" Dense="true" Variant="Variant.Outlined">
+                                    @foreach (var sport in _availableSports)
+                                    {
+                                        <MudSelectItem Value="@sport">@sport.ToUpper()</MudSelectItem>
+                                    }
+                                </MudSelect>
+
+                                @if (_selectedSport == "nascar")
+                                {
+                                    <MudSelect T="int?" Label="Season" @bind-Value="_selectedSeason" SelectedValuesChanged="OnFilterChanged" Clearable="true" Dense="true" Variant="Variant.Outlined">
+                                        @foreach (var item in _featureValues.GetValueOrDefault("year", new List<object>()))
+                                        {
+                                            int val;
+                                            if (item is System.Text.Json.JsonElement element)
+                                            {
+                                                val = element.GetInt32();
+                                            }
+                                            else
+                                            {
+                                                val = Convert.ToInt32(item);
+                                            }
+                                            <MudSelectItem T="int?" Value="@val">@val</MudSelectItem>
+                                        }
+                                    </MudSelect>
+
+                                    <MudSelect T="string" Label="Track Type" @bind-Value="_selectedTrackType" SelectedValuesChanged="OnFilterChanged" Clearable="true" Dense="true" Variant="Variant.Outlined">
+                                        @foreach (var item in _featureValues.GetValueOrDefault("track_type", new List<object>()))
+                                        {
+                                            <MudSelectItem T="string" Value="@item.ToString()">@item</MudSelectItem>
+                                        }
+                                    </MudSelect>
+
+                                    <MudSelect T="string" Label="Driver" @bind-Value="_selectedDriver" SelectedValuesChanged="OnFilterChanged" Clearable="true" Dense="true" Variant="Variant.Outlined">
+                                        @foreach (var item in _featureValues.GetValueOrDefault("driver", new List<object>()))
+                                        {
+                                            <MudSelectItem T="string" Value="@item.ToString()">@item</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                }
+                            </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+
+                <MudItem xs="12" md="9">
+                    <MudCard Elevation="2">
+                        <MudCardHeader>
+                            <MudText Typo="Typo.h6">Data View</MudText>
+                            <MudSpacer />
+                            @if (_dataSchema != null)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Primary">Total Rows: @_dataSchema.TotalRows</MudChip>
+                            }
+                        </MudCardHeader>
+                        <MudCardContent>
+                            <MudTable T="Dictionary<string, object>" ServerData="@LoadServerData" @ref="_table" Dense="true" Hover="true" Striped="true" Loading="_isLoadingData">
+                                <HeaderContent>
+                                    @if (_dataSchema?.Columns != null)
+                                    {
+                                        @foreach (var col in _dataSchema.Columns)
+                                        {
+                                            <MudTh>@col</MudTh>
+                                        }
+                                    }
+                                </HeaderContent>
+                                <RowTemplate>
+                                    @foreach (var col in _dataSchema.Columns)
+                                    {
+                                        <MudTd DataLabel="@col">@context.GetValueOrDefault(col, "")</MudTd>
+                                    }
+                                </RowTemplate>
+                                <PagerContent>
+                                    <MudTablePager />
+                                </PagerContent>
+                            </MudTable>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            </MudGrid>
+        </div>
+    </MudTabPanel>
+
+ <!-- Training Tab -->
+    <MudTabPanel Text="Train Model" Icon="@Icons.Material.Filled.School">
+     <div class="pa-4">
+       <MudGrid>
+         <MudItem xs="12" md="6">
+      <MudCard Elevation="2">
+       <MudCardHeader>
+   <MudText Typo="Typo.h6">Training Configuration</MudText>
+        </MudCardHeader>
+               <MudCardContent>
+   <MudStack Spacing="3">
+       <!-- Sport Selection -->
+            <MudSelect @bind-Value="_trainingSport" Label="Sport" Dense="true">
+        @foreach (var sport in _availableSports)
+   {
+           <MudSelectItem Value="@sport">@sport.ToUpper()</MudSelectItem>
+            }
+   </MudSelect>
+
+   <!-- NASCAR Series Selection (conditional) -->
+        @if (_trainingSport == "nascar")
+  {
+     <MudSelect @bind-Value="_nascarSeries" Label="Series" Dense="true">
+        @foreach (var series in _nascarSeriesList)
+       {
+       <MudSelectItem Value="@series">@series</MudSelectItem>
+         }
+      </MudSelect>
+    }
+
+  <!-- Task Selection -->
+ <MudSelect @bind-Value="_trainingTask" Label="Task Type" Dense="true">
+    <MudSelectItem Value="@("classification")">Classification (Win/Loss)</MudSelectItem>
+             <MudSelectItem Value="@("regression")">Regression (Score Prediction)</MudSelectItem>
+     </MudSelect>
+
+                            <!-- Train Start Season -->
+                            <MudTextField @bind-Value="_trainStartSeason"
+                                          Label="Train Start Season (Optional)"
+                                          Type="number"
+                                          Hint="Start training from this season (e.g., 2012)"
+                                          Clearable="true" />
+
+                            <!-- Test Split Configuration -->
+                            <MudTextField @bind-Value="_testStartSeason"
+                                          Label="Test Start Season (Optional)"
+                                          Type="number"
+                                          Hint="Leave empty for automatic split"
+                                          Clearable="true" />
+
+                            <!-- Model Selection -->
+                            <MudSelect @bind-Value="_selectedModelType" Label="Model Algorithm" Dense="true" Class="mb-3">
+                                <MudSelectItem Value="@("rf")">Random Forest (Baseline)</MudSelectItem>
+                                <MudSelectItem Value="@("xgboost")">XGBoost (Gradient Boosting)</MudSelectItem>
+                            </MudSelect>
+
+                            <!-- Advanced Hyperparameters -->
+                            <MudExpansionPanels Class="mt-2">
+                                <MudExpansionPanel Text="Advanced Options">
+                                    <MudStack Spacing="3">
+                                        <MudText Typo="Typo.subtitle2">Random Forest Parameters</MudText>
+                                        
+                                        <!-- Number of Trees -->
+                                        <div>
+                                            <MudTooltip Text="The number of trees in the forest. More trees generally improve performance and stability but increase training time.">
+                                                <MudText Typo="Typo.caption">Number of Trees (n_estimators): @_nEstimators</MudText>
+                                            </MudTooltip>
+                                            <MudSlider @bind-Value="_nEstimators" Min="10" Max="500" Step="10" Color="Color.Primary" />
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">Higher values reduce variance but take longer to train.</MudText>
+                                        </div>
+
+                                        <!-- Max Depth -->
+                                        <MudTextField @bind-Value="_maxDepth" 
+                                                      Label="Max Depth" 
+                                                      Type="number" 
+                                                      HelperText="The maximum depth of the tree. Deeper trees capture more complex patterns but may overfit. Leave empty for nodes to expand until all leaves are pure." 
+                                                      Clearable="true" />
+
+                                        <!-- Class Weight (Classification Only) -->
+                                        @if (_trainingTask == "classification")
+                                        {
+                                            <MudSelect @bind-Value="_classWeight" Label="Class Weight" Dense="true" HelperText="Weights associated with classes. 'Balanced' uses the values of y to automatically adjust weights inversely proportional to class frequencies.">
+                                                <MudSelectItem Value="@("None")">None (Equal weights)</MudSelectItem>
+                                                <MudSelectItem Value="@("balanced")">Balanced (Recommended for imbalanced data)</MudSelectItem>
+                                                <MudSelectItem Value="@("balanced_subsample")">Balanced Subsample</MudSelectItem>
+                                            </MudSelect>
+                                        }
+                                    </MudStack>
+                                </MudExpansionPanel>
+                            </MudExpansionPanels>
+
+                            <!-- Training Button -->
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Success"
+                                       FullWidth="true"
+                                       Size="Size.Large"
+                                       @onclick="StartTraining"
+                                       Disabled="@(_isTraining || string.IsNullOrEmpty(_trainingSport) || string.IsNullOrEmpty(_trainingTask) || !_isPythonServiceAvailable)">
+                                @if (_isTraining)
+                                {
+                                    <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                                    <MudText Class="ms-2">Training...</MudText>
+                                }
+                                else
+                                {
+                                    <span>Start Training</span>
+                                }
+                            </MudButton>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <!-- Training Results -->
+                @if (_trainingResult != null)
+                {
+                    <MudCard Elevation="2">
+                        <MudCardHeader>
+                            <MudText Typo="Typo.h6">Training Results</MudText>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            @if (_trainingResult.MultiTarget && _trainingResult.TargetsTrained != null)
+                            {
+                                <!-- Multi-target training results (NASCAR) -->
+                                <MudAlert Severity="Severity.Success" Class="mb-3">
+                                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Class="mr-2" />
+                                    Trained @_trainingResult.TargetsTrained.Count models successfully!
+                                </MudAlert>
+                                
+                                <MudText Typo="Typo.subtitle2" Class="mb-2">Multi-Target Results (NASCAR)</MudText>
+                                <MudTabs Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-3">
+                                    @foreach (var target in _trainingResult.TargetsTrained)
+                                    {
+                                        <MudTabPanel Text="@GetTargetDisplayName(target)" Icon="@GetTargetIcon(target)">
+                                            <MudStack Spacing="2">
+                                                @if (_trainingResult.Results != null && _trainingResult.Results.TryGetValue(target, out var result))
+                                                {
+                                                    <MudText Typo="Typo.caption">Model: <code>@result.ModelPath</code></MudText>
+                                                }
+                                                @if (_trainingResult.Metrics.ValueKind == System.Text.Json.JsonValueKind.Object)
+                                                {
+                                                    @if (_trainingResult.Metrics.TryGetProperty(target, out var targetMetrics))
+                                                    {
+                                                        <MudSimpleTable Dense="true">
+                                                            <tbody>
+                                                                @foreach (var prop in targetMetrics.EnumerateObject())
+                                                                {
+                                                                    <tr>
+                                                                        <td><strong>@prop.Name</strong></td>
+                                                                        <td>@FormatMetricValue(prop.Value)</td>
+                                                                    </tr>
+                                                                }
+                                                            </tbody>
+                                                        </MudSimpleTable>
+                                                    }
+                                                }
+                                            </MudStack>
+                                        </MudTabPanel>
+                                    }
+                                </MudTabs>
+                            }
+                            else if (_trainingResult.Metrics.ValueKind != System.Text.Json.JsonValueKind.Undefined)
+                            {
+                                <!-- Single-target training results (NFL, NBA, etc.) -->
+                                <MudAlert Severity="Severity.Success" Class="mb-3">
+                                    Training completed successfully!
+                                </MudAlert>
+
+                                <MudText Typo="Typo.subtitle2">Model Information</MudText>
+                                <MudDivider Class="my-2" />
+                                <div class="mb-3">
+                                    <MudText Typo="Typo.caption" Class="d-block">Sport: <strong>@_trainingSport</strong></MudText>
+                                    <MudText Typo="Typo.caption" Class="d-block">Task: <strong>@_trainingTask</strong></MudText>
+                                    <MudText Typo="Typo.caption" Class="d-block">Model Path: <code>@_trainingResult.ModelPath</code></MudText>
+                                </div>
+
+                                <MudText Typo="Typo.subtitle2">Performance Metrics</MudText>
+                                <MudDivider Class="my-2" />
+                                <MudSimpleTable>
+                                    <tbody>
+                                        @foreach (var prop in _trainingResult.Metrics.EnumerateObject())
+                                        {
+                                            <tr>
+                                                <td><strong>@prop.Name</strong></td>
+                                                <td>@FormatMetricValue(prop.Value)</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Error">
+                                    Training failed. Check the logs for details.
+                                </MudAlert>
+                            }
+                        </MudCardContent>
+                    </MudCard>
+                }
+                else if (!_isTraining)
+                {
+                    <MudCard Elevation="2">
+                        <MudCardContent>
+                            <MudText Typo="Typo.body2" Color="Color.Default">
+                                Configure your training parameters and click "Start Training" to begin model training with the selected sport and task.
+                            </MudText>
+                        </MudCardContent>
+                    </MudCard>
+                }
+            </MudItem>
+        </MudGrid>
+    </div>
+</MudTabPanel>
+
+<!-- Model Management Tab -->
+<MudTabPanel Text="Model Management" Icon="@Icons.Material.Filled.Settings" OnClick="LoadModels">
+    <div class="pa-4">
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <MudText Typo="Typo.h6">Trained Models</MudText>
+                <MudSpacer />
+                <MudButton StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadModels" Variant="Variant.Outlined" Color="Color.Primary">Refresh</MudButton>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudTable Items="_trainedModels" Hover="true" Loading="_isLoadingModels">
+                    <HeaderContent>
+                        <MudTh>Sport</MudTh>
+                        <MudTh>Series</MudTh>
+                        <MudTh>Task</MudTh>
+                        <MudTh>Last Updated</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Sport">@context.Sport.ToUpper()</MudTd>
+                        <MudTd DataLabel="Series">@context.Series</MudTd>
+                        <MudTd DataLabel="Task">@context.Task</MudTd>
+                        <MudTd DataLabel="Last Updated">@DateTimeOffset.FromUnixTimeSeconds((long)context.LastUpdated).ToLocalTime().ToString("g")</MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudStack Row="true" Spacing="2">
+                                <MudButton Variant="Variant.Filled" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteModel(context))">Delete</MudButton>
+                                <MudButton Variant="Variant.Outlined" Color="Color.Info" Size="Size.Small" Href="@($"/model-insights?sport={context.Sport}&series={context.Series}&task={context.Task}")">Insights</MudButton>
+                            </MudStack>
+                        </MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
+                </MudTable>
+            </MudCardContent>
+        </MudCard>
+    </div>
+</MudTabPanel>
+</MudTabs>
+
+@code {
+    private int _activeTab = 0;
+    private string _pythonServiceUrl = "http://localhost:8000";
+    private bool _isPythonServiceAvailable = false;
+    
+    // Dataset Explorer / Data View
+    private List<string> _availableSports = new();
+    private string _selectedSport = "";
+    private DataSchema _dataSchema;
+    private bool _isLoadingData = false;
+    private MudTable<Dictionary<string, object>> _table;
+    
+    // Data View Filters
+    private int? _selectedSeason;
+    private string? _selectedTrackType;
+    private string? _selectedDriver;
+    private Dictionary<string, List<object>> _featureValues = new();
+
+    // Training
+    private string _trainingSport = "nfl";
+    private string _trainingTask = "classification";
+    private string _selectedModelType = "rf";
+    private string _nascarSeries = "cup";
+    private List<string> _nascarSeriesList = new() { "cup", "truck", "xfinity" };
+    private int? _testStartSeason;
+    private int? _trainStartSeason;
+    private bool _isTraining = false;
+    private TrainResponse _trainingResult;
+
+    // Hyperparameters
+    private int _nEstimators = 200;
+    private int? _maxDepth;
+    private string _classWeight = "balanced";
+
+    // Model Management
+    private List<ModelInfo> _trainedModels = new();
+    private bool _isLoadingModels = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _isPythonServiceAvailable = await MLClient.IsHealthyAsync();
+            _availableSports = await MLClient.GetAvailableSportsAsync();
+            
+            if (_isPythonServiceAvailable)
+            {
+                Snackbar.Add("Python ML Service connected", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Python ML Service unavailable", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initializing ML Training page");
+            Snackbar.Add("Error initializing page", Severity.Error);
+        }
+    }
+
+    private async Task SelectSport(string sport)
+    {
+        _selectedSport = sport;
+        _selectedSeason = null;
+        _selectedTrackType = null;
+        _selectedDriver = null;
+        
+        // Load feature values for dropdowns
+        try 
+        {
+            var series = sport == "nascar" ? "cup" : null; // Default to cup for NASCAR
+            _featureValues = await MLClient.GetFeatureValuesAsync(sport, series);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading feature values");
+        }
+
+        if (_table != null)
+            await _table.ReloadServerData();
+    }
+
+    private async Task<TableData<Dictionary<string, object>>> LoadServerData(TableState state, CancellationToken token)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(_selectedSport))
+                return new TableData<Dictionary<string, object>> { TotalItems = 0, Items = new List<Dictionary<string, object>>() };
+
+            _isLoadingData = true;
+            
+            var series = _selectedSport == "nascar" ? "cup" : null; // Default to cup
+            
+            var data = await MLClient.GetDataAsync(
+                _selectedSport, 
+                limit: state.PageSize, 
+                skip: state.Page * state.PageSize,
+                seasonMin: _selectedSeason,
+                seasonMax: _selectedSeason, // Exact match for now
+                series: series,
+                driver: _selectedDriver,
+                trackType: _selectedTrackType
+            );
+            
+            _dataSchema = data; // Update schema to get columns
+            
+            return new TableData<Dictionary<string, object>>
+            {
+                TotalItems = data.TotalRows,
+                Items = data.Rows
+            };
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading data");
+            Snackbar.Add($"Error loading data: {ex.Message}", Severity.Error);
+            return new TableData<Dictionary<string, object>> { TotalItems = 0, Items = new List<Dictionary<string, object>>() };
+        }
+        finally
+        {
+            _isLoadingData = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnFilterChanged()
+    {
+        if (_table != null)
+            await _table.ReloadServerData();
+    }
+
+    private async Task StartTraining()
+    {
+        try
+        {
+            _isTraining = true;
+            Snackbar.Add("Starting model training...", Severity.Info);
+            
+            var hyperparams = new Dictionary<string, object>
+            {
+                { "model_type", _selectedModelType },
+                { "n_estimators", _nEstimators }
+            };
+
+            if (_maxDepth.HasValue)
+            {
+                hyperparams.Add("max_depth", _maxDepth.Value);
+            }
+
+            if (_trainingTask == "classification")
+            {
+                hyperparams.Add("class_weight", _classWeight);
+            }
+
+            _trainingResult = await MLClient.TrainAsync(
+                sport: _trainingSport,
+                task: _trainingTask,
+                testStartSeason: _testStartSeason,
+                trainStartSeason: _trainStartSeason,
+                series: _trainingSport == "nascar" ? _nascarSeries : null,
+                hyperparameters: hyperparams
+            );
+            
+            Snackbar.Add("Model training completed successfully!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error during model training");
+            Snackbar.Add($"Training failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isTraining = false;
+        }
+    }
+
+    private string FormatMetricValue(System.Text.Json.JsonElement value)
+    {
+        return value.ValueKind switch
+        {
+            System.Text.Json.JsonValueKind.Number => value.TryGetDouble(out var d) ? d.ToString("F4") : value.ToString(),
+            System.Text.Json.JsonValueKind.String => value.GetString() ?? "N/A",
+            System.Text.Json.JsonValueKind.Object => "[Object]",
+            System.Text.Json.JsonValueKind.Array => "[Array]",
+            _ => value.ToString()
+        };
+    }
+
+    private async Task LoadModels()
+    {
+        try
+        {
+            _isLoadingModels = true;
+            var allModels = new List<ModelInfo>();
+            
+            foreach (var sport in _availableSports)
+            {
+                var models = await MLClient.GetModelsAsync(sport);
+                allModels.AddRange(models);
+            }
+            
+            _trainedModels = allModels.OrderByDescending(m => m.LastUpdated).ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading models");
+            Snackbar.Add("Error loading models", Severity.Error);
+        }
+        finally
+        {
+            _isLoadingModels = false;
+        }
+    }
+
+    private async Task DeleteModel(ModelInfo model)
+    {
+        bool? result = await DialogService.ShowMessageBox(
+            "Delete Model", 
+            $"Are you sure you want to delete the {model.Sport} {model.Task} model?", 
+            yesText: "Delete", cancelText: "Cancel");
+
+        if (result == true)
+        {
+            try
+            {
+                await MLClient.DeleteModelAsync(model.Sport, model.Series, model.Task);
+                Snackbar.Add("Model deleted successfully", Severity.Success);
+                await LoadModels();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error deleting model");
+                Snackbar.Add($"Error deleting model: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    // Helper methods for NASCAR multi-target display
+    private string GetTargetDisplayName(string target) => target switch
+    {
+        "race_win" => "Race Win",
+        "top5_finish" => "Top 5 Finish",
+        "top10_finish" => "Top 10 Finish",
+        _ => target.Replace("_", " ").ToUpperInvariant()
+    };
+
+    private string GetTargetIcon(string target) => target switch
+    {
+        "race_win" => Icons.Material.Filled.EmojiEvents,
+        "top5_finish" => Icons.Material.Filled.Star,
+        "top10_finish" => Icons.Material.Filled.StarHalf,
+        _ => Icons.Material.Filled.Assessment
+    };
+}

@@ -1,0 +1,308 @@
+@page "/simulation"
+@using SportsBettingAnalyzer.Services
+@inject PythonMLServiceClient MLClient
+@inject ISnackbar Snackbar
+@inject SimulationStateService SimulationState
+@inject FileExportService FileExportService
+@rendermode InteractiveServer
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Monte Carlo Simulation</MudText>
+    
+    @if (SimulationState.IsInitialized && SimulationState.GetSelectedDriverNames().Any())
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-4">Using driver selection from 2025 Roster.</MudAlert>
+    }
+
+    <MudGrid>
+        <!-- Configuration Panel -->
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4">
+                <MudText Typo="Typo.h6" Class="mb-3">Configuration</MudText>
+                
+                <MudSelect T="int" Label="Year" @bind-Value="_selectedYear" Variant="Variant.Outlined" Class="mb-4">
+                    @foreach (var year in _years)
+                    {
+                        <MudSelectItem Value="@year">@year</MudSelectItem>
+                    }
+                </MudSelect>
+                
+                <MudSelect T="string" Label="Track Type" @bind-Value="_trackType" Variant="Variant.Outlined" Class="mb-4">
+                    <MudSelectItem Value="@("Intermediate")">Intermediate</MudSelectItem>
+                    <MudSelectItem Value="@("Short Track")">Short Track</MudSelectItem>
+                    <MudSelectItem Value="@("Superspeedway")">Superspeedway</MudSelectItem>
+                    <MudSelectItem Value="@("Road Course")">Road Course</MudSelectItem>
+                    <MudSelectItem Value="@("Flat")">Flat</MudSelectItem>
+                    <MudSelectItem Value="@("Concrete")">Concrete</MudSelectItem>
+                </MudSelect>
+                
+                <MudNumericField @bind-Value="_numSimulations" Label="Simulations" Variant="Variant.Outlined" Min="100" Max="10000" Step="100" Class="mb-4" />
+                
+                <MudDivider Class="my-4"/>
+                
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Driver Selection</MudText>
+                
+                <!-- Team Filter -->
+                <MudSelect T="string" Label="Filter by Team" Value="_selectedTeam" ValueChanged="OnTeamChanged" Variant="Variant.Outlined" Class="mb-2" Clearable="true">
+                    @foreach (var team in _availableTeams)
+                    {
+                        <MudSelectItem Value="@team">@team</MudSelectItem>
+                    }
+                </MudSelect>
+                
+                <!-- Bulk Actions -->
+                <div class="d-flex gap-2 mb-2">
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="SelectAll">All</MudButton>
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="DeselectAll">None</MudButton>
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="SelectTop20">Top 20</MudButton>
+                </div>
+
+                <MudText Typo="Typo.caption" Class="mb-2">Selected: @_selectedDrivers.Count()</MudText>
+                <MudSelect T="string" Label="Drivers" MultiSelection="true" @bind-Value="_driverSelectValue" @bind-SelectedValues="_selectedDrivers" Variant="Variant.Outlined" Class="mb-4" AnchorOrigin="Origin.BottomCenter">
+                    @foreach (var driver in _filteredDrivers)
+                    {
+                        <MudSelectItem Value="@driver">@driver</MudSelectItem>
+                    }
+                </MudSelect>
+                
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="RunSimulation" Disabled="@(_isLoading || !_selectedDrivers.Any())">
+                    @if (_isLoading)
+                    {
+                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                        <MudText Class="ms-2">Simulating...</MudText>
+                    }
+                    else
+                    {
+                        <MudText>Run Simulation</MudText>
+                    }
+                </MudButton>
+            </MudPaper>
+        </MudItem>
+        
+        <!-- Results Panel -->
+        <MudItem xs="12" md="8">
+            @if (_simulationResponse != null)
+            {
+                <MudPaper Class="pa-4">
+                    <div class="d-flex justify-space-between align-center mb-4">
+                        <div>
+                            <MudText Typo="Typo.h6">Results</MudText>
+                            <MudText Typo="Typo.caption">
+                                Simulated @_simulationResponse.Metadata.Simulations races for @_simulationResponse.Metadata.Year @_simulationResponse.Metadata.TrackType
+                            </MudText>
+                        </div>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportResults">Export Results</MudButton>
+                    </div>
+                    
+                    <MudTable Items="@_simulationResponse.Results" Dense="true" Hover="true" Striped="true" Class="mt-4">
+                        <HeaderContent>
+                            <MudTh>Driver</MudTh>
+                            <MudTh>Win %</MudTh>
+                            <MudTh>Top 5 %</MudTh>
+                            <MudTh>Top 10 %</MudTh>
+                            <MudTh>Avg Finish</MudTh>
+                            <MudTh>Best</MudTh>
+                            <MudTh>Worst</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Driver"><b>@context.Driver</b></MudTd>
+                            <MudTd DataLabel="Win %">
+                                <MudText Color="@(context.WinProb > 0.1 ? Color.Success : Color.Default)">
+                                    @($"{context.WinProb:P1}")
+                                </MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Top 5 %">@($"{context.Top5Prob:P1}")</MudTd>
+                            <MudTd DataLabel="Top 10 %">@($"{context.Top10Prob:P1}")</MudTd>
+                            <MudTd DataLabel="Avg Finish">@($"{context.AvgFinish:F1}")</MudTd>
+                            <MudTd DataLabel="Best">@context.BestFinish</MudTd>
+                            <MudTd DataLabel="Worst">@context.WorstFinish</MudTd>
+                        </RowTemplate>
+                        <PagerContent>
+                            <MudTablePager />
+                        </PagerContent>
+                    </MudTable>
+                </MudPaper>
+            }
+            else if (!_isLoading)
+            {
+                <MudPaper Class="pa-16 d-flex justify-center align-center">
+                    <MudText Typo="Typo.h6" Color="Color.Secondary">Select drivers and run simulation to see results</MudText>
+                </MudPaper>
+            }
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    private int _selectedYear = DateTime.Now.Year;
+    private string _trackType = "Intermediate";
+    private int _numSimulations = 1000;
+    
+    private List<int> _years = Enumerable.Range(2012, DateTime.Now.Year - 2012 + 1).Reverse().ToList();
+    
+    // Driver & Team Data
+    private List<string> _allDrivers = new();
+    private List<string> _filteredDrivers = new();
+    private List<string> _availableTeams = new();
+    private Dictionary<string, Dictionary<string, object>> _driverMappings = new();
+    
+    // Selection State
+    private string _selectedTeam;
+    private string _driverSelectValue { get; set; }
+    private IEnumerable<string> _selectedDrivers { get; set; } = new HashSet<string>();
+    
+    private bool _isLoading = false;
+    private SimulationResponse _simulationResponse;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+        
+        // Check if we have drivers from the 2025 selection service
+        if (SimulationState.IsInitialized)
+        {
+            var selected2025 = SimulationState.GetSelectedDriverNames();
+            
+            // Ensure they are in the list so they can be selected
+            var missing = selected2025.Except(_allDrivers).ToList();
+            if (missing.Any())
+            {
+                _allDrivers.AddRange(missing);
+                _allDrivers.Sort();
+                FilterDrivers(); // Re-filter to update _filteredDrivers
+            }
+            
+            _selectedDrivers = new HashSet<string>(selected2025);
+        }
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            // Load Drivers
+            _allDrivers = await MLClient.GetDriversAsync("nascar", "cup");
+            _allDrivers.Sort();
+            _filteredDrivers = new List<string>(_allDrivers);
+            
+            // Load Mappings for Teams
+            _driverMappings = await MLClient.GetDriverMappingsAsync("nascar", "cup");
+            
+            // Extract unique teams
+            var teams = new HashSet<string>();
+            foreach (var map in _driverMappings.Values)
+            {
+                if (map.TryGetValue("team_name", out var teamObj) && teamObj != null)
+                {
+                    teams.Add(teamObj.ToString());
+                }
+            }
+            _availableTeams = teams.OrderBy(t => t).ToList();
+
+            // Default select top 20
+            SelectTop20();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading data: {ex.Message}", Severity.Error);
+        }
+    }
+    
+    private void OnTeamChanged(string team)
+    {
+        _selectedTeam = team;
+        FilterDrivers();
+    }
+    
+    private void FilterDrivers()
+    {
+        if (string.IsNullOrEmpty(_selectedTeam))
+        {
+            _filteredDrivers = new List<string>(_allDrivers);
+        }
+        else
+        {
+            _filteredDrivers = _allDrivers.Where(d => 
+                _driverMappings.ContainsKey(d) && 
+                _driverMappings[d].TryGetValue("team_name", out var t) && 
+                t?.ToString() == _selectedTeam
+            ).ToList();
+        }
+    }
+    
+    private void SelectAll()
+    {
+        // Add currently filtered drivers to selection
+        var current = new HashSet<string>(_selectedDrivers);
+        foreach (var d in _filteredDrivers)
+        {
+            current.Add(d);
+        }
+        _selectedDrivers = current;
+    }
+    
+    private void DeselectAll()
+    {
+        // Remove currently filtered drivers from selection
+        if (string.IsNullOrEmpty(_selectedTeam))
+        {
+            _selectedDrivers = new HashSet<string>();
+        }
+        else
+        {
+            var current = new HashSet<string>(_selectedDrivers);
+            foreach (var d in _filteredDrivers)
+            {
+                current.Remove(d);
+            }
+            _selectedDrivers = current;
+        }
+    }
+    
+    private void SelectTop20()
+    {
+        // Select first 20 from filtered list
+        _selectedDrivers = _filteredDrivers.Take(20).ToHashSet();
+    }
+
+    private async Task RunSimulation()
+    {
+        if (!_selectedDrivers.Any())
+        {
+            Snackbar.Add("Please select at least one driver", Severity.Warning);
+            return;
+        }
+
+        _isLoading = true;
+        _simulationResponse = null;
+        
+        try
+        {
+            var request = new SimulationRequest
+            {
+                Drivers = _selectedDrivers.ToList(),
+                Year = _selectedYear,
+                TrackType = _trackType,
+                NumSimulations = _numSimulations
+            };
+            
+            _simulationResponse = await MLClient.SimulateRaceAsync("nascar", request, "cup");
+            Snackbar.Add("Simulation complete!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Simulation failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task ExportResults()
+    {
+        if (_simulationResponse?.Results == null) return;
+        await FileExportService.ExportToCsv(_simulationResponse.Results, $"simulation_results_{_selectedYear}_{_trackType}.csv");
+        Snackbar.Add("Results exported to CSV", Severity.Success);
+    }
+}

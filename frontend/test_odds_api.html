@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Odds API</title>
+</head>
+<body>
+    <h1>Odds API Test</h1>
+    <button onclick="testSports()">Test Get Sports</button>
+    <button onclick="testOdds()">Test Get NFL Odds</button>
+    <pre id="output"></pre>
+
+    <script>
+        const apiKey = '4aee54c212eef472437166704a960985';
+        const baseUrl = 'https://api.the-odds-api.com/v4';
+        const output = document.getElementById('output');
+
+        async function testSports() {
+            try {
+                const response = await fetch(`${baseUrl}/sports?apiKey=${apiKey}`);
+                const data = await response.json();
+                output.textContent = JSON.stringify(data, null, 2);
+                console.log('Sports:', data);
+            } catch (error) {
+                output.textContent = 'Error: ' + error.message;
+            }
+        }
+
+        async function testOdds() {
+            try {
+                const sportKey = 'americanfootball_nfl';
+                const response = await fetch(`${baseUrl}/sports/${sportKey}/odds?apiKey=${apiKey}&regions=us&markets=h2h&oddsFormat=american`);
+                const data = await response.json();
+                output.textContent = JSON.stringify(data, null, 2);
+                console.log('Odds:', data);
+                console.log('Number of events:', data.length);
+            } catch (error) {
+                output.textContent = 'Error: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>

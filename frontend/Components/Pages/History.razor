@@ -1,0 +1,141 @@
+@page "/history"
+@using MudBlazor
+@using SportsBettingAnalyzer.Models
+@using SportsBettingAnalyzer.Services
+@inject DataCollectionService DataCollectionService
+@inject FileExportService FileExportService
+@inject ISnackbar Snackbar
+@rendermode InteractiveServer
+
+<PageTitle>Bet History</PageTitle>
+
+<div class="d-flex justify-space-between align-center mb-4">
+    <div>
+        <MudText Typo="Typo.h4" GutterBottom="true">Bet History</MudText>
+        <MudText Typo="Typo.body1">View your analyzed bets and track results.</MudText>
+    </div>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportHistory" Disabled="@(_historicalBets == null || !_historicalBets.Any())">
+        Export History
+    </MudButton>
+</div>
+
+@if (_isLoading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+
+@if (_historicalBets != null && _historicalBets.Any())
+{
+    <MudTable Items="@_historicalBets" Hover="true" Dense="true" Striped="true">
+        <HeaderContent>
+            <MudTh>Date</MudTh>
+            <MudTh>Teams/Player</MudTh>
+            <MudTh>Sport</MudTh>
+            <MudTh>Bet Type</MudTh>
+            <MudTh>Odds</MudTh>
+            <MudTh>Wager</MudTh>
+            <MudTh>Recommendation</MudTh>
+            <MudTh>Result</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Date">@context.AnalyzedAt.ToString("MM/dd/yyyy HH:mm")</MudTd>
+            <MudTd DataLabel="Teams/Player">
+                @if (!string.IsNullOrEmpty(context.Team1))
+                {
+                    <div>@context.Team1</div>
+                    @if (!string.IsNullOrEmpty(context.Team2))
+                    {
+                        <div>vs @context.Team2</div>
+                    }
+                }
+                else if (!string.IsNullOrEmpty(context.PlayerName))
+                {
+                    <div>@context.PlayerName</div>
+                }
+            </MudTd>
+            <MudTd DataLabel="Sport">@context.Sport</MudTd>
+            <MudTd DataLabel="Bet Type">@context.BetType</MudTd>
+            <MudTd DataLabel="Odds">@context.Odds</MudTd>
+            <MudTd DataLabel="Wager">$@context.WagerAmount.ToString("F2")</MudTd>
+            <MudTd DataLabel="Recommendation">
+                <MudChip T="string" Size="Size.Small" Color="@(context.Recommendation == "GoodBet" ? Color.Success : context.Recommendation == "BadBet" ? Color.Error : Color.Warning)">
+                    @context.Recommendation
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Result">
+                @if (context.Won.HasValue)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="@(context.Won.Value ? Color.Success : Color.Error)">
+                        @(context.Won.Value ? "Won" : "Lost")
+                    </MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default">Pending</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                @if (!context.Won.HasValue)
+                {
+                    <MudButtonGroup>
+                        <MudButton Size="Size.Small" Color="Color.Success" OnClick="@(() => UpdateResult(context.Id, true))">Won</MudButton>
+                        <MudButton Size="Size.Small" Color="Color.Error" OnClick="@(() => UpdateResult(context.Id, false))">Lost</MudButton>
+                    </MudButtonGroup>
+                }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+else if (!_isLoading)
+{
+    <MudAlert Severity="Severity.Info">No bet history found. Analyze some bets to see them here.</MudAlert>
+}
+
+@code {
+    private List<HistoricalBet>? _historicalBets;
+    private bool _isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadHistory();
+    }
+
+    private async Task LoadHistory()
+    {
+        try
+        {
+            _isLoading = true;
+            _historicalBets = await DataCollectionService.GetHistoricalBetsAsync();
+        }
+        catch (Exception ex)
+        {
+            // Handle error
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task UpdateResult(int betId, bool won)
+    {
+        try
+        {
+            await DataCollectionService.UpdateBetResultAsync(betId, won);
+            await LoadHistory();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error updating result: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ExportHistory()
+    {
+        if (_historicalBets == null || !_historicalBets.Any()) return;
+        await FileExportService.ExportToCsv(_historicalBets, $"bet_history_{DateTime.Now:yyyyMMdd}.csv");
+        Snackbar.Add("History exported to CSV", Severity.Success);
+    }
+}
+

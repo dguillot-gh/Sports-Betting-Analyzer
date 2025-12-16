@@ -1,0 +1,788 @@
+@page "/trends"
+@rendermode InteractiveServer
+@using MudBlazor
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+<PageTitle>Trends Analysis - Sports Betting Analyzer</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudStack Spacing="4">
+        <!-- Header -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <div class="d-flex align-center justify-space-between flex-wrap" style="gap: 16px;">
+                <div class="d-flex align-center">
+                    <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="Size.Large" Color="Color.Primary" Class="mr-3" />
+                    <div>
+                        <MudText Typo="Typo.h5">Trends Analysis</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Historical performance and patterns</MudText>
+                    </div>
+                </div>
+                
+                <!-- Sport Tabs -->
+                <MudButtonGroup Color="Color.Primary" Variant="Variant.Outlined">
+                    @foreach (var sport in _sports)
+                    {
+                        <MudButton Variant="@(_selectedSport == sport.Key ? Variant.Filled : Variant.Outlined)"
+                                   OnClick="@(() => SelectSport(sport.Key))">
+                            @sport.Value
+                        </MudButton>
+                    }
+                </MudButtonGroup>
+            </div>
+        </MudPaper>
+
+        <!-- Entity Selector & Year Range -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudGrid>
+                @if (_isNascar)
+                {
+                    <!-- NASCAR: Team dropdown first -->
+                    <MudItem xs="12" md="4">
+                        <MudAutocomplete T="string" Label="Team"
+                                         Value="_selectedTeam"
+                                         ValueChanged="OnTeamSelected"
+                                         SearchFunc="SearchTeams"
+                                         MaxItems="100"
+                                         AdornmentIcon="@Icons.Material.Filled.Groups"
+                                         AdornmentColor="Color.Primary"
+                                         Variant="Variant.Outlined"
+                                         Dense="true"
+                                         Immediate="true" />
+                    </MudItem>
+                    <!-- NASCAR: Driver dropdown (filtered by team) -->
+                    <MudItem xs="12" md="3">
+                        <MudAutocomplete T="string" Label="Driver (Optional)"
+                                         @bind-Value="_selectedEntity"
+                                         SearchFunc="SearchEntities"
+                                         MaxItems="100"
+                                         AdornmentIcon="@Icons.Material.Filled.Person"
+                                         AdornmentColor="Color.Secondary"
+                                         Variant="Variant.Outlined"
+                                         Dense="true"
+                                         Immediate="true"
+                                         Disabled="@(string.IsNullOrEmpty(_selectedTeam))" />
+                    </MudItem>
+                }
+                else
+                {
+                    <!-- NFL/NBA: Team only -->
+                    <MudItem xs="12" md="6">
+                        <MudAutocomplete T="string" Label="Team"
+                                         @bind-Value="_selectedEntity"
+                                         SearchFunc="SearchEntities"
+                                         MaxItems="100"
+                                         AdornmentIcon="@Icons.Material.Filled.Search"
+                                         AdornmentColor="Color.Primary"
+                                         Variant="Variant.Outlined"
+                                         Dense="true"
+                                         Immediate="true" />
+                    </MudItem>
+                }
+                <MudItem xs="12" md="@(_isNascar ? 3 : 4)">
+                    <MudText Typo="Typo.caption" Class="mb-2">Season Range</MudText>
+                    <div class="d-flex align-center" style="gap: 8px;">
+                        <MudNumericField T="int" @bind-Value="_startYear" Label="From" Min="2010" Max="2030" 
+                                         Variant="Variant.Outlined" Dense="true" Style="max-width: 100px;" />
+                        <MudText>—</MudText>
+                        <MudNumericField T="int" @bind-Value="_endYear" Label="To" Min="2010" Max="2030" 
+                                         Variant="Variant.Outlined" Dense="true" Style="max-width: 100px;" />
+                    </div>
+                </MudItem>
+                <MudItem xs="12" md="2" Class="d-flex align-end">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                               OnClick="LoadTrends" Disabled="@((_isNascar ? string.IsNullOrEmpty(_selectedTeam) : string.IsNullOrEmpty(_selectedEntity)) || _isLoading)">
+                        @if (_isLoading)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Analyze
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        @* ===== NASCAR TEAM PANEL ===== *@
+        @if (_isNascar && _teamData != null)
+        {
+            <MudText Typo="Typo.h6" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Filled.Groups" Class="mr-2" />
+                Team: @_teamData.Entity
+            </MudText>
+            
+            <!-- Team Overview Cards -->
+            <MudGrid>
+                <MudItem xs="6" md="2">
+                    <MudPaper Class="pa-3 text-center" Elevation="2" Style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);">
+                        <MudText Typo="Typo.h5" Style="color: white;">@_teamData.Overall.Races</MudText>
+                        <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.8);">Races</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6" md="2">
+                    <MudPaper Class="pa-3 text-center" Elevation="2" Style="background: linear-gradient(135deg, #2e7d32 0%, #4caf50 100%);">
+                        <MudText Typo="Typo.h5" Style="color: white;">@_teamData.Overall.Wins</MudText>
+                        <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.8);">Wins (@_teamData.Overall.WinPct%)</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6" md="2">
+                    <MudPaper Class="pa-3 text-center" Elevation="2" Style="background: linear-gradient(135deg, #1565c0 0%, #42a5f5 100%);">
+                        <MudText Typo="Typo.h5" Style="color: white;">@_teamData.Overall.Top5</MudText>
+                        <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.8);">Top 5 (@_teamData.Overall.Top5Pct%)</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6" md="2">
+                    <MudPaper Class="pa-3 text-center" Elevation="2" Style="background: linear-gradient(135deg, #6a1b9a 0%, #9c27b0 100%);">
+                        <MudText Typo="Typo.h5" Style="color: white;">@_teamData.Overall.Top10</MudText>
+                        <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.8);">Top 10</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6" md="2">
+                    <MudPaper Class="pa-3 text-center" Elevation="2">
+                        <MudText Typo="Typo.h5">@_teamData.Overall.AvgFinish</MudText>
+                        <MudText Typo="Typo.caption">Avg Finish</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6" md="2">
+                    <MudPaper Class="pa-3 text-center" Elevation="2">
+                        <MudText Typo="Typo.h5">@_teamData.Drivers.Count</MudText>
+                        <MudText Typo="Typo.caption">Drivers</MudText>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+            
+            <!-- Team Charts & Drivers -->
+            <MudGrid Class="mt-4">
+                <!-- Team Season Chart -->
+                <MudItem xs="12" md="7">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudText Typo="Typo.subtitle1" Class="mb-3">
+                            <MudIcon Icon="@Icons.Material.Filled.BarChart" Class="mr-2" />
+                            Team Season Performance
+                        </MudText>
+                        @if (_teamData.BySeason.Any())
+                        {
+                            <MudChart ChartType="ChartType.Bar" 
+                                      ChartSeries="@_teamChartSeries" 
+                                      XAxisLabels="@_teamSeasonLabels"
+                                      Width="100%" Height="200px"
+                                      ChartOptions="@_chartOptions" />
+                        }
+                    </MudPaper>
+                </MudItem>
+                
+                <!-- Team Drivers List -->
+                <MudItem xs="12" md="5">
+                    <MudPaper Class="pa-4" Elevation="2" Style="max-height: 280px; overflow-y: auto;">
+                        <MudText Typo="Typo.subtitle1" Class="mb-3">
+                            <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-2" />
+                            Team Drivers
+                        </MudText>
+                        <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                            <thead>
+                                <tr>
+                                    <th>Driver</th>
+                                    <th>Races</th>
+                                    <th>Wins</th>
+                                    <th>Avg</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var driver in _teamData.Drivers.Take(10))
+                                {
+                                    <tr style="cursor: pointer;" @onclick="@(() => SelectDriver(driver.Name))">
+                                        <td><MudLink>@driver.Name</MudLink></td>
+                                        <td>@driver.Races</td>
+                                        <td>@driver.Wins</td>
+                                        <td>@driver.AvgFinish</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+            
+            <MudDivider Class="my-4" />
+        }
+
+        @if (_trendsData != null)
+        {
+            <!-- Overall Stats Cards -->
+            <MudGrid>
+                @if (_isNascar)
+                {
+                    <MudItem xs="6" md="3">
+                        <MudPaper Class="pa-4 text-center" Elevation="2">
+                            <MudText Typo="Typo.h4" Color="Color.Primary">@_trendsData.Overall.Races</MudText>
+                            <MudText Typo="Typo.caption">Races</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="6" md="3">
+                        <MudPaper Class="pa-4 text-center" Elevation="2">
+                            <MudText Typo="Typo.h4" Color="Color.Success">@_trendsData.Overall.Wins</MudText>
+                            <MudText Typo="Typo.caption">Wins (@_trendsData.Overall.WinPct%)</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="6" md="3">
+                        <MudPaper Class="pa-4 text-center" Elevation="2">
+                            <MudText Typo="Typo.h4" Color="Color.Info">@_trendsData.Overall.Top5</MudText>
+                            <MudText Typo="Typo.caption">Top 5 (@_trendsData.Overall.Top5Pct%)</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="6" md="3">
+                        <MudPaper Class="pa-4 text-center" Elevation="2">
+                            <MudText Typo="Typo.h4">@_trendsData.Overall.AvgFinish</MudText>
+                            <MudText Typo="Typo.caption">Avg Finish</MudText>
+                        </MudPaper>
+                    </MudItem>
+                }
+                else
+                {
+                    <MudItem xs="6" md="3">
+                        <MudPaper Class="pa-4 text-center" Elevation="2">
+                            <MudText Typo="Typo.h4" Color="Color.Primary">@_trendsData.Overall.Games</MudText>
+                            <MudText Typo="Typo.caption">Games</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="6" md="3">
+                        <MudPaper Class="pa-4 text-center" Elevation="2">
+                            <MudText Typo="Typo.h4" Color="Color.Success">@_trendsData.Overall.Wins - @_trendsData.Overall.Losses</MudText>
+                            <MudText Typo="Typo.caption">Record (@_trendsData.Overall.Pct%)</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="6" md="3">
+                        <MudPaper Class="pa-4 text-center" Elevation="2">
+                            <MudText Typo="Typo.h4" Color="Color.Info">@_trendsData.Overall.Ppg</MudText>
+                            <MudText Typo="Typo.caption">PPG</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="6" md="3">
+                        <MudPaper Class="pa-4 text-center" Elevation="2">
+                            <MudText Typo="Typo.h6">@_trendsData.Overall.HomeRecord</MudText>
+                            <MudText Typo="Typo.h6">@_trendsData.Overall.AwayRecord</MudText>
+                            <MudText Typo="Typo.caption">Home / Away</MudText>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+
+            <!-- Charts Row -->
+            <MudGrid>
+                <!-- Season Performance Chart -->
+                <MudItem xs="12" md="8">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudText Typo="Typo.h6" Class="mb-3">
+                            <MudIcon Icon="@Icons.Material.Filled.BarChart" Class="mr-2" />
+                            Season by Season
+                        </MudText>
+                        @if (_trendsData.BySeason.Any())
+                        {
+                            <MudChart ChartType="ChartType.Bar" 
+                                      ChartSeries="@_seasonChartSeries" 
+                                      XAxisLabels="@_seasonLabels"
+                                      Width="100%" Height="250px"
+                                      ChartOptions="@_chartOptions" />
+                        }
+                        else
+                        {
+                            <MudText Color="Color.Secondary">No season data available</MudText>
+                        }
+                    </MudPaper>
+                </MudItem>
+
+                <!-- Recent Form -->
+                <MudItem xs="12" md="4">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudText Typo="Typo.h6" Class="mb-3">
+                            <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-2" />
+                            Recent Form (Last 10)
+                        </MudText>
+                        <div class="d-flex flex-wrap justify-center" style="gap: 6px;">
+                            @foreach (var form in _trendsData.RecentForm)
+                            {
+                                <MudChip T="string" Size="Size.Medium"
+                                         Color="@(form.IsWin ? Color.Success : (_isNascar && form.IsTop5 ? Color.Info : Color.Error))"
+                                         Variant="Variant.Filled">
+                                    @form.Result
+                                </MudChip>
+                            }
+                        </div>
+                        <MudDivider Class="my-3" />
+                        <div class="d-flex justify-space-between">
+                            <MudText>Last 5:</MudText>
+                            <MudText Color="Color.Primary"><strong>@_trendsData.Trends.Last5 wins</strong></MudText>
+                        </div>
+                        <div class="d-flex justify-space-between">
+                            <MudText>Last 10:</MudText>
+                            <MudText Color="Color.Primary"><strong>@_trendsData.Trends.Last10 wins</strong></MudText>
+                        </div>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+
+            <!-- Splits & Trends Table -->
+            <MudGrid>
+                <!-- Splits -->
+                <MudItem xs="12" md="6">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudText Typo="Typo.h6" Class="mb-3">
+                            <MudIcon Icon="@Icons.Material.Filled.Compare" Class="mr-2" />
+                            Performance Splits
+                        </MudText>
+                        @if (_trendsData.Splits.Any())
+                        {
+                            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                <thead>
+                                    <tr>
+                                        <th>Split</th>
+                                        <th>@(_isNascar ? "Races" : "Games")</th>
+                                        <th>Wins</th>
+                                        <th>@(_isNascar ? "Avg Finish" : "Win %")</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var split in _trendsData.Splits)
+                                    {
+                                        <tr>
+                                            <td><strong>@FormatSplitName(split.Key)</strong></td>
+                                            <td>@(split.Value.Games > 0 ? split.Value.Games : split.Value.Races)</td>
+                                            <td>@split.Value.Wins</td>
+                                            <td>
+                                                @if (_isNascar)
+                                                {
+                                                    @split.Value.AvgFinish
+                                                }
+                                                else
+                                                {
+                                                    var total = split.Value.Games > 0 ? split.Value.Games : (split.Value.Wins + split.Value.Losses);
+                                                    @(total > 0 ? Math.Round((double)split.Value.Wins / total * 100, 1) : 0)@("%")
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        }
+                        else
+                        {
+                            <MudText Color="Color.Secondary">No split data available</MudText>
+                        }
+                    </MudPaper>
+                </MudItem>
+
+                <!-- Season Breakdown Table -->
+                <MudItem xs="12" md="6">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudText Typo="Typo.h6" Class="mb-3">
+                            <MudIcon Icon="@Icons.Material.Filled.CalendarMonth" Class="mr-2" />
+                            Year by Year Breakdown
+                        </MudText>
+                        @if (_trendsData.BySeason.Any())
+                        {
+                            <div style="max-height: 300px; overflow-y: auto;">
+                                <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                    <thead>
+                                        <tr>
+                                            <th>Year</th>
+                                            <th>@(_isNascar ? "Races" : "Games")</th>
+                                            <th>Wins</th>
+                                            @if (_isNascar)
+                                            {
+                                                <th>Top 5</th>
+                                                <th>Avg</th>
+                                            }
+                                            else
+                                            {
+                                                <th>Losses</th>
+                                                <th>Win %</th>
+                                            }
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var season in _trendsData.BySeason.OrderByDescending(s => s.Year))
+                                        {
+                                            <tr>
+                                                <td><strong>@season.Year</strong></td>
+                                                <td>@(season.Races > 0 ? season.Races : season.Games)</td>
+                                                <td>@season.Wins</td>
+                                                @if (_isNascar)
+                                                {
+                                                    <td>@season.Top5</td>
+                                                    <td>@season.AvgFinish</td>
+                                                }
+                                                else
+                                                {
+                                                    <td>@season.Losses</td>
+                                                    <td>@season.Pct%</td>
+                                                }
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            </div>
+                        }
+                        else
+                        {
+                            <MudText Color="Color.Secondary">No season breakdown available</MudText>
+                        }
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+        }
+        else if (!_isLoading && !string.IsNullOrEmpty(_selectedEntity))
+        {
+            <MudAlert Severity="Severity.Info">
+                Click "Analyze" to load trends for @_selectedEntity
+            </MudAlert>
+        }
+        else if (!_isLoading)
+        {
+            <MudAlert Severity="Severity.Normal">
+                Select a @(_isNascar ? "driver" : "team") and click Analyze to view trends
+            </MudAlert>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    private Dictionary<string, string> _sports = new()
+    {
+        { "nfl", "NFL" },
+        { "nba", "NBA" },
+        { "nascar", "NASCAR" }
+    };
+
+    private string _selectedSport = "nfl";
+    private string _selectedEntity = "";
+    private string _selectedTeam = "";
+    private int _startYear = 2018;
+    private int _endYear = 2025;
+    private bool _isLoading = false;
+    private bool _isNascar => _selectedSport == "nascar";
+    
+    private List<string> _availableEntities = new();
+    private List<NascarTeam> _nascarTeams = new();
+    private NascarTeamData? _teamData;
+    private TrendsData? _trendsData;
+    
+    // Chart data
+    private List<ChartSeries> _seasonChartSeries = new();
+    private List<ChartSeries> _teamChartSeries = new();
+    private string[] _seasonLabels = Array.Empty<string>();
+    private string[] _teamSeasonLabels = Array.Empty<string>();
+    private ChartOptions _chartOptions = new() { YAxisTicks = 5 };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadEntities();
+    }
+
+    private async Task SelectSport(string sport)
+    {
+        _selectedSport = sport;
+        _selectedEntity = "";
+        _selectedTeam = "";
+        _trendsData = null;
+        _teamData = null;
+        
+        if (_isNascar)
+        {
+            await LoadNascarTeams();
+        }
+        else
+        {
+            await LoadEntities();
+        }
+    }
+    
+    private async Task LoadNascarTeams()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<NascarTeamsResponse>("http://localhost:8000/trends/nascar/teams");
+            _nascarTeams = response?.Teams ?? new();
+        }
+        catch
+        {
+            _nascarTeams = new();
+        }
+    }
+    
+    private async Task OnTeamSelected(string team)
+    {
+        _selectedTeam = team;
+        _selectedEntity = "";
+        _trendsData = null;
+        
+        if (!string.IsNullOrEmpty(team))
+        {
+            // Load drivers for this team
+            var selectedTeamData = _nascarTeams.FirstOrDefault(t => t.Name == team);
+            _availableEntities = selectedTeamData?.Drivers ?? new();
+        }
+    }
+    
+    private Task<IEnumerable<string>> SearchTeams(string value, CancellationToken token)
+    {
+        var teamNames = _nascarTeams.Select(t => t.Name).ToList();
+        
+        if (string.IsNullOrEmpty(value))
+            return Task.FromResult(teamNames.Take(50).AsEnumerable());
+        
+        return Task.FromResult(teamNames
+            .Where(t => t.Contains(value, StringComparison.OrdinalIgnoreCase))
+            .Take(50)
+            .AsEnumerable());
+    }
+    
+    private async Task SelectDriver(string driverName)
+    {
+        _selectedEntity = driverName;
+        await LoadTrends();
+        StateHasChanged();
+    }
+
+    private async Task LoadEntities()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<EntitiesResponse>($"http://localhost:8000/trends/{_selectedSport}/entities");
+            _availableEntities = response?.Entities ?? new();
+        }
+        catch
+        {
+            _availableEntities = new();
+        }
+    }
+
+    private Task<IEnumerable<string>> SearchEntities(string value, CancellationToken token)
+    {
+        if (string.IsNullOrEmpty(value))
+            return Task.FromResult(_availableEntities.Take(100).AsEnumerable());
+        
+        return Task.FromResult(_availableEntities
+            .Where(e => e.Contains(value, StringComparison.OrdinalIgnoreCase))
+            .Take(100)
+            .AsEnumerable());
+    }
+
+    private async Task LoadTrends()
+    {
+        _isLoading = true;
+        try
+        {
+            if (_isNascar)
+            {
+                // NASCAR: Load team data first
+                if (!string.IsNullOrEmpty(_selectedTeam))
+                {
+                    var teamUrl = $"http://localhost:8000/trends/nascar/team/{Uri.EscapeDataString(_selectedTeam)}?start_year={_startYear}&end_year={_endYear}";
+                    _teamData = await Http.GetFromJsonAsync<NascarTeamData>(teamUrl);
+                    
+                    if (_teamData != null)
+                    {
+                        BuildTeamChartData();
+                    }
+                }
+                
+                // NASCAR: Also load driver data if selected
+                if (!string.IsNullOrEmpty(_selectedEntity))
+                {
+                    var driverUrl = $"http://localhost:8000/trends/nascar/{Uri.EscapeDataString(_selectedEntity)}?start_year={_startYear}&end_year={_endYear}";
+                    _trendsData = await Http.GetFromJsonAsync<TrendsData>(driverUrl);
+                    
+                    if (_trendsData != null)
+                    {
+                        BuildChartData();
+                    }
+                }
+            }
+            else
+            {
+                // NFL/NBA: Load team data
+                if (string.IsNullOrEmpty(_selectedEntity)) return;
+                
+                var url = $"http://localhost:8000/trends/{_selectedSport}/{Uri.EscapeDataString(_selectedEntity)}?start_year={_startYear}&end_year={_endYear}";
+                _trendsData = await Http.GetFromJsonAsync<TrendsData>(url);
+                
+                if (_trendsData != null)
+                {
+                    BuildChartData();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading trends: {ex.Message}", Severity.Error);
+            _trendsData = null;
+            _teamData = null;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+    
+    private void BuildTeamChartData()
+    {
+        if (_teamData?.BySeason == null || !_teamData.BySeason.Any()) return;
+
+        _teamSeasonLabels = _teamData.BySeason.Select(s => s.Year.ToString()).ToArray();
+        
+        _teamChartSeries = new()
+        {
+            new ChartSeries { Name = "Wins", Data = _teamData.BySeason.Select(s => (double)s.Wins).ToArray() },
+            new ChartSeries { Name = "Top 5", Data = _teamData.BySeason.Select(s => (double)s.Top5).ToArray() }
+        };
+    }
+
+    private void BuildChartData()
+    {
+        if (_trendsData?.BySeason == null || !_trendsData.BySeason.Any()) return;
+
+        _seasonLabels = _trendsData.BySeason.Select(s => s.Year.ToString()).ToArray();
+        
+        if (_isNascar)
+        {
+            _seasonChartSeries = new()
+            {
+                new ChartSeries { Name = "Wins", Data = _trendsData.BySeason.Select(s => (double)s.Wins).ToArray() },
+                new ChartSeries { Name = "Top 5", Data = _trendsData.BySeason.Select(s => (double)s.Top5).ToArray() }
+            };
+        }
+        else
+        {
+            _seasonChartSeries = new()
+            {
+                new ChartSeries { Name = "Wins", Data = _trendsData.BySeason.Select(s => (double)s.Wins).ToArray() },
+                new ChartSeries { Name = "Losses", Data = _trendsData.BySeason.Select(s => (double)s.Losses).ToArray() }
+            };
+        }
+    }
+
+    private string FormatSplitName(string key)
+    {
+        return key switch
+        {
+            "home" => "Home",
+            "away" => "Away",
+            "Superspeedway" => "Superspeedway",
+            "Short Track" => "Short Track",
+            "Intermediate" => "Intermediate",
+            "Road Course" => "Road Course",
+            _ => key
+        };
+    }
+
+    // Response classes
+    public class EntitiesResponse { public List<string> Entities { get; set; } = new(); public string Type { get; set; } = ""; }
+    
+    public class TrendsData
+    {
+        public string Entity { get; set; } = "";
+        public string Sport { get; set; } = "";
+        public string EntityType { get; set; } = "";
+        public OverallStats Overall { get; set; } = new();
+        public List<SeasonStats> BySeason { get; set; } = new();
+        public List<FormEntry> RecentForm { get; set; } = new();
+        public Dictionary<string, SplitStats> Splits { get; set; } = new();
+        public TrendsSummary Trends { get; set; } = new();
+    }
+
+    public class OverallStats
+    {
+        // Team sports
+        public int Games { get; set; }
+        public int Wins { get; set; }
+        public int Losses { get; set; }
+        public double Pct { get; set; }
+        public double Ppg { get; set; }
+        public string HomeRecord { get; set; } = "";
+        public string AwayRecord { get; set; } = "";
+        
+        // NASCAR
+        public int Races { get; set; }
+        public int Top5 { get; set; }
+        public int Top10 { get; set; }
+        public double WinPct { get; set; }
+        public double Top5Pct { get; set; }
+        public double Top10Pct { get; set; }
+        public double AvgFinish { get; set; }
+    }
+
+    public class SeasonStats
+    {
+        public int Year { get; set; }
+        public int Games { get; set; }
+        public int Races { get; set; }
+        public int Wins { get; set; }
+        public int Losses { get; set; }
+        public double Pct { get; set; }
+        public int Top5 { get; set; }
+        public double AvgFinish { get; set; }
+    }
+
+    public class FormEntry
+    {
+        public string Result { get; set; } = "";
+        public bool IsWin { get; set; }
+        public bool IsTop5 { get; set; }
+        public string Track { get; set; } = "";
+        public string Opponent { get; set; } = "";
+        public bool Home { get; set; }
+    }
+
+    public class SplitStats
+    {
+        public int Games { get; set; }
+        public int Races { get; set; }
+        public int Wins { get; set; }
+        public int Losses { get; set; }
+        public double AvgFinish { get; set; }
+    }
+
+    public class TrendsSummary
+    {
+        public int Last10 { get; set; }
+        public int Last5 { get; set; }
+        public int SeasonsAnalyzed { get; set; }
+        public string DataRange { get; set; } = "";
+    }
+    
+    // NASCAR Team response classes
+    public class NascarTeam
+    {
+        public string Name { get; set; } = "";
+        public int Races { get; set; }
+        public int Wins { get; set; }
+        public double AvgFinish { get; set; }
+        public int DriverCount { get; set; }
+        public List<string> Drivers { get; set; } = new();
+    }
+    
+    public class NascarTeamsResponse
+    {
+        public List<NascarTeam> Teams { get; set; } = new();
+        public string Type { get; set; } = "";
+    }
+    
+    public class NascarTeamData
+    {
+        public string Entity { get; set; } = "";
+        public string Sport { get; set; } = "";
+        public string EntityType { get; set; } = "";
+        public OverallStats Overall { get; set; } = new();
+        public List<SeasonStats> BySeason { get; set; } = new();
+        public Dictionary<string, SplitStats> Splits { get; set; } = new();
+        public List<NascarDriver> Drivers { get; set; } = new();
+        public TrendsSummary Trends { get; set; } = new();
+    }
+    
+    public class NascarDriver
+    {
+        public string Name { get; set; } = "";
+        public int Races { get; set; }
+        public int Wins { get; set; }
+        public double AvgFinish { get; set; }
+    }
+}

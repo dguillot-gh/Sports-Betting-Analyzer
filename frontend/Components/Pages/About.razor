@@ -1,0 +1,282 @@
+@page "/about"
+@rendermode InteractiveServer
+
+<PageTitle>About - Sports Betting Analyzer</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudStack Spacing="4">
+        <!-- Header -->
+        <MudPaper Class="pa-6" Elevation="2">
+            <div class="d-flex align-center mb-4">
+                <MudIcon Icon="@Icons.Material.Filled.Analytics" Size="Size.Large" Color="Color.Primary" Class="mr-3" />
+                <div>
+                    <MudText Typo="Typo.h4">Sports Betting Analyzer</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Machine Learning-Powered Sports Prediction Platform
+                    </MudText>
+                </div>
+            </div>
+            <MudText Typo="Typo.body1">
+                A full-stack application that uses machine learning to analyze sports data and generate predictions 
+                for NASCAR, NFL, and NBA. Built with Blazor, Python, and modern ML frameworks.
+            </MudText>
+        </MudPaper>
+
+        <!-- Architecture Overview -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h5" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Filled.Architecture" Class="mr-2" />
+                System Architecture
+            </MudText>
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudCard Outlined="true" Class="pa-3">
+                        <MudText Typo="Typo.h6" Color="Color.Primary">Frontend</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-2">Blazor Server (.NET 9)</MudText>
+                        <MudList T="string" Dense="true">
+                            <MudListItem Icon="@Icons.Material.Filled.Dashboard">MudBlazor UI Components</MudListItem>
+                            <MudListItem Icon="@Icons.Material.Filled.Http">HttpClient for API calls</MudListItem>
+                            <MudListItem Icon="@Icons.Material.Filled.Storage">State Management Services</MudListItem>
+                        </MudList>
+                    </MudCard>
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudCard Outlined="true" Class="pa-3">
+                        <MudText Typo="Typo.h6" Color="Color.Secondary">Backend API</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-2">Python FastAPI</MudText>
+                        <MudList T="string" Dense="true">
+                            <MudListItem Icon="@Icons.Material.Filled.Api">RESTful Endpoints</MudListItem>
+                            <MudListItem Icon="@Icons.Material.Filled.Psychology">scikit-learn / XGBoost</MudListItem>
+                            <MudListItem Icon="@Icons.Material.Filled.TableChart">Pandas Data Processing</MudListItem>
+                        </MudList>
+                    </MudCard>
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudCard Outlined="true" Class="pa-3">
+                        <MudText Typo="Typo.h6" Color="Color.Tertiary">External APIs</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-2">Third-Party Integrations</MudText>
+                        <MudList T="string" Dense="true">
+                            <MudListItem Icon="@Icons.Material.Filled.AttachMoney">The Odds API (Live Odds)</MudListItem>
+                            <MudListItem Icon="@Icons.Material.Filled.SportsBasketball">BallDontLie (NBA/NFL Stats)</MudListItem>
+                            <MudListItem Icon="@Icons.Material.Filled.Cloud">Kaggle (Dataset Downloads)</MudListItem>
+                        </MudList>
+                    </MudCard>
+                </MudItem>
+            </MudGrid>
+
+            <!-- Data Flow Diagram -->
+            <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2">Data Flow</MudText>
+            <MudPaper Class="pa-3" Outlined="true">
+                <div class="d-flex justify-center align-center flex-wrap" style="gap: 8px;">
+                    <MudChip T="string" Color="Color.Primary">Raw Data (CSV/JSON)</MudChip>
+                    <MudIcon Icon="@Icons.Material.Filled.ArrowForward" />
+                    <MudChip T="string" Color="Color.Secondary">Feature Engineering</MudChip>
+                    <MudIcon Icon="@Icons.Material.Filled.ArrowForward" />
+                    <MudChip T="string" Color="Color.Tertiary">ML Training</MudChip>
+                    <MudIcon Icon="@Icons.Material.Filled.ArrowForward" />
+                    <MudChip T="string" Color="Color.Success">Predictions</MudChip>
+                </div>
+            </MudPaper>
+        </MudPaper>
+
+        <!-- ML Models -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h5" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Filled.Psychology" Class="mr-2" />
+                Machine Learning Models
+            </MudText>
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudCard Outlined="true" Class="pa-3">
+                        <div class="d-flex align-center mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Forest" Color="Color.Success" Class="mr-2" />
+                            <MudText Typo="Typo.h6">Random Forest</MudText>
+                        </div>
+                        <MudText Typo="Typo.body2" Class="mb-2">
+                            An ensemble of decision trees that votes on predictions. Great for interpretability.
+                        </MudText>
+                        <MudDivider Class="my-2" />
+                        <MudSimpleTable Dense="true" Hover="true">
+                            <tbody>
+                                <tr><td><strong>Type</strong></td><td>Ensemble (Bagging)</td></tr>
+                                <tr><td><strong>Best For</strong></td><td>Balanced datasets, feature importance</td></tr>
+                                <tr><td><strong>Speed</strong></td><td>Fast training & inference</td></tr>
+                                <tr><td><strong>Overfitting</strong></td><td>Resistant due to averaging</td></tr>
+                            </tbody>
+                        </MudSimpleTable>
+                    </MudCard>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudCard Outlined="true" Class="pa-3">
+                        <div class="d-flex align-center mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Bolt" Color="Color.Warning" Class="mr-2" />
+                            <MudText Typo="Typo.h6">XGBoost</MudText>
+                        </div>
+                        <MudText Typo="Typo.body2" Class="mb-2">
+                            Gradient boosting that sequentially corrects errors. Often achieves best accuracy.
+                        </MudText>
+                        <MudDivider Class="my-2" />
+                        <MudSimpleTable Dense="true" Hover="true">
+                            <tbody>
+                                <tr><td><strong>Type</strong></td><td>Ensemble (Boosting)</td></tr>
+                                <tr><td><strong>Best For</strong></td><td>Imbalanced data, high accuracy</td></tr>
+                                <tr><td><strong>Speed</strong></td><td>Slower training, fast inference</td></tr>
+                                <tr><td><strong>Overfitting</strong></td><td>Requires tuning to prevent</td></tr>
+                            </tbody>
+                        </MudSimpleTable>
+                    </MudCard>
+                </MudItem>
+            </MudGrid>
+
+            <!-- Task Types -->
+            <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2">Prediction Tasks</MudText>
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudAlert Severity="Severity.Info" Dense="true">
+                        <strong>Classification</strong>: Predicts categories (Win/Loss, Top 5/Not Top 5)
+                        <br/><em>Metrics: Accuracy, Precision, Recall, ROC-AUC</em>
+                    </MudAlert>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudAlert Severity="Severity.Success" Dense="true">
+                        <strong>Regression</strong>: Predicts numeric values (Finish Position, Points)
+                        <br/><em>Metrics: MAE, RMSE, R² Score</em>
+                    </MudAlert>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        <!-- Supported Sports -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h5" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Filled.SportsScore" Class="mr-2" />
+                Supported Sports
+            </MudText>
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudCard Outlined="true" Class="pa-3 text-center">
+                        <MudIcon Icon="@Icons.Material.Filled.DirectionsCar" Size="Size.Large" Color="Color.Error" />
+                        <MudText Typo="Typo.h6" Class="mt-2">NASCAR</MudText>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">30K+ races</MudChip>
+                        <MudText Typo="Typo.body2" Class="mt-2">
+                            Race wins, Top 5/10 finishes, finishing position predictions
+                        </MudText>
+                    </MudCard>
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudCard Outlined="true" Class="pa-3 text-center">
+                        <MudIcon Icon="@Icons.Material.Filled.SportsFootball" Size="Size.Large" Color="Color.Warning" />
+                        <MudText Typo="Typo.h6" Class="mt-2">NFL</MudText>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">13K+ games</MudChip>
+                        <MudText Typo="Typo.body2" Class="mt-2">
+                            Home team wins, point spreads, over/under analysis
+                        </MudText>
+                    </MudCard>
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudCard Outlined="true" Class="pa-3 text-center">
+                        <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Size="Size.Large" Color="Color.Tertiary" />
+                        <MudText Typo="Typo.h6" Class="mt-2">NBA</MudText>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">33K+ games</MudChip>
+                        <MudText Typo="Typo.body2" Class="mt-2">
+                            Game outcomes, team performance, live odds integration
+                        </MudText>
+                    </MudCard>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        <!-- Key Features -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h5" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Filled.Star" Class="mr-2" />
+                Key Features
+            </MudText>
+            <MudGrid>
+                <MudItem xs="12" md="6" lg="4">
+                    <MudList T="string" Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.TrendingUp">
+                            <MudText Typo="Typo.body2"><strong>ML Training</strong> - Train custom models</MudText>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.ShowChart">
+                            <MudText Typo="Typo.body2"><strong>Monte Carlo</strong> - Race simulations</MudText>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.AttachMoney">
+                            <MudText Typo="Typo.body2"><strong>Live Odds</strong> - DraftKings/FanDuel</MudText>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Speed">
+                            <MudText Typo="Typo.body2"><strong>Edge Meters</strong> - Value analysis gauges</MudText>
+                        </MudListItem>
+                    </MudList>
+                </MudItem>
+                <MudItem xs="12" md="6" lg="4">
+                    <MudList T="string" Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.Analytics">
+                            <MudText Typo="Typo.body2"><strong>Analytics</strong> - Correlation matrices</MudText>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.HealthAndSafety">
+                            <MudText Typo="Typo.body2"><strong>Data Health</strong> - Quality scoring</MudText>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Insights">
+                            <MudText Typo="Typo.body2"><strong>Model Insights</strong> - Feature importance</MudText>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.ShowChart">
+                            <MudText Typo="Typo.body2"><strong>Trends Analysis</strong> - Historical patterns</MudText>
+                        </MudListItem>
+                    </MudList>
+                </MudItem>
+                <MudItem xs="12" md="6" lg="4">
+                    <MudList T="string" Dense="true">
+                <MudListItem Icon="@Icons.Material.Filled.Storage">
+                            <MudText Typo="Typo.body2"><strong>Data Management</strong> - Auto-sync datasets</MudText>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Person">
+                            <MudText Typo="Typo.body2"><strong>Player Profiles</strong> - NBA/NFL player stats</MudText>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Build">
+                            <MudText Typo="Typo.body2"><strong>Feature Engineering</strong> - Custom features</MudText>
+                        </MudListItem>
+                    </MudList>
+                </MudItem>
+                <MudItem xs="12" md="6" lg="4">
+                    <MudList T="string" Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.Whatshot">
+                            <MudText Typo="Typo.body2"><strong>Edge Predictions</strong> - Hot/Cold players</MudText>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.EmojiEvents">
+                            <MudText Typo="Typo.body2"><strong>Power Rankings</strong> - Weekly team rankings</MudText>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.ViewColumn">
+                            <MudText Typo="Typo.body2"><strong>Column Scan</strong> - Dataset standardization</MudText>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Compare">
+                            <MudText Typo="Typo.body2"><strong>Player Compare</strong> - Side-by-side stats</MudText>
+                        </MudListItem>
+                    </MudList>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        <!-- Tech Stack -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h5" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Filled.Code" Class="mr-2" />
+                Technology Stack
+            </MudText>
+            <div class="d-flex flex-wrap justify-center" style="gap: 8px;">
+                <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">.NET 9 / Blazor</MudChip>
+                <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">Python 3.11</MudChip>
+                <MudChip T="string" Color="Color.Tertiary" Variant="Variant.Outlined">FastAPI</MudChip>
+                <MudChip T="string" Color="Color.Success" Variant="Variant.Outlined">scikit-learn</MudChip>
+                <MudChip T="string" Color="Color.Warning" Variant="Variant.Outlined">XGBoost</MudChip>
+                <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined">Pandas</MudChip>
+                <MudChip T="string" Color="Color.Dark" Variant="Variant.Outlined">MudBlazor</MudChip>
+            </div>
+        </MudPaper>
+
+        <!-- Footer -->
+        <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary" Class="mt-4">
+            Built for educational purposes. Always gamble responsibly.
+        </MudText>
+    </MudStack>
+</MudContainer>

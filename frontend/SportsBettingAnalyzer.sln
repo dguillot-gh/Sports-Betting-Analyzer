@@ -1,0 +1,29 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36623.8
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SportsBettingAnalyzer", "SportsBettingAnalyzer.csproj", "{816E2405-B146-4775-8DF6-752B9B32B4CA}"
+EndProject
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "PythonMLService", "..\PythonMLService\PythonMLService.pyproj", "{7335E4B4-DAD1-438F-9D96-7F43CD2D8154}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{816E2405-B146-4775-8DF6-752B9B32B4CA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{816E2405-B146-4775-8DF6-752B9B32B4CA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{816E2405-B146-4775-8DF6-752B9B32B4CA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{816E2405-B146-4775-8DF6-752B9B32B4CA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7335E4B4-DAD1-438F-9D96-7F43CD2D8154}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7335E4B4-DAD1-438F-9D96-7F43CD2D8154}.Release|Any CPU.ActiveCfg = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {66B9BFCA-5B05-4437-9F2B-CC781A1AE675}
+	EndGlobalSection
+EndGlobal

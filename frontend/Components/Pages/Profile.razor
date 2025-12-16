@@ -1,0 +1,297 @@
+@page "/profile"
+@using SportsBettingAnalyzer.Services
+@using SportsBettingAnalyzer.Components.Shared
+@inject PythonMLServiceClient MLClient
+@inject ISnackbar Snackbar
+@rendermode InteractiveServer
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Player/Driver Profiles</MudText>
+
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <!-- Entity Selector Component -->
+            <EntitySelector 
+                @bind-SelectedSport="_selectedSport"
+                @bind-SelectedSeries="_selectedSeries"
+                @bind-SelectedTeam="_selectedTeam"
+                SelectedEntity="@_selectedEntity"
+                SelectedEntityChanged="OnEntityChanged"
+                @bind-SelectedYear="_selectedYear"
+                AvailableYears="@_availableYears" />
+        </MudItem>
+
+        <MudItem xs="12" md="8">
+            @if (_profileData != null)
+            {
+                <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
+                    <MudTabPanel Text="Overview">
+                        <MudPaper Class="pa-4" Elevation="0">
+                            <MudText Typo="Typo.h5">@_selectedEntity</MudText>
+                            <MudText Typo="Typo.subtitle1" Color="Color.Secondary">@_selectedTeam</MudText>
+                            <MudDivider Class="my-2" />
+
+                            <!-- Stats Grid -->
+                            <MudGrid>
+                                @foreach (var stat in _profileData.Stats)
+                                {
+                                    <MudItem xs="6" sm="4" md="3">
+                                        <MudPaper Class="pa-3" Elevation="2">
+                                            <MudText Typo="Typo.caption">@stat.Key</MudText>
+                                            <MudText Typo="Typo.h6">@stat.Value</MudText>
+                                        </MudPaper>
+                                    </MudItem>
+                                }
+                            </MudGrid>
+
+                            <!-- Splits -->
+                            @if (_profileData.Splits.Any())
+                            {
+                                <MudText Typo="Typo.h6" Class="mt-4">Splits</MudText>
+                                <MudTable Items="@_profileData.Splits" Dense="true" Hover="true" Class="mt-2">
+                                    <HeaderContent>
+                                        <MudTh>Category</MudTh>
+                                        @foreach (var key in _profileData.Splits.First().Value.Keys)
+                                        {
+                                            <MudTh>@key</MudTh>
+                                        }
+                                    </HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd DataLabel="Category">@context.Key</MudTd>
+                                        @foreach (var val in context.Value.Values)
+                                        {
+                                            <MudTd>@val</MudTd>
+                                        }
+                                    </RowTemplate>
+                                </MudTable>
+                            }
+
+                            <!-- History -->
+                            @if (_profileData.History.Any())
+                            {
+                                <MudText Typo="Typo.h6" Class="mt-4">Recent History</MudText>
+                                <MudTable Items="@_profileData.History" Dense="true" Hover="true" Class="mt-2" 
+                                          SortLabel="Sort By" Filter="new Func<Dictionary<string, object>,bool>(FilterHistory)"
+                                          Striped="true" Bordered="true">
+                                    <ToolBarContent>
+                                        <MudText Typo="Typo.h6">History</MudText>
+                                        <MudSpacer />
+                                        <MudTextField @bind-Value="_historySearchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+                                    </ToolBarContent>
+                                    <HeaderContent>
+                                        @foreach (var key in _profileData.History.First().Keys)
+                                        {
+                                            <MudTh><MudTableSortLabel SortBy="new Func<Dictionary<string, object>, object>(x => x[key])">@key</MudTableSortLabel></MudTh>
+                                        }
+                                    </HeaderContent>
+                                    <RowTemplate>
+                                        @foreach (var val in context.Values)
+                                        {
+                                            <MudTd>@val</MudTd>
+                                        }
+                                    </RowTemplate>
+                                    <PagerContent>
+                                        <MudTablePager />
+                                    </PagerContent>
+                                </MudTable>
+                            }
+                        </MudPaper>
+                    </MudTabPanel>
+                    
+                    <MudTabPanel Text="Comparison">
+                        <MudGrid>
+                            <!-- Year A Selection -->
+                            <MudItem xs="6">
+                                <MudSelect T="int?" Label="Year A" @bind-Value="CompYearA" Variant="Variant.Outlined" Clearable="true">
+                                    @foreach (var year in _availableYears)
+                                    {
+                                        <MudSelectItem Value="@((int?)year)">@year</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                            
+                            <!-- Year B Selection -->
+                            <MudItem xs="6">
+                                <MudSelect T="int?" Label="Year B" @bind-Value="CompYearB" Variant="Variant.Outlined" Clearable="true">
+                                    @foreach (var year in _availableYears)
+                                    {
+                                        <MudSelectItem Value="@((int?)year)">@year</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                        </MudGrid>
+
+                        @if (_compDataA != null || _compDataB != null)
+                        {
+                            <MudDivider Class="my-4" />
+                            <MudGrid>
+                                @if (_compDataA != null)
+                                {
+                                    <MudItem xs="6">
+                                        <MudText Typo="Typo.h6">@CompYearA Stats</MudText>
+                                        @foreach (var stat in _compDataA.Stats)
+                                        {
+                                            <MudText>@stat.Key: @stat.Value</MudText>
+                                        }
+                                    </MudItem>
+                                }
+                                @if (_compDataB != null)
+                                {
+                                    <MudItem xs="6">
+                                        <MudText Typo="Typo.h6">@CompYearB Stats</MudText>
+                                        @foreach (var stat in _compDataB.Stats)
+                                        {
+                                            <MudText>@stat.Key: @stat.Value</MudText>
+                                        }
+                                    </MudItem>
+                                }
+                            </MudGrid>
+                        }
+                    </MudTabPanel>
+                </MudTabs>
+            }
+            else if (_isLoading)
+            {
+                <MudPaper Class="pa-4">
+                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                    <MudText Class="ml-3" Typo="Typo.body1">Loading profile...</MudText>
+                </MudPaper>
+            }
+            else if (!string.IsNullOrEmpty(_selectedEntity))
+            {
+                <MudAlert Severity="Severity.Info">Select an entity to view their profile.</MudAlert>
+            }
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    // Selection state
+    private string _selectedSport = "nascar";
+    private string _selectedSeries;
+    private string _selectedTeam;
+    private string _selectedEntity;
+    private int? _selectedYear;
+    
+    // Comparison state  
+    private int? _compYearA;
+    private int? _compYearB;
+    private ProfileData _compDataA;
+    private ProfileData _compDataB;
+
+    // Profile data
+    private List<int> _availableYears = new();
+    private ProfileData _profileData;
+    
+    // Loading states
+    private bool _isLoading = false;
+    private string _historySearchString = "";
+
+    private int? CompYearA
+    {
+        get => _compYearA;
+        set
+        {
+            if (_compYearA != value)
+            {
+                _compYearA = value;
+                if (value.HasValue && !string.IsNullOrEmpty(_selectedEntity))
+                    _ = LoadCompProfile(value.Value, true);
+                else
+                    _compDataA = null;
+            }
+        }
+    }
+
+    private int? CompYearB
+    {
+        get => _compYearB;
+        set
+        {
+            if (_compYearB != value)
+            {
+                _compYearB = value;
+                if (value.HasValue && !string.IsNullOrEmpty(_selectedEntity))
+                    _ = LoadCompProfile(value.Value, false);
+                else
+                    _compDataB = null;
+            }
+        }
+    }
+
+    private async Task OnEntityChanged(string entity)
+    {
+        if (_selectedEntity == entity) return;
+        
+        _selectedEntity = entity;
+        _selectedYear = null;
+        _compYearA = null;
+        _compYearB = null;
+        _compDataA = null;
+        _compDataB = null;
+        _profileData = null;
+        _availableYears.Clear();
+
+        if (!string.IsNullOrEmpty(entity))
+        {
+            await LoadProfile();
+        }
+    }
+
+    private bool FilterHistory(Dictionary<string, object> element)
+    {
+        if (string.IsNullOrWhiteSpace(_historySearchString))
+            return true;
+            
+        foreach (var val in element.Values)
+        {
+            if (val?.ToString()?.Contains(_historySearchString, StringComparison.OrdinalIgnoreCase) == true)
+                return true;
+        }
+        return false;
+    }
+
+    private async Task LoadProfile()
+    {
+        _isLoading = true;
+        try
+        {
+            _profileData = await MLClient.GetEntityProfileAsync(_selectedSport, _selectedEntity, _selectedSeries, _selectedYear);
+            
+            // Update available years if returned
+            if (_profileData.Years != null && _profileData.Years.Any())
+            {
+                _availableYears = _profileData.Years;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading profile: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task LoadCompProfile(int year, bool isA)
+    {
+        try
+        {
+            var data = await MLClient.GetEntityProfileAsync(_selectedSport, _selectedEntity, _selectedSeries, year);
+            if (isA)
+                _compDataA = data;
+            else
+                _compDataB = data;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading comparison data: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+}

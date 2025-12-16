@@ -1,0 +1,298 @@
+﻿@page "/"
+@using MudBlazor
+@using SportsBettingAnalyzer.Models
+@using SportsBettingAnalyzer.Services
+@inject BetAnalysisService BetAnalysisService
+@inject DataCollectionService DataCollectionService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+@rendermode InteractiveServer
+
+<PageTitle>Sports Betting Analyzer</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Bet Slip Analyzer</MudText>
+<MudText Typo="Typo.body1" GutterBottom="true" Class="mb-4">
+    Upload a screenshot of your bet slip to get AI-powered analysis and recommendations.
+</MudText>
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <InputFile OnChange="OnFileSelected" accept="image/*" class="d-none" id="fileInput" />
+    <MudButton HtmlTag="label" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudUpload" for="fileInput">
+        Upload Bet Slip Image
+    </MudButton>
+    
+    @if (_selectedFile != null)
+    {
+        <MudChip T="string" Icon="@Icons.Material.Filled.InsertPhoto" Size="Size.Small" OnClose="OnFileRemoved" Class="ml-2">
+            @_selectedFile.Name (@((_selectedFile.Size / 1024.0).ToString("F2")) KB)
+        </MudChip>
+    }
+
+    @if (_isProcessing)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-4" />
+        <MudText Typo="Typo.body2" Class="mt-2">Processing image and analyzing bet...</MudText>
+    }
+
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <MudAlert Severity="Severity.Error" Class="mt-4">@_errorMessage</MudAlert>
+    }
+</MudPaper>
+
+@if (_currentAnalysis != null)
+{
+    <MudPaper Elevation="2" Class="pa-4 mb-4">
+        <MudText Typo="Typo.h5" GutterBottom="true">Extracted Bet Information</MudText>
+        
+        @if (_currentAnalysis.BetSlip.IsParlay)
+        {
+            <MudAlert Severity="Severity.Info" Class="mb-4">
+                <MudText Typo="Typo.h6">@_currentAnalysis.BetSlip.BetType - @_currentAnalysis.BetSlip.ParlayLegs Legs</MudText>
+            </MudAlert>
+            
+            @if (!string.IsNullOrEmpty(_currentAnalysis.BetSlip.GameInfo))
+            {
+                <MudText Typo="Typo.body1" Class="mb-3"><strong>Game:</strong> @_currentAnalysis.BetSlip.GameInfo</MudText>
+            }
+            
+            @if (_currentAnalysis.BetSlip.ParlaySelections != null && _currentAnalysis.BetSlip.ParlaySelections.Any())
+            {
+                <MudText Typo="Typo.h6" Class="mb-2">Parlay Selections:</MudText>
+                <MudList T="string">
+                    @foreach (var selection in _currentAnalysis.BetSlip.ParlaySelections)
+                    {
+                        <MudListItem T="string">
+                            <MudText Typo="Typo.body1"><strong>@selection.PlayerName</strong></MudText>
+                            @if (!string.IsNullOrEmpty(selection.BetDescription))
+                            {
+                                <MudText Typo="Typo.body2">@selection.BetDescription</MudText>
+                            }
+                            @if (selection.StatValue.HasValue)
+                            {
+                                <MudText Typo="Typo.body2">
+                                    @selection.StatType: @selection.StatValue@selection.StatOperator
+                                </MudText>
+                            }
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+        }
+        else
+        {
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.body2"><strong>Team/Player 1:</strong> @(_currentAnalysis.BetSlip.Team1 ?? "N/A")</MudText>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.body2"><strong>Team/Player 2:</strong> @(_currentAnalysis.BetSlip.Team2 ?? "N/A")</MudText>
+                </MudItem>
+                @if (!string.IsNullOrEmpty(_currentAnalysis.BetSlip.PlayerName))
+                {
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.body2"><strong>Player:</strong> @_currentAnalysis.BetSlip.PlayerName</MudText>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+        
+        <MudGrid Class="mt-3">
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.body2"><strong>Sport:</strong> @_currentAnalysis.BetSlip.Sport</MudText>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.body2"><strong>Bet Type:</strong> @_currentAnalysis.BetSlip.BetType</MudText>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.body2"><strong>Odds:</strong> @(_currentAnalysis.BetSlip.Odds > 0 ? "+" : "")@_currentAnalysis.BetSlip.Odds (@_currentAnalysis.BetSlip.OddsFormat)</MudText>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.body2"><strong>Wager:</strong> $@_currentAnalysis.BetSlip.WagerAmount.ToString("F2")</MudText>
+            </MudItem>
+            @if (_currentAnalysis.BetSlip.PotentialWin.HasValue)
+            {
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.body2"><strong>Potential Win:</strong> $@_currentAnalysis.BetSlip.PotentialWin.Value.ToString("F2")</MudText>
+                </MudItem>
+            }
+            @if (_currentAnalysis.BetSlip.Spread.HasValue)
+            {
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.body2"><strong>Spread:</strong> @_currentAnalysis.BetSlip.Spread.Value</MudText>
+                </MudItem>
+            }
+            @if (_currentAnalysis.BetSlip.OverUnder.HasValue)
+            {
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.body2"><strong>Over/Under:</strong> @_currentAnalysis.BetSlip.OverUnder.Value</MudText>
+                </MudItem>
+            }
+        </MudGrid>
+    </MudPaper>
+
+    <MudPaper Elevation="2" Class="pa-4 mb-4">
+        <MudText Typo="Typo.h5" GutterBottom="true">Analysis Results</MudText>
+        
+        @{
+            var recommendationColor = _currentAnalysis.Recommendation switch
+            {
+                "GoodBet" => Color.Success,
+                "BadBet" => Color.Error,
+                "Marginal" => Color.Warning,
+                _ => Color.Default
+            };
+
+            var recommendationIcon = _currentAnalysis.Recommendation switch
+            {
+                "GoodBet" => Icons.Material.Filled.ThumbUp,
+                "BadBet" => Icons.Material.Filled.ThumbDown,
+                "Marginal" => Icons.Material.Filled.Help,
+                _ => Icons.Material.Filled.QuestionMark
+            };
+        }
+
+        <MudAlert Severity="@(_currentAnalysis.Recommendation == "GoodBet" ? Severity.Success : _currentAnalysis.Recommendation == "BadBet" ? Severity.Error : Severity.Warning)" 
+                  Icon="@recommendationIcon" Class="mb-4">
+            <MudText Typo="Typo.h6"><strong>Recommendation: @_currentAnalysis.Recommendation</strong></MudText>
+            <MudText Typo="Typo.body2">Confidence: @_currentAnalysis.ConfidenceScore.ToString("F0")%</MudText>
+        </MudAlert>
+
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudCard Elevation="1">
+                    <MudCardContent>
+                        <MudText Typo="Typo.h6">Expected Value</MudText>
+                        <MudText Typo="Typo.h4" Color="@(_currentAnalysis.ExpectedValue >= 0 ? Color.Success : Color.Error)">
+                            $@_currentAnalysis.ExpectedValue.ToString("F2")
+                        </MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudCard Elevation="1">
+                    <MudCardContent>
+                        <MudText Typo="Typo.h6">Implied Probability</MudText>
+                        <MudText Typo="Typo.h4">@_currentAnalysis.ImpliedProbability.ToString("P2")</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudCard Elevation="1">
+                    <MudCardContent>
+                        <MudText Typo="Typo.h6">Value Score</MudText>
+                        <MudText Typo="Typo.h4" Color="@(_currentAnalysis.ValueScore >= 0 ? Color.Success : Color.Error)">
+                            @_currentAnalysis.ValueScore.ToString("F2")
+                        </MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+
+        @if (_currentAnalysis.PredictedWinProbability.HasValue)
+        {
+            <MudCard Elevation="1" Class="mt-4">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6">ML Predicted Win Probability</MudText>
+                    <MudText Typo="Typo.h4">@_currentAnalysis.PredictedWinProbability.Value.ToString("P2")</MudText>
+                </MudCardContent>
+            </MudCard>
+        }
+
+        @if (_currentAnalysis.KellyCriterion.HasValue)
+        {
+            <MudCard Elevation="1" Class="mt-4">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6">Kelly Criterion</MudText>
+                    <MudText Typo="Typo.body1">Optimal bet size: @_currentAnalysis.KellyCriterion.Value.ToString("P2") of bankroll</MudText>
+                </MudCardContent>
+            </MudCard>
+        }
+
+        <MudExpansionPanels Class="mt-4">
+            <MudExpansionPanel Text="Detailed Analysis">
+                <MudText Typo="Typo.body2" Style="white-space: pre-line">@_currentAnalysis.AnalysisDetails</MudText>
+            </MudExpansionPanel>
+            @if (!string.IsNullOrEmpty(_currentAnalysis.BetSlip.RawText))
+            {
+                <MudExpansionPanel Text="Extracted Text (OCR)">
+                    <MudText Typo="Typo.body2" Style="white-space: pre-line; font-family: monospace;">@_currentAnalysis.BetSlip.RawText</MudText>
+                </MudExpansionPanel>
+            }
+        </MudExpansionPanels>
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" 
+                   Class="mt-4" OnClick="SaveAnalysis">
+            Save to History
+        </MudButton>
+    </MudPaper>
+}
+
+@code {
+    private BetAnalysis? _currentAnalysis;
+    private bool _isProcessing = false;
+    private string _errorMessage = string.Empty;
+    private IBrowserFile? _selectedFile;
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null || file.Size > 10485760) // 10MB
+        {
+            if (file != null && file.Size > 10485760)
+            {
+                _errorMessage = "File size exceeds 10MB limit.";
+                Snackbar.Add("File size exceeds 10MB limit.", Severity.Error);
+            }
+            return;
+        }
+
+        _selectedFile = file;
+        _errorMessage = string.Empty;
+        _currentAnalysis = null;
+
+        try
+        {
+            _isProcessing = true;
+            StateHasChanged();
+
+            using var stream = file.OpenReadStream(maxAllowedSize: 10485760); // 10MB
+            _currentAnalysis = await BetAnalysisService.AnalyzeBetSlipImageAsync(stream);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error processing image: {ex.Message}";
+            _currentAnalysis = null;
+            Snackbar.Add($"Error processing image: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OnFileRemoved(MudChip<string> chip)
+    {
+        _selectedFile = null;
+        _currentAnalysis = null;
+        _errorMessage = string.Empty;
+    }
+
+    private async Task SaveAnalysis()
+    {
+        if (_currentAnalysis == null)
+            return;
+
+        try
+        {
+            await DataCollectionService.SaveBetAnalysisAsync(_currentAnalysis);
+            Snackbar.Add("Bet analysis saved to history!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error saving analysis: {ex.Message}";
+            Snackbar.Add($"Error saving analysis: {ex.Message}", Severity.Error);
+        }
+    }
+}
