@@ -5,6 +5,7 @@ import json
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 
+from log_capture import setup_log_capture, get_logs, LOG_BUFFER
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
@@ -31,6 +32,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title='Sports ML API', version='1.2')
+
+setup_log_capture()  # Enable log capture for /logs endpoint
 
 # Dev CORS. Tighten for production.
 app.add_middleware(
@@ -2503,3 +2506,9 @@ def get_player_edge_scores(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.get('/logs')
+def get_system_logs(level: str = None, limit: int = 100):
+    '''Get recent system logs for the Logs Dashboard.'''
+    logs = get_logs(level, limit)
+    return {"logs": logs, "total": len(LOG_BUFFER), "showing": len(logs)}
