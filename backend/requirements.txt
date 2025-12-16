@@ -4,3 +4,10 @@ scikit-learn
 flask
 numpy
 pyyaml
+
+fastapi
+uvicorn
+kaggle
+pyreadr
+httpx
+aiohttp
