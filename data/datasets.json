@@ -11,6 +11,12 @@
       "type": "kaggle",
       "added_at": "2024-12-08T10:30:00",
       "last_updated": "2024-12-08T10:30:00"
+    },
+    {
+      "id": "philiphyde1/nfl-stats-1999-2022",
+      "type": "kaggle",
+      "added_at": "2025-12-13T02:54:11.968902",
+      "last_updated": "2025-12-15T12:37:27.351790"
     }
   ],
   "nba": [
@@ -25,6 +31,12 @@
       "type": "kaggle",
       "added_at": "2024-12-08T10:30:00",
       "last_updated": "2024-12-08T10:30:00"
+    },
+    {
+      "id": "chrismunch/nba-game-team-statistics",
+      "type": "kaggle",
+      "added_at": "2025-12-13T03:04:13.990012",
+      "last_updated": "2025-12-15T12:40:45.449067"
     }
   ]
 }

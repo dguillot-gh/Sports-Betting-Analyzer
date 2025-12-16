@@ -726,6 +726,168 @@ def get_data_status():
     return status
 
 
+# ===== Column Standardization Endpoints =====
+
+# Import column standardizer
+try:
+    from column_standardizer import get_standardizer
+    COLUMN_STANDARDIZER = get_standardizer()
+except ImportError:
+    COLUMN_STANDARDIZER = None
+    logger.warning("ColumnStandardizer not available")
+
+
+@app.get('/data/scan/{sport}')
+def scan_columns(sport: str, series: Optional[str] = None):
+    """
+    Scan data columns and report mapping status.
+    Returns which columns can be auto-mapped, which are unmapped,
+    and which required columns are present/missing.
+    """
+    if COLUMN_STANDARDIZER is None:
+        raise HTTPException(status_code=500, detail="ColumnStandardizer not available")
+    
+    try:
+        s, label = SportFactory.get_sport(sport, series)
+        df = s.load_data()
+        
+        if df.empty:
+            return {"sport": sport, "message": "No data available to scan"}
+        
+        # Get column mapping report
+        report = COLUMN_STANDARDIZER.scan(df, sport)
+        result = report.to_dict()
+        
+        # Get required columns from config
+        try:
+            features = s.get_feature_columns()
+            required_columns = []
+            for col_list in features.values():
+                required_columns.extend(col_list)
+            
+            # Also add target columns
+            targets = s.get_target_columns()
+            if targets:
+                required_columns.extend([t for t in targets.values() if t])
+            
+            # Check availability
+            available_cols_lower = [c.lower() for c in df.columns]
+            
+            required_found = []
+            required_missing = []
+            
+            for req_col in required_columns:
+                # Check if column exists (exact or lowercase match)
+                if req_col in df.columns or req_col.lower() in available_cols_lower:
+                    required_found.append(req_col)
+                else:
+                    required_missing.append(req_col)
+            
+            result["required_columns"] = {
+                "total": len(required_columns),
+                "found": len(required_found),
+                "missing": len(required_missing),
+                "found_list": required_found,
+                "missing_list": required_missing
+            }
+        except Exception as e:
+            logger.warning(f"Could not get required columns for {sport}: {e}")
+            result["required_columns"] = None
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error scanning columns for {sport}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post('/data/standardize/{sport}')
+def standardize_data(sport: str, series: Optional[str] = None, save: bool = False):
+    """
+    Standardize column names for a sport's data.
+    Optionally save the standardized data back to disk.
+    """
+    if COLUMN_STANDARDIZER is None:
+        raise HTTPException(status_code=500, detail="ColumnStandardizer not available")
+    
+    try:
+        s, label = SportFactory.get_sport(sport, series)
+        df = s.load_data()
+        
+        if df.empty:
+            return {"sport": sport, "message": "No data available to standardize"}
+        
+        standardized_df, report = COLUMN_STANDARDIZER.standardize(df, sport)
+        
+        result = {
+            "sport": sport,
+            "columns_renamed": len(report.mapped),
+            "unmapped_columns": report.unmapped,
+            "report": report.to_dict()
+        }
+        
+        if save:
+            # Save standardized data (implementation depends on sport loader)
+            data_dir = REPO_ROOT / 'data' / sport
+            output_file = data_dir / f'{sport}_standardized.csv'
+            standardized_df.to_csv(output_file, index=False)
+            result["saved_to"] = str(output_file)
+            logger.info(f"Saved standardized data to {output_file}")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error standardizing data for {sport}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post('/data/refresh/{sport}')
+def refresh_data(sport: str, series: Optional[str] = None):
+    """
+    Force reload data from disk for a sport.
+    Useful after manual edits or downloads.
+    """
+    try:
+        # Clear any cached data
+        s, label = SportFactory.get_sport(sport, series)
+        
+        # Force reload
+        df = s.load_data()
+        
+        # Get column info
+        scan_report = None
+        if COLUMN_STANDARDIZER:
+            scan_report = COLUMN_STANDARDIZER.scan(df, sport).to_dict()
+        
+        return {
+            "sport": sport,
+            "rows": len(df),
+            "columns": len(df.columns),
+            "column_list": df.columns.tolist(),
+            "scan_report": scan_report
+        }
+        
+    except Exception as e:
+        logger.error(f"Error refreshing data for {sport}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post('/data/add-alias')
+def add_column_alias(sport: str, standard_name: str, new_alias: str):
+    """Add a new column alias mapping."""
+    if COLUMN_STANDARDIZER is None:
+        raise HTTPException(status_code=500, detail="ColumnStandardizer not available")
+    
+    success = COLUMN_STANDARDIZER.add_alias(sport, standard_name, new_alias)
+    
+    if success:
+        return {"success": True, "message": f"Added alias '{new_alias}' -> '{standard_name}' for {sport}"}
+    else:
+        return {"success": False, "message": "Alias already exists or error adding"}
+
+
 @app.get('/data/quality/{sport}')
 def analyze_data_quality(sport: str, series: Optional[str] = None):
     """
@@ -1781,3 +1943,563 @@ def get_entity_trends(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===== Power Rankings Endpoints =====
+
+@app.get('/rankings/{sport}')
+def get_power_rankings(
+    sport: str,
+    week: Optional[int] = None,
+    season: Optional[int] = None,
+    series: Optional[str] = None
+):
+    """Calculate and return power rankings for teams/drivers."""
+    try:
+        from datetime import datetime
+        
+        s, label = SportFactory.get_sport(sport, series)
+        df = s.load_data()
+        
+        if df.empty:
+            raise HTTPException(status_code=404, detail=f"No data for {sport}")
+        
+        is_nascar = 'nascar' in sport.lower()
+        current_year = datetime.now().year
+        target_season = season or current_year
+        
+        # Year column detection
+        year_col = None
+        for col in ['year', 'season', 'schedule_season']:
+            if col in df.columns:
+                year_col = col
+                break
+        
+        # Filter to current/target season
+        if year_col:
+            df = df[df[year_col] == target_season].copy()
+        
+        rankings = []
+        
+        if is_nascar:
+            # NASCAR: Rank by team performance
+            if 'team_name' not in df.columns:
+                return {"rankings": [], "sport": sport, "message": "No team data"}
+            
+            finish_col = 'finish' if 'finish' in df.columns else 'finishing_position'
+            
+            for team in df['team_name'].dropna().unique():
+                team_df = df[df['team_name'] == team]
+                if len(team_df) < 3:
+                    continue
+                
+                races = len(team_df)
+                if finish_col in team_df.columns:
+                    team_df[finish_col] = pd.to_numeric(team_df[finish_col], errors='coerce')
+                    wins = len(team_df[team_df[finish_col] == 1])
+                    top5 = len(team_df[team_df[finish_col] <= 5])
+                    top10 = len(team_df[team_df[finish_col] <= 10])
+                    avg_finish = team_df[finish_col].mean()
+                else:
+                    wins, top5, top10, avg_finish = 0, 0, 0, 20
+                
+                # Power score: Lower avg finish is better
+                win_pct = (wins / races * 100) if races > 0 else 0
+                top5_pct = (top5 / races * 100) if races > 0 else 0
+                
+                # Score = (100 - avg_finish*2) + win_pct + top5_pct/2
+                power_score = max(0, (100 - avg_finish * 2)) + win_pct + (top5_pct / 2)
+                
+                rankings.append({
+                    "team": team,
+                    "power_score": round(power_score, 1),
+                    "record": f"{wins}W / {races}R",
+                    "metrics": {
+                        "races": races,
+                        "wins": wins,
+                        "top5": top5,
+                        "top10": top10,
+                        "avg_finish": round(avg_finish, 1) if pd.notna(avg_finish) else 0,
+                        "win_pct": round(win_pct, 1),
+                        "top5_pct": round(top5_pct, 1)
+                    }
+                })
+        else:
+            # NFL/NBA: Rank by team performance
+            # Find team columns
+            home_col = away_col = None
+            for hc, ac in [('home_team', 'away_team'), ('team_home', 'team_away')]:
+                if hc in df.columns and ac in df.columns:
+                    home_col, away_col = hc, ac
+                    break
+            
+            if not home_col:
+                return {"rankings": [], "sport": sport, "message": "No team columns found"}
+            
+            # Get all unique teams
+            all_teams = set(df[home_col].dropna().unique()) | set(df[away_col].dropna().unique())
+            
+            for team in all_teams:
+                if not isinstance(team, str) or len(team) < 3:
+                    continue
+                
+                team_lower = team.lower()
+                home_games = df[df[home_col].astype(str).str.lower() == team_lower]
+                away_games = df[df[away_col].astype(str).str.lower() == team_lower]
+                
+                total_games = len(home_games) + len(away_games)
+                if total_games < 3:
+                    continue
+                
+                # Calculate wins
+                home_wins = away_wins = 0
+                home_pts = away_pts = 0
+                opp_pts = 0
+                
+                # Check for different win/score columns
+                if 'home_team_win' in df.columns:
+                    home_wins = len(home_games[home_games['home_team_win'] == 1])
+                    away_wins = len(away_games[away_games['home_team_win'] == 0])
+                elif 'home_win' in df.columns:
+                    home_wins = len(home_games[home_games['home_win'] == 1])
+                    away_wins = len(away_games[away_games['home_win'] == 0])
+                elif 'score_home' in df.columns and 'score_away' in df.columns:
+                    home_wins = len(home_games[home_games['score_home'] > home_games['score_away']])
+                    away_wins = len(away_games[away_games['score_away'] > away_games['score_home']])
+                
+                total_wins = home_wins + away_wins
+                total_losses = total_games - total_wins
+                
+                # Point differential
+                point_diff = 0
+                for hsc, asc in [('score_home', 'score_away'), ('home_score', 'away_score')]:
+                    if hsc in df.columns and asc in df.columns:
+                        home_pts = home_games[hsc].sum() if len(home_games) > 0 else 0
+                        home_opp = home_games[asc].sum() if len(home_games) > 0 else 0
+                        away_pts = away_games[asc].sum() if len(away_games) > 0 else 0
+                        away_opp = away_games[hsc].sum() if len(away_games) > 0 else 0
+                        point_diff = ((home_pts + away_pts) - (home_opp + away_opp)) / total_games if total_games > 0 else 0
+                        break
+                
+                win_pct = (total_wins / total_games * 100) if total_games > 0 else 0
+                
+                # Power score = Win% * 0.5 + PointDiff * 2 + 50 (base)
+                power_score = (win_pct * 0.5) + (point_diff * 2) + 50
+                power_score = max(0, min(100, power_score))  # Clamp 0-100
+                
+                rankings.append({
+                    "team": team,
+                    "power_score": round(power_score, 1),
+                    "record": f"{total_wins}-{total_losses}",
+                    "metrics": {
+                        "games": total_games,
+                        "wins": total_wins,
+                        "losses": total_losses,
+                        "win_pct": round(win_pct, 1),
+                        "point_diff": round(point_diff, 1),
+                        "home_record": f"{home_wins}-{len(home_games) - home_wins}",
+                        "away_record": f"{away_wins}-{len(away_games) - away_wins}"
+                    }
+                })
+        
+        # Sort by power score descending
+        rankings.sort(key=lambda x: x['power_score'], reverse=True)
+        
+        # Add rank and tier
+        for i, team in enumerate(rankings):
+            team['rank'] = i + 1
+            team['previous_rank'] = i + 1  # TODO: Load from previous week
+            team['change'] = 0
+            
+            # Tier assignment
+            total = len(rankings)
+            if i < total * 0.15:
+                team['tier'] = "Elite"
+            elif i < total * 0.40:
+                team['tier'] = "Contender"
+            elif i < total * 0.70:
+                team['tier'] = "Middle"
+            else:
+                team['tier'] = "Rebuilding"
+        
+        return {
+            "sport": sport,
+            "season": target_season,
+            "generated_at": datetime.now().isoformat(),
+            "total_teams": len(rankings),
+            "rankings": rankings
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error calculating rankings for {sport}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===== Player Profile Endpoints (NBA/NFL) =====
+
+@app.get('/players/{sport}/list')
+def get_player_list(sport: str, series: Optional[str] = None):
+    """Get list of available players for a sport."""
+    try:
+        s, label = SportFactory.get_sport(sport, series)
+        df = s.load_data()
+        
+        if df.empty:
+            return {"players": [], "sport": sport}
+        
+        players = []
+        
+        # Try to find player column
+        player_cols = ['player', 'player_name', 'name', 'driver']
+        for col in player_cols:
+            if col in df.columns:
+                players = df[col].dropna().unique().tolist()
+                # Clean and sort
+                players = sorted([str(p) for p in players if isinstance(p, str) and len(p) > 2])
+                break
+        
+        # If no player column, try team rosters (for team sports we may have player data elsewhere)
+        if not players and 'home_player' in df.columns:
+            players = list(set(df['home_player'].dropna().tolist() + df.get('away_player', pd.Series()).dropna().tolist()))
+        
+        return {"players": players[:500], "sport": sport, "total": len(players)}
+        
+    except Exception as e:
+        logger.error(f"Error getting player list for {sport}: {e}")
+        return {"players": [], "sport": sport, "error": str(e)}
+
+
+@app.get('/players/{sport}/{player_name}/stats')
+def get_player_stats(
+    sport: str, 
+    player_name: str,
+    season: int = 2024,
+    series: Optional[str] = None
+):
+    """Get stats for a specific player."""
+    try:
+        s, label = SportFactory.get_sport(sport, series)
+        df = s.load_data()
+        
+        if df.empty:
+            raise HTTPException(status_code=404, detail=f"No data for {sport}")
+        
+        # Year column detection
+        year_col = None
+        for col in ['year', 'season', 'schedule_season']:
+            if col in df.columns:
+                year_col = col
+                break
+        
+        # Filter to season
+        if year_col:
+            df = df[df[year_col] == season].copy()
+        
+        # Find player data
+        player_lower = player_name.lower()
+        player_df = pd.DataFrame()
+        
+        player_cols = ['player', 'player_name', 'name', 'driver']
+        for col in player_cols:
+            if col in df.columns:
+                player_df = df[df[col].astype(str).str.lower().str.contains(player_lower, na=False)]
+                break
+        
+        if player_df.empty:
+            return {
+                "player": player_name,
+                "team": "Unknown",
+                "position": "Unknown",
+                "season_stats": {},
+                "last_5_games": [],
+                "error": "Player not found"
+            }
+        
+        # Get team and position if available
+        team = player_df['team'].iloc[0] if 'team' in player_df.columns else "Unknown"
+        position = player_df['position'].iloc[0] if 'position' in player_df.columns else "Unknown"
+        
+        # Calculate season stats based on sport
+        season_stats = {}
+        
+        if 'nba' in sport.lower():
+            # NBA stats
+            numeric_cols = ['pts', 'points', 'reb', 'rebounds', 'ast', 'assists', 'stl', 'steals', 'blk', 'blocks', 'min', 'minutes']
+            for col in numeric_cols:
+                if col in player_df.columns:
+                    val = player_df[col].mean()
+                    if pd.notna(val):
+                        key = col.upper()[:3] if len(col) > 3 else col.upper()
+                        season_stats[key] = round(val, 1)
+            
+            season_stats['GP'] = len(player_df)
+            
+        elif 'nfl' in sport.lower():
+            # NFL stats
+            stat_cols = {
+                'pass_yds': 'Pass Yds',
+                'passing_yards': 'Pass Yds',
+                'rush_yds': 'Rush Yds',
+                'rushing_yards': 'Rush Yds',
+                'rec_yds': 'Rec Yds',
+                'receiving_yards': 'Rec Yds',
+                'tds': 'TDs',
+                'touchdowns': 'TDs',
+                'pass_td': 'Pass TDs',
+                'rush_td': 'Rush TDs',
+                'rec_td': 'Rec TDs'
+            }
+            
+            for col, name in stat_cols.items():
+                if col in player_df.columns:
+                    val = player_df[col].sum()
+                    if pd.notna(val) and val > 0:
+                        season_stats[name] = int(val)
+            
+            season_stats['Games'] = len(player_df)
+        
+        # Last 5 games
+        last_5_games = []
+        date_col = None
+        for col in ['date', 'game_date', 'commence_time']:
+            if col in player_df.columns:
+                date_col = col
+                break
+        
+        if date_col:
+            recent = player_df.sort_values(date_col, ascending=False).head(5)
+        else:
+            recent = player_df.tail(5)
+        
+        for _, row in recent.iterrows():
+            game = {
+                "date": str(row.get(date_col, ''))[:10] if date_col else '',
+                "opponent": row.get('opponent', row.get('opp', '')),
+                "stats": []
+            }
+            
+            # Add relevant stats to game log
+            if 'nba' in sport.lower():
+                for col in ['pts', 'reb', 'ast', 'stl', 'blk']:
+                    if col in row:
+                        game["stats"].append(str(int(row[col])) if pd.notna(row[col]) else '0')
+            else:
+                for col in ['pass_yds', 'rush_yds', 'rec_yds', 'tds']:
+                    if col in row:
+                        game["stats"].append(str(int(row[col])) if pd.notna(row[col]) else '0')
+            
+            last_5_games.append(game)
+        
+        return {
+            "player": player_name,
+            "team": str(team),
+            "position": str(position),
+            "season_stats": season_stats,
+            "last_5_games": last_5_games
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting player stats for {player_name}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get('/players/{sport}/compare')
+def compare_players(
+    sport: str,
+    p1: str,
+    p2: str,
+    season: int = 2024,
+    series: Optional[str] = None
+):
+    """Compare two players side-by-side."""
+    try:
+        # Get stats for both players
+        player1_stats = get_player_stats(sport, p1, season, series)
+        player2_stats = get_player_stats(sport, p2, season, series)
+        
+        return {
+            "player1": player1_stats,
+            "player2": player2_stats,
+            "season": season
+        }
+        
+    except Exception as e:
+        logger.error(f"Error comparing players: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===== Edge Predictions Endpoints =====
+
+@app.get('/edge/{sport}/players')
+def get_player_edge_scores(
+    sport: str,
+    season: int = 2024,
+    limit: int = 50,
+    series: Optional[str] = None
+):
+    """Calculate edge scores for players based on recent form vs season average.
+    
+    Edge Score = (Recent Avg - Season Avg) / Season StdDev
+    Positive = Hot (over-performing), Negative = Cold (under-performing)
+    """
+    try:
+        s, label = SportFactory.get_sport(sport, series)
+        df = s.load_data()
+        
+        if df.empty:
+            return {"players": [], "sport": sport, "message": "No data available"}
+        
+        # Year column detection
+        year_col = None
+        for col in ['year', 'season', 'schedule_season']:
+            if col in df.columns:
+                year_col = col
+                break
+        
+        # Filter to season
+        if year_col:
+            df = df[df[year_col] == season].copy()
+        
+        if df.empty:
+            return {"players": [], "sport": sport, "message": f"No data for {season} season"}
+        
+        # Find player column
+        player_col = None
+        for col in ['player', 'player_name', 'name', 'driver']:
+            if col in df.columns:
+                player_col = col
+                break
+        
+        if not player_col:
+            return {"players": [], "sport": sport, "message": "No player column found"}
+        
+        players_data = []
+        
+        # Determine primary stat column based on sport
+        if 'nba' in sport.lower():
+            primary_stat = 'pts' if 'pts' in df.columns else 'points'
+            secondary_stats = ['reb', 'ast', 'stl', 'blk']
+            stat_labels = {'pts': 'PTS', 'reb': 'REB', 'ast': 'AST'}
+        elif 'nfl' in sport.lower():
+            primary_stat = 'pass_yds' if 'pass_yds' in df.columns else 'passing_yards'
+            secondary_stats = ['rush_yds', 'rec_yds', 'tds']
+            stat_labels = {'pass_yds': 'Pass Yds', 'rush_yds': 'Rush Yds', 'rec_yds': 'Rec Yds'}
+        else:
+            primary_stat = 'finish' if 'finish' in df.columns else 'finishing_position'
+            secondary_stats = []
+            stat_labels = {'finish': 'Finish'}
+        
+        if primary_stat not in df.columns:
+            return {"players": [], "sport": sport, "message": f"Primary stat column '{primary_stat}' not found"}
+        
+        # Get unique players
+        unique_players = df[player_col].dropna().unique()
+        
+        for player_name in unique_players:
+            if not isinstance(player_name, str) or len(player_name) < 3:
+                continue
+            
+            player_df = df[df[player_col] == player_name].copy()
+            
+            if len(player_df) < 5:  # Need at least 5 games for meaningful analysis
+                continue
+            
+            # Convert stat to numeric
+            player_df[primary_stat] = pd.to_numeric(player_df[primary_stat], errors='coerce')
+            player_df = player_df.dropna(subset=[primary_stat])
+            
+            if len(player_df) < 5:
+                continue
+            
+            # Calculate season stats
+            season_avg = player_df[primary_stat].mean()
+            season_std = player_df[primary_stat].std()
+            
+            if season_std == 0 or pd.isna(season_std):
+                season_std = 1  # Avoid division by zero
+            
+            # Calculate recent form (last 5 games)
+            date_col = None
+            for col in ['date', 'game_date', 'commence_time']:
+                if col in player_df.columns:
+                    date_col = col
+                    break
+            
+            if date_col:
+                player_df = player_df.sort_values(date_col, ascending=False)
+            
+            recent_5 = player_df.head(5)[primary_stat]
+            recent_avg = recent_5.mean()
+            
+            # Calculate edge score
+            edge_score = (recent_avg - season_avg) / season_std
+            
+            # Determine trend
+            if edge_score > 1:
+                trend = "🔥 Hot"
+                trend_color = "success"
+            elif edge_score > 0.5:
+                trend = "📈 Warming"
+                trend_color = "info"
+            elif edge_score < -1:
+                trend = "❄️ Cold"
+                trend_color = "error"
+            elif edge_score < -0.5:
+                trend = "📉 Cooling"
+                trend_color = "warning"
+            else:
+                trend = "➡️ Steady"
+                trend_color = "default"
+            
+            # Get team if available
+            team = player_df['team'].iloc[0] if 'team' in player_df.columns else "Unknown"
+            position = player_df['position'].iloc[0] if 'position' in player_df.columns else "Unknown"
+            
+            players_data.append({
+                "player": str(player_name),
+                "team": str(team),
+                "position": str(position),
+                "edge_score": round(edge_score, 2),
+                "trend": trend,
+                "trend_color": trend_color,
+                "season_avg": round(season_avg, 1),
+                "recent_avg": round(recent_avg, 1),
+                "games_played": len(player_df),
+                "primary_stat": stat_labels.get(primary_stat, primary_stat),
+                "last_5": [round(x, 1) for x in recent_5.tolist()]
+            })
+        
+        # Sort by absolute edge score (most extreme performers first)
+        players_data.sort(key=lambda x: abs(x['edge_score']), reverse=True)
+        
+        # Apply limit
+        players_data = players_data[:limit]
+        
+        # Also provide hot/cold splits
+        hot_players = [p for p in players_data if p['edge_score'] > 0.5][:10]
+        cold_players = [p for p in players_data if p['edge_score'] < -0.5][:10]
+        
+        return {
+            "sport": sport,
+            "season": season,
+            "total_analyzed": len(players_data),
+            "primary_stat": stat_labels.get(primary_stat, primary_stat),
+            "players": players_data,
+            "hot_players": hot_players,
+            "cold_players": cold_players
+        }
+        
+    except Exception as e:
+        logger.error(f"Error calculating edge scores for {sport}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+

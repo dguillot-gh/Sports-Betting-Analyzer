@@ -1,0 +1,102 @@
+# Column Aliases Configuration
+# Maps standard column names to known aliases from various Kaggle datasets
+# Format: standard_name: [alias1, alias2, ...]
+
+nba:
+  # Player identification
+  player: [player, player_name, PLAYER, name, Name, PLAYER_NAME, playerName]
+  team: [team, team_name, TEAM, Team, team_abbreviation, teamName, tm, TM]
+  position: [position, pos, POS, Position, player_position]
+  
+  # Performance stats
+  points: [pts, PTS, points, POINTS, player_pts, score, Score]
+  rebounds: [reb, REB, rebounds, TRB, trb, total_rebounds, Rebounds]
+  assists: [ast, AST, assists, player_ast, Assists]
+  steals: [stl, STL, steals, Steals]
+  blocks: [blk, BLK, blocks, Blocks]
+  turnovers: [tov, TOV, turnovers, to, TO]
+  minutes: [min, MIN, minutes, Minutes, mp, MP]
+  
+  # Shooting stats
+  field_goals_made: [fg, FG, fgm, FGM, field_goals_made]
+  field_goals_attempted: [fga, FGA, field_goals_attempted]
+  field_goal_pct: [fg_pct, FG_PCT, fg%, fg_percent, FG%]
+  three_pointers_made: [3p, 3P, fg3, FG3, three_pt_made, x3p_made]
+  three_pointers_attempted: [3pa, 3PA, fg3a, FG3A, three_pt_attempted]
+  three_point_pct: [3p_pct, 3P_PCT, fg3_pct, x3p_percent]
+  free_throws_made: [ft, FT, ftm, FTM, free_throws]
+  free_throws_attempted: [fta, FTA, free_throws_attempted]
+  free_throw_pct: [ft_pct, FT_PCT, ft%, ft_percent]
+  
+  # Game info
+  date: [date, game_date, Date, DATE, GAME_DATE, gameDate]
+  season: [year, season, Season, YEAR, schedule_season, seasonYear]
+  game_id: [game_id, GAME_ID, gameId, matchup_id]
+  opponent: [opponent, opp, OPP, vs, vs_team, opposing_team]
+
+nfl:
+  # Player identification
+  player: [player, player_name, PLAYER, name, Name, player_display_name]
+  player_id: [player_id, PLAYER_ID, gsis_id, nfl_id]
+  team: [team, team_name, TEAM, posteam, recent_team, club]
+  position: [position, pos, POS, Position, position_group]
+  
+  # Passing stats
+  passing_yards: [pass_yds, passing_yards, PassYds, pass_yards, passing_yds]
+  passing_tds: [pass_td, passing_tds, PassTD, pass_touchdowns]
+  completions: [completions, comp, COMP, passing_completions]
+  pass_attempts: [pass_att, attempts, ATT, passing_attempts]
+  interceptions: [int, INT, interceptions, passing_interceptions]
+  passer_rating: [passer_rating, qbr, QBR, quarterback_rating]
+  
+  # Rushing stats
+  rushing_yards: [rush_yds, rushing_yards, RushYds, rush_yards, rushing_yds]
+  rushing_tds: [rush_td, rushing_tds, RushTD, rush_touchdowns]
+  carries: [carries, rush_att, rushing_attempts, rush_attempts]
+  yards_per_carry: [ypc, YPC, yards_per_carry, avg_rush]
+  
+  # Receiving stats
+  receiving_yards: [rec_yds, receiving_yards, RecYds, rec_yards, receiving_yds]
+  receiving_tds: [rec_td, receiving_tds, RecTD, rec_touchdowns]
+  receptions: [rec, receptions, REC, catches]
+  targets: [targets, tgt, TGT, receiving_targets]
+  yards_per_reception: [ypr, YPR, yards_per_reception, avg_rec]
+  
+  # Combined stats
+  touchdowns: [tds, touchdowns, TDs, total_tds, td]
+  fantasy_points: [fantasy_points, fpts, FPTS, fantasy_pts, fantasy_points_ppr]
+  
+  # Game info
+  date: [date, game_date, Date, week_date, gameday]
+  season: [year, season, Season, schedule_season]
+  week: [week, Week, WEEK, game_week, schedule_week]
+  opponent: [opponent, opp, OPP, defteam, opponent_team]
+
+nascar:
+  # Driver/Team identification  
+  driver: [driver, Driver, DRIVER, driver_name, driverName, full_name]
+  team: [team, Team, TEAM, Owner, owner, team_name]
+  car_number: [car, Car, CAR, car_number, number, Number]
+  manufacturer: [manufacturer, make, Make, Manufacturer]
+  
+  # Race results
+  finish: [finish, Finish, finishing_position, Pos, pos, position, FinPos]
+  start: [start, Start, grid, Grid, starting_position, StartPos]
+  laps: [laps, Laps, LAPS, laps_completed]
+  laps_led: [laps_led, LapsLed, led, Led]
+  status: [status, Status, STATUS, finish_status]
+  points: [points, Points, PTS, pts, race_points]
+  playoff_points: [playoff_points, PlayoffPts, bonus_points]
+  
+  # Race info
+  track: [track, Track, TRACK, track_name, circuit]
+  track_type: [track_type, TrackType, type, Type, surface]
+  race: [race, Race, RACE, race_name, event]
+  date: [date, Date, DATE, race_date, raceDate]
+  season: [year, season, Season, YEAR, schedule_season]
+
+# Common columns used across all sports
+common:
+  date: [date, Date, DATE, game_date, event_date]
+  season: [year, season, Season, YEAR, schedule_season]
+  id: [id, ID, Id, record_id]

@@ -1,5 +1,22 @@
 [
   {
+    "date": "2025-12-15T12:37:27.350371",
+    "topic": "Updated philiphyde1/nfl-stats-1999-2022",
+    "details": {
+      "files_added": [
+        "yearly_team_stats_offense.csv",
+        "yearly_player_stats_defense.csv",
+        "weekly_player_stats_defense.csv",
+        "weekly_team_stats_offense.csv",
+        "yearly_team_stats_defense.csv",
+        "weekly_team_stats_defense.csv",
+        "weekly_player_stats_offense.csv",
+        "yearly_player_stats_offense.csv"
+      ],
+      "dataset": "philiphyde1/nfl-stats-1999-2022"
+    }
+  },
+  {
     "date": "2025-12-06T15:59:48.062355",
     "topic": "Updated tobycrabtree/nfl-scores-and-betting-data",
     "details": {
