@@ -1,0 +1,317 @@
+@page "/logs"
+@using System.Text.Json
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject ILogger<Logs> Logger
+
+<PageTitle>System Logs</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.Terminal" Class="mr-2" /> System Logs
+    </MudText>
+    <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">
+        Aggregated logs from Python Backend and Blazor Frontend
+    </MudText>
+
+    <MudGrid>
+        <!-- Controls -->
+        <MudItem xs="12">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+                    <MudSelect T="string" @bind-Value="_selectedSource" Label="Source" Variant="Variant.Outlined" Dense="true" Style="width: 150px;">
+                        <MudSelectItem Value="@("all")">All Sources</MudSelectItem>
+                        <MudSelectItem Value="@("backend")">Python Backend</MudSelectItem>
+                        <MudSelectItem Value="@("frontend")">Blazor Frontend</MudSelectItem>
+                    </MudSelect>
+                    <MudSelect T="string" @bind-Value="_selectedLevel" Label="Level" Variant="Variant.Outlined" Dense="true" Style="width: 130px;">
+                        <MudSelectItem Value="@("all")">All Levels</MudSelectItem>
+                        <MudSelectItem Value="@("error")">Errors</MudSelectItem>
+                        <MudSelectItem Value="@("warning")">Warnings</MudSelectItem>
+                        <MudSelectItem Value="@("info")">Info</MudSelectItem>
+                        <MudSelectItem Value="@("debug")">Debug</MudSelectItem>
+                    </MudSelect>
+                    <MudTextField T="string" @bind-Value="_searchText" Label="Search" Variant="Variant.Outlined" 
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" 
+                                  Dense="true" Style="min-width: 200px;" Immediate="true" />
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" 
+                               OnClick="RefreshLogs" Disabled="@_isLoading">
+                        Refresh
+                    </MudButton>
+                    <MudSwitch T="bool" @bind-Value="_autoRefresh" Label="Auto-refresh" Color="Color.Primary" />
+                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Delete" 
+                               OnClick="ClearLogs">
+                        Clear
+                    </MudButton>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Backend Status -->
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudStack Row="true" AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.CloudQueue" Color="@(_backendHealthy ? Color.Success : Color.Error)" />
+                        <MudText Typo="Typo.h6">Python Backend</MudText>
+                    </MudStack>
+                    <MudChip T="string" Color="@(_backendHealthy ? Color.Success : Color.Error)" Size="Size.Small">
+                        @(_backendHealthy ? "Connected" : "Disconnected")
+                    </MudChip>
+                </MudStack>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@_backendUrl</MudText>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudStack Row="true" AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.Web" Color="Color.Success" />
+                        <MudText Typo="Typo.h6">Blazor Frontend</MudText>
+                    </MudStack>
+                    <MudChip T="string" Color="Color.Success" Size="Size.Small">Running</MudChip>
+                </MudStack>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">In-memory log capture</MudText>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Logs Display -->
+        <MudItem xs="12">
+            <MudPaper Class="pa-4" Elevation="2" Style="background: #1e1e1e; min-height: 500px; max-height: 70vh; overflow-y: auto;" id="logContainer">
+                @if (_isLoading)
+                {
+                    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+                }
+                
+                @if (!FilteredLogs.Any())
+                {
+                    <MudText Color="Color.Secondary" Class="pa-4" Align="Align.Center">
+                        No logs to display. Click Refresh to load logs.
+                    </MudText>
+                }
+                else
+                {
+                    <MudSimpleTable Dense="true" Hover="true" Style="background: transparent;">
+                        <thead>
+                            <tr style="color: #888;">
+                                <th style="width: 180px;">Timestamp</th>
+                                <th style="width: 100px;">Source</th>
+                                <th style="width: 80px;">Level</th>
+                                <th>Message</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var log in FilteredLogs)
+                            {
+                                <tr style="font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px;">
+                                    <td style="color: #666;">@log.Timestamp.ToString("HH:mm:ss.fff")</td>
+                                    <td>
+                                        <MudChip T="string" Size="Size.Small" 
+                                                 Color="@(log.Source == "backend" ? Color.Info : Color.Warning)"
+                                                 Style="font-size: 10px;">
+                                            @log.Source.ToUpper()
+                                        </MudChip>
+                                    </td>
+                                    <td>
+                                        <MudChip T="string" Size="Size.Small" Color="@GetLevelColor(log.Level)" 
+                                                 Style="font-size: 10px; min-width: 60px;">
+                                            @log.Level.ToUpper()
+                                        </MudChip>
+                                    </td>
+                                    <td style="color: @GetLevelTextColor(log.Level); word-break: break-word;">
+                                        @log.Message
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <!-- Stats -->
+        <MudItem xs="12">
+            <MudStack Row="true" Spacing="4" Justify="Justify.Center">
+                <MudChip T="string" Color="Color.Error" Size="Size.Small">
+                    @(_logs.Count(l => l.Level == "error")) Errors
+                </MudChip>
+                <MudChip T="string" Color="Color.Warning" Size="Size.Small">
+                    @(_logs.Count(l => l.Level == "warning")) Warnings  
+                </MudChip>
+                <MudChip T="string" Color="Color.Info" Size="Size.Small">
+                    @(_logs.Count(l => l.Level == "info")) Info
+                </MudChip>
+                <MudChip T="string" Color="Color.Default" Size="Size.Small">
+                    @_logs.Count Total Entries
+                </MudChip>
+            </MudStack>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    private List<LogEntry> _logs = new();
+    private string _selectedSource = "all";
+    private string _selectedLevel = "all";
+    private string _searchText = "";
+    private bool _isLoading = false;
+    private bool _autoRefresh = false;
+    private bool _backendHealthy = false;
+    private string _backendUrl = "";
+    private Timer? _refreshTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _backendUrl = Http.BaseAddress?.ToString() ?? "http://backend:8000";
+        await CheckBackendHealth();
+        await RefreshLogs();
+        
+        // Start auto-refresh timer
+        _refreshTimer = new Timer(async _ => 
+        {
+            if (_autoRefresh)
+            {
+                await InvokeAsync(async () =>
+                {
+                    await RefreshLogs();
+                    StateHasChanged();
+                });
+            }
+        }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    private IEnumerable<LogEntry> FilteredLogs => _logs
+        .Where(l => _selectedSource == "all" || l.Source == _selectedSource)
+        .Where(l => _selectedLevel == "all" || l.Level == _selectedLevel)
+        .Where(l => string.IsNullOrEmpty(_searchText) || 
+                    l.Message.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
+        .OrderByDescending(l => l.Timestamp)
+        .Take(500);
+
+    private async Task CheckBackendHealth()
+    {
+        try
+        {
+            var response = await Http.GetAsync("/health");
+            _backendHealthy = response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            _backendHealthy = false;
+        }
+    }
+
+    private async Task RefreshLogs()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            await CheckBackendHealth();
+
+            // Fetch backend logs
+            if (_backendHealthy)
+            {
+                try
+                {
+                    var backendLogs = await Http.GetFromJsonAsync<BackendLogsResponse>("/logs");
+                    if (backendLogs?.Logs != null)
+                    {
+                        foreach (var log in backendLogs.Logs)
+                        {
+                            if (!_logs.Any(l => l.Source == "backend" && l.Message == log.Message && 
+                                               Math.Abs((l.Timestamp - log.Timestamp).TotalSeconds) < 1))
+                            {
+                                _logs.Add(new LogEntry
+                                {
+                                    Timestamp = log.Timestamp,
+                                    Source = "backend",
+                                    Level = log.Level?.ToLower() ?? "info",
+                                    Message = log.Message ?? ""
+                                });
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Backend doesn't have /logs endpoint yet - add placeholder
+                    AddFrontendLog("warning", $"Backend /logs endpoint not available: {ex.Message}");
+                }
+            }
+
+            // Add frontend log entry
+            AddFrontendLog("info", "Logs refreshed at " + DateTime.Now.ToString("HH:mm:ss"));
+        }
+        catch (Exception ex)
+        {
+            AddFrontendLog("error", $"Error refreshing logs: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void AddFrontendLog(string level, string message)
+    {
+        _logs.Add(new LogEntry
+        {
+            Timestamp = DateTime.Now,
+            Source = "frontend",
+            Level = level,
+            Message = message
+        });
+    }
+
+    private void ClearLogs()
+    {
+        _logs.Clear();
+        Snackbar.Add("Logs cleared", Severity.Info);
+    }
+
+    private Color GetLevelColor(string level) => level switch
+    {
+        "error" => Color.Error,
+        "warning" => Color.Warning,
+        "info" => Color.Info,
+        "debug" => Color.Default,
+        _ => Color.Default
+    };
+
+    private string GetLevelTextColor(string level) => level switch
+    {
+        "error" => "#ff6b6b",
+        "warning" => "#ffd93d",
+        "info" => "#6bcbff",
+        "debug" => "#888",
+        _ => "#ccc"
+    };
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+    }
+
+    private class LogEntry
+    {
+        public DateTime Timestamp { get; set; }
+        public string Source { get; set; } = "";
+        public string Level { get; set; } = "info";
+        public string Message { get; set; } = "";
+    }
+
+    private class BackendLogsResponse
+    {
+        public List<BackendLogEntry>? Logs { get; set; }
+    }
+
+    private class BackendLogEntry
+    {
+        public DateTime Timestamp { get; set; }
+        public string? Level { get; set; }
+        public string? Message { get; set; }
+    }
+}
