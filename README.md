@@ -2,7 +2,7 @@
 
 A FastAPI-based machine learning service for predicting sports outcomes. Provides APIs for training models, making predictions, and analyzing player/team statistics across multiple sports (NASCAR, NFL, NBA).
 
-## ?? Quick Start
+## Quick Start
 
 ### Prerequisites
 - Python 3.9+
@@ -40,7 +40,7 @@ The API will be available at `http://localhost:8000`
 - API docs: `http://localhost:8000/docs`
 - Swagger UI: `http://localhost:8000/redoc`
 
-## ?? Data Setup
+## Data Setup
 
 Large CSV datasets are NOT included in Git (to keep repository size manageable). You need to download them before running the service.
 
@@ -71,7 +71,7 @@ python scripts/setup_data.py --verify-only
 
 See detailed instructions in [`data/README.md`](data/README.md)
 
-## ?? Project Structure
+## Project Structure
 
 ```
 mllearning/
@@ -101,7 +101,7 @@ mllearning/
 ??? requirements.txt    # Python dependencies
 ```
 
-## ?? API Endpoints
+## API Endpoints
 
 ### Health Check
 ```
@@ -184,7 +184,7 @@ GET /{sport}/upcoming
 GET /{sport}/features/values
 ```
 
-## ?? Configuration
+## Configuration
 
 ### Environment Variables
 ```bash
@@ -233,7 +233,7 @@ response = requests.post(
 )
 ```
 
-## ?? Data Validation
+## Data Validation
 
 Verify all datasets before training:
 
@@ -249,14 +249,14 @@ python scripts/verify_data.py --sport nba
 ```
 
 The validator checks:
-- ? File existence
-- ? File size
-- ? CSV format validity
-- ? Required columns
-- ? Row counts
-- ? Null value ratios
+- File existence
+- File size
+- CSV format validity
+- Required columns
+- Row counts
+- Null value ratios
 
-## ?? Troubleshooting
+## Troubleshooting
 
 ### Service Not Starting
 
@@ -296,13 +296,13 @@ ParsingError: Expected N fields in line X but got M
 python scripts/setup_data.py --sport nba
 ```
 
-## ?? Documentation
+## Documentation
 
 - **Data Setup**: See [`data/README.md`](data/README.md)
 - **API Reference**: Visit `http://localhost:8000/docs` when service is running
 - **Configuration**: See `configs/nascar_config.yaml`
 
-## ?? Data Management
+## Data Management
 
 ### Automatic Updates
 NASCAR data is automatically updated via GitHub Actions. Check the latest in `data/nascar/raw/`.
@@ -319,7 +319,7 @@ curl -X POST http://localhost:8000/data/check-updates/nfl
 curl http://localhost:8000/data/history/nascar
 ```
 
-## ?? Integration with .NET
+## Integration with .NET
 
 The `SportsBettingAnalyzer` .NET Blazor application integrates with this service via HTTP:
 
@@ -346,7 +346,7 @@ var result = await client.TrainAsync(
 
 See `../SportsBettingAnalyzer/Services/PythonMLServiceClient.cs` for full integration details.
 
-## ?? Model Metrics
+## Model Metrics
 
 After training, metrics are saved as JSON:
 ```
@@ -364,20 +364,20 @@ Example:
 }
 ```
 
-## ?? Supported Models
+## Supported Models
 
 - **Classification**: Random Forest, Gradient Boosting
 - **Regression**: Linear Regression, Random Forest
 - **Simulation**: Monte Carlo for race outcome prediction
 
-## ?? Performance
+## Performance
 
 - Model training: 30 seconds - 5 minutes (depends on data size)
 - Single prediction: < 100 ms
 - Batch predictions: ~1-2 ms per record
 - Simulation (1000 iterations): 5-10 seconds
 
-## ?? Logging
+## Logging
 
 Logs are output to console and optionally to file:
 ```
@@ -393,7 +393,7 @@ export LOG_LEVEL=DEBUG
 python -m uvicorn api.app:app --log-level debug
 ```
 
-## ?? Security
+## Security
 
 ?? **Note**: This service is designed for development/testing. For production:
 - Enable CORS restrictions
@@ -402,11 +402,11 @@ python -m uvicorn api.app:app --log-level debug
 - Run behind reverse proxy (nginx/Apache)
 - Enable HTTPS
 
-## ?? License
+## License
 
 See LICENSE file for details.
 
-## ?? Contributing
+## Contributing
 
 1. Create feature branch
 2. Make changes
@@ -414,7 +414,7 @@ See LICENSE file for details.
 4. Commit with clear message
 5. Push and create PR
 
-## ?? Support
+## Support
 
 For issues or questions:
 1. Check documentation in `data/README.md`
