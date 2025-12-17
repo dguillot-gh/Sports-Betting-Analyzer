@@ -90,7 +90,7 @@ services:
     image: dpage/pgadmin4:latest
     container_name: sports-pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@sports.local
+      PGADMIN_DEFAULT_EMAIL: admin@sportsbetting.io
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
     ports:
       - "5050:80"
