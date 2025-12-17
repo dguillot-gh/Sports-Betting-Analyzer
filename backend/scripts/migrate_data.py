@@ -1,24 +1,30 @@
 """
-Data Migration Scripts for PostgreSQL
-======================================
+Data Migration Scripts for PostgreSQL (Optimized)
+==================================================
 
-This module provides functions to migrate CSV data to PostgreSQL.
+OPTIMIZATIONS:
+- Batch commits every 1000 records (less memory, better performance)
+- Transaction-based inserts
+- Progress logging
+- Skip already-imported files
 
 Usage:
     python -m scripts.migrate_data --sport nascar
     python -m scripts.migrate_data --sport nfl
     python -m scripts.migrate_data --sport nba
-    python -m scripts.migrate_data --all
+    python -m scripts.migrate_data --sport all
 """
 
 import asyncio
 import asyncpg
 import pandas as pd
 import json
+import hashlib
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
 import logging
+import gc
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,6 +34,29 @@ DATABASE_URL = "postgresql://sports_user:sportsbetting2024@postgres:5432/sports_
 
 # Data directories
 DATA_DIR = Path("/app/data")
+
+# Batch size for commits
+BATCH_SIZE = 5000
+
+
+def compute_content_hash(data: dict) -> str:
+    """Compute MD5 hash of content for duplicate detection."""
+    content = json.dumps(data, sort_keys=True, default=str)
+    return hashlib.md5(content.encode()).hexdigest()
+
+
+async def setup_duplicate_protection(conn):
+    """Add content_hash columns if they don't exist."""
+    try:
+        await conn.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)")
+        await conn.execute("ALTER TABLE stats ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)")
+        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_results_hash ON results(content_hash) WHERE content_hash IS NOT NULL")
+        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_stats_hash ON stats(content_hash) WHERE content_hash IS NOT NULL")
+        # Also fix NULL season constraint
+        await conn.execute("ALTER TABLE results ALTER COLUMN season DROP NOT NULL")
+        logger.info("Duplicate protection setup complete")
+    except Exception as e:
+        logger.warning(f"Duplicate protection setup: {e}")
 
 
 async def get_connection():
@@ -48,7 +77,16 @@ async def get_or_create_sport(conn, sport_name: str) -> int:
     return sport_id
 
 
-async def get_or_create_entity(conn, sport_id: int, name: str, entity_type: str, metadata: dict = None) -> int:
+async def was_file_imported(conn, sport_id: int, filename: str) -> bool:
+    """Check if a file was already imported."""
+    count = await conn.fetchval(
+        "SELECT COUNT(*) FROM import_history WHERE sport_id = $1 AND file_name = $2 AND status = 'success'",
+        sport_id, filename
+    )
+    return count > 0
+
+
+async def get_or_create_entity(conn, sport_id: int, name: str, entity_type: str) -> int:
     """Get entity ID, create if not exists."""
     entity_id = await conn.fetchval(
         "SELECT id FROM entities WHERE sport_id = $1 AND name = $2 AND type = $3",
@@ -56,20 +94,19 @@ async def get_or_create_entity(conn, sport_id: int, name: str, entity_type: str,
     )
     if not entity_id:
         entity_id = await conn.fetchval(
-            """INSERT INTO entities (sport_id, name, type, metadata) 
-               VALUES ($1, $2, $3, $4) RETURNING id""",
-            sport_id, name, entity_type, json.dumps(metadata or {})
+            """INSERT INTO entities (sport_id, name, type) 
+               VALUES ($1, $2, $3) RETURNING id""",
+            sport_id, name, entity_type
         )
     return entity_id
 
 
 async def migrate_nascar(conn, data_dir: Path):
-    """Migrate NASCAR race data to PostgreSQL."""
-    logger.info("Starting NASCAR migration...")
+    """Migrate NASCAR race data to PostgreSQL with batching."""
+    logger.info("Starting NASCAR migration (batched)...")
     
     sport_id = await get_or_create_sport(conn, "nascar")
     
-    # Find NASCAR CSV files
     nascar_dir = data_dir / "nascar"
     csv_files = list(nascar_dir.glob("*.csv")) if nascar_dir.exists() else []
     
@@ -80,77 +117,128 @@ async def migrate_nascar(conn, data_dir: Path):
     total_imported = 0
     
     for csv_file in csv_files:
+        # Skip already imported files
+        if await was_file_imported(conn, sport_id, csv_file.name):
+            logger.info(f"Skipping {csv_file.name} - already imported")
+            continue
+            
         logger.info(f"Processing {csv_file.name}...")
         
         try:
-            df = pd.read_csv(csv_file, low_memory=False)
+            # Read CSV in chunks to save memory
+            chunk_size = 5000
+            file_imported = 0
             
-            # Detect column names (handle variations)
-            driver_col = next((c for c in df.columns if c.lower() in ['driver', 'driver_name']), None)
-            track_col = next((c for c in df.columns if c.lower() in ['track', 'track_name']), None)
-            year_col = next((c for c in df.columns if c.lower() in ['year', 'season']), None)
-            finish_col = next((c for c in df.columns if c.lower() in ['finish', 'finish_position', 'pos']), None)
-            start_col = next((c for c in df.columns if c.lower() in ['start', 'start_position', 'grid']), None)
+            for chunk_num, chunk in enumerate(pd.read_csv(csv_file, low_memory=False, chunksize=chunk_size)):
+                logger.info(f"  Processing chunk {chunk_num + 1}...")
+                
+                # Detect columns
+                driver_col = next((c for c in chunk.columns if c.lower() in ['driver', 'driver_name']), None)
+                track_col = next((c for c in chunk.columns if c.lower() in ['track', 'track_name']), None)
+                year_col = next((c for c in chunk.columns if c.lower() in ['year', 'season']), None)
+                finish_col = next((c for c in chunk.columns if c.lower() in ['finish', 'finish_position', 'pos']), None)
+                start_col = next((c for c in chunk.columns if c.lower() in ['start', 'start_position', 'grid']), None)
+                
+                if not driver_col or not year_col:
+                    logger.warning(f"Skipping {csv_file.name} - missing required columns")
+                    break
+                
+                # Start transaction for this batch
+                async with conn.transaction():
+                    batch_count = 0
+                    
+                    for _, row in chunk.iterrows():
+                        driver_name = str(row.get(driver_col, '')).strip()
+                        if not driver_name or driver_name == 'nan':
+                            continue
+                        
+                        # Get or create driver
+                        driver_id = await get_or_create_entity(conn, sport_id, driver_name, 'driver')
+                        
+                        # Build metadata
+                        result_metadata = {
+                            'source_file': csv_file.name,
+                            'driver_id': driver_id,
+                        }
+                        
+                        if finish_col and pd.notna(row.get(finish_col)):
+                            try:
+                                result_metadata['finish'] = int(float(row[finish_col]))
+                            except:
+                                pass
+                        
+                        if start_col and pd.notna(row.get(start_col)):
+                            try:
+                                result_metadata['start'] = int(float(row[start_col]))
+                            except:
+                                pass
+                        
+                        # Get season
+                        season = None
+                        if year_col and pd.notna(row.get(year_col)):
+                            try:
+                                season = int(float(row[year_col]))
+                            except:
+                                pass
+                        
+                        # Compute content hash for duplicate detection
+                        hash_data = {
+                            'sport': 'nascar',
+                            'driver': driver_name,
+                            'season': season,
+                            'track': str(row.get(track_col, '')) if track_col else '',
+                            'finish': result_metadata.get('finish'),
+                            'start': result_metadata.get('start'),
+                        }
+                        content_hash = compute_content_hash(hash_data)
+                        
+                        # Insert result with duplicate protection
+                        try:
+                            await conn.execute(
+                                """INSERT INTO results (sport_id, season, track, metadata, content_hash)
+                                   VALUES ($1, $2, $3, $4, $5)
+                                   ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL DO NOTHING""",
+                                sport_id,
+                                season,
+                                str(row.get(track_col, ''))[:255] if track_col else None,
+                                json.dumps(result_metadata),
+                                content_hash
+                            )
+                            batch_count += 1
+                            file_imported += 1
+                            total_imported += 1
+                        except asyncpg.UniqueViolationError:
+                            pass  # Duplicate, skip
+                    
+                    logger.info(f"    Committed {batch_count} records")
+                
+                # Force garbage collection between chunks
+                gc.collect()
             
-            if not driver_col or not year_col:
-                logger.warning(f"Skipping {csv_file.name} - missing required columns")
-                continue
-            
-            # Process each row
-            for _, row in df.iterrows():
-                driver_name = str(row.get(driver_col, '')).strip()
-                if not driver_name or driver_name == 'nan':
-                    continue
-                
-                # Get or create driver entity
-                driver_id = await get_or_create_entity(conn, sport_id, driver_name, 'driver')
-                
-                # Create result record
-                result_metadata = {
-                    'source_file': csv_file.name,
-                    'finish': int(row[finish_col]) if finish_col and pd.notna(row.get(finish_col)) else None,
-                    'start': int(row[start_col]) if start_col and pd.notna(row.get(start_col)) else None,
-                }
-                
-                # Add any additional columns as metadata
-                for col in df.columns:
-                    if col not in [driver_col, year_col, track_col, finish_col, start_col]:
-                        val = row.get(col)
-                        if pd.notna(val):
-                            result_metadata[col] = val if not isinstance(val, float) else float(val)
-                
-                # Insert result
-                await conn.execute(
-                    """INSERT INTO results (sport_id, season, track, race_name, metadata)
-                       VALUES ($1, $2, $3, $4, $5)""",
-                    sport_id,
-                    int(row[year_col]) if pd.notna(row.get(year_col)) else None,
-                    str(row.get(track_col, '')) if track_col else None,
-                    csv_file.stem,
-                    json.dumps(result_metadata)
-                )
-                total_imported += 1
-                
-                if total_imported % 1000 == 0:
-                    logger.info(f"  Imported {total_imported} records...")
+            # Record successful import
+            await conn.execute(
+                """INSERT INTO import_history (sport_id, source, file_name, rows_imported, status)
+                   VALUES ($1, $2, $3, $4, $5)""",
+                sport_id, 'csv', csv_file.name, file_imported, 'success'
+            )
+            logger.info(f"  Completed {csv_file.name}: {file_imported} records")
                     
         except Exception as e:
             logger.error(f"Error processing {csv_file.name}: {e}")
-    
-    # Record import
-    await conn.execute(
-        """INSERT INTO import_history (sport_id, source, file_name, rows_imported, status)
-           VALUES ($1, $2, $3, $4, $5)""",
-        sport_id, 'csv', 'nascar_migration', total_imported, 'success'
-    )
+            # Record failed import
+            await conn.execute(
+                """INSERT INTO import_history (sport_id, source, file_name, rows_imported, status, error_message)
+                   VALUES ($1, $2, $3, $4, $5, $6)""",
+                sport_id, 'csv', csv_file.name, 0, 'failed', str(e)
+            )
     
     logger.info(f"NASCAR migration complete: {total_imported} records imported")
     return total_imported
 
 
 async def migrate_nfl(conn, data_dir: Path):
-    """Migrate NFL game data to PostgreSQL."""
-    logger.info("Starting NFL migration...")
+    """Migrate NFL game data to PostgreSQL with batching."""
+    logger.info("Starting NFL migration (batched)...")
     
     sport_id = await get_or_create_sport(conn, "nfl")
     
@@ -164,81 +252,144 @@ async def migrate_nfl(conn, data_dir: Path):
     total_imported = 0
     
     for csv_file in csv_files:
+        if await was_file_imported(conn, sport_id, csv_file.name):
+            logger.info(f"Skipping {csv_file.name} - already imported")
+            continue
+            
         logger.info(f"Processing {csv_file.name}...")
         
         try:
-            df = pd.read_csv(csv_file, low_memory=False)
+            chunk_size = 5000
+            file_imported = 0
             
-            # Detect columns
-            home_col = next((c for c in df.columns if 'home' in c.lower() and 'team' in c.lower()), None)
-            away_col = next((c for c in df.columns if 'away' in c.lower() and 'team' in c.lower()), None)
-            home_score_col = next((c for c in df.columns if 'home' in c.lower() and 'score' in c.lower()), None)
-            away_score_col = next((c for c in df.columns if 'away' in c.lower() and 'score' in c.lower()), None)
-            season_col = next((c for c in df.columns if c.lower() in ['season', 'year', 'schedule_season']), None)
-            week_col = next((c for c in df.columns if 'week' in c.lower()), None)
+            for chunk_num, chunk in enumerate(pd.read_csv(csv_file, low_memory=False, chunksize=chunk_size)):
+                # Look for various column patterns
+                home_col = next((c for c in chunk.columns if 'home' in c.lower() and 'team' in c.lower()), None)
+                away_col = next((c for c in chunk.columns if 'away' in c.lower() and 'team' in c.lower()), None)
+                
+                # Alternative: team column for player stats
+                team_col = next((c for c in chunk.columns if c.lower() in ['team', 'tm']), None)
+                player_col = next((c for c in chunk.columns if c.lower() in ['player', 'player_name', 'name']), None)
+                
+                season_col = next((c for c in chunk.columns if c.lower() in ['season', 'year', 'schedule_season']), None)
+                
+                if player_col:
+                    # Player stats file
+                    async with conn.transaction():
+                        for _, row in chunk.iterrows():
+                            player_name = str(row.get(player_col, '')).strip()
+                            if not player_name or player_name == 'nan':
+                                continue
+                            
+                            player_id = await get_or_create_entity(conn, sport_id, player_name, 'player')
+                            
+                            stats_data = {'source_file': csv_file.name}
+                            for col in chunk.columns:
+                                val = row.get(col)
+                                if pd.notna(val):
+                                    try:
+                                        stats_data[col] = float(val) if isinstance(val, (int, float)) else str(val)[:500]
+                                    except:
+                                        stats_data[col] = str(val)[:500]
+                            
+                            await conn.execute(
+                                """INSERT INTO stats (entity_id, stat_type, stats)
+                                   VALUES ($1, $2, $3)""",
+                                player_id, 'season', json.dumps(stats_data)
+                            )
+                            file_imported += 1
+                            total_imported += 1
+                        
+                        logger.info(f"    Committed {file_imported} player stats")
+                
+                elif home_col and away_col:
+                    # Game results file
+                    async with conn.transaction():
+                        for _, row in chunk.iterrows():
+                            home_team = str(row.get(home_col, '')).strip()
+                            away_team = str(row.get(away_col, '')).strip()
+                            
+                            if not home_team or home_team == 'nan':
+                                continue
+                            
+                            home_id = await get_or_create_entity(conn, sport_id, home_team, 'team')
+                            away_id = await get_or_create_entity(conn, sport_id, away_team, 'team')
+                            
+                            season = None
+                            if season_col and pd.notna(row.get(season_col)):
+                                try:
+                                    season = int(float(row[season_col]))
+                                except:
+                                    pass
+                            
+                            result_metadata = {'source_file': csv_file.name}
+                            
+                            await conn.execute(
+                                """INSERT INTO results (sport_id, season, home_entity_id, away_entity_id, metadata)
+                                   VALUES ($1, $2, $3, $4, $5)""",
+                                sport_id, season, home_id, away_id, json.dumps(result_metadata)
+                            )
+                            file_imported += 1
+                            total_imported += 1
+                        
+                        logger.info(f"    Committed {file_imported} game results")
+                
+                elif team_col:
+                    # Team stats file
+                    async with conn.transaction():
+                        for _, row in chunk.iterrows():
+                            team_name = str(row.get(team_col, '')).strip()
+                            if not team_name or team_name == 'nan':
+                                continue
+                            
+                            team_id = await get_or_create_entity(conn, sport_id, team_name, 'team')
+                            
+                            stats_data = {'source_file': csv_file.name}
+                            for col in chunk.columns:
+                                val = row.get(col)
+                                if pd.notna(val):
+                                    try:
+                                        stats_data[col] = float(val) if isinstance(val, (int, float)) else str(val)[:500]
+                                    except:
+                                        stats_data[col] = str(val)[:500]
+                            
+                            await conn.execute(
+                                """INSERT INTO stats (entity_id, stat_type, stats)
+                                   VALUES ($1, $2, $3)""",
+                                team_id, 'team_season', json.dumps(stats_data)
+                            )
+                            file_imported += 1
+                            total_imported += 1
+                        
+                        logger.info(f"    Committed {file_imported} team stats")
+                else:
+                    logger.warning(f"Skipping {csv_file.name} - no recognizable columns")
+                    break
+                
+                gc.collect()
             
-            if not home_col or not away_col:
-                logger.warning(f"Skipping {csv_file.name} - missing team columns")
-                continue
-            
-            for _, row in df.iterrows():
-                home_team = str(row.get(home_col, '')).strip()
-                away_team = str(row.get(away_col, '')).strip()
-                
-                if not home_team or home_team == 'nan':
-                    continue
-                
-                # Get or create team entities
-                home_id = await get_or_create_entity(conn, sport_id, home_team, 'team')
-                away_id = await get_or_create_entity(conn, sport_id, away_team, 'team')
-                
-                home_score = float(row[home_score_col]) if home_score_col and pd.notna(row.get(home_score_col)) else None
-                away_score = float(row[away_score_col]) if away_score_col and pd.notna(row.get(away_score_col)) else None
-                
-                # Build metadata
-                result_metadata = {'source_file': csv_file.name}
-                for col in df.columns:
-                    if col not in [home_col, away_col, home_score_col, away_score_col, season_col, week_col]:
-                        val = row.get(col)
-                        if pd.notna(val):
-                            result_metadata[col] = str(val) if isinstance(val, str) else float(val) if isinstance(val, float) else val
-                
+            if file_imported > 0:
                 await conn.execute(
-                    """INSERT INTO results (sport_id, season, week, home_entity_id, away_entity_id, 
-                       home_score, away_score, metadata)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
-                    sport_id,
-                    int(row[season_col]) if season_col and pd.notna(row.get(season_col)) else None,
-                    int(row[week_col]) if week_col and pd.notna(row.get(week_col)) else None,
-                    home_id, away_id, home_score, away_score,
-                    json.dumps(result_metadata)
+                    """INSERT INTO import_history (sport_id, source, file_name, rows_imported, status)
+                       VALUES ($1, $2, $3, $4, $5)""",
+                    sport_id, 'csv', csv_file.name, file_imported, 'success'
                 )
-                total_imported += 1
-                
-                if total_imported % 1000 == 0:
-                    logger.info(f"  Imported {total_imported} records...")
                     
         except Exception as e:
             logger.error(f"Error processing {csv_file.name}: {e}")
-    
-    await conn.execute(
-        """INSERT INTO import_history (sport_id, source, file_name, rows_imported, status)
-           VALUES ($1, $2, $3, $4, $5)""",
-        sport_id, 'csv', 'nfl_migration', total_imported, 'success'
-    )
     
     logger.info(f"NFL migration complete: {total_imported} records imported")
     return total_imported
 
 
 async def migrate_nba(conn, data_dir: Path):
-    """Migrate NBA game data to PostgreSQL."""
-    logger.info("Starting NBA migration...")
+    """Migrate NBA data to PostgreSQL with batching."""
+    logger.info("Starting NBA migration (batched)...")
     
     sport_id = await get_or_create_sport(conn, "nba")
     
     nba_dir = data_dir / "nba"
-    csv_files = list(nba_dir.glob("*.csv")) if nba_dir.exists() else []
+    csv_files = list(nba_dir.glob("**/*.csv")) if nba_dir.exists() else []
     
     if not csv_files:
         logger.warning(f"No NBA CSV files found in {nba_dir}")
@@ -247,76 +398,93 @@ async def migrate_nba(conn, data_dir: Path):
     total_imported = 0
     
     for csv_file in csv_files:
+        if await was_file_imported(conn, sport_id, csv_file.name):
+            logger.info(f"Skipping {csv_file.name} - already imported")
+            continue
+            
         logger.info(f"Processing {csv_file.name}...")
         
         try:
-            df = pd.read_csv(csv_file, low_memory=False)
+            chunk_size = 5000
+            file_imported = 0
             
-            # Similar to NFL migration
-            home_col = next((c for c in df.columns if 'home' in c.lower() and 'team' in c.lower()), None)
-            away_col = next((c for c in df.columns if ('away' in c.lower() or 'visitor' in c.lower()) and 'team' in c.lower()), None)
-            
-            # Handle player-level data
-            player_col = next((c for c in df.columns if c.lower() in ['player', 'player_name']), None)
-            team_col = next((c for c in df.columns if c.lower() in ['team', 'tm']), None)
-            
-            if player_col:
-                # Player stats file
-                for _, row in df.iterrows():
-                    player_name = str(row.get(player_col, '')).strip()
-                    if not player_name or player_name == 'nan':
-                        continue
-                    
-                    player_id = await get_or_create_entity(conn, sport_id, player_name, 'player')
-                    
-                    # Store stats
-                    stats_data = {}
-                    for col in df.columns:
-                        if col != player_col:
-                            val = row.get(col)
-                            if pd.notna(val):
-                                stats_data[col] = float(val) if isinstance(val, (int, float)) else str(val)
-                    
-                    await conn.execute(
-                        """INSERT INTO stats (entity_id, stat_type, stats)
-                           VALUES ($1, $2, $3)""",
-                        player_id, 'season', json.dumps(stats_data)
-                    )
-                    total_imported += 1
-                    
-            elif home_col or team_col:
-                # Game/team data
-                for _, row in df.iterrows():
-                    team_name = str(row.get(home_col or team_col, '')).strip()
-                    if not team_name or team_name == 'nan':
-                        continue
-                    
-                    team_id = await get_or_create_entity(conn, sport_id, team_name, 'team')
-                    
-                    result_metadata = {'source_file': csv_file.name}
-                    for col in df.columns:
-                        val = row.get(col)
-                        if pd.notna(val):
-                            result_metadata[col] = float(val) if isinstance(val, (int, float)) else str(val)
-                    
-                    await conn.execute(
-                        """INSERT INTO results (sport_id, metadata)
-                           VALUES ($1, $2)""",
-                        sport_id, json.dumps(result_metadata)
-                    )
-                    total_imported += 1
+            for chunk_num, chunk in enumerate(pd.read_csv(csv_file, low_memory=False, chunksize=chunk_size)):
+                # Detect file type by columns
+                player_col = next((c for c in chunk.columns if c.lower() in ['player', 'player_name']), None)
+                team_col = next((c for c in chunk.columns if c.lower() in ['team', 'tm']), None)
                 
-                if total_imported % 1000 == 0:
-                    logger.info(f"  Imported {total_imported} records...")
+                if player_col:
+                    # Player data
+                    async with conn.transaction():
+                        for _, row in chunk.iterrows():
+                            player_name = str(row.get(player_col, '')).strip()
+                            if not player_name or player_name == 'nan':
+                                continue
+                            
+                            player_id = await get_or_create_entity(conn, sport_id, player_name, 'player')
+                            
+                            stats_data = {'source_file': csv_file.name}
+                            for col in chunk.columns:
+                                val = row.get(col)
+                                if pd.notna(val):
+                                    try:
+                                        stats_data[col] = float(val) if isinstance(val, (int, float)) else str(val)[:500]
+                                    except:
+                                        stats_data[col] = str(val)[:500]
+                            
+                            await conn.execute(
+                                """INSERT INTO stats (entity_id, stat_type, stats)
+                                   VALUES ($1, $2, $3)""",
+                                player_id, 'season', json.dumps(stats_data)
+                            )
+                            file_imported += 1
+                            total_imported += 1
+                        
+                        logger.info(f"    Chunk {chunk_num + 1}: {file_imported} records")
+                
+                elif team_col:
+                    # Team data
+                    async with conn.transaction():
+                        for _, row in chunk.iterrows():
+                            team_name = str(row.get(team_col, '')).strip()
+                            if not team_name or team_name == 'nan':
+                                continue
+                            
+                            team_id = await get_or_create_entity(conn, sport_id, team_name, 'team')
+                            
+                            stats_data = {'source_file': csv_file.name}
+                            for col in chunk.columns:
+                                val = row.get(col)
+                                if pd.notna(val):
+                                    try:
+                                        stats_data[col] = float(val) if isinstance(val, (int, float)) else str(val)[:500]
+                                    except:
+                                        stats_data[col] = str(val)[:500]
+                            
+                            await conn.execute(
+                                """INSERT INTO stats (entity_id, stat_type, stats)
+                                   VALUES ($1, $2, $3)""",
+                                team_id, 'team_season', json.dumps(stats_data)
+                            )
+                            file_imported += 1
+                            total_imported += 1
+                        
+                        logger.info(f"    Chunk {chunk_num + 1}: {file_imported} records")
+                else:
+                    logger.warning(f"Skipping {csv_file.name} - no player/team columns found")
+                    break
+                
+                gc.collect()
+            
+            if file_imported > 0:
+                await conn.execute(
+                    """INSERT INTO import_history (sport_id, source, file_name, rows_imported, status)
+                       VALUES ($1, $2, $3, $4, $5)""",
+                    sport_id, 'csv', csv_file.name, file_imported, 'success'
+                )
                     
         except Exception as e:
             logger.error(f"Error processing {csv_file.name}: {e}")
-    
-    await conn.execute(
-        """INSERT INTO import_history (sport_id, source, file_name, rows_imported, status)
-           VALUES ($1, $2, $3, $4, $5)""",
-        sport_id, 'csv', 'nba_migration', total_imported, 'success'
-    )
     
     logger.info(f"NBA migration complete: {total_imported} records imported")
     return total_imported
@@ -324,9 +492,16 @@ async def migrate_nba(conn, data_dir: Path):
 
 async def run_migration(sport: Optional[str] = None):
     """Run data migration for specified sport or all sports."""
+    logger.info("=" * 50)
+    logger.info("STARTING DATA MIGRATION (OPTIMIZED)")
+    logger.info("=" * 50)
+    
     conn = await get_connection()
     
     try:
+        # Setup duplicate protection (add columns/indexes if needed)
+        await setup_duplicate_protection(conn)
+        
         results = {}
         
         if sport is None or sport == 'all':
