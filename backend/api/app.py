@@ -5,7 +5,7 @@ import json
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 
-from log_capture import setup_log_capture, get_logs, LOG_BUFFER
+from api.log_capture import setup_log_capture, get_logs, LOG_BUFFER
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd

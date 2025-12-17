@@ -1,11 +1,33 @@
 # Docker Compose for Sports Betting Analyzer
 # Run: docker compose up -d
-# Access: http://localhost
-
-version: '3.8'
+# Access: Frontend at http://localhost, API at http://localhost:8003
 
 services:
+  # ============================================
+  # PostgreSQL Database
+  # ============================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: sports-db
+    environment:
+      POSTGRES_DB: sports_betting
+      POSTGRES_USER: sports_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-sportsbetting2024}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d  # SQL scripts run on first start
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sports_user -d sports_betting"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ============================================
   # Python ML Backend
+  # ============================================
   backend:
     build:
       context: ./backend
@@ -13,9 +35,15 @@ services:
     container_name: sports-ml-backend
     ports:
       - "8003:8000"
+    environment:
+      - DATABASE_URL=postgresql://sports_user:${DB_PASSWORD:-sportsbetting2024}@postgres:5432/sports_betting
+      - REDIS_URL=redis://redis:6379  # Optional, for caching
     volumes:
       - ./data:/app/data
       - ./models:/app/models
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -23,7 +51,9 @@ services:
       timeout: 10s
       retries: 3
 
+  # ============================================
   # Blazor Frontend
+  # ============================================
   frontend:
     build:
       context: ./frontend
@@ -33,12 +63,46 @@ services:
       - "80:8080"
     environment:
       - PythonApiUrl=http://backend:8000
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=sports_betting;Username=sports_user;Password=${DB_PASSWORD:-sportsbetting2024}
     depends_on:
       backend:
         condition: service_healthy
     restart: unless-stopped
 
-  # Watchtower - Auto-update containers (optional)
+  # ============================================
+  # Redis Cache (Optional - for API caching)
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: sports-cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    profiles:
+      - cache
+
+  # ============================================
+  # pgAdmin - Database GUI
+  # ============================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: sports-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@sports.local
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  # ============================================
+  # Watchtower - Auto-update containers
+  # ============================================
   watchtower:
     image: containrrr/watchtower
     container_name: watchtower
@@ -51,6 +115,20 @@ services:
     profiles:
       - production
 
+# ============================================
+# Persistent Volumes
+# ============================================
+volumes:
+  postgres_data:
+    name: sports-postgres-data
+  redis_data:
+    name: sports-redis-data
+  pgadmin_data:
+    name: sports-pgadmin-data
+
+# ============================================
+# Network
+# ============================================
 networks:
   default:
     name: sports-betting-network
