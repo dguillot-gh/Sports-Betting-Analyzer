@@ -12,3 +12,5 @@ pyreadr
 httpx
 aiohttp
 python-multipart
+
+asyncpg>=0.29.0
