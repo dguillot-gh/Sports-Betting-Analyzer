@@ -13,7 +13,9 @@
         <MudSpacer />
         <MudIconButton Icon="@Icons.Material.Filled.Info" Color="Color.Inherit" Href="/about" Title="About & Architecture" />
     </MudAppBar>
-    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="2" 
+               Variant="DrawerVariant.Responsive"
+               Breakpoint="Breakpoint.Md">
         <NavMenu />
     </MudDrawer>
     <MudMainContent>
