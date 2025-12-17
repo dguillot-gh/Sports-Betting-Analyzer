@@ -409,9 +409,11 @@ async def migrate_nba(conn, data_dir: Path):
             file_imported = 0
             
             for chunk_num, chunk in enumerate(pd.read_csv(csv_file, low_memory=False, chunksize=chunk_size)):
-                # Detect file type by columns
-                player_col = next((c for c in chunk.columns if c.lower() in ['player', 'player_name']), None)
-                team_col = next((c for c in chunk.columns if c.lower() in ['team', 'tm']), None)
+                # Detect file type by columns - expanded patterns
+                player_col = next((c for c in chunk.columns if c.lower() in ['player', 'player_name', 'playername', 'player_id']), None)
+                team_col = next((c for c in chunk.columns if c.lower() in ['team', 'tm', 'teamname', 'team_name', 'hometeamname', 'abbreviation']), None)
+                home_team_col = next((c for c in chunk.columns if c.lower() in ['hometeamname', 'home_team', 'hometeam']), None)
+                away_team_col = next((c for c in chunk.columns if c.lower() in ['awayteamname', 'away_team', 'awayteam', 'visitorteamname']), None)
                 
                 if player_col:
                     # Player data
@@ -470,6 +472,47 @@ async def migrate_nba(conn, data_dir: Path):
                             total_imported += 1
                         
                         logger.info(f"    Chunk {chunk_num + 1}: {file_imported} records")
+                
+                elif home_team_col and away_team_col:
+                    # Game data with home/away teams
+                    async with conn.transaction():
+                        for _, row in chunk.iterrows():
+                            home_team = str(row.get(home_team_col, '')).strip()
+                            away_team = str(row.get(away_team_col, '')).strip()
+                            
+                            if not home_team or home_team == 'nan':
+                                continue
+                            
+                            home_id = await get_or_create_entity(conn, sport_id, home_team, 'team')
+                            away_id = await get_or_create_entity(conn, sport_id, away_team, 'team') if away_team and away_team != 'nan' else None
+                            
+                            game_data = {'source_file': csv_file.name}
+                            for col in chunk.columns:
+                                val = row.get(col)
+                                if pd.notna(val):
+                                    try:
+                                        game_data[col] = float(val) if isinstance(val, (int, float)) else str(val)[:500]
+                                    except:
+                                        game_data[col] = str(val)[:500]
+                            
+                            # Compute hash for duplicate detection
+                            hash_data = {'sport': 'nba', 'home': home_team, 'away': away_team, 'game': game_data.get('gameId', '')}
+                            content_hash = compute_content_hash(hash_data)
+                            
+                            try:
+                                await conn.execute(
+                                    """INSERT INTO results (sport_id, home_entity_id, away_entity_id, metadata, content_hash)
+                                       VALUES ($1, $2, $3, $4, $5)
+                                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL DO NOTHING""",
+                                    sport_id, home_id, away_id, json.dumps(game_data), content_hash
+                                )
+                                file_imported += 1
+                                total_imported += 1
+                            except asyncpg.UniqueViolationError:
+                                pass
+                        
+                        logger.info(f"    Chunk {chunk_num + 1}: {file_imported} game records")
+                
                 else:
                     logger.warning(f"Skipping {csv_file.name} - no player/team columns found")
                     break
