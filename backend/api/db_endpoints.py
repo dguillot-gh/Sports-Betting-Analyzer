@@ -185,6 +185,80 @@ async def clear_sport_data(sport: str):
         await conn.close()
 
 
+class PredictionRecord(BaseModel):
+    sport: str
+    entity_name: str
+    task: str  # classification or regression
+    prediction: float
+    probability: Optional[float] = None
+    confidence: Optional[str] = None
+    input_features: Optional[dict] = None
+
+
+@router.post("/predictions")
+async def store_prediction(prediction: PredictionRecord):
+    """Store a prediction in the database for tracking."""
+    conn = await get_db_connection()
+    try:
+        # Get sport ID
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", prediction.sport)
+        if not sport_id:
+            raise HTTPException(status_code=404, detail=f"Sport '{prediction.sport}' not found")
+        
+        # Get or create model record
+        model_id = await conn.fetchval(
+            """SELECT id FROM models WHERE sport_id = $1 AND task = $2 LIMIT 1""",
+            sport_id, prediction.task
+        )
+        
+        if not model_id:
+            # Create a model record if it doesn't exist
+            model_id = await conn.fetchval(
+                """INSERT INTO models (sport_id, task, model_path, is_active) 
+                   VALUES ($1, $2, 'auto', true) RETURNING id""",
+                sport_id, prediction.task
+            )
+        
+        # Store prediction
+        await conn.execute(
+            """INSERT INTO predictions (model_id, input_features, prediction, probability, confidence)
+               VALUES ($1, $2, $3, $4, $5)""",
+            model_id,
+            json.dumps(prediction.input_features or {}),
+            prediction.prediction,
+            prediction.probability,
+            prediction.confidence
+        )
+        
+        return {"success": True, "message": "Prediction stored"}
+    finally:
+        await conn.close()
+
+
+@router.get("/predictions/{sport}")
+async def get_predictions(sport: str, limit: int = 50):
+    """Get recent predictions for a sport."""
+    conn = await get_db_connection()
+    try:
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
+        if not sport_id:
+            raise HTTPException(status_code=404, detail=f"Sport '{sport}' not found")
+        
+        rows = await conn.fetch("""
+            SELECT p.*, m.task
+            FROM predictions p
+            JOIN models m ON m.id = p.model_id
+            WHERE m.sport_id = $1
+            ORDER BY p.created_at DESC
+            LIMIT $2
+        """, sport_id, limit)
+        
+        return [dict(row) for row in rows]
+    finally:
+        await conn.close()
+
+
+
 # ============================================
 # NEW WORKFLOW FOR KAGGLE DATA
 # ============================================
