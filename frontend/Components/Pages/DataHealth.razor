@@ -37,6 +37,44 @@
             </div>
         </MudPaper>
 
+        <!-- Database Stats -->
+        @if (_dbStats != null)
+        {
+            <MudPaper Class="pa-4" Elevation="1">
+                <div class="d-flex align-center mb-2">
+                    <MudIcon Icon="@Icons.Material.Filled.Storage" Color="Color.Success" Class="mr-2" />
+                    <MudText Typo="Typo.h6">PostgreSQL Database</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Class="ml-2">Connected</MudChip>
+                </div>
+                <MudGrid>
+                    <MudItem xs="6" md="2">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Results</MudText>
+                        <MudText Typo="Typo.h6">@_dbStats.Results.ToString("N0")</MudText>
+                    </MudItem>
+                    <MudItem xs="6" md="2">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Entities</MudText>
+                        <MudText Typo="Typo.h6">@_dbStats.Entities.ToString("N0")</MudText>
+                    </MudItem>
+                    <MudItem xs="6" md="2">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Stats</MudText>
+                        <MudText Typo="Typo.h6">@_dbStats.Stats.ToString("N0")</MudText>
+                    </MudItem>
+                    <MudItem xs="6" md="2">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Predictions</MudText>
+                        <MudText Typo="Typo.h6">@_dbStats.Predictions.ToString("N0")</MudText>
+                    </MudItem>
+                    <MudItem xs="6" md="2">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Models</MudText>
+                        <MudText Typo="Typo.h6">@_dbStats.Models.ToString("N0")</MudText>
+                    </MudItem>
+                    <MudItem xs="6" md="2">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Sports</MudText>
+                        <MudText Typo="Typo.h6">@_dbStats.Sports.ToString("N0")</MudText>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+        }
+
         <!-- Sport Tabs -->
         <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" 
                  PanelClass="pa-4" ActivePanelIndex="_activeTab" ActivePanelIndexChanged="OnTabChanged">
@@ -264,6 +302,7 @@
     private Dictionary<string, bool> _sportLoading = new();
     private Dictionary<string, string> _sportLoadingStatus = new();
     private string _currentLoadingSport = "";
+    private DbStats? _dbStats;
 
     private List<SportInfo> _sports = new()
     {
@@ -281,8 +320,35 @@
             _sportLoadingStatus[sport.Key] = "";
         }
         
+        // Load database stats
+        await LoadDbStats();
+        
         // Only load the first sport initially (lazy load)
         await LoadSportData(_sports[0].Key);
+    }
+    
+    private async Task LoadDbStats()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<Dictionary<string, int>>("http://backend:8000/db/stats");
+            if (response != null)
+            {
+                _dbStats = new DbStats
+                {
+                    Results = response.GetValueOrDefault("results", 0),
+                    Entities = response.GetValueOrDefault("entities", 0),
+                    Stats = response.GetValueOrDefault("stats", 0),
+                    Predictions = response.GetValueOrDefault("predictions", 0),
+                    Models = response.GetValueOrDefault("models", 0),
+                    Sports = response.GetValueOrDefault("sports", 0)
+                };
+            }
+        }
+        catch
+        {
+            // Database not available, stats will be null (hidden)
+        }
     }
 
     private async Task OnTabChanged(int index)
@@ -474,5 +540,15 @@
         public Dictionary<string, double> FeatureCoverage { get; set; } = new();
         public Dictionary<string, double> ClassBalance { get; set; } = new();
         public Dictionary<string, double> MissingValues { get; set; } = new();
+    }
+    
+    private class DbStats
+    {
+        public int Results { get; set; }
+        public int Entities { get; set; }
+        public int Stats { get; set; }
+        public int Predictions { get; set; }
+        public int Models { get; set; }
+        public int Sports { get; set; }
     }
 }
