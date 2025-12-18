@@ -19,9 +19,9 @@
                 <MudText Typo="Typo.h6" Class="mb-3">Find Driver</MudText>
                 
                 <!-- Series Selector -->
-                <MudSelect T="string" Label="Series" @bind-Value="_selectedSeries" 
+                <MudSelect T="string" Label="Series" Value="_selectedSeries" 
                            Variant="Variant.Outlined" Dense="true" Class="mb-3"
-                           ValueChanged="OnSeriesChanged">
+                           ValueChanged="@((string s) => OnSeriesChanged(s))">
                     <MudSelectItem Value="@("cup")">
                         <MudIcon Icon="@Icons.Material.Filled.EmojiEvents" Class="mr-2" Size="Size.Small" />
                         Cup Series
