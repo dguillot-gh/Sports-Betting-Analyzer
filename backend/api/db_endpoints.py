@@ -185,6 +185,249 @@ async def clear_sport_data(sport: str):
         await conn.close()
 
 
+# ============================================
+# PROFILE ENDPOINTS
+# ============================================
+
+@router.get("/profiles/{sport}/list")
+async def get_profile_list(sport: str, entity_type: str = None, series: str = None, search: str = None, limit: int = 500):
+    """
+    Get list of entities (players/drivers/teams) for a sport.
+    
+    Args:
+        sport: 'nascar', 'nfl', 'nba'
+        entity_type: optional filter ('player', 'driver', 'team')
+        series: NASCAR series filter ('cup', 'xfinity', 'trucks')
+        search: optional name search
+        limit: max results (default 500)
+    """
+    conn = await get_db_connection()
+    try:
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
+        if not sport_id:
+            raise HTTPException(status_code=404, detail=f"Sport '{sport}' not found")
+        
+        # Build query based on sport
+        if sport == 'nascar':
+            default_type = 'driver'
+        else:
+            default_type = 'player'
+        
+        type_filter = entity_type or default_type
+        
+        query = """
+            SELECT DISTINCT e.id, e.name, e.type, e.series, e.metadata
+            FROM entities e
+            WHERE e.sport_id = $1 AND e.type = $2
+        """
+        params = [sport_id, type_filter]
+        
+        # Add series filter for NASCAR
+        if series and sport == 'nascar':
+            query += f" AND e.series = ${len(params) + 1}"
+            params.append(series)
+        
+        if search:
+            query += f" AND e.name ILIKE ${len(params) + 1}"
+            params.append(f"%{search}%")
+        
+        query += f" ORDER BY e.name LIMIT ${len(params) + 1}"
+        params.append(limit)
+        
+        rows = await conn.fetch(query, *params)
+        
+        return {
+            "sport": sport,
+            "entity_type": type_filter,
+            "series": series,
+            "count": len(rows),
+            "entities": [
+                {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "type": row["type"],
+                    "series": row["series"],
+                    "metadata": row["metadata"] if row["metadata"] else {}
+                }
+                for row in rows
+            ]
+        }
+    finally:
+        await conn.close()
+
+
+@router.get("/profiles/{sport}/{name}")
+async def get_entity_profile(sport: str, name: str, series: str = None, season: int = None):
+    """
+    Get full profile for an entity with stats and recent results.
+    
+    Args:
+        sport: 'nascar', 'nfl', 'nba'
+        name: entity name (player/driver name)
+        series: NASCAR series filter ('cup', 'xfinity', 'trucks')
+        season: optional season filter
+    """
+    conn = await get_db_connection()
+    try:
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
+        if not sport_id:
+            raise HTTPException(status_code=404, detail=f"Sport '{sport}' not found")
+        
+        # Find entity - include series filter for NASCAR
+        if series and sport == 'nascar':
+            entity = await conn.fetchrow("""
+                SELECT id, name, type, series, metadata
+                FROM entities
+                WHERE sport_id = $1 AND name ILIKE $2 AND series = $3
+                LIMIT 1
+            """, sport_id, f"%{name}%", series)
+        else:
+            entity = await conn.fetchrow("""
+                SELECT id, name, type, series, metadata
+                FROM entities
+                WHERE sport_id = $1 AND name ILIKE $2
+                LIMIT 1
+            """, sport_id, f"%{name}%")
+        
+        if not entity:
+            raise HTTPException(status_code=404, detail=f"Entity '{name}' not found in {sport}" + (f" ({series})" if series else ""))
+        
+        entity_id = entity["id"]
+        
+        # Get available seasons - filter by series if specified
+        if series and sport == 'nascar':
+            seasons = await conn.fetch("""
+                SELECT DISTINCT season FROM stats 
+                WHERE entity_id = $1 AND season IS NOT NULL AND series = $2
+                ORDER BY season DESC
+            """, entity_id, series)
+        else:
+            seasons = await conn.fetch("""
+                SELECT DISTINCT season FROM stats 
+                WHERE entity_id = $1 AND season IS NOT NULL
+                ORDER BY season DESC
+            """, entity_id)
+        available_seasons = [row["season"] for row in seasons]
+        
+        # Get stats
+        stats_query = """
+            SELECT stat_type, value, season
+            FROM stats
+            WHERE entity_id = $1
+        """
+        if season:
+            stats_query += f" AND season = {season}"
+        stats_query += " ORDER BY season DESC, stat_type"
+        
+        stats_rows = await conn.fetch(stats_query, entity_id)
+        
+        # Organize stats by season
+        stats_by_season = {}
+        for row in stats_rows:
+            s = row["season"] or "career"
+            if s not in stats_by_season:
+                stats_by_season[s] = {}
+            stats_by_season[s][row["stat_type"]] = row["value"]
+        
+        # Get recent results (last 10)
+        if sport == "nascar":
+            results = await conn.fetch("""
+                SELECT r.game_date, r.metadata, rr.finish_position, rr.start_position, rr.laps_led
+                FROM results r
+                JOIN race_results rr ON rr.result_id = r.id
+                WHERE rr.entity_id = $1
+                ORDER BY r.game_date DESC
+                LIMIT 10
+            """, entity_id)
+        else:
+            # NBA/NFL - entity could be home or away
+            results = await conn.fetch("""
+                SELECT r.game_date, r.season, r.home_score, r.away_score, r.metadata,
+                       h.name as home_team, a.name as away_team
+                FROM results r
+                LEFT JOIN entities h ON h.id = r.home_entity_id
+                LEFT JOIN entities a ON a.id = r.away_entity_id
+                WHERE r.home_entity_id = $1 OR r.away_entity_id = $1
+                ORDER BY r.game_date DESC
+                LIMIT 10
+            """, entity_id)
+        
+        return {
+            "entity": {
+                "id": entity["id"],
+                "name": entity["name"],
+                "type": entity["type"],
+                "metadata": entity["metadata"] if entity["metadata"] else {}
+            },
+            "sport": sport,
+            "available_seasons": available_seasons,
+            "stats": stats_by_season,
+            "recent_results": [dict(row) for row in results]
+        }
+    finally:
+        await conn.close()
+
+
+@router.get("/profiles/{sport}/{name}/history")
+async def get_entity_history(sport: str, name: str, limit: int = 50):
+    """
+    Get full result history for an entity.
+    
+    Args:
+        sport: 'nascar', 'nfl', 'nba'
+        name: entity name
+        limit: max results
+    """
+    conn = await get_db_connection()
+    try:
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
+        if not sport_id:
+            raise HTTPException(status_code=404, detail=f"Sport '{sport}' not found")
+        
+        # Find entity
+        entity = await conn.fetchrow("""
+            SELECT id, name, type FROM entities
+            WHERE sport_id = $1 AND name ILIKE $2
+            LIMIT 1
+        """, sport_id, f"%{name}%")
+        
+        if not entity:
+            raise HTTPException(status_code=404, detail=f"Entity '{name}' not found")
+        
+        entity_id = entity["id"]
+        
+        if sport == "nascar":
+            rows = await conn.fetch("""
+                SELECT r.game_date, r.season, r.metadata as race_info,
+                       rr.finish_position, rr.start_position, rr.laps_led, rr.points
+                FROM results r
+                JOIN race_results rr ON rr.result_id = r.id
+                WHERE rr.entity_id = $1
+                ORDER BY r.game_date DESC
+                LIMIT $2
+            """, entity_id, limit)
+        else:
+            rows = await conn.fetch("""
+                SELECT r.game_date, r.season, r.home_score, r.away_score, r.metadata,
+                       h.name as home_team, a.name as away_team
+                FROM results r
+                LEFT JOIN entities h ON h.id = r.home_entity_id
+                LEFT JOIN entities a ON a.id = r.away_entity_id
+                WHERE r.home_entity_id = $1 OR r.away_entity_id = $1
+                ORDER BY r.game_date DESC
+                LIMIT $2
+            """, entity_id, limit)
+        
+        return {
+            "entity": entity["name"],
+            "sport": sport,
+            "count": len(rows),
+            "history": [dict(row) for row in rows]
+        }
+    finally:
+        await conn.close()
+
+
 class PredictionRecord(BaseModel):
     sport: str
     entity_name: str

@@ -1,9 +1,10 @@
 @page "/driver-profiles"
-@using SportsBettingAnalyzer.Services
-@using SportsBettingAnalyzer.Components.Shared
-@inject PythonMLServiceClient MLClient
-@inject ISnackbar Snackbar
 @rendermode InteractiveServer
+@using MudBlazor
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+<PageTitle>NASCAR Driver Profiles</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
     <MudText Typo="Typo.h4" Class="mb-4">
@@ -12,259 +13,320 @@
     </MudText>
 
     <MudGrid>
+        <!-- Search & Selection -->
         <MudItem xs="12" md="4">
-            <!-- Entity Selector Component -->
-            <EntitySelector 
-                @bind-SelectedSport="_selectedSport"
-                @bind-SelectedSeries="_selectedSeries"
-                @bind-SelectedTeam="_selectedTeam"
-                SelectedEntity="@_selectedEntity"
-                SelectedEntityChanged="OnEntityChanged"
-                @bind-SelectedYear="_selectedYear"
-                AvailableYears="@_availableYears" />
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" Class="mb-3">Find Driver</MudText>
+                
+                <!-- Series Selector -->
+                <MudSelect T="string" Label="Series" @bind-Value="_selectedSeries" 
+                           Variant="Variant.Outlined" Dense="true" Class="mb-3"
+                           ValueChanged="OnSeriesChanged">
+                    <MudSelectItem Value="@("cup")">
+                        <MudIcon Icon="@Icons.Material.Filled.EmojiEvents" Class="mr-2" Size="Size.Small" />
+                        Cup Series
+                    </MudSelectItem>
+                    <MudSelectItem Value="@("xfinity")">
+                        <MudIcon Icon="@Icons.Material.Filled.Stars" Class="mr-2" Size="Size.Small" />
+                        Xfinity Series
+                    </MudSelectItem>
+                    <MudSelectItem Value="@("trucks")">
+                        <MudIcon Icon="@Icons.Material.Filled.LocalShipping" Class="mr-2" Size="Size.Small" />
+                        Trucks Series
+                    </MudSelectItem>
+                </MudSelect>
+                
+                <MudAutocomplete T="string" Label="Search Driver"
+                                 Value="_selectedDriver"
+                                 ValueChanged="OnDriverSelected"
+                                 SearchFunc="SearchDrivers"
+                                 MaxItems="50"
+                                 AdornmentIcon="@Icons.Material.Filled.Search"
+                                 Variant="Variant.Outlined"
+                                 Dense="true"
+                                 Immediate="true"
+                                 Placeholder="Type driver name..."
+                                 Disabled="@string.IsNullOrEmpty(_selectedSeries)" />
+                
+                @if (_availableSeasons.Any())
+                {
+                    <MudSelect T="int?" Label="Season" @bind-Value="_selectedSeason" 
+                               Variant="Variant.Outlined" Dense="true" Class="mt-3" Clearable="true">
+                        @foreach (var season in _availableSeasons)
+                        {
+                            <MudSelectItem Value="@((int?)season)">@season</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+                
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-3" FullWidth="true"
+                           OnClick="LoadProfile" Disabled="@(string.IsNullOrEmpty(_selectedDriver) || _isLoading)">
+                    @if (_isLoading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Load Profile
+                </MudButton>
+            </MudPaper>
+            
+            <!-- Series Info -->
+            <MudAlert Severity="Severity.Info" Class="mt-2">
+                @_selectedSeries switch
+                {
+                    "cup" => "NASCAR Cup Series - Top tier",
+                    "xfinity" => "NASCAR Xfinity Series",
+                    "trucks" => "NASCAR Truck Series",
+                    _ => "Select a series to view drivers"
+                }
+            </MudAlert>
         </MudItem>
 
+        <!-- Profile Display -->
         <MudItem xs="12" md="8">
-            @if (_profileData != null)
+            @if (_profile != null)
             {
-                <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
-                    <MudTabPanel Text="Overview">
-                        <MudPaper Class="pa-4" Elevation="0">
-                            <MudText Typo="Typo.h5">@_selectedEntity</MudText>
-                            <MudText Typo="Typo.subtitle1" Color="Color.Secondary">@_selectedTeam</MudText>
-                            <MudDivider Class="my-2" />
-
-                            <!-- Stats Grid -->
-                            <MudGrid>
-                                @foreach (var stat in _profileData.Stats)
-                                {
-                                    <MudItem xs="6" sm="4" md="3">
-                                        <MudPaper Class="pa-3" Elevation="2">
-                                            <MudText Typo="Typo.caption">@stat.Key</MudText>
-                                            <MudText Typo="Typo.h6">@stat.Value</MudText>
-                                        </MudPaper>
-                                    </MudItem>
-                                }
-                            </MudGrid>
-
-                            <!-- Splits -->
-                            @if (_profileData.Splits.Any())
-                            {
-                                <MudText Typo="Typo.h6" Class="mt-4">Splits</MudText>
-                                <MudTable Items="@_profileData.Splits" Dense="true" Hover="true" Class="mt-2">
-                                    <HeaderContent>
-                                        <MudTh>Category</MudTh>
-                                        @foreach (var key in _profileData.Splits.First().Value.Keys)
+                <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+                    <!-- Overview Tab -->
+                    <MudTabPanel Text="Overview" Icon="@Icons.Material.Filled.Person">
+                        <MudPaper Class="pa-4 mb-4" Elevation="1" Style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
+                                <MudAvatar Size="Size.Large" Color="Color.Warning">
+                                    @(_profile.Entity.Name?.Substring(0, 1) ?? "?")
+                                </MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.h5" Style="color: white;">@_profile.Entity.Name</MudText>
+                                    <MudText Typo="Typo.subtitle1" Style="color: rgba(255,255,255,0.8);">
+                                        @GetSeriesDisplayName(_selectedSeries) Driver
+                                        @if (_profile.Entity.Metadata?.ContainsKey("team") == true)
                                         {
-                                            <MudTh>@key</MudTh>
+                                            <text> • @_profile.Entity.Metadata["team"]</text>
                                         }
-                                    </HeaderContent>
-                                    <RowTemplate>
-                                        <MudTd DataLabel="Category">@context.Key</MudTd>
-                                        @foreach (var val in context.Value.Values)
-                                        {
-                                            <MudTd>@val</MudTd>
-                                        }
-                                    </RowTemplate>
-                                </MudTable>
-                            }
-
-                            <!-- History -->
-                            @if (_profileData.History.Any())
-                            {
-                                <MudText Typo="Typo.h6" Class="mt-4">Recent History</MudText>
-                                <MudTable Items="@_profileData.History" Dense="true" Hover="true" Class="mt-2" 
-                                          SortLabel="Sort By" Filter="new Func<Dictionary<string, object>,bool>(FilterHistory)"
-                                          Striped="true" Bordered="true">
-                                    <ToolBarContent>
-                                        <MudText Typo="Typo.h6">History</MudText>
-                                        <MudSpacer />
-                                        <MudTextField @bind-Value="_historySearchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
-                                    </ToolBarContent>
-                                    <HeaderContent>
-                                        @foreach (var key in _profileData.History.First().Keys)
-                                        {
-                                            <MudTh><MudTableSortLabel SortBy="new Func<Dictionary<string, object>, object>(x => x[key])">@key</MudTableSortLabel></MudTh>
-                                        }
-                                    </HeaderContent>
-                                    <RowTemplate>
-                                        @foreach (var val in context.Values)
-                                        {
-                                            <MudTd>@val</MudTd>
-                                        }
-                                    </RowTemplate>
-                                    <PagerContent>
-                                        <MudTablePager />
-                                    </PagerContent>
-                                </MudTable>
-                            }
+                                    </MudText>
+                                </div>
+                                <MudSpacer />
+                                <MudChip T="string" Color="Color.Warning" Size="Size.Small">@GetSeriesDisplayName(_selectedSeries)</MudChip>
+                            </MudStack>
                         </MudPaper>
-                    </MudTabPanel>
-                    
-                    <MudTabPanel Text="Comparison">
-                        <MudGrid>
-                            <!-- Year A Selection -->
-                            <MudItem xs="6">
-                                <MudSelect T="int?" Label="Year A" @bind-Value="CompYearA" Variant="Variant.Outlined" Clearable="true">
-                                    @foreach (var year in _availableYears)
-                                    {
-                                        <MudSelectItem Value="@((int?)year)">@year</MudSelectItem>
-                                    }
-                                </MudSelect>
-                            </MudItem>
-                            
-                            <!-- Year B Selection -->
-                            <MudItem xs="6">
-                                <MudSelect T="int?" Label="Year B" @bind-Value="CompYearB" Variant="Variant.Outlined" Clearable="true">
-                                    @foreach (var year in _availableYears)
-                                    {
-                                        <MudSelectItem Value="@((int?)year)">@year</MudSelectItem>
-                                    }
-                                </MudSelect>
-                            </MudItem>
-                        </MudGrid>
 
-                        @if (_compDataA != null || _compDataB != null)
+                        <!-- Stats Cards -->
+                        @if (_profile.Stats.Any())
                         {
-                            <MudDivider Class="my-4" />
-                            <MudGrid>
-                                @if (_compDataA != null)
-                                {
-                                    <MudItem xs="6">
-                                        <MudText Typo="Typo.h6">@CompYearA Stats</MudText>
-                                        @foreach (var stat in _compDataA.Stats)
-                                        {
-                                            <MudText>@stat.Key: @stat.Value</MudText>
-                                        }
-                                    </MudItem>
-                                }
-                                @if (_compDataB != null)
-                                {
-                                    <MudItem xs="6">
-                                        <MudText Typo="Typo.h6">@CompYearB Stats</MudText>
-                                        @foreach (var stat in _compDataB.Stats)
-                                        {
-                                            <MudText>@stat.Key: @stat.Value</MudText>
-                                        }
-                                    </MudItem>
-                                }
-                            </MudGrid>
+                            <MudText Typo="Typo.h6" Class="mb-2">@GetSeriesDisplayName(_selectedSeries) Statistics</MudText>
+                            @foreach (var seasonStats in _profile.Stats.Take(3))
+                            {
+                                <MudText Typo="Typo.subtitle2" Class="mb-1">@seasonStats.Key Season</MudText>
+                                <MudGrid Class="mb-3">
+                                    @foreach (var stat in seasonStats.Value.Take(8))
+                                    {
+                                        <MudItem xs="6" sm="4" md="3">
+                                            <MudPaper Class="pa-3 text-center" Elevation="1">
+                                                <MudText Typo="Typo.h6" Color="Color.Primary">@stat.Value</MudText>
+                                                <MudText Typo="Typo.caption">@stat.Key</MudText>
+                                            </MudPaper>
+                                        </MudItem>
+                                    }
+                                </MudGrid>
+                            }
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Info">No @GetSeriesDisplayName(_selectedSeries) stats available for this driver.</MudAlert>
+                        }
+                    </MudTabPanel>
+
+                    <!-- Recent Results Tab -->
+                    <MudTabPanel Text="Recent Results" Icon="@Icons.Material.Filled.Timeline">
+                        @if (_profile.RecentResults.Any())
+                        {
+                            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Start</th>
+                                        <th>Finish</th>
+                                        <th>Laps Led</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var result in _profile.RecentResults)
+                                    {
+                                        <tr>
+                                            <td>@(result.GameDate?.ToString("MM/dd/yyyy") ?? "-")</td>
+                                            <td>@(result.StartPosition?.ToString() ?? "-")</td>
+                                            <td>
+                                                <MudChip T="string" Size="Size.Small" 
+                                                         Color="@(result.FinishPosition <= 3 ? Color.Success : result.FinishPosition <= 10 ? Color.Info : Color.Default)">
+                                                    P@result.FinishPosition
+                                                </MudChip>
+                                            </td>
+                                            <td>@(result.LapsLed?.ToString() ?? "0")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Info">No recent @GetSeriesDisplayName(_selectedSeries) results found.</MudAlert>
+                        }
+                    </MudTabPanel>
+
+                    <!-- History Tab -->
+                    <MudTabPanel Text="Full History" Icon="@Icons.Material.Filled.History">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadFullHistory" 
+                                   Disabled="_isLoadingHistory" Class="mb-3">
+                            @if (_isLoadingHistory)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            }
+                            Load Full @GetSeriesDisplayName(_selectedSeries) History
+                        </MudButton>
+                        
+                        @if (_history != null && _history.Any())
+                        {
+                            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Season</th>
+                                        <th>Start</th>
+                                        <th>Finish</th>
+                                        <th>Laps Led</th>
+                                        <th>Points</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var result in _history)
+                                    {
+                                        <tr>
+                                            <td>@(result.GameDate?.ToString("MM/dd/yyyy") ?? "-")</td>
+                                            <td>@result.Season</td>
+                                            <td>@(result.StartPosition?.ToString() ?? "-")</td>
+                                            <td>P@result.FinishPosition</td>
+                                            <td>@(result.LapsLed?.ToString() ?? "0")</td>
+                                            <td>@(result.Points?.ToString() ?? "-")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                            <MudText Typo="Typo.caption" Class="mt-2">@_history.Count @GetSeriesDisplayName(_selectedSeries) results</MudText>
                         }
                     </MudTabPanel>
                 </MudTabs>
             }
             else if (_isLoading)
             {
-                <MudPaper Class="pa-4">
-                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
-                    <MudText Class="ml-3" Typo="Typo.body1">Loading profile...</MudText>
+                <MudPaper Class="pa-8 d-flex flex-column align-center justify-center">
+                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+                    <MudText Class="mt-4">Loading @GetSeriesDisplayName(_selectedSeries) profile...</MudText>
                 </MudPaper>
             }
-            else if (!string.IsNullOrEmpty(_selectedEntity))
+            else
             {
-                <MudAlert Severity="Severity.Info">Select an entity to view their profile.</MudAlert>
+                <MudPaper Class="pa-8 d-flex flex-column align-center justify-center" Elevation="1">
+                    <MudIcon Icon="@Icons.Material.Filled.PersonSearch" Size="Size.Large" Color="Color.Secondary" />
+                    <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mt-2">Search for a driver</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Select a series, then search for a driver</MudText>
+                </MudPaper>
             }
         </MudItem>
     </MudGrid>
 </MudContainer>
 
 @code {
-    // Selection state
-    private string _selectedSport = "nascar";
-    private string _selectedSeries;
-    private string _selectedTeam;
-    private string _selectedEntity;
-    private int? _selectedYear;
-    
-    // Comparison state  
-    private int? _compYearA;
-    private int? _compYearB;
-    private ProfileData _compDataA;
-    private ProfileData _compDataB;
-
-    // Profile data
-    private List<int> _availableYears = new();
-    private ProfileData _profileData;
-    
-    // Loading states
+    private string _selectedSeries = "cup";
+    private string _selectedDriver = "";
+    private int? _selectedSeason;
     private bool _isLoading = false;
-    private string _historySearchString = "";
+    private bool _isLoadingHistory = false;
+    
+    private List<string> _driverList = new();
+    private List<int> _availableSeasons = new();
+    private DriverProfile? _profile;
+    private List<RaceResult>? _history;
 
-    private int? CompYearA
+    protected override async Task OnInitializedAsync()
     {
-        get => _compYearA;
-        set
+        await LoadDriverList();
+    }
+
+    private string GetSeriesDisplayName(string series) => series switch
+    {
+        "cup" => "Cup Series",
+        "xfinity" => "Xfinity Series",
+        "trucks" => "Trucks Series",
+        _ => "NASCAR"
+    };
+
+    private async Task OnSeriesChanged(string series)
+    {
+        _selectedSeries = series;
+        _selectedDriver = "";
+        _profile = null;
+        _history = null;
+        _availableSeasons.Clear();
+        await LoadDriverList();
+    }
+
+    private async Task LoadDriverList()
+    {
+        try
         {
-            if (_compYearA != value)
+            var url = $"http://backend:8000/db/profiles/nascar/list?entity_type=driver&series={_selectedSeries}&limit=1000";
+            var response = await Http.GetFromJsonAsync<ProfileListResponse>(url);
+            if (response?.Entities != null)
             {
-                _compYearA = value;
-                if (value.HasValue && !string.IsNullOrEmpty(_selectedEntity))
-                    _ = LoadCompProfile(value.Value, true);
-                else
-                    _compDataA = null;
+                _driverList = response.Entities.Select(e => e.Name).Distinct().ToList();
             }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading drivers: {ex.Message}", Severity.Warning);
         }
     }
 
-    private int? CompYearB
+    private Task<IEnumerable<string>> SearchDrivers(string value, CancellationToken token)
     {
-        get => _compYearB;
-        set
-        {
-            if (_compYearB != value)
-            {
-                _compYearB = value;
-                if (value.HasValue && !string.IsNullOrEmpty(_selectedEntity))
-                    _ = LoadCompProfile(value.Value, false);
-                else
-                    _compDataB = null;
-            }
-        }
-    }
-
-    private async Task OnEntityChanged(string entity)
-    {
-        if (_selectedEntity == entity) return;
+        if (string.IsNullOrEmpty(value))
+            return Task.FromResult(_driverList.Take(50).AsEnumerable());
         
-        _selectedEntity = entity;
-        _selectedYear = null;
-        _compYearA = null;
-        _compYearB = null;
-        _compDataA = null;
-        _compDataB = null;
-        _profileData = null;
-        _availableYears.Clear();
+        return Task.FromResult(_driverList
+            .Where(d => d.Contains(value, StringComparison.OrdinalIgnoreCase))
+            .Take(50)
+            .AsEnumerable());
+    }
 
-        if (!string.IsNullOrEmpty(entity))
+    private async Task OnDriverSelected(string driver)
+    {
+        _selectedDriver = driver;
+        _profile = null;
+        _history = null;
+        _availableSeasons.Clear();
+        
+        if (!string.IsNullOrEmpty(driver))
         {
             await LoadProfile();
         }
     }
 
-    private bool FilterHistory(Dictionary<string, object> element)
-    {
-        if (string.IsNullOrWhiteSpace(_historySearchString))
-            return true;
-            
-        foreach (var val in element.Values)
-        {
-            if (val?.ToString()?.Contains(_historySearchString, StringComparison.OrdinalIgnoreCase) == true)
-                return true;
-        }
-        return false;
-    }
-
     private async Task LoadProfile()
     {
+        if (string.IsNullOrEmpty(_selectedDriver)) return;
+        
         _isLoading = true;
         try
         {
-            _profileData = await MLClient.GetEntityProfileAsync(_selectedSport, _selectedEntity, _selectedSeries, _selectedYear);
-            
-            // Update available years if returned
-            if (_profileData.Years != null && _profileData.Years.Any())
+            var url = $"http://backend:8000/db/profiles/nascar/{Uri.EscapeDataString(_selectedDriver)}?series={_selectedSeries}";
+            if (_selectedSeason.HasValue)
             {
-                _availableYears = _profileData.Years;
+                url += $"&season={_selectedSeason.Value}";
+            }
+            
+            _profile = await Http.GetFromJsonAsync<DriverProfile>(url);
+            
+            if (_profile?.AvailableSeasons != null)
+            {
+                _availableSeasons = _profile.AvailableSeasons;
             }
         }
         catch (Exception ex)
@@ -274,27 +336,68 @@
         finally
         {
             _isLoading = false;
-            await InvokeAsync(StateHasChanged);
         }
     }
 
-    private async Task LoadCompProfile(int year, bool isA)
+    private async Task LoadFullHistory()
     {
+        if (string.IsNullOrEmpty(_selectedDriver)) return;
+        
+        _isLoadingHistory = true;
         try
         {
-            var data = await MLClient.GetEntityProfileAsync(_selectedSport, _selectedEntity, _selectedSeries, year);
-            if (isA)
-                _compDataA = data;
-            else
-                _compDataB = data;
+            var url = $"http://backend:8000/db/profiles/nascar/{Uri.EscapeDataString(_selectedDriver)}/history?series={_selectedSeries}&limit=100";
+            var response = await Http.GetFromJsonAsync<HistoryResponse>(url);
+            _history = response?.History ?? new();
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error loading comparison data: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Error loading history: {ex.Message}", Severity.Error);
         }
         finally
         {
-            await InvokeAsync(StateHasChanged);
+            _isLoadingHistory = false;
         }
+    }
+
+    // Response models
+    private class ProfileListResponse
+    {
+        public List<EntityInfo> Entities { get; set; } = new();
+    }
+
+    private class EntityInfo
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Type { get; set; } = "";
+        public string? Series { get; set; }
+        public Dictionary<string, object>? Metadata { get; set; }
+    }
+
+    private class DriverProfile
+    {
+        public EntityInfo Entity { get; set; } = new();
+        public string Sport { get; set; } = "";
+        public List<int> AvailableSeasons { get; set; } = new();
+        public Dictionary<string, Dictionary<string, object>> Stats { get; set; } = new();
+        public List<RaceResult> RecentResults { get; set; } = new();
+    }
+
+    private class RaceResult
+    {
+        public DateTime? GameDate { get; set; }
+        public int? Season { get; set; }
+        public int? FinishPosition { get; set; }
+        public int? StartPosition { get; set; }
+        public int? LapsLed { get; set; }
+        public int? Points { get; set; }
+    }
+
+    private class HistoryResponse
+    {
+        public string Entity { get; set; } = "";
+        public int Count { get; set; }
+        public List<RaceResult> History { get; set; } = new();
     }
 }
