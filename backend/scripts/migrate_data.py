@@ -192,12 +192,13 @@ async def migrate_nascar(conn, data_dir: Path):
                         }
                         content_hash = compute_content_hash(hash_data)
                         
-                        # Insert result with duplicate protection
+                        # Insert/Update result with UPSERT
                         try:
                             await conn.execute(
                                 """INSERT INTO results (sport_id, season, track, metadata, content_hash)
                                    VALUES ($1, $2, $3, $4, $5)
-                                   ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL DO NOTHING""",
+                                   ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL 
+                                   DO UPDATE SET metadata = EXCLUDED.metadata""",
                                 sport_id,
                                 season,
                                 str(row.get(track_col, ''))[:255] if track_col else None,
@@ -208,7 +209,7 @@ async def migrate_nascar(conn, data_dir: Path):
                             file_imported += 1
                             total_imported += 1
                         except asyncpg.UniqueViolationError:
-                            pass  # Duplicate, skip
+                            pass  # Unexpected, but handle gracefully
                     
                     logger.info(f"    Committed {batch_count} records")
                 
@@ -503,7 +504,8 @@ async def migrate_nba(conn, data_dir: Path):
                                 await conn.execute(
                                     """INSERT INTO results (sport_id, home_entity_id, away_entity_id, metadata, content_hash)
                                        VALUES ($1, $2, $3, $4, $5)
-                                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL DO NOTHING""",
+                                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL 
+                                       DO UPDATE SET metadata = EXCLUDED.metadata""",
                                     sport_id, home_id, away_id, json.dumps(game_data), content_hash
                                 )
                                 file_imported += 1

@@ -95,6 +95,13 @@
                                Disabled="@_isUpdating">
                         Train
                     </MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Success"
+                               StartIcon="@Icons.Material.Filled.Storage"
+                               OnClick="@(() => SyncToDatabase("nascar"))"
+                               Disabled="@_isUpdating"
+                               Title="Import updated data to database">
+                        Sync DB
+                    </MudButton>
                 </MudCardActions>
             </MudCard>
         </MudItem>
@@ -221,11 +228,18 @@
                         }
                     </MudCardContent>
                     <MudCardActions>
-                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" FullWidth="true"
+                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
                                    StartIcon="@Icons.Material.Filled.ModelTraining"
                                    OnClick="@(() => RetrainModel(sport))"
                                    Disabled="@_isUpdating">
-                            Train Model
+                            Train
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Success"
+                                   StartIcon="@Icons.Material.Filled.Storage"
+                                   OnClick="@(() => SyncToDatabase(sport))"
+                                   Disabled="@_isUpdating"
+                                   Title="Import updated data to database">
+                            Sync DB
                         </MudButton>
                     </MudCardActions>
                 </MudCard>
@@ -684,6 +698,63 @@
         catch (Exception ex)
         {
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isUpdating = false;
+        }
+    }
+    
+    private async Task SyncToDatabase(string sport)
+    {
+        _isUpdating = true;
+        try
+        {
+            Snackbar.Add($"Syncing {sport.ToUpper()} data to database...", Severity.Info);
+            
+            using var http = new HttpClient();
+            http.Timeout = TimeSpan.FromMinutes(10); // Long timeout for large imports
+            
+            var response = await http.PostAsync($"http://backend:8000/db/import/csv/{sport}", null);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"{sport.ToUpper()} data synced to database! Check import history for details.", Severity.Success);
+                Logger.LogInformation("Database sync triggered for {Sport}: {Result}", sport, result);
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Sync failed: {error}", Severity.Error);
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            // Try localhost if backend hostname fails
+            try
+            {
+                using var http2 = new HttpClient();
+                http2.Timeout = TimeSpan.FromMinutes(10);
+                var response = await http2.PostAsync($"http://localhost:8000/db/import/csv/{sport}", null);
+                if (response.IsSuccessStatusCode)
+                {
+                    Snackbar.Add($"{sport.ToUpper()} data synced to database!", Severity.Success);
+                }
+                else
+                {
+                    Snackbar.Add("Sync failed - check server logs", Severity.Error);
+                }
+            }
+            catch
+            {
+                Snackbar.Add($"Error connecting to backend: {ex.Message}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            Logger.LogError(ex, "Database sync failed for {Sport}", sport);
         }
         finally
         {
