@@ -86,29 +86,76 @@ async def was_file_imported(conn, sport_id: int, filename: str) -> bool:
     return count > 0
 
 
-async def get_or_create_entity(conn, sport_id: int, name: str, entity_type: str) -> int:
-    """Get entity ID, create if not exists."""
-    entity_id = await conn.fetchval(
-        "SELECT id FROM entities WHERE sport_id = $1 AND name = $2 AND type = $3",
-        sport_id, name, entity_type
-    )
-    if not entity_id:
+async def get_or_create_entity(conn, sport_id: int, name: str, entity_type: str, series: str = None) -> int:
+    """Get entity ID, create if not exists. Supports optional series for NASCAR."""
+    if series:
         entity_id = await conn.fetchval(
-            """INSERT INTO entities (sport_id, name, type) 
-               VALUES ($1, $2, $3) RETURNING id""",
+            "SELECT id FROM entities WHERE sport_id = $1 AND name = $2 AND type = $3 AND series = $4",
+            sport_id, name, entity_type, series
+        )
+        if not entity_id:
+            entity_id = await conn.fetchval(
+                """INSERT INTO entities (sport_id, name, type, series) 
+                   VALUES ($1, $2, $3, $4) RETURNING id""",
+                sport_id, name, entity_type, series
+            )
+    else:
+        entity_id = await conn.fetchval(
+            "SELECT id FROM entities WHERE sport_id = $1 AND name = $2 AND type = $3",
             sport_id, name, entity_type
         )
+        if not entity_id:
+            entity_id = await conn.fetchval(
+                """INSERT INTO entities (sport_id, name, type) 
+                   VALUES ($1, $2, $3) RETURNING id""",
+                sport_id, name, entity_type
+            )
     return entity_id
 
 
+def parse_series_from_filename(filename: str) -> str:
+    """Parse NASCAR series from filename.
+    cup_series.rda -> 'cup'
+    xfinity_series.rda -> 'xfinity'
+    truck_series.rda -> 'trucks'
+    """
+    fname = filename.lower()
+    if 'cup' in fname:
+        return 'cup'
+    elif 'xfinity' in fname:
+        return 'xfinity'
+    elif 'truck' in fname:
+        return 'trucks'
+    return None
+
+
 async def migrate_nascar(conn, data_dir: Path):
-    """Migrate NASCAR race data to PostgreSQL with batching."""
-    logger.info("Starting NASCAR migration (batched)...")
+    """Migrate NASCAR race data to PostgreSQL with batching and series support."""
+    logger.info("Starting NASCAR migration (batched with series support)...")
     
     sport_id = await get_or_create_sport(conn, "nascar")
     
     nascar_dir = data_dir / "nascar"
-    csv_files = list(nascar_dir.glob("*.csv")) if nascar_dir.exists() else []
+    
+    # Look for RDA-converted CSVs first (these have series info), then regular CSVs
+    # Check raw/ directory for series-specific files
+    raw_dir = nascar_dir / "raw"
+    csv_files = []
+    
+    # Priority: look for converted CSVs from RDA files in raw/
+    if raw_dir.exists():
+        for rda_file in raw_dir.glob("*.rda"):
+            # Check if converted CSV exists
+            csv_path = nascar_dir / f"{rda_file.stem}.csv"
+            if csv_path.exists():
+                csv_files.append((csv_path, parse_series_from_filename(rda_file.name)))
+    
+    # Also check for regular CSVs in main directory (without series)
+    if nascar_dir.exists():
+        for csv_file in nascar_dir.glob("*.csv"):
+            # Skip if already added with series info
+            if not any(str(csv_file) == str(f[0]) for f in csv_files):
+                csv_files.append((csv_file, parse_series_from_filename(csv_file.name)))
     
     if not csv_files:
         logger.warning(f"No NASCAR CSV files found in {nascar_dir}")
@@ -116,20 +163,20 @@ async def migrate_nascar(conn, data_dir: Path):
     
     total_imported = 0
     
-    for csv_file in csv_files:
+    for csv_path, series in csv_files:
         # Skip already imported files
-        if await was_file_imported(conn, sport_id, csv_file.name):
-            logger.info(f"Skipping {csv_file.name} - already imported")
+        if await was_file_imported(conn, sport_id, csv_path.name):
+            logger.info(f"Skipping {csv_path.name} - already imported")
             continue
             
-        logger.info(f"Processing {csv_file.name}...")
+        logger.info(f"Processing {csv_path.name} (series: {series or 'unknown'})...")
         
         try:
             # Read CSV in chunks to save memory
             chunk_size = 5000
             file_imported = 0
             
-            for chunk_num, chunk in enumerate(pd.read_csv(csv_file, low_memory=False, chunksize=chunk_size)):
+            for chunk_num, chunk in enumerate(pd.read_csv(csv_path, low_memory=False, chunksize=chunk_size)):
                 logger.info(f"  Processing chunk {chunk_num + 1}...")
                 
                 # Detect columns
@@ -140,7 +187,7 @@ async def migrate_nascar(conn, data_dir: Path):
                 start_col = next((c for c in chunk.columns if c.lower() in ['start', 'start_position', 'grid']), None)
                 
                 if not driver_col or not year_col:
-                    logger.warning(f"Skipping {csv_file.name} - missing required columns")
+                    logger.warning(f"Skipping {csv_path.name} - missing required columns")
                     break
                 
                 # Start transaction for this batch
@@ -152,13 +199,14 @@ async def migrate_nascar(conn, data_dir: Path):
                         if not driver_name or driver_name == 'nan':
                             continue
                         
-                        # Get or create driver
-                        driver_id = await get_or_create_entity(conn, sport_id, driver_name, 'driver')
+                        # Get or create driver WITH SERIES
+                        driver_id = await get_or_create_entity(conn, sport_id, driver_name, 'driver', series)
                         
                         # Build metadata
                         result_metadata = {
-                            'source_file': csv_file.name,
+                            'source_file': csv_path.name,
                             'driver_id': driver_id,
+                            'series': series,
                         }
                         
                         if finish_col and pd.notna(row.get(finish_col)):
@@ -186,6 +234,7 @@ async def migrate_nascar(conn, data_dir: Path):
                             'sport': 'nascar',
                             'driver': driver_name,
                             'season': season,
+                            'series': series,
                             'track': str(row.get(track_col, '')) if track_col else '',
                             'finish': result_metadata.get('finish'),
                             'start': result_metadata.get('start'),
@@ -195,12 +244,13 @@ async def migrate_nascar(conn, data_dir: Path):
                         # Insert/Update result with UPSERT
                         try:
                             await conn.execute(
-                                """INSERT INTO results (sport_id, season, track, metadata, content_hash)
-                                   VALUES ($1, $2, $3, $4, $5)
+                                """INSERT INTO results (sport_id, season, series, track, metadata, content_hash)
+                                   VALUES ($1, $2, $3, $4, $5, $6)
                                    ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL 
                                    DO UPDATE SET metadata = EXCLUDED.metadata""",
                                 sport_id,
                                 season,
+                                series,
                                 str(row.get(track_col, ''))[:255] if track_col else None,
                                 json.dumps(result_metadata),
                                 content_hash
@@ -220,17 +270,17 @@ async def migrate_nascar(conn, data_dir: Path):
             await conn.execute(
                 """INSERT INTO import_history (sport_id, source, file_name, rows_imported, status)
                    VALUES ($1, $2, $3, $4, $5)""",
-                sport_id, 'csv', csv_file.name, file_imported, 'success'
+                sport_id, 'csv', csv_path.name, file_imported, 'success'
             )
-            logger.info(f"  Completed {csv_file.name}: {file_imported} records")
+            logger.info(f"  Completed {csv_path.name}: {file_imported} records (series: {series})")
                     
         except Exception as e:
-            logger.error(f"Error processing {csv_file.name}: {e}")
+            logger.error(f"Error processing {csv_path.name}: {e}")
             # Record failed import
             await conn.execute(
                 """INSERT INTO import_history (sport_id, source, file_name, rows_imported, status, error_message)
                    VALUES ($1, $2, $3, $4, $5, $6)""",
-                sport_id, 'csv', csv_file.name, 0, 'failed', str(e)
+                sport_id, 'csv', csv_path.name, 0, 'failed', str(e)
             )
     
     logger.info(f"NASCAR migration complete: {total_imported} records imported")
