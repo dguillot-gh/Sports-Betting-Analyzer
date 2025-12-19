@@ -330,14 +330,16 @@ async def get_entity_profile(sport: str, name: str, series: str = None, season: 
         
         # Get recent results (last 10)
         if sport == "nascar":
+            # NASCAR: results table has driver data in metadata (driver_id, finish, start)
             results = await conn.fetch("""
-                SELECT r.game_date, r.metadata, rr.finish_position, rr.start_position, rr.laps_led
+                SELECT r.game_date, r.season, r.series, r.track, r.metadata
                 FROM results r
-                JOIN race_results rr ON rr.result_id = r.id
-                WHERE rr.entity_id = $1
-                ORDER BY r.game_date DESC
+                WHERE r.sport_id = $1 
+                  AND r.metadata->>'driver_id' = $2::text
+                  AND ($3::text IS NULL OR r.series = $3)
+                ORDER BY r.game_date DESC, r.season DESC
                 LIMIT 10
-            """, entity_id)
+            """, sport_id, str(entity_id), series)
         else:
             # NBA/NFL - entity could be home or away
             results = await conn.fetch("""
@@ -396,15 +398,15 @@ async def get_entity_history(sport: str, name: str, limit: int = 50):
         entity_id = entity["id"]
         
         if sport == "nascar":
+            # NASCAR: query results table with metadata containing driver_id
             rows = await conn.fetch("""
-                SELECT r.game_date, r.season, r.metadata as race_info,
-                       rr.finish_position, rr.start_position, rr.laps_led, rr.points
+                SELECT r.game_date, r.season, r.series, r.track, r.metadata
                 FROM results r
-                JOIN race_results rr ON rr.result_id = r.id
-                WHERE rr.entity_id = $1
-                ORDER BY r.game_date DESC
-                LIMIT $2
-            """, entity_id, limit)
+                WHERE r.sport_id = $1 
+                  AND r.metadata->>'driver_id' = $2::text
+                ORDER BY r.season DESC, r.game_date DESC
+                LIMIT $3
+            """, sport_id, str(entity_id), limit)
         else:
             rows = await conn.fetch("""
                 SELECT r.game_date, r.season, r.home_score, r.away_score, r.metadata,
