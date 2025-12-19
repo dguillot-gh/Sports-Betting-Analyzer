@@ -294,39 +294,92 @@ async def get_entity_profile(sport: str, name: str, series: str = None, season: 
         
         entity_id = entity["id"]
         
-        # Get available seasons (from stats table, no series filter here)
-        seasons = await conn.fetch("""
-            SELECT DISTINCT season FROM stats 
-            WHERE entity_id = $1 AND season IS NOT NULL
-            ORDER BY season DESC
-        """, entity_id)
+        # For NASCAR, get available seasons from results (stats table is empty)
+        if sport == "nascar":
+            seasons = await conn.fetch("""
+                SELECT DISTINCT season FROM results 
+                WHERE sport_id = $1 
+                  AND metadata->>'driver_id' = $2::text
+                  AND season IS NOT NULL
+                  AND ($3::text IS NULL OR series = $3)
+                ORDER BY season DESC
+            """, sport_id, str(entity_id), series)
+        else:
+            seasons = await conn.fetch("""
+                SELECT DISTINCT season FROM stats 
+                WHERE entity_id = $1 AND season IS NOT NULL
+                ORDER BY season DESC
+            """, entity_id)
         available_seasons = [row["season"] for row in seasons]
         
-        # Get stats (stats table stores data as JSONB in 'stats' column)
-        stats_query = """
-            SELECT stat_type, season, stats
-            FROM stats
-            WHERE entity_id = $1
-        """
-        if season:
-            stats_query += f" AND season = {season}"
-        stats_query += " ORDER BY season DESC, stat_type"
-        
-        stats_rows = await conn.fetch(stats_query, entity_id)
-        
-        # Organize stats by season
+        # For NASCAR, compute stats from results metadata
         stats_by_season = {}
-        for row in stats_rows:
-            s = str(row["season"]) if row["season"] else "career"
-            if s not in stats_by_season:
-                stats_by_season[s] = {}
-            # stats is a JSONB object, merge it into the season dict
-            if row["stats"]:
+        if sport == "nascar":
+            # Get all results for this driver
+            all_results = await conn.fetch("""
+                SELECT season, metadata
+                FROM results
+                WHERE sport_id = $1 
+                  AND metadata->>'driver_id' = $2::text
+                  AND ($3::text IS NULL OR series = $3)
+            """, sport_id, str(entity_id), series)
+            
+            # Organize by season and compute stats
+            season_data = {}
+            for row in all_results:
+                s = str(row["season"]) if row["season"] else "unknown"
+                if s not in season_data:
+                    season_data[s] = []
+                
+                # Parse metadata
                 try:
-                    stat_data = json.loads(row["stats"]) if isinstance(row["stats"], str) else row["stats"]
-                    stats_by_season[s].update(stat_data)
+                    meta = json.loads(row["metadata"]) if isinstance(row["metadata"], str) else row["metadata"]
+                    if meta:
+                        season_data[s].append(meta)
                 except:
-                    stats_by_season[s][row["stat_type"]] = row["stats"]
+                    pass
+            
+            # Compute aggregated stats for each season
+            for s, races in season_data.items():
+                finishes = [r.get("finish") for r in races if r.get("finish") is not None]
+                starts = [r.get("start") for r in races if r.get("start") is not None]
+                
+                if finishes:
+                    stats_by_season[s] = {
+                        "races": len(finishes),
+                        "wins": sum(1 for f in finishes if f == 1),
+                        "top_5": sum(1 for f in finishes if f <= 5),
+                        "top_10": sum(1 for f in finishes if f <= 10),
+                        "avg_finish": round(sum(finishes) / len(finishes), 1),
+                        "best_finish": min(finishes),
+                        "poles": sum(1 for s in starts if s == 1),
+                        "avg_start": round(sum(starts) / len(starts), 1) if starts else None,
+                    }
+        else:
+            # Get stats from stats table for other sports
+            stats_query = """
+                SELECT stat_type, season, stats
+                FROM stats
+                WHERE entity_id = $1
+            """
+            if season:
+                stats_query += f" AND season = {season}"
+            stats_query += " ORDER BY season DESC, stat_type"
+            
+            stats_rows = await conn.fetch(stats_query, entity_id)
+            
+            # Organize stats by season
+            for row in stats_rows:
+                s = str(row["season"]) if row["season"] else "career"
+                if s not in stats_by_season:
+                    stats_by_season[s] = {}
+                # stats is a JSONB object, merge it into the season dict
+                if row["stats"]:
+                    try:
+                        stat_data = json.loads(row["stats"]) if isinstance(row["stats"], str) else row["stats"]
+                        stats_by_season[s].update(stat_data)
+                    except:
+                        stats_by_season[s][row["stat_type"]] = row["stats"]
         
         # Get recent results (last 10)
         if sport == "nascar":

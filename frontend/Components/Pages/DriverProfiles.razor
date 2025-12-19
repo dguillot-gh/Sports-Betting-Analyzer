@@ -137,17 +137,18 @@
                             <MudSimpleTable Dense="true" Hover="true" Striped="true">
                                 <thead>
                                     <tr>
-                                        <th>Date</th>
+                                        <th>Season</th>
+                                        <th>Track</th>
                                         <th>Start</th>
                                         <th>Finish</th>
-                                        <th>Laps Led</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @foreach (var result in _profile.RecentResults)
                                     {
                                         <tr>
-                                            <td>@(result.GameDate?.ToString("MM/dd/yyyy") ?? "-")</td>
+                                            <td>@result.Season</td>
+                                            <td>@(result.Track ?? "-")</td>
                                             <td>@(result.StartPosition?.ToString() ?? "-")</td>
                                             <td>
                                                 <MudChip T="string" Size="Size.Small" 
@@ -155,7 +156,6 @@
                                                     P@result.FinishPosition
                                                 </MudChip>
                                             </td>
-                                            <td>@(result.LapsLed?.ToString() ?? "0")</td>
                                         </tr>
                                     }
                                 </tbody>
@@ -183,24 +183,25 @@
                             <MudSimpleTable Dense="true" Hover="true" Striped="true">
                                 <thead>
                                     <tr>
-                                        <th>Date</th>
                                         <th>Season</th>
+                                        <th>Track</th>
                                         <th>Start</th>
                                         <th>Finish</th>
-                                        <th>Laps Led</th>
-                                        <th>Points</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @foreach (var result in _history)
                                     {
                                         <tr>
-                                            <td>@(result.GameDate?.ToString("MM/dd/yyyy") ?? "-")</td>
                                             <td>@result.Season</td>
+                                            <td>@(result.Track ?? "-")</td>
                                             <td>@(result.StartPosition?.ToString() ?? "-")</td>
-                                            <td>P@result.FinishPosition</td>
-                                            <td>@(result.LapsLed?.ToString() ?? "0")</td>
-                                            <td>@(result.Points?.ToString() ?? "-")</td>
+                                            <td>
+                                                <MudChip T="string" Size="Size.Small" 
+                                                         Color="@(result.FinishPosition <= 3 ? Color.Success : result.FinishPosition <= 10 ? Color.Info : Color.Default)">
+                                                    P@result.FinishPosition
+                                                </MudChip>
+                                            </td>
                                         </tr>
                                     }
                                 </tbody>
@@ -384,10 +385,40 @@
     {
         public DateTime? GameDate { get; set; }
         public int? Season { get; set; }
-        public int? FinishPosition { get; set; }
-        public int? StartPosition { get; set; }
-        public int? LapsLed { get; set; }
+        public string? Track { get; set; }
+        public string? Series { get; set; }
+        public string? Metadata { get; set; }  // JSON string from API
+        
+        // Direct properties (used if API returns them directly)
+        [System.Text.Json.Serialization.JsonPropertyName("finish_position")]
+        public int? FinishPositionDirect { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("start_position")]
+        public int? StartPositionDirect { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("laps_led")]
+        public int? LapsLedDirect { get; set; }
         public int? Points { get; set; }
+        
+        // Computed properties - try direct first, then parse from metadata
+        public int? FinishPosition => FinishPositionDirect ?? GetMetadataInt("finish");
+        public int? StartPosition => StartPositionDirect ?? GetMetadataInt("start");
+        public int? LapsLed => LapsLedDirect ?? GetMetadataInt("laps_led");
+        
+        private int? GetMetadataInt(string key)
+        {
+            if (string.IsNullOrEmpty(Metadata)) return null;
+            try
+            {
+                var doc = System.Text.Json.JsonDocument.Parse(Metadata);
+                if (doc.RootElement.TryGetProperty(key, out var prop))
+                {
+                    return prop.ValueKind == System.Text.Json.JsonValueKind.Number 
+                        ? prop.GetInt32() 
+                        : null;
+                }
+            }
+            catch { }
+            return null;
+        }
     }
 
     private class HistoryResponse
