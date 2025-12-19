@@ -183,7 +183,7 @@ async def migrate_nascar(conn, data_dir: Path):
                 driver_col = next((c for c in chunk.columns if c.lower() in ['driver', 'driver_name']), None)
                 track_col = next((c for c in chunk.columns if c.lower() in ['track', 'track_name']), None)
                 year_col = next((c for c in chunk.columns if c.lower() in ['year', 'season']), None)
-                finish_col = next((c for c in chunk.columns if c.lower() in ['finish', 'finish_position', 'pos']), None)
+                finish_col = next((c for c in chunk.columns if c.lower() in ['finish', 'finish_position', 'finishing_position', 'pos']), None)
                 start_col = next((c for c in chunk.columns if c.lower() in ['start', 'start_position', 'grid']), None)
                 
                 if not driver_col or not year_col:
