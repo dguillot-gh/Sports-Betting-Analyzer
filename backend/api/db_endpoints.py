@@ -294,24 +294,17 @@ async def get_entity_profile(sport: str, name: str, series: str = None, season: 
         
         entity_id = entity["id"]
         
-        # Get available seasons - filter by series if specified
-        if series and sport == 'nascar':
-            seasons = await conn.fetch("""
-                SELECT DISTINCT season FROM stats 
-                WHERE entity_id = $1 AND season IS NOT NULL AND series = $2
-                ORDER BY season DESC
-            """, entity_id, series)
-        else:
-            seasons = await conn.fetch("""
-                SELECT DISTINCT season FROM stats 
-                WHERE entity_id = $1 AND season IS NOT NULL
-                ORDER BY season DESC
-            """, entity_id)
+        # Get available seasons (from stats table, no series filter here)
+        seasons = await conn.fetch("""
+            SELECT DISTINCT season FROM stats 
+            WHERE entity_id = $1 AND season IS NOT NULL
+            ORDER BY season DESC
+        """, entity_id)
         available_seasons = [row["season"] for row in seasons]
         
-        # Get stats
+        # Get stats (stats table stores data as JSONB in 'stats' column)
         stats_query = """
-            SELECT stat_type, value, season
+            SELECT stat_type, season, stats
             FROM stats
             WHERE entity_id = $1
         """
@@ -324,10 +317,16 @@ async def get_entity_profile(sport: str, name: str, series: str = None, season: 
         # Organize stats by season
         stats_by_season = {}
         for row in stats_rows:
-            s = row["season"] or "career"
+            s = str(row["season"]) if row["season"] else "career"
             if s not in stats_by_season:
                 stats_by_season[s] = {}
-            stats_by_season[s][row["stat_type"]] = row["value"]
+            # stats is a JSONB object, merge it into the season dict
+            if row["stats"]:
+                try:
+                    stat_data = json.loads(row["stats"]) if isinstance(row["stats"], str) else row["stats"]
+                    stats_by_season[s].update(stat_data)
+                except:
+                    stats_by_season[s][row["stat_type"]] = row["stats"]
         
         # Get recent results (last 10)
         if sport == "nascar":
