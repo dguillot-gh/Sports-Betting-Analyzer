@@ -97,10 +97,6 @@
                                     <MudText Typo="Typo.h5" Style="color: white;">@_profile.Entity.Name</MudText>
                                     <MudText Typo="Typo.subtitle1" Style="color: rgba(255,255,255,0.8);">
                                         @GetSeriesDisplayName(_selectedSeries) Driver
-                                        @if (_profile.Entity.Metadata?.ContainsKey("team") == true)
-                                        {
-                                            <text> • @_profile.Entity.Metadata["team"]</text>
-                                        }
                                     </MudText>
                                 </div>
                                 <MudSpacer />
@@ -372,7 +368,7 @@
         public string Name { get; set; } = "";
         public string Type { get; set; } = "";
         public string? Series { get; set; }
-        public Dictionary<string, object>? Metadata { get; set; }
+        public System.Text.Json.JsonElement? Metadata { get; set; }
     }
 
     private class DriverProfile
