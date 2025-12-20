@@ -95,12 +95,12 @@
                                Disabled="@_isUpdating">
                         Train
                     </MudButton>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Success"
-                               StartIcon="@Icons.Material.Filled.Storage"
-                               OnClick="@(() => SyncToDatabase("nascar"))"
-                               Disabled="@_isUpdating"
-                               Title="Import updated data to database">
-                        Sync DB
+                    <MudButton Variant="Variant.Filled" Color="Color.Warning"
+                               StartIcon="@Icons.Material.Filled.DatasetLinked"
+                               OnClick="@OpenRdaImportDialog"
+                               Disabled="@(_isUpdating || _isRdaImporting)"
+                               Title="Import directly from .rda files with pre-computed stats">
+                        Import RDA
                     </MudButton>
                 </MudCardActions>
             </MudCard>
@@ -408,6 +408,102 @@
 
 </MudContainer>
 
+<!-- RDA Import Progress Dialog -->
+<MudDialog @bind-Visible="_showRdaDialog" Options="_rdaDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.DatasetLinked" Class="mr-2" />
+            NASCAR RDA Import
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (!_isRdaImporting)
+        {
+            <!-- Import Options -->
+            <MudStack Spacing="3">
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    Import directly from .rda files with pre-computed season stats.
+                </MudAlert>
+                
+                <MudSelect T="string" Label="Series" @bind-Value="_rdaSeries" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("all")">All Series</MudSelectItem>
+                    <MudSelectItem Value="@("cup")">Cup Series</MudSelectItem>
+                    <MudSelectItem Value="@("xfinity")">Xfinity Series</MudSelectItem>
+                    <MudSelectItem Value="@("trucks")">Trucks Series</MudSelectItem>
+                </MudSelect>
+                
+                <MudStack Row="true" Spacing="2">
+                    <MudNumericField T="int" Label="Year Start" @bind-Value="_rdaYearStart" 
+                                     Variant="Variant.Outlined" Min="2000" Max="2030" />
+                    <MudNumericField T="int" Label="Year End" @bind-Value="_rdaYearEnd" 
+                                     Variant="Variant.Outlined" Min="2000" Max="2030" />
+                </MudStack>
+                
+                <MudCheckBox T="bool" @bind-Value="_rdaClearExisting" 
+                             Label="Clear existing NASCAR data before import" Color="Color.Warning" />
+            </MudStack>
+        }
+        else
+        {
+            <!-- Progress Display -->
+            <MudStack Spacing="2">
+                <MudProgressLinear Color="Color.Primary" Indeterminate="@(_rdaStatus?.Status == "running")" 
+                                   Value="100" Class="mb-2" />
+                
+                <MudText Typo="Typo.subtitle2">
+                    Status: <MudChip T="string" Size="Size.Small" 
+                                     Color="@(_rdaStatus?.Status == "completed" ? Color.Success : 
+                                              _rdaStatus?.Status == "failed" ? Color.Error : Color.Info)">
+                        @(_rdaStatus?.Status ?? "unknown")
+                    </MudChip>
+                </MudText>
+                
+                @if (_rdaStatus?.StartedAt != null)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        Started: @FormatDate(_rdaStatus.StartedAt)
+                    </MudText>
+                }
+                
+                <MudPaper Class="pa-2 mt-2" Elevation="0" Outlined="true" 
+                          Style="max-height: 200px; overflow-y: auto; background: #1a1a2e;">
+                    @if (_rdaStatus?.Progress != null)
+                    {
+                        @foreach (var line in _rdaStatus.Progress)
+                        {
+                            <MudText Typo="Typo.caption" Style="font-family: monospace; color: #00ff88;">
+                                @line
+                            </MudText>
+                        }
+                    }
+                </MudPaper>
+                
+                @if (_rdaStatus?.Error != null)
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true">
+                        @_rdaStatus.Error
+                    </MudAlert>
+                }
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (!_isRdaImporting)
+        {
+            <MudButton OnClick="@CloseRdaDialog">Cancel</MudButton>
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@StartRdaImport">
+                Start Import
+            </MudButton>
+        }
+        else if (_rdaStatus?.Status == "completed" || _rdaStatus?.Status == "failed")
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@CloseRdaDialog">
+                Close
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
 @code {
     private DataStatusResponse? _dataStatus;
     private bool _isLoading = true;
@@ -426,6 +522,17 @@
     // Column Scan
     private bool _isScanning = false;
     private ColumnScanReport? _scanReport;
+    
+    // RDA Import Dialog
+    private bool _showRdaDialog = false;
+    private bool _isRdaImporting = false;
+    private string _rdaSeries = "all";
+    private int _rdaYearStart = 2012;
+    private int _rdaYearEnd = DateTime.Now.Year;
+    private bool _rdaClearExisting = false;
+    private RdaImportStatus? _rdaStatus;
+    private System.Threading.Timer? _rdaPollTimer;
+    private DialogOptions _rdaDialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
 
     protected override async Task OnInitializedAsync()
     {
@@ -809,6 +916,131 @@
         public int Missing { get; set; }
         public List<string> FoundList { get; set; } = new();
         public List<string> MissingList { get; set; } = new();
+    }
+    
+    // ===== RDA Import Methods =====
+    
+    private void OpenRdaImportDialog()
+    {
+        _isRdaImporting = false;
+        _rdaStatus = null;
+        _showRdaDialog = true;
+    }
+    
+    private void CloseRdaDialog()
+    {
+        _showRdaDialog = false;
+        _rdaPollTimer?.Dispose();
+        _rdaPollTimer = null;
+        _isRdaImporting = false;
+    }
+    
+    private async Task StartRdaImport()
+    {
+        _isRdaImporting = true;
+        _rdaStatus = new RdaImportStatus { Status = "starting", Progress = new List<string>() };
+        StateHasChanged();
+        
+        try
+        {
+            using var http = new HttpClient();
+            http.Timeout = TimeSpan.FromMinutes(30);
+            
+            var url = $"http://backend:8000/db/import/nascar/rda?series={_rdaSeries}&year_start={_rdaYearStart}&year_end={_rdaYearEnd}&clear_existing={_rdaClearExisting.ToString().ToLower()}";
+            var response = await http.PostAsync(url, null);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                // Start polling for status
+                _rdaPollTimer = new System.Threading.Timer(async _ => await PollRdaStatus(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2));
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                _rdaStatus = new RdaImportStatus { Status = "failed", Error = error };
+            }
+        }
+        catch (HttpRequestException)
+        {
+            // Try localhost
+            try
+            {
+                using var http2 = new HttpClient();
+                http2.Timeout = TimeSpan.FromMinutes(30);
+                var url = $"http://localhost:8000/db/import/nascar/rda?series={_rdaSeries}&year_start={_rdaYearStart}&year_end={_rdaYearEnd}&clear_existing={_rdaClearExisting.ToString().ToLower()}";
+                var response = await http2.PostAsync(url, null);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    _rdaPollTimer = new System.Threading.Timer(async _ => await PollRdaStatus(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2));
+                }
+            }
+            catch (Exception ex)
+            {
+                _rdaStatus = new RdaImportStatus { Status = "failed", Error = ex.Message };
+            }
+        }
+        catch (Exception ex)
+        {
+            _rdaStatus = new RdaImportStatus { Status = "failed", Error = ex.Message };
+        }
+        
+        StateHasChanged();
+    }
+    
+    private async Task PollRdaStatus()
+    {
+        try
+        {
+            using var http = new HttpClient();
+            RdaImportStatus? status = null;
+            
+            try
+            {
+                status = await http.GetFromJsonAsync<RdaImportStatus>("http://backend:8000/db/import/nascar/status");
+            }
+            catch
+            {
+                status = await http.GetFromJsonAsync<RdaImportStatus>("http://localhost:8000/db/import/nascar/status");
+            }
+            
+            if (status != null)
+            {
+                _rdaStatus = status;
+                await InvokeAsync(StateHasChanged);
+                
+                // Stop polling when complete or failed
+                if (status.Status == "completed" || status.Status == "failed")
+                {
+                    _rdaPollTimer?.Dispose();
+                    _rdaPollTimer = null;
+                    
+                    if (status.Status == "completed")
+                    {
+                        await InvokeAsync(async () =>
+                        {
+                            Snackbar.Add("RDA import completed successfully!", Severity.Success);
+                            await LoadStatus();
+                        });
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error polling RDA status");
+        }
+    }
+    
+    // Model for RDA import status
+    public class RdaImportStatus
+    {
+        public string Status { get; set; } = "idle";
+        public string? StartedAt { get; set; }
+        public string? CompletedAt { get; set; }
+        public List<string>? Progress { get; set; }
+        public object? Result { get; set; }
+        public string? Error { get; set; }
     }
 }
 
