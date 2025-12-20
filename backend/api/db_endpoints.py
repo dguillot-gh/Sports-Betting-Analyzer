@@ -163,6 +163,82 @@ async def run_kaggle_import(sport: str, dataset_id: str):
         logger.error(f"Kaggle import failed: {e}")
 
 
+@router.post("/import/nascar/rda")
+async def import_nascar_rda(
+    background_tasks: BackgroundTasks,
+    series: str = None,
+    year_start: int = 2012,
+    year_end: int = None,
+    clear_existing: bool = False
+):
+    """
+    Import NASCAR data directly from RDA files.
+    
+    Args:
+        series: Optional series filter ('cup', 'xfinity', 'trucks', or None for all)
+        year_start: Start year (default: 2012)
+        year_end: End year (default: current year)
+        clear_existing: Clear existing NASCAR data before import
+    """
+    from datetime import datetime
+    
+    if year_end is None:
+        year_end = datetime.now().year
+    
+    # Validate series
+    valid_series = [None, 'cup', 'xfinity', 'trucks', 'all']
+    if series not in valid_series:
+        raise HTTPException(status_code=400, detail=f"Invalid series. Must be one of: {valid_series}")
+    
+    # Start background import
+    background_tasks.add_task(run_rda_import, series, year_start, year_end, clear_existing)
+    
+    return {
+        "status": "started",
+        "message": f"RDA import started for NASCAR {series or 'all'} ({year_start}-{year_end})",
+        "year_range": f"{year_start}-{year_end}",
+        "series": series or "all",
+        "clear_existing": clear_existing
+    }
+
+
+async def run_rda_import(series: str, year_start: int, year_end: int, clear_existing: bool):
+    """Background task for RDA import."""
+    logger.info(f"Starting RDA import: series={series}, years={year_start}-{year_end}, clear={clear_existing}")
+    
+    try:
+        if clear_existing:
+            # Clear existing NASCAR data
+            conn = await get_db_connection()
+            try:
+                sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = 'nascar'")
+                if sport_id:
+                    if series and series != 'all':
+                        await conn.execute("DELETE FROM results WHERE sport_id = $1 AND series = $2", sport_id, series)
+                        await conn.execute("DELETE FROM stats WHERE series = $1", series)
+                        await conn.execute("DELETE FROM entities WHERE sport_id = $1 AND series = $2", sport_id, series)
+                        logger.info(f"Cleared existing {series} data")
+                    else:
+                        await conn.execute("DELETE FROM results WHERE sport_id = $1", sport_id)
+                        await conn.execute("DELETE FROM stats WHERE entity_id IN (SELECT id FROM entities WHERE sport_id = $1)", sport_id)
+                        await conn.execute("DELETE FROM entities WHERE sport_id = $1", sport_id)
+                        logger.info("Cleared all NASCAR data")
+            finally:
+                await conn.close()
+        
+        # Run RDA import
+        from scripts.rda_importer import import_nascar_rda
+        result = await import_nascar_rda(
+            series=series if series and series != 'all' else None,
+            year_start=year_start,
+            year_end=year_end
+        )
+        logger.info(f"RDA import complete: {result}")
+    except Exception as e:
+        logger.error(f"RDA import failed: {e}")
+        raise
+
+
 @router.delete("/clear/{sport}")
 async def clear_sport_data(sport: str):
     """Clear all data for a sport (careful!)."""
