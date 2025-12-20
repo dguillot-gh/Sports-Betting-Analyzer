@@ -12,12 +12,25 @@ import asyncpg
 import pandas as pd
 import json
 from pathlib import Path
+from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
 
 # Database URL
 DATABASE_URL = "postgresql://sports_user:sportsbetting2024@postgres:5432/sports_betting"
+
+# Import status tracking (in-memory for background task progress)
+import_status = {
+    "nascar_rda": {
+        "status": "idle",  # idle, running, completed, failed
+        "started_at": None,
+        "completed_at": None,
+        "progress": [],
+        "result": None,
+        "error": None
+    }
+}
 
 router = APIRouter(prefix="/db", tags=["database"])
 
@@ -26,6 +39,7 @@ class ImportRequest(BaseModel):
     sport: str
     source: str = "csv"  # 'csv', 'kaggle'
     file_path: Optional[str] = None
+
 
 
 class ImportResponse(BaseModel):
@@ -190,7 +204,16 @@ async def import_nascar_rda(
     if series not in valid_series:
         raise HTTPException(status_code=400, detail=f"Invalid series. Must be one of: {valid_series}")
     
-    # Start background import
+    # Update status and start background import
+    import_status["nascar_rda"] = {
+        "status": "running",
+        "started_at": datetime.now().isoformat(),
+        "completed_at": None,
+        "progress": [f"Import started for {series or 'all'} ({year_start}-{year_end})"],
+        "result": None,
+        "error": None
+    }
+    
     background_tasks.add_task(run_rda_import, series, year_start, year_end, clear_existing)
     
     return {
@@ -202,12 +225,19 @@ async def import_nascar_rda(
     }
 
 
+@router.get("/import/nascar/status")
+async def get_nascar_import_status():
+    """Get the current status of NASCAR RDA import."""
+    return import_status["nascar_rda"]
+
+
 async def run_rda_import(series: str, year_start: int, year_end: int, clear_existing: bool):
     """Background task for RDA import."""
     logger.info(f"Starting RDA import: series={series}, years={year_start}-{year_end}, clear={clear_existing}")
     
     try:
         if clear_existing:
+            import_status["nascar_rda"]["progress"].append("Clearing existing data...")
             # Clear existing NASCAR data
             conn = await get_db_connection()
             try:
@@ -217,14 +247,16 @@ async def run_rda_import(series: str, year_start: int, year_end: int, clear_exis
                         await conn.execute("DELETE FROM results WHERE sport_id = $1 AND series = $2", sport_id, series)
                         await conn.execute("DELETE FROM stats WHERE series = $1", series)
                         await conn.execute("DELETE FROM entities WHERE sport_id = $1 AND series = $2", sport_id, series)
-                        logger.info(f"Cleared existing {series} data")
+                        import_status["nascar_rda"]["progress"].append(f"Cleared existing {series} data")
                     else:
                         await conn.execute("DELETE FROM results WHERE sport_id = $1", sport_id)
                         await conn.execute("DELETE FROM stats WHERE entity_id IN (SELECT id FROM entities WHERE sport_id = $1)", sport_id)
                         await conn.execute("DELETE FROM entities WHERE sport_id = $1", sport_id)
-                        logger.info("Cleared all NASCAR data")
+                        import_status["nascar_rda"]["progress"].append("Cleared all NASCAR data")
             finally:
                 await conn.close()
+        
+        import_status["nascar_rda"]["progress"].append("Starting RDA file import...")
         
         # Run RDA import
         from scripts.rda_importer import import_nascar_rda
@@ -233,8 +265,26 @@ async def run_rda_import(series: str, year_start: int, year_end: int, clear_exis
             year_start=year_start,
             year_end=year_end
         )
+        
+        # Update status on completion
+        import_status["nascar_rda"]["status"] = "completed"
+        import_status["nascar_rda"]["completed_at"] = datetime.now().isoformat()
+        import_status["nascar_rda"]["result"] = result
+        
+        # Add summary to progress
+        if result.get("series_results"):
+            for sr in result["series_results"]:
+                import_status["nascar_rda"]["progress"].append(
+                    f"✅ {sr['series']}: {sr['results_imported']} results, {sr['stats_computed']} stats"
+                )
+        import_status["nascar_rda"]["progress"].append("Import complete!")
+        
         logger.info(f"RDA import complete: {result}")
     except Exception as e:
+        import_status["nascar_rda"]["status"] = "failed"
+        import_status["nascar_rda"]["completed_at"] = datetime.now().isoformat()
+        import_status["nascar_rda"]["error"] = str(e)
+        import_status["nascar_rda"]["progress"].append(f"❌ Error: {e}")
         logger.error(f"RDA import failed: {e}")
         raise
 
