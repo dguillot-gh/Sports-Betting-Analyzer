@@ -5,7 +5,7 @@ VisualStudioVersion = 17.14.36623.8
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SportsBettingAnalyzer", "SportsBettingAnalyzer.csproj", "{816E2405-B146-4775-8DF6-752B9B32B4CA}"
 EndProject
-Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "PythonMLService", "..\PythonMLService\PythonMLService.pyproj", "{7335E4B4-DAD1-438F-9D96-7F43CD2D8154}"
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "PythonMLService", "..\backend\PythonMLService.pyproj", "{7335E4B4-DAD1-438F-9D96-7F43CD2D8154}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
