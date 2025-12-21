@@ -3,6 +3,7 @@
 @using MudBlazor
 @inject HttpClient Http
 @inject ISnackbar Snackbar
+@inject NavigationManager Navigation
 
 <PageTitle>NASCAR Driver Profiles</PageTitle>
 
@@ -177,25 +178,27 @@
                             </MudPaper>
                         }
 
-                        <!-- Stats Cards -->
+                        <!-- Stats Cards - Scrollable -->
                         @if (_profile.Stats.Any())
                         {
                             <MudText Typo="Typo.h6" Class="mb-2">@GetSeriesDisplayName(_selectedSeries) Statistics</MudText>
-                            @foreach (var seasonStats in _profile.Stats.Take(3))
-                            {
-                                <MudText Typo="Typo.subtitle2" Class="mb-1">@seasonStats.Key Season</MudText>
-                                <MudGrid Class="mb-3">
-                                    @foreach (var stat in seasonStats.Value.Take(8))
-                                    {
-                                        <MudItem xs="6" sm="4" md="3">
-                                            <MudPaper Class="pa-3 text-center" Elevation="1">
-                                                <MudText Typo="Typo.h6" Color="Color.Primary">@stat.Value</MudText>
-                                                <MudText Typo="Typo.caption">@stat.Key</MudText>
-                                            </MudPaper>
-                                        </MudItem>
-                                    }
-                                </MudGrid>
-                            }
+                            <div style="max-height: 500px; overflow-y: auto;">
+                                @foreach (var seasonStats in _profile.Stats.OrderByDescending(s => s.Key))
+                                {
+                                    <MudText Typo="Typo.subtitle2" Class="mb-1">@seasonStats.Key Season</MudText>
+                                    <MudGrid Class="mb-3">
+                                        @foreach (var stat in seasonStats.Value.Take(12))
+                                        {
+                                            <MudItem xs="6" sm="4" md="3">
+                                                <MudPaper Class="pa-3 text-center" Elevation="1">
+                                                    <MudText Typo="Typo.h6" Color="Color.Primary">@stat.Value</MudText>
+                                                    <MudText Typo="Typo.caption">@FormatStatName(stat.Key)</MudText>
+                                                </MudPaper>
+                                            </MudItem>
+                                        }
+                                    </MudGrid>
+                                }
+                            </div>
                         }
                         else
                         {
@@ -341,7 +344,26 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Check for query parameters from deep links
+        var uri = new Uri(Navigation.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        
+        var seriesParam = query["series"];
+        var driverParam = query["driver"];
+        
+        if (!string.IsNullOrEmpty(seriesParam))
+        {
+            _selectedSeries = seriesParam;
+        }
+        
         await LoadDriverList();
+        
+        // If driver specified in URL, auto-load their profile
+        if (!string.IsNullOrEmpty(driverParam))
+        {
+            _selectedDriver = driverParam;
+            await LoadProfile();
+        }
     }
 
     private string GetSeriesDisplayName(string series) => series switch
@@ -354,6 +376,25 @@
 
     private string TruncateText(string? text, int maxLength) => 
         text != null && text.Length > maxLength ? text[..(maxLength - 3)] + "..." : text ?? "";
+
+    private string FormatStatName(string key) => key.ToLower() switch
+    {
+        "races" => "Races",
+        "wins" => "Wins",
+        "top_5" => "Top 5",
+        "top_10" => "Top 10",
+        "avg_finish" => "Avg Finish",
+        "best_finish" => "Best Finish",
+        "poles" => "Poles",
+        "avg_start" => "Avg Start",
+        "laps_led" => "Laps Led",
+        "total_pts" => "Points",
+        "dnf_count" => "DNFs",
+        "avg_rating" => "Avg Rating",
+        "stage_wins" => "Stage Wins",
+        "stage_points" => "Stage Pts",
+        _ => key.Replace("_", " ").ToUpperInvariant()
+    };
 
     private async Task OnSeriesChanged(string series)
     {
