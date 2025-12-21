@@ -706,3 +706,232 @@ BENEFITS:
 - Concurrent access
 - Mobile-ready
 """
+
+
+# ============================================
+# RACE RESULTS ENDPOINTS
+# ============================================
+
+@router.get("/races/{sport}/list")
+async def get_race_results_list(
+    sport: str,
+    series: str = None,
+    season: int = None,
+    track: str = None,
+    driver: str = None,
+    finish_max: int = None,  # For filtering wins (finish_max=1) or top 5 (finish_max=5)
+    limit: int = 100,
+    offset: int = 0
+):
+    """
+    Get race results with filters.
+    Filter by series, season, track, driver name, or finish position.
+    """
+    conn = await get_db_connection()
+    try:
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
+        if not sport_id:
+            raise HTTPException(status_code=404, detail=f"Sport '{sport}' not found")
+        
+        # Build dynamic query
+        query = """
+            SELECT r.id, r.season, r.series, r.track, r.metadata
+            FROM results r
+            WHERE r.sport_id = $1
+        """
+        params = [sport_id]
+        param_count = 1
+        
+        if series:
+            param_count += 1
+            query += f" AND r.series = ${param_count}"
+            params.append(series)
+        
+        if season:
+            param_count += 1
+            query += f" AND r.season = ${param_count}"
+            params.append(season)
+        
+        if track:
+            param_count += 1
+            query += f" AND LOWER(r.track) LIKE LOWER(${param_count})"
+            params.append(f"%{track}%")
+        
+        if driver:
+            param_count += 1
+            query += f" AND LOWER(r.metadata->>'driver_name') LIKE LOWER(${param_count})"
+            params.append(f"%{driver}%")
+        
+        if finish_max:
+            param_count += 1
+            query += f" AND (r.metadata->>'finish')::int <= ${param_count}"
+            params.append(finish_max)
+        
+        # Order and paginate
+        query += f" ORDER BY r.season DESC, (r.metadata->>'race_num')::int DESC NULLS LAST"
+        param_count += 1
+        query += f" LIMIT ${param_count}"
+        params.append(limit)
+        param_count += 1
+        query += f" OFFSET ${param_count}"
+        params.append(offset)
+        
+        results = await conn.fetch(query, *params)
+        
+        # Get total count for pagination
+        count_query = """
+            SELECT COUNT(*) FROM results r WHERE r.sport_id = $1
+        """
+        count_params = [sport_id]
+        if series:
+            count_query += " AND r.series = $2"
+            count_params.append(series)
+        if season:
+            count_query += f" AND r.season = ${len(count_params)+1}"
+            count_params.append(season)
+        if track:
+            count_query += f" AND LOWER(r.track) LIKE LOWER(${len(count_params)+1})"
+            count_params.append(f"%{track}%")
+        if driver:
+            count_query += f" AND LOWER(r.metadata->>'driver_name') LIKE LOWER(${len(count_params)+1})"
+            count_params.append(f"%{driver}%")
+        if finish_max:
+            count_query += f" AND (r.metadata->>'finish')::int <= ${len(count_params)+1}"
+            count_params.append(finish_max)
+        
+        total_count = await conn.fetchval(count_query, *count_params)
+        
+        # Format results
+        race_results = []
+        for row in results:
+            meta = json.loads(row["metadata"]) if row["metadata"] else {}
+            race_results.append({
+                "id": row["id"],
+                "season": row["season"],
+                "series": row["series"],
+                "track": row["track"],
+                "race_num": meta.get("race_num"),
+                "race_name": meta.get("race_name"),
+                "driver": meta.get("driver_name"),
+                "finish": meta.get("finish"),
+                "start": meta.get("start"),
+                "led": meta.get("led"),
+                "laps": meta.get("laps"),
+                "pts": meta.get("pts"),
+                "status": meta.get("status"),
+                "team": meta.get("team"),
+                "make": meta.get("make"),
+                "rating": meta.get("rating"),
+            })
+        
+        return {
+            "results": race_results,
+            "total": total_count,
+            "limit": limit,
+            "offset": offset,
+        }
+    finally:
+        await conn.close()
+
+
+@router.get("/races/{sport}/tracks")
+async def get_unique_tracks(sport: str, series: str = None, season: int = None):
+    """
+    Get list of unique tracks for filter dropdown.
+    """
+    conn = await get_db_connection()
+    try:
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
+        if not sport_id:
+            raise HTTPException(status_code=404, detail=f"Sport '{sport}' not found")
+        
+        query = """
+            SELECT DISTINCT track FROM results 
+            WHERE sport_id = $1 AND track IS NOT NULL
+        """
+        params = [sport_id]
+        
+        if series:
+            query += " AND series = $2"
+            params.append(series)
+        
+        if season:
+            query += f" AND season = ${len(params)+1}"
+            params.append(season)
+        
+        query += " ORDER BY track"
+        
+        rows = await conn.fetch(query, *params)
+        return {"tracks": [row["track"] for row in rows if row["track"]]}
+    finally:
+        await conn.close()
+
+
+@router.get("/races/{sport}/seasons")
+async def get_available_seasons(sport: str, series: str = None):
+    """
+    Get list of available seasons for filter dropdown.
+    """
+    conn = await get_db_connection()
+    try:
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
+        if not sport_id:
+            raise HTTPException(status_code=404, detail=f"Sport '{sport}' not found")
+        
+        query = """
+            SELECT DISTINCT season FROM results 
+            WHERE sport_id = $1 AND season IS NOT NULL
+        """
+        params = [sport_id]
+        
+        if series:
+            query += " AND series = $2"
+            params.append(series)
+        
+        query += " ORDER BY season DESC"
+        
+        rows = await conn.fetch(query, *params)
+        return {"seasons": [row["season"] for row in rows]}
+    finally:
+        await conn.close()
+
+
+@router.get("/races/{sport}/drivers")
+async def get_drivers_with_results(sport: str, series: str = None, season: int = None, search: str = None, limit: int = 50):
+    """
+    Get list of drivers with results for filter dropdown.
+    """
+    conn = await get_db_connection()
+    try:
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
+        if not sport_id:
+            raise HTTPException(status_code=404, detail=f"Sport '{sport}' not found")
+        
+        query = """
+            SELECT DISTINCT metadata->>'driver_name' as driver_name
+            FROM results 
+            WHERE sport_id = $1 
+              AND metadata->>'driver_name' IS NOT NULL
+        """
+        params = [sport_id]
+        
+        if series:
+            query += " AND series = $2"
+            params.append(series)
+        
+        if season:
+            query += f" AND season = ${len(params)+1}"
+            params.append(season)
+        
+        if search:
+            query += f" AND LOWER(metadata->>'driver_name') LIKE LOWER(${len(params)+1})"
+            params.append(f"%{search}%")
+        
+        query += " ORDER BY driver_name LIMIT $" + str(len(params)+1)
+        params.append(limit)
+        
+        rows = await conn.fetch(query, *params)
+        return {"drivers": [row["driver_name"] for row in rows if row["driver_name"]]}
+    finally:
+        await conn.close()
+

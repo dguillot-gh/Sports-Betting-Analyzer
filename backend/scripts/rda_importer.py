@@ -159,6 +159,36 @@ def detect_columns(df) -> Dict[str, str]:
             mapping['race_num'] = columns[name]
             break
     
+    # Race name column
+    for name in ['name', 'race_name', 'event']:
+        if name in columns:
+            mapping['race_name'] = columns[name]
+            break
+    
+    # Extended columns - direct mapping
+    extended_cols = {
+        'laps': ['laps', 'laps_completed'],
+        'led': ['led', 'laps_led'],
+        'pts': ['pts', 'points', 'race_points'],
+        'status': ['status', 'finish_status'],
+        'team': ['team', 'team_name'],
+        'make': ['make', 'manufacturer'],
+        'car': ['car', 'car_number', 'car_num'],
+        'rating': ['rating', 'driver_rating', 'loop_rating'],
+        'win': ['win', 'winner'],
+        's1': ['s1', 'stage1', 'stage_1'],
+        's2': ['s2', 'stage2', 'stage_2'],
+        'seg_points': ['seg points', 'seg_points', 'stage_points'],
+        'length': ['length', 'track_length'],
+        'surface': ['surface', 'track_surface'],
+    }
+    
+    for key, names in extended_cols.items():
+        for name in names:
+            if name in columns:
+                mapping[key] = columns[name]
+                break
+    
     return mapping
 
 
@@ -244,25 +274,107 @@ async def import_rda_series(
                     except (ValueError, TypeError):
                         pass
                 
-                # Build metadata
+                # Get race number for unique identification
+                race_num = None
+                if 'race_num' in col_map:
+                    try:
+                        race_num = int(float(row[col_map['race_num']]))
+                    except (ValueError, TypeError):
+                        pass
+                
+                # Get race name
+                race_name = None
+                if 'race_name' in col_map:
+                    race_name = str(row[col_map['race_name']]).strip()
+                    if race_name == 'nan':
+                        race_name = None
+                
+                # Extract extended columns
+                def safe_int(col_key):
+                    if col_key in col_map:
+                        try:
+                            val = row[col_map[col_key]]
+                            return int(float(val)) if val is not None and str(val) != 'nan' else None
+                        except (ValueError, TypeError):
+                            pass
+                    return None
+                
+                def safe_float(col_key):
+                    if col_key in col_map:
+                        try:
+                            val = row[col_map[col_key]]
+                            return round(float(val), 1) if val is not None and str(val) != 'nan' else None
+                        except (ValueError, TypeError):
+                            pass
+                    return None
+                
+                def safe_str(col_key):
+                    if col_key in col_map:
+                        val = str(row[col_map[col_key]]).strip()
+                        return val if val and val != 'nan' else None
+                    return None
+                
+                laps = safe_int('laps')
+                led = safe_int('led')
+                pts = safe_int('pts')
+                status = safe_str('status')
+                team = safe_str('team')
+                make = safe_str('make')
+                car = safe_str('car')
+                rating = safe_float('rating')
+                win = safe_int('win')
+                s1 = safe_int('s1')
+                s2 = safe_int('s2')
+                seg_points = safe_int('seg_points')
+                
+                # Build metadata with all available fields
                 metadata = {
                     'driver_id': driver_id,
+                    'driver_name': driver_name,
                     'series': series,
                 }
                 if finish is not None:
                     metadata['finish'] = finish
                 if start is not None:
                     metadata['start'] = start
+                if race_num is not None:
+                    metadata['race_num'] = race_num
+                if race_name:
+                    metadata['race_name'] = race_name
+                if laps is not None:
+                    metadata['laps'] = laps
+                if led is not None:
+                    metadata['led'] = led
+                if pts is not None:
+                    metadata['pts'] = pts
+                if status:
+                    metadata['status'] = status
+                if team:
+                    metadata['team'] = team
+                if make:
+                    metadata['make'] = make
+                if car:
+                    metadata['car'] = car
+                if rating is not None:
+                    metadata['rating'] = rating
+                if win is not None:
+                    metadata['win'] = win
+                if s1 is not None:
+                    metadata['s1'] = s1
+                if s2 is not None:
+                    metadata['s2'] = s2
+                if seg_points is not None:
+                    metadata['seg_points'] = seg_points
                 
-                # Compute content hash
+                # Compute content hash (include race_num for uniqueness)
                 hash_data = {
                     'sport': 'nascar',
                     'driver': driver_name,
                     'season': year,
                     'series': series,
                     'track': track or '',
+                    'race_num': race_num,
                     'finish': finish,
-                    'start': start,
                 }
                 content_hash = compute_hash(hash_data)
                 
@@ -293,6 +405,13 @@ async def import_rda_series(
                     driver_season_data[driver_key][season_key].append({
                         'finish': finish,
                         'start': start,
+                        'led': led or 0,
+                        'pts': pts or 0,
+                        'status': status,
+                        'rating': rating,
+                        's1': s1,
+                        's2': s2,
+                        'seg_points': seg_points or 0,
                     })
         
         logger.info(f"  Processed {batch_end}/{total_rows} rows...")
@@ -309,7 +428,16 @@ async def import_rda_series(
             if not finishes:
                 continue
             
+            # Extended stats
+            laps_led = sum(r.get('led', 0) or 0 for r in races)
+            total_pts = sum(r.get('pts', 0) or 0 for r in races)
+            dnf_count = sum(1 for r in races if r.get('status') and r['status'].lower() not in ['running', 'finished', ''])
+            ratings = [r.get('rating') for r in races if r.get('rating') is not None]
+            stage_wins = sum(1 for r in races if (r.get('s1') == 1 or r.get('s2') == 1))
+            total_stage_points = sum(r.get('seg_points', 0) or 0 for r in races)
+            
             stats = {
+                # Basic stats
                 'races': len(finishes),
                 'wins': sum(1 for f in finishes if f == 1),
                 'top_5': sum(1 for f in finishes if f <= 5),
@@ -318,6 +446,13 @@ async def import_rda_series(
                 'best_finish': min(finishes),
                 'poles': sum(1 for s in starts if s == 1) if starts else 0,
                 'avg_start': round(sum(starts) / len(starts), 1) if starts else None,
+                # Extended stats
+                'laps_led': laps_led,
+                'total_pts': total_pts,
+                'dnf_count': dnf_count,
+                'avg_rating': round(sum(ratings) / len(ratings), 1) if ratings else None,
+                'stage_wins': stage_wins,
+                'stage_points': total_stage_points,
             }
             
             # Upsert stats
