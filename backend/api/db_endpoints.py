@@ -29,6 +29,22 @@ import_status = {
         "progress": [],
         "result": None,
         "error": None
+    },
+    "nfl": {
+        "status": "idle",
+        "started_at": None,
+        "completed_at": None,
+        "progress": [],
+        "result": None,
+        "error": None
+    },
+    "nba": {
+        "status": "idle",
+        "started_at": None,
+        "completed_at": None,
+        "progress": [],
+        "result": None,
+        "error": None
     }
 }
 
