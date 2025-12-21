@@ -267,7 +267,7 @@
                         
                         @if (_history != null && _history.Any())
                         {
-                            @{ var filteredHistory = _historyYear.HasValue ? _history.Where(h => h.Season == _historyYear.Value).ToList() : _history; }
+                            var filteredHistory = _historyYear.HasValue ? _history.Where(h => h.Season == _historyYear.Value).ToList() : _history;
                             
                             <MudText Typo="Typo.subtitle2" Class="mb-2">
                                 Showing @filteredHistory.Count @GetSeriesDisplayName(_selectedSeries) results
