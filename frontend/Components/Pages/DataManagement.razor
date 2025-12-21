@@ -228,6 +228,13 @@
                         }
                     </MudCardContent>
                     <MudCardActions>
+                        <MudButton Variant="Variant.Filled" Color="@color"
+                                   StartIcon="@Icons.Material.Filled.CloudDownload"
+                                   OnClick="@(() => OpenSportImportDialog(sport))"
+                                   Disabled="@(_isUpdating || _isSportImporting)"
+                                   Title="Import from nflverse/hoopR + Kaggle">
+                            Import All
+                        </MudButton>
                         <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
                                    StartIcon="@Icons.Material.Filled.ModelTraining"
                                    OnClick="@(() => RetrainModel(sport))"
@@ -504,6 +511,85 @@
     </DialogActions>
 </MudDialog>
 
+<!-- NFL/NBA Import Dialog -->
+<MudDialog @bind-Visible="_showSportImportDialog" Options="@_rdaDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.CloudDownload" Class="mr-2" />
+            Import @(_sportImportTarget?.ToUpper()) Data
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (!_isSportImporting)
+        {
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.body2">
+                    This will download and import @(_sportImportTarget) data from:
+                </MudText>
+                <MudList T="string" Dense="true">
+                    @if (_sportImportTarget == "nfl")
+                    {
+                        <MudListItem Icon="@Icons.Material.Filled.GitHub" Dense="true">nflverse-data (GitHub releases)</MudListItem>
+                    }
+                    else
+                    {
+                        <MudListItem Icon="@Icons.Material.Filled.GitHub" Dense="true">hoopR (Sportsdataverse)</MudListItem>
+                    }
+                    <MudListItem Icon="@Icons.Material.Filled.Dataset" Dense="true">Existing Kaggle datasets</MudListItem>
+                </MudList>
+                <MudCheckBox @bind-Value="_sportClearExisting" Color="Color.Warning" Dense="true">
+                    Clear existing @(_sportImportTarget?.ToUpper()) data before import
+                </MudCheckBox>
+            </MudStack>
+        }
+        else
+        {
+            <MudStack Spacing="2">
+                <MudProgressLinear Color="@(_sportStatus?.Status == "completed" ? Color.Success : Color.Primary)" 
+                                    Indeterminate="@(_sportStatus?.Status == "running")" />
+                <MudText Typo="Typo.body2">
+                    Status: @(_sportStatus?.Status ?? "starting...")
+                </MudText>
+                
+                <MudPaper Class="pa-2 mt-2" Elevation="0" Outlined="true" 
+                          Style="max-height: 200px; overflow-y: auto; background: #1a1a2e;">
+                    @if (_sportStatus?.Progress != null)
+                    {
+                        @foreach (var line in _sportStatus.Progress)
+                        {
+                            <MudText Typo="Typo.caption" Style="font-family: monospace; color: #00ff88;">
+                                @line
+                            </MudText>
+                        }
+                    }
+                </MudPaper>
+                
+                @if (_sportStatus?.Error != null)
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true">
+                        @_sportStatus.Error
+                    </MudAlert>
+                }
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (!_isSportImporting)
+        {
+            <MudButton OnClick="@CloseSportImportDialog">Cancel</MudButton>
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@StartSportImport">
+                Start Import
+            </MudButton>
+        }
+        else if (_sportStatus?.Status == "completed" || _sportStatus?.Status == "failed")
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@CloseSportImportDialog">
+                Close
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
 @code {
     private DataStatusResponse? _dataStatus;
     private bool _isLoading = true;
@@ -533,6 +619,14 @@
     private RdaImportStatus? _rdaStatus;
     private System.Threading.Timer? _rdaPollTimer;
     private DialogOptions _rdaDialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
+    
+    // NFL/NBA Import Dialog
+    private bool _showSportImportDialog = false;
+    private bool _isSportImporting = false;
+    private string? _sportImportTarget;
+    private bool _sportClearExisting = false;
+    private SportImportStatus? _sportStatus;
+    private System.Threading.Timer? _sportPollTimer;
 
     protected override async Task OnInitializedAsync()
     {
@@ -1041,6 +1135,120 @@
         public List<string>? Progress { get; set; }
         public object? Result { get; set; }
         public string? Error { get; set; }
+    }
+    
+    // Model for NFL/NBA import status (same structure)
+    public class SportImportStatus
+    {
+        public string Status { get; set; } = "idle";
+        public string? StartedAt { get; set; }
+        public string? CompletedAt { get; set; }
+        public List<string>? Progress { get; set; }
+        public object? Result { get; set; }
+        public string? Error { get; set; }
+    }
+    
+    // Sport Import Methods
+    private void OpenSportImportDialog(string sport)
+    {
+        _sportImportTarget = sport;
+        _sportClearExisting = false;
+        _sportStatus = null;
+        _showSportImportDialog = true;
+    }
+    
+    private void CloseSportImportDialog()
+    {
+        _showSportImportDialog = false;
+        _isSportImporting = false;
+        _sportPollTimer?.Dispose();
+        _sportPollTimer = null;
+    }
+    
+    private async Task StartSportImport()
+    {
+        if (string.IsNullOrEmpty(_sportImportTarget)) return;
+        
+        try
+        {
+            _isSportImporting = true;
+            _sportStatus = new SportImportStatus { Status = "running", Progress = new List<string> { $"Starting {_sportImportTarget.ToUpper()} import..." } };
+            StateHasChanged();
+            
+            // Call the import API
+            var response = await MLClient.HttpClient.PostAsync(
+                $"/db/import/{_sportImportTarget}?clear_existing={_sportClearExisting.ToString().ToLower()}",
+                null
+            );
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                _sportStatus.Status = "failed";
+                _sportStatus.Error = "Failed to start import";
+                return;
+            }
+            
+            // Start polling
+            _sportPollTimer = new System.Threading.Timer(
+                async _ => await PollSportStatus(),
+                null,
+                TimeSpan.FromSeconds(2),
+                TimeSpan.FromSeconds(2)
+            );
+        }
+        catch (Exception ex)
+        {
+            _sportStatus = new SportImportStatus 
+            { 
+                Status = "failed", 
+                Error = ex.Message,
+                Progress = new List<string> { $"Error: {ex.Message}" }
+            };
+        }
+    }
+    
+    private async Task PollSportStatus()
+    {
+        if (string.IsNullOrEmpty(_sportImportTarget)) return;
+        
+        try
+        {
+            var response = await MLClient.HttpClient.GetAsync($"/db/import/{_sportImportTarget}/status");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var status = System.Text.Json.JsonSerializer.Deserialize<SportImportStatus>(json, new System.Text.Json.JsonSerializerOptions 
+                { 
+                    PropertyNameCaseInsensitive = true 
+                });
+                
+                if (status != null)
+                {
+                    _sportStatus = status;
+                    await InvokeAsync(StateHasChanged);
+                    
+                    // Stop polling when complete or failed
+                    if (status.Status == "completed" || status.Status == "failed")
+                    {
+                        _sportPollTimer?.Dispose();
+                        _sportPollTimer = null;
+                        
+                        if (status.Status == "completed")
+                        {
+                            await InvokeAsync(async () =>
+                            {
+                                Snackbar.Add($"{_sportImportTarget?.ToUpper()} import completed successfully!", Severity.Success);
+                                await LoadStatus();
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error polling sport import status");
+        }
     }
 }
 
