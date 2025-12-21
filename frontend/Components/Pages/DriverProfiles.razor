@@ -104,6 +104,79 @@
                             </MudStack>
                         </MudPaper>
 
+                        <!-- Last 5 Races Card -->
+                        @if (_profile.RecentResults != null && _profile.RecentResults.Any())
+                        {
+                            <MudPaper Class="pa-4 mb-4" Elevation="2">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
+                                    <MudText Typo="Typo.h6">
+                                        <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-2" />
+                                        Last 5 Races
+                                    </MudText>
+                                    <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                                               Href="@($"/race-results?series={_selectedSeries}&driver={Uri.EscapeDataString(_profile.Entity.Name ?? "")}")">
+                                        View All Results →
+                                    </MudButton>
+                                </MudStack>
+                                
+                                <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                    <thead>
+                                        <tr>
+                                            <th>Season</th>
+                                            <th>Track</th>
+                                            <th>Finish</th>
+                                            <th>Start</th>
+                                            <th>Led</th>
+                                            <th>Pts</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var result in _profile.RecentResults.Take(5))
+                                        {
+                                            <tr>
+                                                <td>@result.Season</td>
+                                                <td>
+                                                    <MudTooltip Text="@result.Track">
+                                                        @TruncateText(result.Track, 20)
+                                                    </MudTooltip>
+                                                </td>
+                                                <td>
+                                                    <MudChip T="string" Size="Size.Small" 
+                                                             Color="@(result.FinishPosition <= 3 ? Color.Success : result.FinishPosition <= 10 ? Color.Info : Color.Default)">
+                                                        P@(result.FinishPosition)
+                                                    </MudChip>
+                                                </td>
+                                                <td>@(result.StartPosition?.ToString() ?? "-")</td>
+                                                <td>
+                                                    @if (result.LapsLed > 0)
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Warning">@result.LapsLed</MudChip>
+                                                    }
+                                                    else
+                                                    {
+                                                        @:0
+                                                    }
+                                                </td>
+                                                <td>@(result.Points?.ToString() ?? "-")</td>
+                                                <td>
+                                                    @{ var status = result.GetStatus(); }
+                                                    @if (!string.IsNullOrEmpty(status) && status.ToLower() != "running")
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Error">@status</MudChip>
+                                                    }
+                                                    else
+                                                    {
+                                                        <MudText Typo="Typo.caption" Color="Color.Success">✓</MudText>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            </MudPaper>
+                        }
+
                         <!-- Stats Cards -->
                         @if (_profile.Stats.Any())
                         {
@@ -153,7 +226,7 @@
                                             <td>
                                                 <MudChip T="string" Size="Size.Small" 
                                                          Color="@(result.FinishPosition <= 3 ? Color.Success : result.FinishPosition <= 10 ? Color.Info : Color.Default)">
-                                                    P@result.FinishPosition
+                                                    P@(result.FinishPosition)
                                                 </MudChip>
                                             </td>
                                         </tr>
@@ -169,17 +242,38 @@
 
                     <!-- History Tab -->
                     <MudTabPanel Text="Full History" Icon="@Icons.Material.Filled.History">
-                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadFullHistory" 
-                                   Disabled="_isLoadingHistory" Class="mb-3">
-                            @if (_isLoadingHistory)
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadFullHistory" 
+                                       Disabled="_isLoadingHistory">
+                                @if (_isLoadingHistory)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                }
+                                Load Full History
+                            </MudButton>
+                            
+                            @if (_historyYears.Any())
                             {
-                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                <MudSelect T="int?" Label="Year" Value="_historyYear" ValueChanged="OnHistoryYearChanged"
+                                           Variant="Variant.Outlined" Dense="true" Style="width: 140px;">
+                                    <MudSelectItem T="int?" Value="@((int?)null)">All Years</MudSelectItem>
+                                    @foreach (var year in _historyYears)
+                                    {
+                                        <MudSelectItem T="int?" Value="@((int?)year)">@year</MudSelectItem>
+                                    }
+                                </MudSelect>
                             }
-                            Load Full @GetSeriesDisplayName(_selectedSeries) History
-                        </MudButton>
+                        </MudStack>
                         
                         @if (_history != null && _history.Any())
                         {
+                            var filteredHistory = _historyYear.HasValue ? _history.Where(h => h.Season == _historyYear.Value).ToList() : _history;
+                            
+                            <MudText Typo="Typo.subtitle2" Class="mb-2">
+                                Showing @filteredHistory.Count @GetSeriesDisplayName(_selectedSeries) results
+                                @if (_historyYear.HasValue) { <text> for @_historyYear</text> }
+                            </MudText>
+                            
                             <MudSimpleTable Dense="true" Hover="true" Striped="true">
                                 <thead>
                                     <tr>
@@ -190,7 +284,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @foreach (var result in _history)
+                                    @foreach (var result in filteredHistory)
                                     {
                                         <tr>
                                             <td>@result.Season</td>
@@ -199,14 +293,13 @@
                                             <td>
                                                 <MudChip T="string" Size="Size.Small" 
                                                          Color="@(result.FinishPosition <= 3 ? Color.Success : result.FinishPosition <= 10 ? Color.Info : Color.Default)">
-                                                    P@result.FinishPosition
+                                                    P@(result.FinishPosition)
                                                 </MudChip>
                                             </td>
                                         </tr>
                                     }
                                 </tbody>
                             </MudSimpleTable>
-                            <MudText Typo="Typo.caption" Class="mt-2">@_history.Count @GetSeriesDisplayName(_selectedSeries) results</MudText>
                         }
                     </MudTabPanel>
                 </MudTabs>
@@ -241,6 +334,10 @@
     private List<int> _availableSeasons = new();
     private DriverProfile? _profile;
     private List<RaceResult>? _history;
+    
+    // Year filter for history
+    private int? _historyYear = null;
+    private List<int> _historyYears = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -254,6 +351,9 @@
         "trucks" => "Trucks Series",
         _ => "NASCAR"
     };
+
+    private string TruncateText(string? text, int maxLength) => 
+        text != null && text.Length > maxLength ? text[..(maxLength - 3)] + "..." : text ?? "";
 
     private async Task OnSeriesChanged(string series)
     {
@@ -343,9 +443,20 @@
         _isLoadingHistory = true;
         try
         {
-            var url = $"http://backend:8000/db/profiles/nascar/{Uri.EscapeDataString(_selectedDriver)}/history?series={_selectedSeries}&limit=100";
+            var url = $"http://backend:8000/db/profiles/nascar/{Uri.EscapeDataString(_selectedDriver)}/history?series={_selectedSeries}&limit=500";
             var response = await Http.GetFromJsonAsync<HistoryResponse>(url);
             _history = response?.History ?? new();
+            
+            // Extract unique years for the filter dropdown
+            _historyYears = _history
+                .Where(h => h.Season.HasValue)
+                .Select(h => h.Season!.Value)
+                .Distinct()
+                .OrderByDescending(y => y)
+                .ToList();
+            
+            // Reset year filter
+            _historyYear = null;
         }
         catch (Exception ex)
         {
@@ -355,6 +466,12 @@
         {
             _isLoadingHistory = false;
         }
+    }
+    
+    private void OnHistoryYearChanged(int? year)
+    {
+        _historyYear = year;
+        StateHasChanged();
     }
 
     // Response models
@@ -397,11 +514,12 @@
         [System.Text.Json.Serialization.JsonPropertyName("laps_led")]
         public int? LapsLedDirect { get; set; }
         public int? Points { get; set; }
+        public string? Status { get; set; }
         
         // Computed properties - try direct first, then parse from metadata
-        public int? FinishPosition => FinishPositionDirect ?? GetMetadataInt("finish");
+        public int FinishPosition => FinishPositionDirect ?? GetMetadataInt("finish") ?? 0;
         public int? StartPosition => StartPositionDirect ?? GetMetadataInt("start");
-        public int? LapsLed => LapsLedDirect ?? GetMetadataInt("laps_led");
+        public int LapsLed => LapsLedDirect ?? GetMetadataInt("led") ?? GetMetadataInt("laps_led") ?? 0;
         
         private int? GetMetadataInt(string key)
         {
@@ -414,6 +532,22 @@
                     return prop.ValueKind == System.Text.Json.JsonValueKind.Number 
                         ? prop.GetInt32() 
                         : null;
+                }
+            }
+            catch { }
+            return null;
+        }
+        
+        public string? GetStatus()
+        {
+            if (!string.IsNullOrEmpty(Status)) return Status;
+            if (string.IsNullOrEmpty(Metadata)) return null;
+            try
+            {
+                var doc = System.Text.Json.JsonDocument.Parse(Metadata);
+                if (doc.RootElement.TryGetProperty("status", out var prop))
+                {
+                    return prop.GetString();
                 }
             }
             catch { }
