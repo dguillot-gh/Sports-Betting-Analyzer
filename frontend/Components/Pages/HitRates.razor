@@ -1,6 +1,6 @@
 @page "/hit-rates"
 @using SportsBettingAnalyzer.Services
-@inject PythonMLServiceClient MLClient
+@inject IHttpClientFactory HttpClientFactory
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @rendermode InteractiveServer
@@ -238,7 +238,8 @@
             if (!string.IsNullOrEmpty(_searchPlayer))
                 url += $"&player={Uri.EscapeDataString(_searchPlayer)}";
             
-            var response = await MLClient.HttpClient.GetAsync(url);
+            var http = HttpClientFactory.CreateClient("PythonML");
+            var response = await http.GetAsync(url);
             if (!response.IsSuccessStatusCode)
             {
                 _hitRates = new List<HitRateResult>();
