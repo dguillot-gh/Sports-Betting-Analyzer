@@ -20,6 +20,7 @@ import asyncio
 import logging
 import json
 import hashlib
+import gc  # Garbage collection for memory management
 import requests
 from pathlib import Path
 from datetime import datetime

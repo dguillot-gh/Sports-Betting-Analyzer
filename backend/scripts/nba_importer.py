@@ -15,6 +15,7 @@ import asyncio
 import logging
 import json
 import hashlib
+import gc  # Garbage collection for memory management
 from pathlib import Path
 from datetime import datetime
 import pandas as pd
@@ -74,8 +75,9 @@ async def ensure_sport_exists(conn) -> int:
     return sport_id
 
 
-# Batch size for commits to prevent memory issues
-BATCH_SIZE = 1000
+# Batch size - REDUCED for low memory servers (2GB RAM)
+# Process 100 rows at a time to prevent memory crashes
+BATCH_SIZE = 100
 
 
 async def import_from_kaggle(conn, sport_id: int, progress_callback=None) -> dict:
@@ -132,6 +134,9 @@ async def import_from_kaggle(conn, sport_id: int, progress_callback=None) -> dic
                                 results["players"] += 1
                         except Exception as e:
                             logger.debug(f"Error importing player {name}: {e}")
+                
+                # Free memory after each batch
+                gc.collect()
             
             logger.info(f"Imported {results['players']} unique players")
             
@@ -214,6 +219,9 @@ async def import_from_kaggle(conn, sport_id: int, progress_callback=None) -> dic
                         results["games"] += 1
                     except Exception as e:
                         logger.debug(f"Error importing season stats: {e}")
+                
+                # Free memory after each batch
+                gc.collect()
         
         except Exception as e:
             logger.error(f"Error reading Player Per Game.csv: {e}")

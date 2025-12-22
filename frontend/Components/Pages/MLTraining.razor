@@ -372,6 +372,56 @@
 </MudTabPanel>
 </MudTabs>
 
+<!-- Training Progress Dialog -->
+<MudDialog @bind-Visible="_showTrainingDialog" Options="@_trainingDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.ModelTraining" Class="mr-2" />
+            Training @(_trainingSport?.ToUpper()) Model
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="2">
+            <MudProgressLinear Color="@(_trainingStatus == "completed" ? Color.Success : (_trainingStatus == "failed" ? Color.Error : Color.Primary))" 
+                               Indeterminate="@(_trainingStatus == "running")" />
+            <MudText Typo="Typo.body2">
+                Status: <strong>@(_trainingStatus ?? "initializing...")</strong>
+            </MudText>
+            
+            <MudPaper Class="pa-2 mt-2" Elevation="0" Outlined="true" 
+                      Style="max-height: 250px; overflow-y: auto; background: #1a1a2e;">
+                @foreach (var line in _trainingProgress)
+                {
+                    <MudText Typo="Typo.caption" Style="font-family: monospace; color: #00ff88;">
+                        @line
+                    </MudText>
+                }
+                @if (!_trainingProgress.Any())
+                {
+                    <MudText Typo="Typo.caption" Style="font-family: monospace; color: #888;">
+                        Waiting for training to start...
+                    </MudText>
+                }
+            </MudPaper>
+            
+            @if (_trainingError != null)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">
+                    @_trainingError
+                </MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        @if (_trainingStatus == "completed" || _trainingStatus == "failed")
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@CloseTrainingDialog">
+                Close
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
 @code {
     private int _activeTab = 0;
     private string _pythonServiceUrl = "http://localhost:8000";
@@ -409,6 +459,19 @@
     // Model Management
     private List<ModelInfo> _trainedModels = new();
     private bool _isLoadingModels = false;
+
+    // Training Progress Dialog
+    private bool _showTrainingDialog = false;
+    private string? _trainingStatus;
+    private string? _trainingError;
+    private List<string> _trainingProgress = new();
+    private DialogOptions _trainingDialogOptions = new() 
+    { 
+        MaxWidth = MaxWidth.Small, 
+        FullWidth = true, 
+        DisableBackdropClick = true,
+        CloseOnEscapeKey = false 
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -509,7 +572,14 @@
         try
         {
             _isTraining = true;
-            Snackbar.Add("Starting model training...", Severity.Info);
+            _showTrainingDialog = true;
+            _trainingStatus = "running";
+            _trainingError = null;
+            _trainingProgress.Clear();
+            _trainingProgress.Add($"[{DateTime.Now:HH:mm:ss}] Starting {_trainingSport.ToUpper()} model training...");
+            _trainingProgress.Add($"[{DateTime.Now:HH:mm:ss}] Task: {_trainingTask}");
+            _trainingProgress.Add($"[{DateTime.Now:HH:mm:ss}] Model: {_selectedModelType}");
+            StateHasChanged();
             
             var hyperparams = new Dictionary<string, object>
             {
@@ -527,6 +597,9 @@
                 hyperparams.Add("class_weight", _classWeight);
             }
 
+            _trainingProgress.Add($"[{DateTime.Now:HH:mm:ss}] Sending training request to Python ML service...");
+            StateHasChanged();
+
             _trainingResult = await MLClient.TrainAsync(
                 sport: _trainingSport,
                 task: _trainingTask,
@@ -536,17 +609,33 @@
                 hyperparameters: hyperparams
             );
             
+            _trainingProgress.Add($"[{DateTime.Now:HH:mm:ss}] ✅ Training completed successfully!");
+            if (_trainingResult.MultiTarget && _trainingResult.TargetsTrained != null)
+            {
+                _trainingProgress.Add($"[{DateTime.Now:HH:mm:ss}] Trained {_trainingResult.TargetsTrained.Count} target models");
+            }
+            _trainingProgress.Add($"[{DateTime.Now:HH:mm:ss}] Model saved to: {_trainingResult.ModelPath}");
+            _trainingStatus = "completed";
             Snackbar.Add("Model training completed successfully!", Severity.Success);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error during model training");
+            _trainingProgress.Add($"[{DateTime.Now:HH:mm:ss}] ❌ Error: {ex.Message}");
+            _trainingError = ex.Message;
+            _trainingStatus = "failed";
             Snackbar.Add($"Training failed: {ex.Message}", Severity.Error);
         }
         finally
         {
             _isTraining = false;
+            StateHasChanged();
         }
+    }
+
+    private void CloseTrainingDialog()
+    {
+        _showTrainingDialog = false;
     }
 
     private string FormatMetricValue(System.Text.Json.JsonElement value)
