@@ -74,8 +74,12 @@ async def ensure_sport_exists(conn) -> int:
     return sport_id
 
 
+# Batch size for commits to prevent memory issues
+BATCH_SIZE = 1000
+
+
 async def import_from_kaggle(conn, sport_id: int, progress_callback=None) -> dict:
-    """Import NBA data from existing Kaggle files."""
+    """Import NBA data from existing Kaggle files with batching."""
     results = {"players": 0, "games": 0}
     
     # Check for Player Per Game.csv
@@ -85,122 +89,131 @@ async def import_from_kaggle(conn, sport_id: int, progress_callback=None) -> dic
             progress_callback("Importing Kaggle Player Per Game data...")
         
         try:
-            df = pd.read_csv(player_file, low_memory=False)
-            logger.info(f"Loaded {len(df)} rows from Player Per Game.csv")
-            
-            # Import unique players
+            # Read in chunks to save memory
             player_map = {}
-            for _, row in df.iterrows():
-                player_id = row.get('player_id')
-                if pd.isna(player_id):
-                    continue
+            batch_count = 0
+            
+            for chunk in pd.read_csv(player_file, low_memory=False, chunksize=BATCH_SIZE):
+                batch_count += 1
+                if progress_callback and batch_count % 5 == 0:
+                    progress_callback(f"Processing player batch {batch_count} ({results['players']} players imported)...")
                 
-                name = row.get('player') or f"Player {player_id}"
-                if pd.isna(name):
-                    continue
-                
-                position = row.get('pos', '')
-                team = row.get('team', '')
-                season = row.get('season')
-                
-                metadata = {
-                    'position': str(position) if not pd.isna(position) else None,
-                    'team': str(team) if not pd.isna(team) else None,
-                }
-                
-                content_hash = compute_hash({'sport': 'nba', 'player_id': str(player_id)})
-                
-                if str(player_id) not in player_map:
-                    try:
-                        entity_id = await conn.fetchval(
-                            """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
-                               VALUES ($1, $2, 'player', 'nba', $3, $4)
-                               ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                               DO UPDATE SET name = EXCLUDED.name, metadata = EXCLUDED.metadata
-                               RETURNING id""",
-                            sport_id, str(name), json.dumps(metadata), content_hash
-                        )
-                        if entity_id:
-                            player_map[str(player_id)] = entity_id
-                            results["players"] += 1
-                    except Exception as e:
-                        logger.debug(f"Error importing player {name}: {e}")
+                for _, row in chunk.iterrows():
+                    player_id = row.get('player_id')
+                    if pd.isna(player_id):
+                        continue
+                    
+                    name = row.get('player') or f"Player {player_id}"
+                    if pd.isna(name):
+                        continue
+                    
+                    position = row.get('pos', '')
+                    team = row.get('team', '')
+                    
+                    metadata = {
+                        'position': str(position) if not pd.isna(position) else None,
+                        'team': str(team) if not pd.isna(team) else None,
+                    }
+                    
+                    content_hash = compute_hash({'sport': 'nba', 'player_id': str(player_id)})
+                    
+                    if str(player_id) not in player_map:
+                        try:
+                            entity_id = await conn.fetchval(
+                                """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
+                                   VALUES ($1, $2, 'player', 'nba', $3, $4)
+                                   ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                                   DO UPDATE SET name = EXCLUDED.name, metadata = EXCLUDED.metadata
+                                   RETURNING id""",
+                                sport_id, str(name), json.dumps(metadata), content_hash
+                            )
+                            if entity_id:
+                                player_map[str(player_id)] = entity_id
+                                results["players"] += 1
+                        except Exception as e:
+                            logger.debug(f"Error importing player {name}: {e}")
             
             logger.info(f"Imported {results['players']} unique players")
             
-            # Import season stats
+            # Import season stats (second pass with chunked reading)
             if progress_callback:
                 progress_callback("Importing player season stats...")
             
-            for _, row in df.iterrows():
-                player_id = row.get('player_id')
-                season = row.get('season')
-                if pd.isna(player_id) or pd.isna(season):
-                    continue
+            stats_batch_count = 0
+            for chunk in pd.read_csv(player_file, low_memory=False, chunksize=BATCH_SIZE):
+                stats_batch_count += 1
+                if progress_callback and stats_batch_count % 10 == 0:
+                    progress_callback(f"Processing stats batch {stats_batch_count} ({results['games']} stats imported)...")
                 
-                entity_id = player_map.get(str(player_id))
-                if not entity_id:
-                    continue
-                
-                def safe_float(val):
+                for _, row in chunk.iterrows():
+                    player_id = row.get('player_id')
+                    season = row.get('season')
+                    if pd.isna(player_id) or pd.isna(season):
+                        continue
+                    
+                    entity_id = player_map.get(str(player_id))
+                    if not entity_id:
+                        continue
+                    
+                    def safe_float(val):
+                        try:
+                            return round(float(val), 1) if not pd.isna(val) else None
+                        except:
+                            return None
+                    
+                    def safe_int(val):
+                        try:
+                            return int(float(val)) if not pd.isna(val) else None
+                        except:
+                            return None
+                    
+                    stats = {
+                        'games': safe_int(row.get('g')),
+                        'games_started': safe_int(row.get('gs')),
+                        'minutes': safe_float(row.get('mp_per_game')),
+                        # Scoring
+                        'pts': safe_float(row.get('pts_per_game') or row.get('pts')),
+                        'fg': safe_float(row.get('fg_per_game')),
+                        'fga': safe_float(row.get('fga_per_game')),
+                        'fg_pct': safe_float(row.get('fg_percent')),
+                        'fg3': safe_float(row.get('x3p_per_game')),
+                        'fg3a': safe_float(row.get('x3pa_per_game')),
+                        'fg3_pct': safe_float(row.get('x3p_percent')),
+                        'ft': safe_float(row.get('ft_per_game')),
+                        'fta': safe_float(row.get('fta_per_game')),
+                        'ft_pct': safe_float(row.get('ft_percent')),
+                        # Rebounds
+                        'reb': safe_float(row.get('trb_per_game')),
+                        'oreb': safe_float(row.get('orb_per_game')),
+                        'dreb': safe_float(row.get('drb_per_game')),
+                        # Other
+                        'ast': safe_float(row.get('ast_per_game')),
+                        'stl': safe_float(row.get('stl_per_game')),
+                        'blk': safe_float(row.get('blk_per_game')),
+                        'tov': safe_float(row.get('tov_per_game')),
+                        'pf': safe_float(row.get('pf_per_game')),
+                    }
+                    
+                    # Clean None values
+                    stats = {k: v for k, v in stats.items() if v is not None}
+                    
+                    stats_hash = compute_hash({
+                        'entity_id': entity_id,
+                        'season': int(season),
+                        'sport': 'nba'
+                    })
+                    
                     try:
-                        return round(float(val), 1) if not pd.isna(val) else None
-                    except:
-                        return None
-                
-                def safe_int(val):
-                    try:
-                        return int(float(val)) if not pd.isna(val) else None
-                    except:
-                        return None
-                
-                stats = {
-                    'games': safe_int(row.get('g')),
-                    'games_started': safe_int(row.get('gs')),
-                    'minutes': safe_float(row.get('mp_per_game')),
-                    # Scoring
-                    'pts': safe_float(row.get('pts_per_game') or row.get('pts')),
-                    'fg': safe_float(row.get('fg_per_game')),
-                    'fga': safe_float(row.get('fga_per_game')),
-                    'fg_pct': safe_float(row.get('fg_percent')),
-                    'fg3': safe_float(row.get('x3p_per_game')),
-                    'fg3a': safe_float(row.get('x3pa_per_game')),
-                    'fg3_pct': safe_float(row.get('x3p_percent')),
-                    'ft': safe_float(row.get('ft_per_game')),
-                    'fta': safe_float(row.get('fta_per_game')),
-                    'ft_pct': safe_float(row.get('ft_percent')),
-                    # Rebounds
-                    'reb': safe_float(row.get('trb_per_game')),
-                    'oreb': safe_float(row.get('orb_per_game')),
-                    'dreb': safe_float(row.get('drb_per_game')),
-                    # Other
-                    'ast': safe_float(row.get('ast_per_game')),
-                    'stl': safe_float(row.get('stl_per_game')),
-                    'blk': safe_float(row.get('blk_per_game')),
-                    'tov': safe_float(row.get('tov_per_game')),
-                    'pf': safe_float(row.get('pf_per_game')),
-                }
-                
-                # Clean None values
-                stats = {k: v for k, v in stats.items() if v is not None}
-                
-                stats_hash = compute_hash({
-                    'entity_id': entity_id,
-                    'season': int(season),
-                    'sport': 'nba'
-                })
-                
-                try:
-                    await conn.execute(
-                        """INSERT INTO stats (entity_id, season, series, stat_type, stats, content_hash)
-                           VALUES ($1, $2, 'nba', 'season_per_game', $3, $4)
-                           ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                           DO UPDATE SET stats = EXCLUDED.stats""",
-                        int(entity_id), int(season), json.dumps(stats), stats_hash
-                    )
-                    results["games"] += 1
-                except Exception as e:
-                    logger.debug(f"Error importing season stats: {e}")
+                        await conn.execute(
+                            """INSERT INTO stats (entity_id, season, series, stat_type, stats, content_hash)
+                               VALUES ($1, $2, 'nba', 'season_per_game', $3, $4)
+                               ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                               DO UPDATE SET stats = EXCLUDED.stats""",
+                            int(entity_id), int(season), json.dumps(stats), stats_hash
+                        )
+                        results["games"] += 1
+                    except Exception as e:
+                        logger.debug(f"Error importing season stats: {e}")
         
         except Exception as e:
             logger.error(f"Error reading Player Per Game.csv: {e}")
