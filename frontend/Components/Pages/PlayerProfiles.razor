@@ -434,27 +434,52 @@
     // New DB endpoint response classes
     public class EntitiesResponse
     {
+        [System.Text.Json.Serialization.JsonPropertyName("entities")]
         public List<EntityInfo> Entities { get; set; } = new();
+        
+        [System.Text.Json.Serialization.JsonPropertyName("count")]
         public int Count { get; set; }
     }
     
     public class EntityInfo
     {
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
         public int Id { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("name")]
         public string Name { get; set; } = "";
+        
+        [System.Text.Json.Serialization.JsonPropertyName("type")]
         public string Type { get; set; } = "";
+        
+        [System.Text.Json.Serialization.JsonPropertyName("series")]
         public string Series { get; set; } = "";
+        
+        [System.Text.Json.Serialization.JsonPropertyName("metadata")]
         public Dictionary<string, object> Metadata { get; set; } = new();
     }
     
     public class ProfileResponse
     {
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
         public int Id { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("name")]
         public string Name { get; set; } = "";
+        
+        [System.Text.Json.Serialization.JsonPropertyName("type")]
         public string Type { get; set; } = "";
+        
+        [System.Text.Json.Serialization.JsonPropertyName("series")]
         public string Series { get; set; } = "";
+        
+        [System.Text.Json.Serialization.JsonPropertyName("metadata")]
         public Dictionary<string, object> Metadata { get; set; } = new();
+        
+        [System.Text.Json.Serialization.JsonPropertyName("stats")]
         public Dictionary<int, Dictionary<string, object>> Stats { get; set; } = new();
+        
+        [System.Text.Json.Serialization.JsonPropertyName("recent_games")]
         public List<Dictionary<string, object>> RecentGames { get; set; } = new();
     }
 }

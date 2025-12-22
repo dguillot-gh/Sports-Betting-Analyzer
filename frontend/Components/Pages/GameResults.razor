@@ -251,38 +251,60 @@
     
     public class GameResult
     {
+        [System.Text.Json.Serialization.JsonPropertyName("season")]
         public int Season { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("week")]
         public int? Week { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("player_name")]
         public string? PlayerName { get; set; }
-        public string? Player_Name { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("position")]
         public string? Position { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("opponent")]
         public string? Opponent { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("game_date")]
         public string? GameDate { get; set; }
-        public string? Game_Date { get; set; }
         
         // NFL stats
+        [System.Text.Json.Serialization.JsonPropertyName("pass_yds")]
         public int? PassYds { get; set; }
-        public int? Pass_Yds { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rush_yds")]
         public int? RushYds { get; set; }
-        public int? Rush_Yds { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rec_yds")]
         public int? RecYds { get; set; }
-        public int? Rec_Yds { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("pass_td")]
         public int? PassTd { get; set; }
-        public int? Pass_Td { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rush_td")]
         public int? RushTd { get; set; }
-        public int? Rush_Td { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rec_td")]
         public int? RecTd { get; set; }
-        public int? Rec_Td { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rec")]
+        public int? Rec { get; set; }
         
         // NBA stats
+        [System.Text.Json.Serialization.JsonPropertyName("pts")]
         public int? Pts { get; set; }
-        public int? Reb { get; set; }
-        public int? Ast { get; set; }
-        public int? Stl { get; set; }
-        public int? Blk { get; set; }
         
-        // Property accessors for snake_case variations
-        public string? GetPlayerName() => PlayerName ?? Player_Name;
-        public string? GetGameDate() => GameDate ?? Game_Date;
+        [System.Text.Json.Serialization.JsonPropertyName("reb")]
+        public int? Reb { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("ast")]
+        public int? Ast { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("stl")]
+        public int? Stl { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("blk")]
+        public int? Blk { get; set; }
     }
 }

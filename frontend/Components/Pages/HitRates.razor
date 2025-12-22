@@ -404,22 +404,57 @@
     
     public class GameResult
     {
+        [System.Text.Json.Serialization.JsonPropertyName("season")]
         public int Season { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("week")]
         public int? Week { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("player_name")]
         public string? PlayerName { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("team")]
         public string? Team { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("position")]
         public string? Position { get; set; }
+        
+        // NBA stats
+        [System.Text.Json.Serialization.JsonPropertyName("pts")]
         public int? Pts { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("reb")]
         public int? Reb { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("ast")]
         public int? Ast { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("stl")]
         public int? Stl { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("blk")]
         public int? Blk { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("fg3")]
         public int? Fg3 { get; set; }
+        
+        // NFL stats
+        [System.Text.Json.Serialization.JsonPropertyName("pass_yds")]
         public int? PassYds { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rush_yds")]
         public int? RushYds { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rec_yds")]
         public int? RecYds { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rec")]
         public int? Rec { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("pass_td")]
         public int? PassTd { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rush_td")]
         public int? RushTd { get; set; }
     }
 }
