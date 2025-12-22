@@ -82,6 +82,19 @@ async def get_db_connection():
         raise HTTPException(status_code=500, detail=f"Database connection failed: {e}")
 
 
+async def ensure_sport_exists(conn, sport: str) -> int:
+    """Ensure a sport exists in the database and return its ID. Creates if missing."""
+    sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
+    if not sport_id:
+        # Auto-create the sport entry
+        sport_id = await conn.fetchval(
+            """INSERT INTO sports (name, config) VALUES ($1, '{}') RETURNING id""",
+            sport
+        )
+        logger.info(f"Auto-created sport entry for: {sport}")
+    return sport_id
+
+
 @router.get("/health")
 async def database_health():
     """Check database connectivity."""
@@ -345,9 +358,8 @@ async def get_profile_list(sport: str, entity_type: str = None, series: str = No
     """
     conn = await get_db_connection()
     try:
-        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
-        if not sport_id:
-            raise HTTPException(status_code=404, detail=f"Sport '{sport}' not found")
+        # Auto-create sport entry if it doesn't exist
+        sport_id = await ensure_sport_exists(conn, sport)
         
         # Build query based on sport
         if sport == 'nascar':
@@ -411,9 +423,8 @@ async def get_entity_profile(sport: str, name: str, series: str = None, season: 
     """
     conn = await get_db_connection()
     try:
-        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
-        if not sport_id:
-            raise HTTPException(status_code=404, detail=f"Sport '{sport}' not found")
+        # Auto-create sport entry if it doesn't exist
+        sport_id = await ensure_sport_exists(conn, sport)
         
         # Find entity - include series filter for NASCAR
         if series and sport == 'nascar':
