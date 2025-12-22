@@ -46,6 +46,20 @@ async def get_db_connection():
     return await asyncpg.connect(DATABASE_URL)
 
 
+async def ensure_schema(conn):
+    """Ensure required columns exist in database tables."""
+    try:
+        await conn.execute("ALTER TABLE entities ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)")
+        await conn.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)")
+        await conn.execute("ALTER TABLE stats ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)")
+        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_hash ON entities(content_hash) WHERE content_hash IS NOT NULL")
+        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_results_hash ON results(content_hash) WHERE content_hash IS NOT NULL")
+        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_stats_hash ON stats(content_hash) WHERE content_hash IS NOT NULL")
+        logger.info("Schema setup complete - content_hash columns ready")
+    except Exception as e:
+        logger.warning(f"Schema setup warning: {e}")
+
+
 async def ensure_sport_exists(conn) -> int:
     """Ensure NBA sport exists and return sport_id."""
     sport_id = await conn.fetchval(
@@ -332,6 +346,10 @@ async def import_all_nba(clear_existing: bool = False, progress_callback=None) -
         
         # Connect to database
         conn = await get_db_connection()
+        
+        # Ensure schema has required columns
+        await ensure_schema(conn)
+        
         sport_id = await ensure_sport_exists(conn)
         
         # Clear existing if requested
