@@ -76,8 +76,8 @@ async def ensure_sport_exists(conn) -> int:
 
 
 # Batch size - REDUCED for low memory servers (2GB RAM)
-# Process 100 rows at a time to prevent memory crashes
-BATCH_SIZE = 100
+# Process 50 rows at a time to prevent memory crashes
+BATCH_SIZE = 50
 
 
 async def import_from_kaggle(conn, sport_id: int, progress_callback=None) -> dict:
@@ -249,26 +249,29 @@ async def import_box_scores(conn, sport_id: int, progress_callback=None) -> dict
     )
     player_name_to_id = {row['name']: row['id'] for row in player_rows}
     
-    # Process CSV files
+    # Process CSV files with chunked reading
     for csv_file in box_scores_dir.glob("*.csv"):
         try:
-            df = pd.read_csv(csv_file, low_memory=False)
-            logger.info(f"Processing {csv_file.name} with {len(df)} rows")
+            logger.info(f"Processing {csv_file.name} in chunks...")
+            chunk_count = 0
             
-            for _, row in df.iterrows():
-                player_name = row.get('player') or row.get('Player')
-                if pd.isna(player_name):
-                    continue
+            for chunk in pd.read_csv(csv_file, low_memory=False, chunksize=BATCH_SIZE):
+                chunk_count += 1
                 
-                entity_id = player_name_to_id.get(str(player_name))
-                if not entity_id:
-                    continue
-                
-                def safe_int(val):
-                    try:
-                        return int(float(val)) if not pd.isna(val) else None
-                    except:
-                        return None
+                for _, row in chunk.iterrows():
+                    player_name = row.get('player') or row.get('Player')
+                    if pd.isna(player_name):
+                        continue
+                    
+                    entity_id = player_name_to_id.get(str(player_name))
+                    if not entity_id:
+                        continue
+                    
+                    def safe_int(val):
+                        try:
+                            return int(float(val)) if not pd.isna(val) else None
+                        except:
+                            return None
                 
                 def safe_float(val):
                     try:
@@ -333,6 +336,9 @@ async def import_box_scores(conn, sport_id: int, progress_callback=None) -> dict
                     results["imported"] += 1
                 except Exception as e:
                     logger.debug(f"Error importing box score: {e}")
+                
+                # Free memory after each chunk
+                gc.collect()
         
         except Exception as e:
             logger.error(f"Error processing {csv_file.name}: {e}")
