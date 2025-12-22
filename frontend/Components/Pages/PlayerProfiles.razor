@@ -4,6 +4,7 @@
 @using SportsBettingAnalyzer.Services
 @inject IHttpClientFactory HttpClientFactory
 @inject ISnackbar Snackbar
+@inject NavigationManager Navigation
 
 <PageTitle>Player Profiles - Sports Betting Analyzer</PageTitle>
 
@@ -237,7 +238,24 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Player list will load when user selects a sport or searches
+        // Read query params from URL (when navigating from GameResults)
+        var uri = new Uri(Navigation.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        
+        if (!string.IsNullOrEmpty(query["sport"]))
+        {
+            _selectedSport = query["sport"]!;
+        }
+        
+        // Load player list for the selected sport
+        await LoadPlayerList();
+        
+        // If player is specified in URL, select and load their stats
+        if (!string.IsNullOrEmpty(query["player"]))
+        {
+            _selectedPlayer = Uri.UnescapeDataString(query["player"]!);
+            await LoadPlayerStats();
+        }
     }
 
     private async Task SelectSport(string sport)

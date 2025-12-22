@@ -2,8 +2,8 @@
 Downloads hoopR data + imports Kaggle data to PostgreSQL.
 
 Data Sources:
-- hoopR: espn_nba_player_boxscores (game-by-game stats)
-- Kaggle: Player Per Game, Player Totals, Advanced
+- sportsdataverse: espn_nba_player_box (game-by-game stats)
+- Kaggle: Player Per Game, Player Totals, Advanced (fallback)
 NBA Data Importer
 Imports NBA data from hoopR/sportsdataverse and existing Kaggle data.
 
@@ -16,6 +16,7 @@ import logging
 import json
 import hashlib
 import gc  # Garbage collection for memory management
+import requests
 from pathlib import Path
 from datetime import datetime
 import pandas as pd
@@ -26,20 +27,190 @@ logger = logging.getLogger(__name__)
 # Database URL
 DATABASE_URL = "postgresql://sports_user:sportsbetting2024@postgres:5432/sports_betting"
 
-# hoopR data (sportsdataverse GitHub)
-HOOPR_BASE = "https://github.com/sportsdataverse/hoopR-data/releases/download"
-HOOPR_FILES = {
-    "player_box": f"{HOOPR_BASE}/player_box/player_box.parquet",
-    "schedules": f"{HOOPR_BASE}/schedules/schedules.parquet",
-}
+# sportsdataverse data releases (hoopR uses this)
+SPORTSDATAVERSE_BASE = "https://github.com/sportsdataverse/sportsdataverse-data/releases/download"
 
-# Local Kaggle data paths
+# Get current year for dynamic file downloads
+CURRENT_YEAR = datetime.now().year
+
+# NBA data files to download - year-specific player box scores
+# hoopR provides data via sportsdataverse-data releases
+HOOPDATA_FILES = {}
+for year in range(2020, CURRENT_YEAR + 1):
+    HOOPDATA_FILES[f"player_box_{year}"] = f"{SPORTSDATAVERSE_BASE}/espn_nba_player_box/player_box_{year}.parquet"
+
+# Local data paths
 DATA_DIR = Path("/app/data/nba")
+HOOPDATA_DIR = Path("/app/data/hoopdata")
+
+
+async def download_hoopdata(progress_callback=None):
+    """Download latest hoopR/sportsdataverse NBA data."""
+    HOOPDATA_DIR.mkdir(parents=True, exist_ok=True)
+    
+    downloaded = []
+    for name, url in HOOPDATA_FILES.items():
+        try:
+            if progress_callback:
+                progress_callback(f"Downloading {name}...")
+            
+            response = requests.get(url, timeout=120)
+            if response.status_code == 200:
+                file_path = HOOPDATA_DIR / f"{name}.parquet"
+                file_path.write_bytes(response.content)
+                downloaded.append(name)
+                logger.info(f"Downloaded {name} ({len(response.content)} bytes)")
+            else:
+                logger.warning(f"Failed to download {name}: {response.status_code}")
+        except Exception as e:
+            logger.error(f"Error downloading {name}: {e}")
+    
+    return downloaded
 
 
 def compute_hash(data: dict) -> str:
     """Compute hash for deduplication."""
     return hashlib.md5(json.dumps(data, sort_keys=True).encode()).hexdigest()
+
+
+async def import_from_hoopdata(conn, sport_id: int, progress_callback=None) -> dict:
+    """Import NBA data from downloaded sportsdataverse parquet files."""
+    results = {"players": 0, "games": 0}
+    
+    # Find all player_box_YYYY.parquet files
+    parquet_files = sorted(HOOPDATA_DIR.glob("player_box_*.parquet"))
+    
+    if not parquet_files:
+        logger.info("No hoopdata parquet files found, will use Kaggle fallback")
+        return results
+    
+    if progress_callback:
+        progress_callback(f"Found {len(parquet_files)} hoopdata files to import...")
+    
+    # Track unique players
+    player_map = {}
+    
+    for pq_file in parquet_files:
+        try:
+            if progress_callback:
+                progress_callback(f"Processing {pq_file.name}...")
+            
+            # Read parquet file
+            df = pd.read_parquet(pq_file)
+            logger.info(f"Loaded {len(df)} rows from {pq_file.name}")
+            
+            # Process in batches
+            batch_size = 100
+            for start_idx in range(0, len(df), batch_size):
+                batch = df.iloc[start_idx:start_idx + batch_size]
+                
+                for _, row in batch.iterrows():
+                    # Get player info
+                    player_id = row.get('athlete_id') or row.get('player_id')
+                    player_name = row.get('athlete_display_name') or row.get('player_name')
+                    
+                    if pd.isna(player_id) or pd.isna(player_name):
+                        continue
+                    
+                    # Create/update player entity if not seen
+                    if str(player_id) not in player_map:
+                        position = row.get('athlete_position_name', '')
+                        team = row.get('team_short_display_name') or row.get('team_abbreviation', '')
+                        
+                        metadata = {
+                            'position': str(position) if not pd.isna(position) else None,
+                            'team': str(team) if not pd.isna(team) else None,
+                        }
+                        
+                        content_hash = compute_hash({'sport': 'nba', 'player_id': str(player_id)})
+                        
+                        try:
+                            entity_id = await conn.fetchval(
+                                """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
+                                   VALUES ($1, $2, 'player', 'nba', $3, $4)
+                                   ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                                   DO UPDATE SET name = EXCLUDED.name, metadata = EXCLUDED.metadata
+                                   RETURNING id""",
+                                sport_id, str(player_name), json.dumps(metadata), content_hash
+                            )
+                            if entity_id:
+                                player_map[str(player_id)] = entity_id
+                                results["players"] += 1
+                        except Exception as e:
+                            logger.debug(f"Error importing player {player_name}: {e}")
+                    
+                    # Import game result
+                    def safe_int(val):
+                        try:
+                            return int(float(val)) if not pd.isna(val) else None
+                        except:
+                            return None
+                    
+                    game_date = row.get('game_date') or row.get('game_date_time')
+                    season = row.get('season') or row.get('season_type')
+                    
+                    # Extract season year from game date if needed
+                    if pd.isna(season) and not pd.isna(game_date):
+                        try:
+                            year = int(str(game_date)[:4])
+                            month = int(str(game_date)[5:7]) if len(str(game_date)) > 6 else 1
+                            season = year if month >= 9 else year
+                        except:
+                            continue
+                    
+                    if pd.isna(season):
+                        continue
+                    
+                    opponent = row.get('opponent_team_short_display_name') or row.get('opponent_abbreviation', '')
+                    
+                    game_metadata = {
+                        'player_name': str(player_name),
+                        'game_date': str(game_date) if not pd.isna(game_date) else None,
+                        'opponent': str(opponent) if not pd.isna(opponent) else None,
+                        'minutes': safe_int(row.get('minutes') or row.get('min')),
+                        'pts': safe_int(row.get('points') or row.get('pts')),
+                        'reb': safe_int(row.get('rebounds') or row.get('reb')),
+                        'ast': safe_int(row.get('assists') or row.get('ast')),
+                        'stl': safe_int(row.get('steals') or row.get('stl')),
+                        'blk': safe_int(row.get('blocks') or row.get('blk')),
+                        'fg': safe_int(row.get('field_goals_made') or row.get('fg')),
+                        'fga': safe_int(row.get('field_goals_attempted') or row.get('fga')),
+                        'fg3': safe_int(row.get('three_point_field_goals_made') or row.get('fg3')),
+                        'fg3a': safe_int(row.get('three_point_field_goals_attempted') or row.get('fg3a')),
+                        'ft': safe_int(row.get('free_throws_made') or row.get('ft')),
+                        'fta': safe_int(row.get('free_throws_attempted') or row.get('fta')),
+                        'tov': safe_int(row.get('turnovers') or row.get('to')),
+                    }
+                    
+                    # Clean None values
+                    game_metadata = {k: v for k, v in game_metadata.items() if v is not None}
+                    
+                    game_hash = compute_hash({
+                        'sport': 'nba',
+                        'player_id': str(player_id),
+                        'game_date': str(game_date)
+                    })
+                    
+                    try:
+                        await conn.execute(
+                            """INSERT INTO results (sport_id, season, series, metadata, content_hash)
+                               VALUES ($1, $2, 'nba', $3, $4)
+                               ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                               DO UPDATE SET metadata = EXCLUDED.metadata""",
+                            sport_id, int(season), json.dumps(game_metadata), game_hash
+                        )
+                        results["games"] += 1
+                    except Exception as e:
+                        logger.debug(f"Error importing game: {e}")
+                
+                # Free memory periodically
+                gc.collect()
+                
+        except Exception as e:
+            logger.error(f"Error processing {pq_file.name}: {e}")
+    
+    logger.info(f"Imported {results['players']} players, {results['games']} games from hoopdata")
+    return results
 
 
 async def get_db_connection():
@@ -349,7 +520,12 @@ async def import_box_scores(conn, sport_id: int, progress_callback=None) -> dict
 
 async def import_all_nba(clear_existing: bool = False, progress_callback=None) -> dict:
     """
-    Main entry point: Import NBA data from Kaggle and hoopR.
+    Main entry point: Import NBA data from sportsdataverse and Kaggle.
+    
+    Data flow:
+    1. Download latest data from sportsdataverse (hoopR releases)
+    2. Import players and game stats from parquet files
+    3. Fallback to Kaggle files if sportsdataverse download fails
     
     Args:
         clear_existing: If True, delete existing NBA data first
@@ -360,7 +536,9 @@ async def import_all_nba(clear_existing: bool = False, progress_callback=None) -
     """
     results = {
         "status": "success",
+        "downloaded": [],
         "players_imported": 0,
+        "games_imported": 0,
         "season_stats_imported": 0,
         "box_scores_imported": 0,
         "errors": []
@@ -370,6 +548,16 @@ async def import_all_nba(clear_existing: bool = False, progress_callback=None) -
     try:
         if progress_callback:
             progress_callback("Starting NBA data import...")
+        
+        # Step 1: Download latest data from sportsdataverse
+        if progress_callback:
+            progress_callback("Downloading latest NBA data from sportsdataverse...")
+        
+        downloaded = await download_hoopdata(progress_callback)
+        results["downloaded"] = downloaded
+        
+        if progress_callback:
+            progress_callback(f"Downloaded {len(downloaded)} files from sportsdataverse")
         
         # Connect to database
         conn = await get_db_connection()
@@ -397,12 +585,21 @@ async def import_all_nba(clear_existing: bool = False, progress_callback=None) -
                 sport_id
             )
         
-        # Import from Kaggle files
+        # Step 2: Import from downloaded sportsdataverse files (primary source)
+        if downloaded:
+            hoopdata_result = await import_from_hoopdata(conn, sport_id, progress_callback)
+            results["players_imported"] = hoopdata_result.get("players", 0)
+            results["games_imported"] = hoopdata_result.get("games", 0)
+        
+        # Step 3: Fallback/supplement with Kaggle files
         kaggle_result = await import_from_kaggle(conn, sport_id, progress_callback)
-        results["players_imported"] = kaggle_result.get("players", 0)
         results["season_stats_imported"] = kaggle_result.get("games", 0)
         
-        # Import box scores
+        # If no sportsdataverse players, count Kaggle players
+        if results["players_imported"] == 0:
+            results["players_imported"] = kaggle_result.get("players", 0)
+        
+        # Import box scores from local files if available
         box_result = await import_box_scores(conn, sport_id, progress_callback)
         results["box_scores_imported"] = box_result.get("imported", 0)
         

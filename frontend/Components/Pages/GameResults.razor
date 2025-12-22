@@ -15,7 +15,7 @@
         </div>
         
         <!-- Sport Toggle -->
-        <MudToggleGroup T="string" @bind-Value="_selectedSport" Color="Color.Primary" Outline="true" Size="Size.Large">
+        <MudToggleGroup T="string" Value="_selectedSport" ValueChanged="OnSportChanged" Color="Color.Primary" Outline="true" Size="Size.Large">
             <MudToggleItem Value="@("nfl")">
                 <MudIcon Icon="@Icons.Material.Filled.SportsFootball" Class="mr-1" /> NFL
             </MudToggleItem>
@@ -29,7 +29,7 @@
     <MudPaper Elevation="2" Class="pa-4 mb-4">
         <MudGrid>
             <MudItem xs="12" md="3">
-                <MudSelect T="int?" @bind-Value="_selectedSeason" Label="Season" Clearable="true" Variant="Variant.Outlined" Dense="true">
+                <MudSelect T="int?" Value="_selectedSeason" ValueChanged="OnSeasonChanged" Label="Season" Clearable="true" Variant="Variant.Outlined" Dense="true">
                     @foreach (var season in _seasons)
                     {
                         <MudSelectItem Value="@((int?)season)">@season</MudSelectItem>
@@ -44,7 +44,7 @@
             @if (_selectedSport == "nfl")
             {
                 <MudItem xs="12" md="2">
-                    <MudSelect T="int?" @bind-Value="_selectedWeek" Label="Week" Clearable="true" Variant="Variant.Outlined" Dense="true">
+                    <MudSelect T="int?" Value="_selectedWeek" ValueChanged="OnWeekChanged" Label="Week" Clearable="true" Variant="Variant.Outlined" Dense="true">
                         @for (int w = 1; w <= 18; w++)
                         {
                             <MudSelectItem Value="@((int?)w)">Week @w</MudSelectItem>
@@ -175,6 +175,30 @@
         {
             _selectedSeason = season;
         }
+    }
+    
+    private async Task OnSportChanged(string sport)
+    {
+        _selectedSport = sport;
+        _selectedSeason = null;
+        _selectedWeek = null;
+        _searchPlayer = null;
+        _results.Clear();
+        StateHasChanged();
+        await LoadSeasons();
+        await LoadResults();
+    }
+    
+    private async Task OnSeasonChanged(int? season)
+    {
+        _selectedSeason = season;
+        await LoadResults();
+    }
+    
+    private async Task OnWeekChanged(int? week)
+    {
+        _selectedWeek = week;
+        await LoadResults();
     }
     
     private async Task LoadSeasons()

@@ -34,11 +34,21 @@ DATABASE_URL = "postgresql://sports_user:sportsbetting2024@postgres:5432/sports_
 
 # nflverse GitHub releases
 NFLVERSE_BASE = "https://github.com/nflverse/nflverse-data/releases/download"
+
+# Get current year for dynamic file downloads
+from datetime import datetime
+CURRENT_YEAR = datetime.now().year
+
+# nflverse files to download - includes year-specific player stats
 NFLVERSE_FILES = {
-    "player_stats": f"{NFLVERSE_BASE}/player_stats/player_stats.csv",
     "players": f"{NFLVERSE_BASE}/players/players.csv",
     "schedules": f"{NFLVERSE_BASE}/schedules/schedules.csv",
 }
+
+# Add year-specific player stats files (recent years + current)
+# nflverse stores weekly stats as stats_player_week_YYYY.csv
+for year in range(2020, CURRENT_YEAR + 1):
+    NFLVERSE_FILES[f"player_stats_{year}"] = f"{NFLVERSE_BASE}/player_stats/player_stats_{year}.csv"
 
 # Local data paths
 DATA_DIR = Path("/app/data/nfl")
@@ -172,108 +182,120 @@ async def import_players(conn, sport_id: int, progress_callback=None) -> dict:
 
 
 async def import_player_stats(conn, sport_id: int, player_map: dict, progress_callback=None) -> dict:
-    """Import player weekly stats from nflverse player_stats.csv with batching."""
-    stats_file = NFLVERSE_DIR / "player_stats.csv"
-    if not stats_file.exists():
-        logger.warning("player_stats.csv not found")
-        return {"imported": 0, "stats_computed": 0}
+    """Import player weekly stats from nflverse year-specific player_stats files with batching."""
+    
+    # Find all player_stats_YYYY.csv files
+    stats_files = sorted(NFLVERSE_DIR.glob("player_stats_*.csv"))
+    
+    if not stats_files:
+        # Fallback to old single file
+        single_file = NFLVERSE_DIR / "player_stats.csv"
+        if single_file.exists():
+            stats_files = [single_file]
+        else:
+            logger.warning("No player_stats files found")
+            return {"imported": 0, "stats_computed": 0}
     
     if progress_callback:
-        progress_callback("Importing player game stats...")
+        progress_callback(f"Found {len(stats_files)} player stats files to import...")
     
     # Group by player + season for aggregation
     player_season_data = {}
     games_imported = 0
     batch_count = 0
     
-    for chunk in pd.read_csv(stats_file, low_memory=False, chunksize=BATCH_SIZE):
-        batch_count += 1
-        if progress_callback and batch_count % 10 == 0:
-            progress_callback(f"Processing stats batch {batch_count} ({games_imported} games imported)...")
+    for stats_file in stats_files:
+        if progress_callback:
+            progress_callback(f"Processing {stats_file.name}...")
         
-        for _, row in chunk.iterrows():
-            player_id = row.get('player_id')
-            if pd.isna(player_id):
-                continue
+        for chunk in pd.read_csv(stats_file, low_memory=False, chunksize=BATCH_SIZE):
+            batch_count += 1
+            if progress_callback and batch_count % 10 == 0:
+                progress_callback(f"Processing stats batch {batch_count} ({games_imported} games imported)...")
             
-            entity_id = player_map.get(str(player_id))
-            if not entity_id:
-                continue
-            
-            season = row.get('season')
-            week = row.get('week')
-            if pd.isna(season):
-                continue
-            
-            # Build game result metadata
-            def safe_int(val):
+            for _, row in chunk.iterrows():
+                player_id = row.get('player_id')
+                if pd.isna(player_id):
+                    continue
+                
+                entity_id = player_map.get(str(player_id))
+                if not entity_id:
+                    continue
+                
+                season = row.get('season')
+                week = row.get('week')
+                if pd.isna(season):
+                    continue
+                
+                # Build game result metadata
+                def safe_int(val):
+                    try:
+                        return int(float(val)) if not pd.isna(val) else None
+                    except:
+                        return None
+                
+                def safe_float(val):
+                    try:
+                        return round(float(val), 1) if not pd.isna(val) else None
+                    except:
+                        return None
+                
+                metadata = {
+                    'player_id': str(player_id),
+                    'player_name': row.get('player_name') or row.get('player_display_name'),
+                    'season': safe_int(season),
+                    'week': safe_int(week),
+                    'opponent': row.get('opponent_team') or row.get('recent_team'),
+                    'position': row.get('position'),
+                    # Passing
+                    'pass_att': safe_int(row.get('attempts') or row.get('passing_att')),
+                    'pass_cmp': safe_int(row.get('completions') or row.get('passing_cmp')),
+                    'pass_yds': safe_int(row.get('passing_yards') or row.get('passing_yds')),
+                    'pass_td': safe_int(row.get('passing_tds') or row.get('passing_td')),
+                    'pass_int': safe_int(row.get('interceptions') or row.get('passing_int')),
+                    # Rushing
+                    'rush_att': safe_int(row.get('carries') or row.get('rushing_att')),
+                    'rush_yds': safe_int(row.get('rushing_yards') or row.get('rushing_yds')),
+                    'rush_td': safe_int(row.get('rushing_tds') or row.get('rushing_td')),
+                    # Receiving
+                    'rec': safe_int(row.get('receptions')),
+                    'rec_yds': safe_int(row.get('receiving_yards') or row.get('receiving_yds')),
+                    'rec_td': safe_int(row.get('receiving_tds') or row.get('receiving_td')),
+                    'targets': safe_int(row.get('targets')),
+                    # Defense
+                    'tackles': safe_int(row.get('tackles')),
+                    'sacks': safe_float(row.get('sacks')),
+                    'def_int': safe_int(row.get('def_interceptions') or row.get('interceptions')),
+                }
+                
+                # Clean None values
+                metadata = {k: v for k, v in metadata.items() if v is not None}
+                
+                # Insert as result
+                content_hash = compute_hash({
+                    'sport': 'nfl',
+                    'player_id': str(player_id),
+                    'season': season,
+                    'week': week
+                })
+                
                 try:
-                    return int(float(val)) if not pd.isna(val) else None
-                except:
-                    return None
-            
-            def safe_float(val):
-                try:
-                    return round(float(val), 1) if not pd.isna(val) else None
-                except:
-                    return None
-            
-            metadata = {
-                'player_id': str(player_id),
-                'player_name': row.get('player_name') or row.get('player_display_name'),
-                'season': safe_int(season),
-                'week': safe_int(week),
-                'opponent': row.get('opponent_team') or row.get('recent_team'),
-                'position': row.get('position'),
-                # Passing
-                'pass_att': safe_int(row.get('attempts') or row.get('passing_att')),
-                'pass_cmp': safe_int(row.get('completions') or row.get('passing_cmp')),
-                'pass_yds': safe_int(row.get('passing_yards') or row.get('passing_yds')),
-                'pass_td': safe_int(row.get('passing_tds') or row.get('passing_td')),
-                'pass_int': safe_int(row.get('interceptions') or row.get('passing_int')),
-                # Rushing
-                'rush_att': safe_int(row.get('carries') or row.get('rushing_att')),
-                'rush_yds': safe_int(row.get('rushing_yards') or row.get('rushing_yds')),
-                'rush_td': safe_int(row.get('rushing_tds') or row.get('rushing_td')),
-                # Receiving
-                'rec': safe_int(row.get('receptions')),
-                'rec_yds': safe_int(row.get('receiving_yards') or row.get('receiving_yds')),
-                'rec_td': safe_int(row.get('receiving_tds') or row.get('receiving_td')),
-                'targets': safe_int(row.get('targets')),
-                # Defense
-                'tackles': safe_int(row.get('tackles')),
-                'sacks': safe_float(row.get('sacks')),
-                'def_int': safe_int(row.get('def_interceptions') or row.get('interceptions')),
-            }
-            
-            # Clean None values
-            metadata = {k: v for k, v in metadata.items() if v is not None}
-            
-            # Insert as result
-            content_hash = compute_hash({
-                'sport': 'nfl',
-                'player_id': str(player_id),
-                'season': season,
-                'week': week
-            })
-            
-            try:
-                await conn.execute(
-                    """INSERT INTO results (sport_id, season, series, metadata, content_hash)
-                       VALUES ($1, $2, 'nfl', $3, $4)
-                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                       DO UPDATE SET metadata = EXCLUDED.metadata""",
-                    sport_id, int(season), json.dumps(metadata), content_hash
-                )
-                games_imported += 1
-            except Exception as e:
-                logger.debug(f"Error importing stat row: {e}")
-            
-            # Track for season aggregation
-            key = (str(entity_id), int(season))
-            if key not in player_season_data:
-                player_season_data[key] = []
-            player_season_data[key].append(metadata)
+                    await conn.execute(
+                        """INSERT INTO results (sport_id, season, series, metadata, content_hash)
+                           VALUES ($1, $2, 'nfl', $3, $4)
+                           ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                           DO UPDATE SET metadata = EXCLUDED.metadata""",
+                        sport_id, int(season), json.dumps(metadata), content_hash
+                    )
+                    games_imported += 1
+                except Exception as e:
+                    logger.debug(f"Error importing stat row: {e}")
+                
+                # Track for season aggregation
+                key = (str(entity_id), int(season))
+                if key not in player_season_data:
+                    player_season_data[key] = []
+                player_season_data[key].append(metadata)
     
     if progress_callback:
         progress_callback(f"Imported {games_imported} game stat rows. Computing season stats...")
