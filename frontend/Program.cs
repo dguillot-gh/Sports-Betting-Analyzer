@@ -32,6 +32,14 @@ builder.Services.AddHttpClient<PythonMLServiceClient>()
         client.Timeout = TimeSpan.FromMinutes(10); // Allow long-running training operations
     });
 
+// Named HttpClient for direct usage in Blazor pages
+var pythonServiceUrl = builder.Configuration["PythonMLService:BaseUrl"] ?? "http://localhost:8000";
+builder.Services.AddHttpClient("PythonML", client =>
+{
+    client.BaseAddress = new Uri(pythonServiceUrl);
+    client.Timeout = TimeSpan.FromMinutes(10);
+});
+
 // Add circuit options for better error handling and extended timeouts
 builder.Services.AddServerSideBlazor()
     .AddCircuitOptions(options =>
