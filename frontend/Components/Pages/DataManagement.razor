@@ -1,6 +1,7 @@
 @page "/data-management"
 @using SportsBettingAnalyzer.Services
 @inject PythonMLServiceClient MLClient
+@inject IHttpClientFactory HttpClientFactory
 @inject ISnackbar Snackbar
 @inject ILogger<DataManagement> Logger
 @rendermode InteractiveServer
@@ -529,11 +530,11 @@
                 <MudList T="string" Dense="true">
                     @if (_sportImportTarget == "nfl")
                     {
-                        <MudListItem Icon="@Icons.Material.Filled.GitHub" Dense="true">nflverse-data (GitHub releases)</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Code" Dense="true">nflverse-data (GitHub releases)</MudListItem>
                     }
                     else
                     {
-                        <MudListItem Icon="@Icons.Material.Filled.GitHub" Dense="true">hoopR (Sportsdataverse)</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Code" Dense="true">hoopR (Sportsdataverse)</MudListItem>
                     }
                     <MudListItem Icon="@Icons.Material.Filled.Dataset" Dense="true">Existing Kaggle datasets</MudListItem>
                 </MudList>
@@ -1176,7 +1177,8 @@
             StateHasChanged();
             
             // Call the import API
-            var response = await MLClient.HttpClient.PostAsync(
+            var http = HttpClientFactory.CreateClient("PythonML");
+            var response = await http.PostAsync(
                 $"/db/import/{_sportImportTarget}?clear_existing={_sportClearExisting.ToString().ToLower()}",
                 null
             );
@@ -1213,7 +1215,8 @@
         
         try
         {
-            var response = await MLClient.HttpClient.GetAsync($"/db/import/{_sportImportTarget}/status");
+            var http = HttpClientFactory.CreateClient("PythonML");
+            var response = await http.GetAsync($"/db/import/{_sportImportTarget}/status");
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();

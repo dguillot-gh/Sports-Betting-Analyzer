@@ -1,6 +1,6 @@
 @page "/game-results"
 @using SportsBettingAnalyzer.Services
-@inject PythonMLServiceClient MLClient
+@inject IHttpClientFactory HttpClientFactory
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @rendermode InteractiveServer
@@ -181,7 +181,8 @@
     {
         try
         {
-            var response = await MLClient.HttpClient.GetAsync($"/db/games/{_selectedSport}/seasons");
+            var http = HttpClientFactory.CreateClient("PythonML");
+            var response = await http.GetAsync($"/db/games/{_selectedSport}/seasons");
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
@@ -210,7 +211,8 @@
             if (_selectedWeek.HasValue && _selectedSport == "nfl")
                 url += $"&week={_selectedWeek.Value}";
             
-            var response = await MLClient.HttpClient.GetAsync(url);
+            var http = HttpClientFactory.CreateClient("PythonML");
+            var response = await http.GetAsync(url);
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();

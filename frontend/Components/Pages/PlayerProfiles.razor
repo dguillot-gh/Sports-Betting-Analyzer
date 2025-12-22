@@ -2,7 +2,7 @@
 @rendermode InteractiveServer
 @using MudBlazor
 @using SportsBettingAnalyzer.Services
-@inject PythonMLServiceClient MLClient
+@inject IHttpClientFactory HttpClientFactory
 @inject ISnackbar Snackbar
 
 <PageTitle>Player Profiles - Sports Betting Analyzer</PageTitle>
@@ -255,7 +255,8 @@
     {
         try
         {
-            var response = await MLClient.HttpClient.GetAsync($"/db/profiles/{_selectedSport}/list");
+            var http = HttpClientFactory.CreateClient("PythonML");
+            var response = await http.GetAsync($"/db/profiles/{_selectedSport}/list");
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
@@ -294,7 +295,8 @@
         _isLoading = true;
         try
         {
-            var response = await MLClient.HttpClient.GetAsync($"/db/profiles/{_selectedSport}/{Uri.EscapeDataString(_selectedPlayer)}");
+            var http = HttpClientFactory.CreateClient("PythonML");
+            var response = await http.GetAsync($"/db/profiles/{_selectedSport}/{Uri.EscapeDataString(_selectedPlayer)}");
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
@@ -372,8 +374,8 @@
         _isLoading = true;
         try
         {
-            var url = $"http://localhost:8000/players/{_selectedSport}/compare?p1={Uri.EscapeDataString(_comparePlayer1)}&p2={Uri.EscapeDataString(_comparePlayer2)}&season={_season}";
-            _comparisonData = await Http.GetFromJsonAsync<ComparisonData>(url);
+            var http = HttpClientFactory.CreateClient("PythonML");
+            _comparisonData = await http.GetFromJsonAsync<ComparisonData>($"/players/{_selectedSport}/compare?p1={Uri.EscapeDataString(_comparePlayer1)}&p2={Uri.EscapeDataString(_comparePlayer2)}&season={_season}");
         }
         catch (Exception ex)
         {
