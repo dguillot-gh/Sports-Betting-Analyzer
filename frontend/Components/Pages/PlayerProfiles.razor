@@ -1,7 +1,8 @@
 @page "/player-profiles"
 @rendermode InteractiveServer
 @using MudBlazor
-@inject HttpClient Http
+@using SportsBettingAnalyzer.Services
+@inject PythonMLServiceClient MLClient
 @inject ISnackbar Snackbar
 
 <PageTitle>Player Profiles - Sports Betting Analyzer</PageTitle>
@@ -254,9 +255,14 @@
     {
         try
         {
-            var url = $"http://localhost:8000/players/{_selectedSport}/list";
-            var response = await Http.GetFromJsonAsync<PlayerListResponse>(url);
-            _availablePlayers = response?.Players ?? new();
+            var response = await MLClient.HttpClient.GetAsync($"/db/profiles/{_selectedSport}/list");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var data = System.Text.Json.JsonSerializer.Deserialize<EntitiesResponse>(json, 
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                _availablePlayers = data?.Entities?.Select(e => e.Name).Where(n => !string.IsNullOrEmpty(n)).ToList() ?? new();
+            }
         }
         catch
         {
@@ -288,14 +294,37 @@
         _isLoading = true;
         try
         {
-            var url = $"http://localhost:8000/players/{_selectedSport}/{Uri.EscapeDataString(_selectedPlayer)}/stats?season={_season}";
-            _playerStats = await Http.GetFromJsonAsync<PlayerStatsData>(url);
-            
-            if (_playerStats?.Last5Games.Any() == true)
+            var response = await MLClient.HttpClient.GetAsync($"/db/profiles/{_selectedSport}/{Uri.EscapeDataString(_selectedPlayer)}");
+            if (response.IsSuccessStatusCode)
             {
-                _last5Headers = _selectedSport == "nba" 
-                    ? new[] { "PTS", "REB", "AST", "STL", "BLK" }
-                    : new[] { "Pass Yds", "Rush Yds", "Rec Yds", "TDs" };
+                var json = await response.Content.ReadAsStringAsync();
+                var profile = System.Text.Json.JsonSerializer.Deserialize<ProfileResponse>(json,
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                
+                if (profile != null)
+                {
+                    _playerStats = new PlayerStatsData
+                    {
+                        Player = profile.Name ?? _selectedPlayer,
+                        Team = profile.Metadata?.GetValueOrDefault("team")?.ToString() ?? "",
+                        Position = profile.Metadata?.GetValueOrDefault("position")?.ToString() ?? "",
+                        SeasonStats = profile.Stats?.GetValueOrDefault(_season) ?? new(),
+                        Last5Games = profile.RecentGames?.Take(5).Select(g => new GameLog
+                        {
+                            Date = g.GetValueOrDefault("game_date")?.ToString() ?? g.GetValueOrDefault("week")?.ToString() ?? "?",
+                            Opponent = g.GetValueOrDefault("opponent")?.ToString() ?? "?",
+                            Stats = GetGameStats(g, _selectedSport)
+                        }).ToList() ?? new()
+                    };
+                    
+                    _last5Headers = _selectedSport == "nba" 
+                        ? new[] { "PTS", "REB", "AST", "STL", "BLK" }
+                        : new[] { "Pass Yds", "Rush Yds", "Rec Yds", "TDs" };
+                }
+            }
+            else
+            {
+                Snackbar.Add("Player not found", Severity.Warning);
             }
         }
         catch (Exception ex)
@@ -305,6 +334,34 @@
         finally
         {
             _isLoading = false;
+        }
+    }
+    
+    private List<string> GetGameStats(Dictionary<string, object> game, string sport)
+    {
+        if (sport == "nba")
+        {
+            return new List<string>
+            {
+                game.GetValueOrDefault("pts")?.ToString() ?? "-",
+                game.GetValueOrDefault("reb")?.ToString() ?? "-",
+                game.GetValueOrDefault("ast")?.ToString() ?? "-",
+                game.GetValueOrDefault("stl")?.ToString() ?? "-",
+                game.GetValueOrDefault("blk")?.ToString() ?? "-"
+            };
+        }
+        else
+        {
+            var passTd = int.TryParse(game.GetValueOrDefault("pass_td")?.ToString(), out var pt) ? pt : 0;
+            var rushTd = int.TryParse(game.GetValueOrDefault("rush_td")?.ToString(), out var rt) ? rt : 0;
+            var recTd = int.TryParse(game.GetValueOrDefault("rec_td")?.ToString(), out var rect) ? rect : 0;
+            return new List<string>
+            {
+                game.GetValueOrDefault("pass_yds")?.ToString() ?? "-",
+                game.GetValueOrDefault("rush_yds")?.ToString() ?? "-",
+                game.GetValueOrDefault("rec_yds")?.ToString() ?? "-",
+                (passTd + rushTd + recTd).ToString()
+            };
         }
     }
 
@@ -370,5 +427,32 @@
     {
         public PlayerStatsData Player1 { get; set; } = new();
         public PlayerStatsData Player2 { get; set; } = new();
+    }
+    
+    // New DB endpoint response classes
+    public class EntitiesResponse
+    {
+        public List<EntityInfo> Entities { get; set; } = new();
+        public int Count { get; set; }
+    }
+    
+    public class EntityInfo
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Type { get; set; } = "";
+        public string Series { get; set; } = "";
+        public Dictionary<string, object> Metadata { get; set; } = new();
+    }
+    
+    public class ProfileResponse
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Type { get; set; } = "";
+        public string Series { get; set; } = "";
+        public Dictionary<string, object> Metadata { get; set; } = new();
+        public Dictionary<int, Dictionary<string, object>> Stats { get; set; } = new();
+        public List<Dictionary<string, object>> RecentGames { get; set; } = new();
     }
 }

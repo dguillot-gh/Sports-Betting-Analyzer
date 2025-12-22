@@ -1,6 +1,6 @@
 @page "/game-results"
 @using SportsBettingAnalyzer.Services
-@inject IHttpClientFactory HttpClientFactory
+@inject PythonMLServiceClient MLClient
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @rendermode InteractiveServer
@@ -159,23 +159,29 @@
     
     protected override async Task OnParametersSetAsync()
     {
+        // Read query params from URL
         var uri = new Uri(Navigation.Uri);
         var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
         
         if (!string.IsNullOrEmpty(query["sport"]))
+        {
             _selectedSport = query["sport"]!;
+        }
         if (!string.IsNullOrEmpty(query["player"]))
+        {
             _searchPlayer = query["player"];
+        }
         if (int.TryParse(query["season"], out var season))
+        {
             _selectedSeason = season;
+        }
     }
     
     private async Task LoadSeasons()
     {
         try
         {
-            var http = HttpClientFactory.CreateClient("PythonML");
-            var response = await http.GetAsync($"/db/games/{_selectedSport}/seasons");
+            var response = await MLClient.HttpClient.GetAsync($"/db/games/{_selectedSport}/seasons");
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
@@ -204,8 +210,7 @@
             if (_selectedWeek.HasValue && _selectedSport == "nfl")
                 url += $"&week={_selectedWeek.Value}";
             
-            var http = HttpClientFactory.CreateClient("PythonML");
-            var response = await http.GetAsync(url);
+            var response = await MLClient.HttpClient.GetAsync(url);
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
@@ -230,8 +235,17 @@
         }
     }
     
-    public class SeasonsResponse { public List<int> Seasons { get; set; } = new(); }
-    public class GameResultsResponse { public List<GameResult> Results { get; set; } = new(); public int Count { get; set; } }
+    // Response models
+    public class SeasonsResponse
+    {
+        public List<int> Seasons { get; set; } = new();
+    }
+    
+    public class GameResultsResponse
+    {
+        public List<GameResult> Results { get; set; } = new();
+        public int Count { get; set; }
+    }
     
     public class GameResult
     {
@@ -242,16 +256,31 @@
         public string? Position { get; set; }
         public string? Opponent { get; set; }
         public string? GameDate { get; set; }
+        public string? Game_Date { get; set; }
+        
+        // NFL stats
         public int? PassYds { get; set; }
+        public int? Pass_Yds { get; set; }
         public int? RushYds { get; set; }
+        public int? Rush_Yds { get; set; }
         public int? RecYds { get; set; }
+        public int? Rec_Yds { get; set; }
         public int? PassTd { get; set; }
+        public int? Pass_Td { get; set; }
         public int? RushTd { get; set; }
+        public int? Rush_Td { get; set; }
         public int? RecTd { get; set; }
+        public int? Rec_Td { get; set; }
+        
+        // NBA stats
         public int? Pts { get; set; }
         public int? Reb { get; set; }
         public int? Ast { get; set; }
         public int? Stl { get; set; }
         public int? Blk { get; set; }
+        
+        // Property accessors for snake_case variations
+        public string? GetPlayerName() => PlayerName ?? Player_Name;
+        public string? GetGameDate() => GameDate ?? Game_Date;
     }
 }

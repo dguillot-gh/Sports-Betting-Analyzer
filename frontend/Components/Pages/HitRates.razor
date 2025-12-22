@@ -1,6 +1,6 @@
 @page "/hit-rates"
 @using SportsBettingAnalyzer.Services
-@inject IHttpClientFactory HttpClientFactory
+@inject PythonMLServiceClient MLClient
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @rendermode InteractiveServer
@@ -202,6 +202,7 @@
     
     protected override void OnInitialized()
     {
+        // Set defaults based on sport
         UpdateDefaults();
     }
     
@@ -223,6 +224,7 @@
     {
         if (string.IsNullOrWhiteSpace(_searchPlayer) || _searchPlayer.Length < 2)
             return;
+        
         await CalculateHitRates();
     }
     
@@ -234,75 +236,24 @@
             _searchCompleted = false;
             StateHasChanged();
             
-            var url = $"/db/games/{_selectedSport}/list?limit=500";
+            // Call API to get hit rates
+            var url = $"/db/hitrates/{_selectedSport}?stat={_selectedStat}&threshold={_threshold}";
             if (!string.IsNullOrEmpty(_searchPlayer))
                 url += $"&player={Uri.EscapeDataString(_searchPlayer)}";
             
-            var http = HttpClientFactory.CreateClient("PythonML");
-            var response = await http.GetAsync(url);
-            if (!response.IsSuccessStatusCode)
+            var response = await MLClient.HttpClient.GetAsync(url);
+            if (response.IsSuccessStatusCode)
             {
-                _hitRates = new List<HitRateResult>();
-                _searchCompleted = true;
-                return;
+                var json = await response.Content.ReadAsStringAsync();
+                var data = System.Text.Json.JsonSerializer.Deserialize<HitRatesResponse>(json, 
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                _hitRates = data?.Results ?? new List<HitRateResult>();
             }
-            
-            var json = await response.Content.ReadAsStringAsync();
-            var games = System.Text.Json.JsonSerializer.Deserialize<GameResultsResponse>(json,
-                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            
-            if (games?.Results == null)
+            else
             {
-                _hitRates = new List<HitRateResult>();
-                _searchCompleted = true;
-                return;
+                // Fallback: Calculate locally from game results
+                await CalculateLocalHitRates();
             }
-            
-            var playerGames = games.Results
-                .Where(g => !string.IsNullOrEmpty(g.PlayerName))
-                .GroupBy(g => g.PlayerName)
-                .ToList();
-            
-            _hitRates = playerGames.Select(pg =>
-            {
-                var allGames = pg.OrderByDescending(g => g.Season).ThenByDescending(g => g.Week ?? 0).ToList();
-                var last5 = allGames.Take(5).ToList();
-                var last10 = allGames.Take(10).ToList();
-                
-                int GetStatValue(GameResult g) => _selectedStat switch
-                {
-                    "pts" => g.Pts ?? 0,
-                    "reb" => g.Reb ?? 0,
-                    "ast" => g.Ast ?? 0,
-                    "stl" => g.Stl ?? 0,
-                    "blk" => g.Blk ?? 0,
-                    "fg3" => g.Fg3 ?? 0,
-                    "pass_yds" => g.PassYds ?? 0,
-                    "rush_yds" => g.RushYds ?? 0,
-                    "rec_yds" => g.RecYds ?? 0,
-                    "rec" => g.Rec ?? 0,
-                    "pass_td" => g.PassTd ?? 0,
-                    "rush_td" => g.RushTd ?? 0,
-                    _ => 0
-                };
-                
-                return new HitRateResult
-                {
-                    PlayerName = pg.Key!,
-                    Team = pg.FirstOrDefault()?.Team ?? "",
-                    Position = pg.FirstOrDefault()?.Position ?? "",
-                    Last5Games = last5.Count,
-                    Last5Hits = last5.Count(g => GetStatValue(g) >= _threshold),
-                    Last10Games = last10.Count,
-                    Last10Hits = last10.Count(g => GetStatValue(g) >= _threshold),
-                    SeasonGames = allGames.Count,
-                    SeasonHits = allGames.Count(g => GetStatValue(g) >= _threshold),
-                    SeasonAvg = allGames.Count > 0 ? allGames.Average(g => GetStatValue(g)) : 0,
-                };
-            })
-            .OrderByDescending(h => h.SeasonRate)
-            .Take(50)
-            .ToList();
             
             _searchCompleted = true;
         }
@@ -315,6 +266,78 @@
         {
             _isLoading = false;
         }
+    }
+    
+    private async Task CalculateLocalHitRates()
+    {
+        // Fetch game results and calculate locally
+        var url = $"/db/games/{_selectedSport}/list?limit=500";
+        if (!string.IsNullOrEmpty(_searchPlayer))
+            url += $"&player={Uri.EscapeDataString(_searchPlayer)}";
+        
+        var response = await MLClient.HttpClient.GetAsync(url);
+        if (!response.IsSuccessStatusCode)
+        {
+            _hitRates = new List<HitRateResult>();
+            return;
+        }
+        
+        var json = await response.Content.ReadAsStringAsync();
+        var games = System.Text.Json.JsonSerializer.Deserialize<GameResultsResponse>(json,
+            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        
+        if (games?.Results == null)
+        {
+            _hitRates = new List<HitRateResult>();
+            return;
+        }
+        
+        // Group by player
+        var playerGames = games.Results
+            .Where(g => !string.IsNullOrEmpty(g.PlayerName))
+            .GroupBy(g => g.PlayerName)
+            .ToList();
+        
+        _hitRates = playerGames.Select(pg =>
+        {
+            var allGames = pg.OrderByDescending(g => g.Season).ThenByDescending(g => g.Week ?? 0).ToList();
+            var last5 = allGames.Take(5).ToList();
+            var last10 = allGames.Take(10).ToList();
+            
+            int GetStatValue(GameResult g) => _selectedStat switch
+            {
+                "pts" => g.Pts ?? 0,
+                "reb" => g.Reb ?? 0,
+                "ast" => g.Ast ?? 0,
+                "stl" => g.Stl ?? 0,
+                "blk" => g.Blk ?? 0,
+                "fg3" => g.Fg3 ?? 0,
+                "pass_yds" => g.PassYds ?? 0,
+                "rush_yds" => g.RushYds ?? 0,
+                "rec_yds" => g.RecYds ?? 0,
+                "rec" => g.Rec ?? 0,
+                "pass_td" => g.PassTd ?? 0,
+                "rush_td" => g.RushTd ?? 0,
+                _ => 0
+            };
+            
+            return new HitRateResult
+            {
+                PlayerName = pg.Key!,
+                Team = pg.FirstOrDefault()?.Team ?? "",
+                Position = pg.FirstOrDefault()?.Position ?? "",
+                Last5Games = last5.Count,
+                Last5Hits = last5.Count(g => GetStatValue(g) >= _threshold),
+                Last10Games = last10.Count,
+                Last10Hits = last10.Count(g => GetStatValue(g) >= _threshold),
+                SeasonGames = allGames.Count,
+                SeasonHits = allGames.Count(g => GetStatValue(g) >= _threshold),
+                SeasonAvg = allGames.Count > 0 ? allGames.Average(g => GetStatValue(g)) : 0,
+            };
+        })
+        .OrderByDescending(h => h.SeasonRate)
+        .Take(50)
+        .ToList();
     }
     
     private Color GetRateColor(double rate)
@@ -348,7 +371,34 @@
         _ => stat
     };
     
-    public class GameResultsResponse { public List<GameResult> Results { get; set; } = new(); }
+    // Models
+    public class HitRatesResponse
+    {
+        public List<HitRateResult> Results { get; set; } = new();
+    }
+    
+    public class HitRateResult
+    {
+        public string PlayerName { get; set; } = "";
+        public string Team { get; set; } = "";
+        public string Position { get; set; } = "";
+        public int Last5Games { get; set; }
+        public int Last5Hits { get; set; }
+        public int Last10Games { get; set; }
+        public int Last10Hits { get; set; }
+        public int SeasonGames { get; set; }
+        public int SeasonHits { get; set; }
+        public double SeasonAvg { get; set; }
+        
+        public double Last5Rate => Last5Games > 0 ? (double)Last5Hits / Last5Games : 0;
+        public double Last10Rate => Last10Games > 0 ? (double)Last10Hits / Last10Games : 0;
+        public double SeasonRate => SeasonGames > 0 ? (double)SeasonHits / SeasonGames : 0;
+    }
+    
+    public class GameResultsResponse
+    {
+        public List<GameResult> Results { get; set; } = new();
+    }
     
     public class GameResult
     {
@@ -369,23 +419,5 @@
         public int? Rec { get; set; }
         public int? PassTd { get; set; }
         public int? RushTd { get; set; }
-    }
-    
-    public class HitRateResult
-    {
-        public string PlayerName { get; set; } = "";
-        public string Team { get; set; } = "";
-        public string Position { get; set; } = "";
-        public int Last5Games { get; set; }
-        public int Last5Hits { get; set; }
-        public int Last10Games { get; set; }
-        public int Last10Hits { get; set; }
-        public int SeasonGames { get; set; }
-        public int SeasonHits { get; set; }
-        public double SeasonAvg { get; set; }
-        
-        public double Last5Rate => Last5Games > 0 ? (double)Last5Hits / Last5Games : 0;
-        public double Last10Rate => Last10Games > 0 ? (double)Last10Hits / Last10Games : 0;
-        public double SeasonRate => SeasonGames > 0 ? (double)SeasonHits / SeasonGames : 0;
     }
 }

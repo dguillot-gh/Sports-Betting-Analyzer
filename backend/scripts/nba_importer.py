@@ -1,6 +1,10 @@
 """
+Downloads hoopR data + imports Kaggle data to PostgreSQL.
+
+Data Sources:
+- hoopR: espn_nba_player_boxscores (game-by-game stats)
+- Kaggle: Player Per Game, Player Totals, Advanced
 NBA Data Importer
-==================
 Imports NBA data from hoopR/sportsdataverse and existing Kaggle data.
 
 Usage:

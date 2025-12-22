@@ -1,6 +1,14 @@
 """
+Downloads ALL nflverse data from GitHub releases and imports to PostgreSQL.
+Also imports existing Kaggle data.
+
+Data Sources:
+- player_stats: Weekly player stats
+- players: Player directory
+- schedules: Games + betting lines
+- ftn_charting: Advanced charting data
+- weekly_rosters: Who played each week
 NFL Data Importer
-==================
 Downloads nflverse data from GitHub releases and imports to PostgreSQL.
 Also imports existing Kaggle data.
 

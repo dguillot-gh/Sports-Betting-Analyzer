@@ -951,3 +951,359 @@ async def get_drivers_with_results(sport: str, series: str = None, season: int =
     finally:
         await conn.close()
 
+
+# =============================================================================
+# NFL Import Endpoints
+# =============================================================================
+
+@router.post("/import/nfl")
+async def import_nfl_data(
+    background_tasks: BackgroundTasks,
+    clear_existing: bool = False
+):
+    """
+    Start NFL data import from nflverse.
+    Downloads data from GitHub releases and imports to PostgreSQL.
+    """
+    # Check if already running
+    if import_status["nfl"]["status"] == "running":
+        return {
+            "status": "already_running",
+            "message": "NFL import is already in progress",
+            "started_at": import_status["nfl"]["started_at"]
+        }
+    
+    # Update status and start background import
+    import_status["nfl"] = {
+        "status": "running",
+        "started_at": datetime.now().isoformat(),
+        "completed_at": None,
+        "progress": ["NFL import started..."],
+        "result": None,
+        "error": None
+    }
+    
+    background_tasks.add_task(run_nfl_import, clear_existing)
+    
+    return {
+        "status": "started",
+        "message": "NFL data import started (nflverse + Kaggle)",
+        "clear_existing": clear_existing
+    }
+
+
+@router.get("/import/nfl/status")
+async def get_nfl_import_status():
+    """Get the current status of NFL import."""
+    return import_status["nfl"]
+
+
+async def run_nfl_import(clear_existing: bool):
+    """Background task for NFL import."""
+    try:
+        from scripts.nfl_importer import import_all_nfl
+        
+        def progress_callback(msg):
+            import_status["nfl"]["progress"].append(msg)
+            logger.info(f"NFL Import: {msg}")
+        
+        result = await import_all_nfl(
+            clear_existing=clear_existing,
+            progress_callback=progress_callback
+        )
+        
+        import_status["nfl"]["status"] = "completed" if result.get("status") == "success" else "failed"
+        import_status["nfl"]["completed_at"] = datetime.now().isoformat()
+        import_status["nfl"]["result"] = result
+        
+        if result.get("errors"):
+            import_status["nfl"]["error"] = "; ".join(result["errors"])
+        
+    except Exception as e:
+        logger.error(f"NFL import failed: {e}")
+        import_status["nfl"]["status"] = "failed"
+        import_status["nfl"]["completed_at"] = datetime.now().isoformat()
+        import_status["nfl"]["error"] = str(e)
+        import_status["nfl"]["progress"].append(f"❌ Error: {e}")
+
+
+# =============================================================================
+# NBA Import Endpoints
+# =============================================================================
+
+@router.post("/import/nba")
+async def import_nba_data(
+    background_tasks: BackgroundTasks,
+    clear_existing: bool = False
+):
+    """
+    Start NBA data import from hoopR and Kaggle.
+    """
+    # Check if already running
+    if import_status["nba"]["status"] == "running":
+        return {
+            "status": "already_running",
+            "message": "NBA import is already in progress",
+            "started_at": import_status["nba"]["started_at"]
+        }
+    
+    # Update status and start background import
+    import_status["nba"] = {
+        "status": "running",
+        "started_at": datetime.now().isoformat(),
+        "completed_at": None,
+        "progress": ["NBA import started..."],
+        "result": None,
+        "error": None
+    }
+    
+    background_tasks.add_task(run_nba_import, clear_existing)
+    
+    return {
+        "status": "started",
+        "message": "NBA data import started (hoopR + Kaggle)",
+        "clear_existing": clear_existing
+    }
+
+
+@router.get("/import/nba/status")
+async def get_nba_import_status():
+    """Get the current status of NBA import."""
+    return import_status["nba"]
+
+
+async def run_nba_import(clear_existing: bool):
+    """Background task for NBA import."""
+    try:
+        from scripts.nba_importer import import_all_nba
+        
+        def progress_callback(msg):
+            import_status["nba"]["progress"].append(msg)
+            logger.info(f"NBA Import: {msg}")
+        
+        result = await import_all_nba(
+            clear_existing=clear_existing,
+            progress_callback=progress_callback
+        )
+        
+        import_status["nba"]["status"] = "completed" if result.get("status") == "success" else "failed"
+        import_status["nba"]["completed_at"] = datetime.now().isoformat()
+        import_status["nba"]["result"] = result
+        
+        if result.get("errors"):
+            import_status["nba"]["error"] = "; ".join(result["errors"])
+        
+    except Exception as e:
+        logger.error(f"NBA import failed: {e}")
+        import_status["nba"]["status"] = "failed"
+        import_status["nba"]["completed_at"] = datetime.now().isoformat()
+        import_status["nba"]["error"] = str(e)
+        import_status["nba"]["progress"].append(f"❌ Error: {e}")
+
+
+# =============================================================================
+# NFL/NBA Profile Endpoints
+# =============================================================================
+
+@router.get("/profiles/{sport}/list")
+async def get_sport_profiles(
+    sport: str,
+    entity_type: str = "player",
+    search: str = None,
+    limit: int = 100
+):
+    """Get list of players/teams for a sport."""
+    if sport not in ["nfl", "nba", "nascar"]:
+        raise HTTPException(status_code=400, detail=f"Invalid sport: {sport}")
+    
+    conn = await get_db_connection()
+    try:
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
+        if not sport_id:
+            raise HTTPException(status_code=404, detail=f"Sport '{sport}' not found")
+        
+        query = """
+            SELECT id, name, type, series, metadata
+            FROM entities
+            WHERE sport_id = $1 AND type = $2
+        """
+        params = [sport_id, entity_type]
+        
+        if search:
+            query += " AND LOWER(name) LIKE LOWER($3)"
+            params.append(f"%{search}%")
+        
+        query += f" ORDER BY name LIMIT ${len(params)+1}"
+        params.append(limit)
+        
+        rows = await conn.fetch(query, *params)
+        
+        return {
+            "entities": [
+                {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "type": row["type"],
+                    "series": row["series"],
+                    "metadata": json.loads(row["metadata"]) if row["metadata"] else {}
+                }
+                for row in rows
+            ],
+            "count": len(rows)
+        }
+    finally:
+        await conn.close()
+
+
+@router.get("/profiles/{sport}/{name}")
+async def get_player_profile(sport: str, name: str):
+    """Get detailed player profile with stats."""
+    if sport not in ["nfl", "nba", "nascar"]:
+        raise HTTPException(status_code=400, detail=f"Invalid sport: {sport}")
+    
+    conn = await get_db_connection()
+    try:
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
+        if not sport_id:
+            raise HTTPException(status_code=404, detail=f"Sport '{sport}' not found")
+        
+        # Get player entity
+        entity = await conn.fetchrow(
+            """SELECT id, name, type, series, metadata
+               FROM entities
+               WHERE sport_id = $1 AND LOWER(name) = LOWER($2)
+               LIMIT 1""",
+            sport_id, name
+        )
+        
+        if not entity:
+            raise HTTPException(status_code=404, detail=f"Player '{name}' not found")
+        
+        # Get stats
+        stats_rows = await conn.fetch(
+            """SELECT season, stat_type, stats
+               FROM stats
+               WHERE entity_id = $1
+               ORDER BY season DESC""",
+            entity["id"]
+        )
+        
+        # Format stats by season
+        stats = {}
+        for row in stats_rows:
+            season = row["season"]
+            if season not in stats:
+                stats[season] = {}
+            stats[season].update(json.loads(row["stats"]) if row["stats"] else {})
+        
+        # Get recent games (from results)
+        recent_games = await conn.fetch(
+            """SELECT season, metadata
+               FROM results
+               WHERE sport_id = $1 
+                 AND (metadata->>'player_name' = $2 OR metadata->>'player_id' = $3)
+               ORDER BY season DESC, (metadata->>'week')::int DESC NULLS LAST
+               LIMIT 10""",
+            sport_id, name, name
+        )
+        
+        return {
+            "id": entity["id"],
+            "name": entity["name"],
+            "type": entity["type"],
+            "series": entity["series"],
+            "metadata": json.loads(entity["metadata"]) if entity["metadata"] else {},
+            "stats": stats,
+            "recent_games": [
+                {
+                    "season": row["season"],
+                    **(json.loads(row["metadata"]) if row["metadata"] else {})
+                }
+                for row in recent_games
+            ]
+        }
+    finally:
+        await conn.close()
+
+
+# =============================================================================
+# Game Results Endpoints (NFL/NBA)
+# =============================================================================
+
+@router.get("/games/{sport}/list")
+async def get_game_results(
+    sport: str,
+    season: int = None,
+    team: str = None,
+    player: str = None,
+    week: int = None,
+    limit: int = 100
+):
+    """Get game results for NFL or NBA."""
+    if sport not in ["nfl", "nba"]:
+        raise HTTPException(status_code=400, detail=f"Invalid sport for games: {sport}")
+    
+    conn = await get_db_connection()
+    try:
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
+        if not sport_id:
+            raise HTTPException(status_code=404, detail=f"Sport '{sport}' not found")
+        
+        query = """
+            SELECT id, season, series, metadata
+            FROM results
+            WHERE sport_id = $1
+        """
+        params = [sport_id]
+        
+        if season:
+            query += f" AND season = ${len(params)+1}"
+            params.append(season)
+        
+        if player:
+            query += f" AND (metadata->>'player_name' ILIKE ${len(params)+1} OR metadata->>'player_id' = ${len(params)+1})"
+            params.append(f"%{player}%")
+        
+        if week and sport == "nfl":
+            query += f" AND (metadata->>'week')::int = ${len(params)+1}"
+            params.append(week)
+        
+        query += f" ORDER BY season DESC, (metadata->>'week')::int DESC NULLS LAST LIMIT ${len(params)+1}"
+        params.append(limit)
+        
+        rows = await conn.fetch(query, *params)
+        
+        return {
+            "results": [
+                {
+                    "id": row["id"],
+                    "season": row["season"],
+                    "series": row["series"],
+                    **(json.loads(row["metadata"]) if row["metadata"] else {})
+                }
+                for row in rows
+            ],
+            "count": len(rows)
+        }
+    finally:
+        await conn.close()
+
+
+@router.get("/games/{sport}/seasons")
+async def get_available_seasons(sport: str):
+    """Get list of available seasons for a sport."""
+    conn = await get_db_connection()
+    try:
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
+        if not sport_id:
+            return {"seasons": []}
+        
+        rows = await conn.fetch(
+            """SELECT DISTINCT season FROM results 
+               WHERE sport_id = $1 AND season IS NOT NULL
+               ORDER BY season DESC""",
+            sport_id
+        )
+        return {"seasons": [row["season"] for row in rows]}
+    finally:
+        await conn.close()
