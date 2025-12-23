@@ -19,3 +19,4 @@ pyarrow
 requests
 nflreadpy
 polars
+basketball_reference_web_scraper
