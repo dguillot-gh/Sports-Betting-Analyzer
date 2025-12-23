@@ -36,13 +36,21 @@ DATABASE_URL = "postgresql://sports_user:sportsbetting2024@postgres:5432/sports_
 NFLVERSE_BASE = "https://github.com/nflverse/nflverse-data/releases/download"
 NFLVERSE_PBP_BASE = "https://github.com/nflverse/nflverse-pbp/releases/download"
 
-# Years to import (2020-2024 for now)
-IMPORT_YEARS = list(range(2020, 2025))
+# Years to import (2020-2025 including current season)
+IMPORT_YEARS = list(range(2020, 2026))
 
-# Per-season player stats (season aggregates - cleaner format)
-# These files contain full season totals per player
-PLAYER_STATS_REG = {
-    year: f"{NFLVERSE_BASE}/player_stats/stats_player_reg_{year}.csv"
+# Per-season weekly player stats from nflverse-data releases
+# These files contain weekly stats per player (we'll aggregate to season totals)
+# URL format: https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats_YYYY.csv
+PLAYER_STATS_WEEKLY = {
+    year: f"{NFLVERSE_BASE}/player_stats/player_stats_{year}.csv"
+    for year in IMPORT_YEARS
+}
+
+# Season-level aggregates (pre-computed by nflverse)
+# URL format: https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats_season_YYYY.csv  
+PLAYER_STATS_SEASON = {
+    year: f"{NFLVERSE_BASE}/player_stats/player_stats_season_{year}.csv"
     for year in IMPORT_YEARS
 }
 
@@ -72,10 +80,10 @@ async def download_nflverse(progress_callback=None):
     
     downloaded = []
     
-    # Download per-year player stats (2020-2024)
-    for year, url in PLAYER_STATS_REG.items():
+    # Download per-year season stats (2020-2025)
+    for year, url in PLAYER_STATS_SEASON.items():
         try:
-            name = f"stats_player_reg_{year}"
+            name = f"player_stats_season_{year}"
             if progress_callback:
                 progress_callback(f"Downloading {name}.csv...")
             
@@ -170,8 +178,15 @@ async def download_pbp_2025(progress_callback=None) -> list:
         return []
 
 
-async def import_pbp_2025(conn, sport_id: int, progress_callback=None) -> dict:
-    """Import 2025 player stats from play-by-play RDS files."""
+async def import_pbp_2025(conn, sport_id: int, player_map: dict, progress_callback=None) -> dict:
+    """Import 2025 player stats from play-by-play RDS files.
+    
+    Args:
+        conn: Database connection
+        sport_id: NFL sport ID
+        player_map: Dict mapping player_id -> entity_id for stats table insertion
+        progress_callback: Optional progress callback function
+    """
     try:
         import pyreadr
     except ImportError:
@@ -306,6 +321,7 @@ async def import_pbp_2025(conn, sport_id: int, progress_callback=None) -> dict:
         })
         
         try:
+            # Insert into results table (for game history queries)
             await conn.execute(
                 """INSERT INTO results (sport_id, season, series, metadata, content_hash)
                    VALUES ($1, $2, 'nfl', $3, $4)
@@ -313,11 +329,48 @@ async def import_pbp_2025(conn, sport_id: int, progress_callback=None) -> dict:
                    DO UPDATE SET metadata = EXCLUDED.metadata""",
                 sport_id, 2025, json.dumps(metadata), content_hash
             )
+            
+            # ALSO insert into stats table (for profile queries)
+            # First try to look up entity_id from player_map
+            entity_id = player_map.get(str(player_id))
+            
+            # If not in player_map, try to find by searching entities table
+            if not entity_id:
+                player_name = stats.get('player_name', '')
+                if player_name:
+                    entity_id = await conn.fetchval(
+                        """SELECT id FROM entities 
+                           WHERE sport_id = $1 AND name ILIKE $2
+                           LIMIT 1""",
+                        sport_id, f"%{player_name}%"
+                    )
+            
+            if entity_id:
+                # Build stats dict (exclude identifier fields)
+                stats_dict = {k: v for k, v in metadata.items() 
+                             if k not in ['player_id', 'player_name', 'games'] and v is not None}
+                stats_dict['games'] = metadata.get('games', 0)  # Keep games count
+                
+                stats_hash = compute_hash({
+                    'entity_id': entity_id,
+                    'season': 2025,
+                    'sport': 'nfl',
+                    'stat_type': 'season'
+                })
+                
+                await conn.execute(
+                    """INSERT INTO stats (entity_id, season, stat_type, stats, content_hash)
+                       VALUES ($1, $2, 'season', $3, $4)
+                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                       DO UPDATE SET stats = EXCLUDED.stats""",
+                    entity_id, 2025, json.dumps(stats_dict), stats_hash
+                )
+            
             imported += 1
         except Exception as e:
             logger.debug(f"Error inserting player {player_id}: {e}")
     
-    logger.info(f"Processed {games_processed} games, imported {imported} player 2025 stats")
+    logger.info(f"Processed {games_processed} games, imported {imported} player 2025 stats to results AND stats tables")
     return {"games_processed": games_processed, "imported": imported}
 
 
@@ -419,13 +472,13 @@ async def import_players(conn, sport_id: int, progress_callback=None) -> dict:
 
 
 async def import_player_stats(conn, sport_id: int, player_map: dict, progress_callback=None) -> dict:
-    """Import player season stats from nflverse stats_player_reg_YYYY.csv files."""
+    """Import player season stats from nflverse player_stats_season_YYYY.csv files."""
     
-    # Find all stats_player_reg_YYYY.csv files
-    stats_files = sorted(NFLVERSE_DIR.glob("stats_player_reg_*.csv"))
+    # Find all player_stats_season_YYYY.csv files (2020-2025)
+    stats_files = sorted(NFLVERSE_DIR.glob("player_stats_season_*.csv"))
     
     if not stats_files:
-        logger.warning("No stats_player_reg_*.csv files found")
+        logger.warning("No player_stats_season_*.csv files found")
         return {"imported": 0, "stats_computed": 0}
     
     if progress_callback:
@@ -499,7 +552,7 @@ async def import_player_stats(conn, sport_id: int, player_map: dict, progress_ca
                     # Clean None values
                     metadata = {k: v for k, v in metadata.items() if v is not None}
                     
-                    # Create unique hash for this player-season
+                    # Create unique hash for this player-season (for results table)
                     content_hash = compute_hash({
                         'sport': 'nfl',
                         'player_id': str(player_id),
@@ -508,6 +561,7 @@ async def import_player_stats(conn, sport_id: int, player_map: dict, progress_ca
                     })
                     
                     try:
+                        # Insert into results table (for game history queries)
                         await conn.execute(
                             """INSERT INTO results (sport_id, season, series, metadata, content_hash)
                                VALUES ($1, $2, 'nfl', $3, $4)
@@ -515,6 +569,30 @@ async def import_player_stats(conn, sport_id: int, player_map: dict, progress_ca
                                DO UPDATE SET metadata = EXCLUDED.metadata""",
                             sport_id, int(season), json.dumps(metadata), content_hash
                         )
+                        
+                        # ALSO insert into stats table (for profile queries)
+                        # Look up entity_id from player_map
+                        entity_id = player_map.get(str(player_id))
+                        if entity_id:
+                            # Build stats dict (exclude identifier fields)
+                            stats_dict = {k: v for k, v in metadata.items() 
+                                         if k not in ['player_id', 'player_name', 'player_display_name']}
+                            
+                            stats_hash = compute_hash({
+                                'entity_id': entity_id,
+                                'season': int(season),
+                                'sport': 'nfl',
+                                'stat_type': 'season'
+                            })
+                            
+                            await conn.execute(
+                                """INSERT INTO stats (entity_id, season, stat_type, stats, content_hash)
+                                   VALUES ($1, $2, 'season', $3, $4)
+                                   ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                                   DO UPDATE SET stats = EXCLUDED.stats""",
+                                entity_id, int(season), json.dumps(stats_dict), stats_hash
+                            )
+                        
                         imported += 1
                     except Exception as e:
                         logger.debug(f"Error importing stat row: {e}")
@@ -525,7 +603,7 @@ async def import_player_stats(conn, sport_id: int, player_map: dict, progress_ca
         except Exception as e:
             logger.error(f"Error processing {stats_file.name}: {e}")
     
-    logger.info(f"Imported {imported} player season stats")
+    logger.info(f"Imported {imported} player season stats to results AND stats tables")
     return {"imported": imported, "stats_computed": imported}
 
 
@@ -634,22 +712,11 @@ async def import_all_nfl(clear_existing: bool = False, progress_callback=None) -
         results["players_imported"] = player_result.get("imported", 0)
         player_map = player_result.get("player_map", {})
         
-        # Step 5: Import player stats (2020-2024)
+        # Step 5: Import player stats (2020-2025 including current season)
+        # Note: 2025 data now comes from standard player_stats_season files like other years
         stats_result = await import_player_stats(conn, sport_id, player_map, progress_callback)
         results["games_imported"] = stats_result.get("imported", 0)
         results["stats_computed"] = stats_result.get("stats_computed", 0)
-        
-        # Step 6: Download and import 2025 PBP data
-        if progress_callback:
-            progress_callback("Downloading 2025 play-by-play data...")
-        
-        pbp_downloaded = await download_pbp_2025(progress_callback)
-        results["pbp_2025_downloaded"] = len(pbp_downloaded)
-        
-        if pbp_downloaded:
-            pbp_result = await import_pbp_2025(conn, sport_id, progress_callback)
-            results["pbp_2025_imported"] = pbp_result.get("imported", 0)
-            results["pbp_2025_games"] = pbp_result.get("games_processed", 0)
         
         if progress_callback:
             progress_callback("NFL import complete!")

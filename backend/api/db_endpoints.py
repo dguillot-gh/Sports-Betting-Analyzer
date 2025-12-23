@@ -1272,7 +1272,7 @@ async def get_player_profile(sport: str, name: str):
                 "not_found": True
             }
         
-        # Entity found - get stats and recent games
+        # Entity found - get stats from stats table first
         stats_rows = await conn.fetch(
             """SELECT season, stat_type, stats
                FROM stats
@@ -1300,6 +1300,7 @@ async def get_player_profile(sport: str, name: str):
                WHERE sport_id = $1 
                  AND (
                      metadata->>'player_name' ILIKE $2
+                     OR metadata->>'player_display_name' ILIKE $2
                      OR metadata->>'player_id' = $3
                      OR metadata->>'gsis_id' = $3
                  )
@@ -1307,6 +1308,18 @@ async def get_player_profile(sport: str, name: str):
                LIMIT 10""",
             sport_id, f"%{entity['name']}%", gsis_id or ""
         )
+        
+        # If stats table is empty, build stats from results metadata (NFL stores stats in results)
+        if not stats and recent_games:
+            for row in recent_games:
+                row_meta = json.loads(row["metadata"]) if isinstance(row["metadata"], str) else (row["metadata"] or {})
+                season = row["season"]
+                if season not in stats:
+                    stats[season] = {}
+                # Merge relevant stats (exclude identifier fields)
+                for k, v in row_meta.items():
+                    if k not in ["player_id", "player_name", "player_display_name", "gsis_id"]:
+                        stats[season][k] = v
         
         return {
             "id": entity["id"],
