@@ -36,8 +36,9 @@ DATABASE_URL = "postgresql://sports_user:sportsbetting2024@postgres:5432/sports_
 NFLVERSE_BASE = "https://github.com/nflverse/nflverse-data/releases/download"
 NFLVERSE_PBP_BASE = "https://github.com/nflverse/nflverse-pbp/releases/download"
 
-# Years to import (2020-2025 including current season)
-IMPORT_YEARS = list(range(2020, 2026))
+# Years to import (2020-2024 from pre-computed stats files)
+# 2025 season uses PBP aggregation since nflverse hasn't published stats files for ongoing season
+IMPORT_YEARS = list(range(2020, 2025))
 
 # Per-season weekly player stats from nflverse-data releases
 # These files contain weekly stats per player (we'll aggregate to season totals)
@@ -80,7 +81,7 @@ async def download_nflverse(progress_callback=None):
     
     downloaded = []
     
-    # Download per-year season stats (2020-2025)
+    # Download per-year season stats (2020-2024 - 2025 uses PBP)
     for year, url in PLAYER_STATS_SEASON.items():
         try:
             name = f"player_stats_season_{year}"
@@ -474,7 +475,7 @@ async def import_players(conn, sport_id: int, progress_callback=None) -> dict:
 async def import_player_stats(conn, sport_id: int, player_map: dict, progress_callback=None) -> dict:
     """Import player season stats from nflverse player_stats_season_YYYY.csv files."""
     
-    # Find all player_stats_season_YYYY.csv files (2020-2025)
+    # Find all player_stats_season_YYYY.csv files (2020-2024)
     stats_files = sorted(NFLVERSE_DIR.glob("player_stats_season_*.csv"))
     
     if not stats_files:
@@ -712,11 +713,22 @@ async def import_all_nfl(clear_existing: bool = False, progress_callback=None) -
         results["players_imported"] = player_result.get("imported", 0)
         player_map = player_result.get("player_map", {})
         
-        # Step 5: Import player stats (2020-2025 including current season)
-        # Note: 2025 data now comes from standard player_stats_season files like other years
+        # Step 5: Import player stats (2020-2024 from pre-computed season files)
         stats_result = await import_player_stats(conn, sport_id, player_map, progress_callback)
         results["games_imported"] = stats_result.get("imported", 0)
         results["stats_computed"] = stats_result.get("stats_computed", 0)
+        
+        # Step 6: Download and import 2025 PBP data (since nflverse doesn't publish season stats for ongoing season)
+        if progress_callback:
+            progress_callback("Downloading 2025 play-by-play data...")
+        
+        pbp_downloaded = await download_pbp_2025(progress_callback)
+        results["pbp_2025_downloaded"] = len(pbp_downloaded)
+        
+        if pbp_downloaded:
+            pbp_result = await import_pbp_2025(conn, sport_id, player_map, progress_callback)
+            results["pbp_2025_imported"] = pbp_result.get("imported", 0)
+            results["pbp_2025_games"] = pbp_result.get("games_processed", 0)
         
         if progress_callback:
             progress_callback("NFL import complete!")
