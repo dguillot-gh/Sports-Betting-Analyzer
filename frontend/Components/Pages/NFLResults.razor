@@ -1,0 +1,379 @@
+@page "/nfl-results"
+@rendermode InteractiveServer
+@using MudBlazor
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>NFL Player Stats</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">
+        <MudIcon Icon="@Icons.Material.Filled.SportsFootball" Class="mr-2" />
+        NFL Player Stats
+    </MudText>
+
+    <!-- Filters -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="2">
+                <MudSelect T="int?" Label="Season" @bind-Value="_selectedSeason" 
+                           Variant="Variant.Outlined" Dense="true" Clearable="true">
+                    @foreach (var season in _availableSeasons)
+                    {
+                        <MudSelectItem T="int?" Value="@season">@season</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            
+            <MudItem xs="12" sm="6" md="3">
+                <MudAutocomplete T="string" Label="Player"
+                                 Value="_selectedPlayer"
+                                 ValueChanged="OnPlayerChanged"
+                                 SearchFunc="SearchPlayers"
+                                 Variant="Variant.Outlined"
+                                 Dense="true"
+                                 Clearable="true"
+                                 Placeholder="Filter by player..." />
+            </MudItem>
+            
+            <MudItem xs="12" sm="6" md="2">
+                <MudSelect T="string" Label="Position" @bind-Value="_selectedPosition" 
+                           Variant="Variant.Outlined" Dense="true" Clearable="true">
+                    <MudSelectItem Value="@((string?)null)">All Positions</MudSelectItem>
+                    <MudSelectItem Value="@("QB")">Quarterback</MudSelectItem>
+                    <MudSelectItem Value="@("RB")">Running Back</MudSelectItem>
+                    <MudSelectItem Value="@("WR")">Wide Receiver</MudSelectItem>
+                    <MudSelectItem Value="@("TE")">Tight End</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            
+            <MudItem xs="12" sm="6" md="2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" 
+                           OnClick="LoadResults" Disabled="_isLoading" FullWidth="true">
+                    @if (_isLoading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Search
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- Results Table -->
+    @if (_isLoading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+    
+    @if (_results.Any())
+    {
+        <MudPaper Elevation="2">
+            <MudTable Items="@_results" Dense="true" Hover="true" Striped="true" 
+                      FixedHeader="true" Height="600px">
+                <HeaderContent>
+                    <MudTh>Season</MudTh>
+                    <MudTh>Player</MudTh>
+                    <MudTh>Pos</MudTh>
+                    <MudTh>Team</MudTh>
+                    <MudTh Style="text-align: right">Games</MudTh>
+                    <MudTh Style="text-align: right">Pass Yds</MudTh>
+                    <MudTh Style="text-align: right">Pass TD</MudTh>
+                    <MudTh Style="text-align: right">Rush Yds</MudTh>
+                    <MudTh Style="text-align: right">Rush TD</MudTh>
+                    <MudTh Style="text-align: right">Rec</MudTh>
+                    <MudTh Style="text-align: right">Rec Yds</MudTh>
+                    <MudTh Style="text-align: right">Rec TD</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Season">@context.Season</MudTd>
+                    <MudTd DataLabel="Player">
+                        <MudLink Href="@($"/nfl-player-profiles?player={Uri.EscapeDataString(context.PlayerName ?? "")}")" 
+                                 Color="Color.Primary">
+                            @context.PlayerName
+                        </MudLink>
+                    </MudTd>
+                    <MudTd DataLabel="Pos">
+                        <MudChip T="string" Size="Size.Small" Color="@GetPositionColor(context.Position)">
+                            @context.Position
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Team">@context.Team</MudTd>
+                    <MudTd DataLabel="Games" Style="text-align: right">@(context.Games ?? 0)</MudTd>
+                    <MudTd DataLabel="Pass Yds" Style="text-align: right">
+                        @if (context.PassYds > 0)
+                        {
+                            <strong>@context.PassYds.ToString("N0")</strong>
+                        }
+                        else
+                        {
+                            <span>-</span>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Pass TD" Style="text-align: right">
+                        @if (context.PassTd > 0)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success">@context.PassTd</MudChip>
+                        }
+                        else
+                        {
+                            <span>-</span>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Rush Yds" Style="text-align: right">
+                        @if (context.RushYds > 0)
+                        {
+                            <strong>@context.RushYds.ToString("N0")</strong>
+                        }
+                        else
+                        {
+                            <span>-</span>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Rush TD" Style="text-align: right">
+                        @if (context.RushTd > 0)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success">@context.RushTd</MudChip>
+                        }
+                        else
+                        {
+                            <span>-</span>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Rec" Style="text-align: right">@(context.Rec ?? 0)</MudTd>
+                    <MudTd DataLabel="Rec Yds" Style="text-align: right">
+                        @if (context.RecYds > 0)
+                        {
+                            <strong>@context.RecYds.ToString("N0")</strong>
+                        }
+                        else
+                        {
+                            <span>-</span>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Rec TD" Style="text-align: right">
+                        @if (context.RecTd > 0)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success">@context.RecTd</MudChip>
+                        }
+                        else
+                        {
+                            <span>-</span>
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="new int[] { 50, 100, 200, 500 }" />
+                </PagerContent>
+            </MudTable>
+        </MudPaper>
+        
+        <MudText Typo="Typo.caption" Class="mt-2">
+            Showing @_results.Count of @_totalResults results
+        </MudText>
+    }
+    else if (!_isLoading && _hasSearched)
+    {
+        <MudAlert Severity="Severity.Info">No results found. Try adjusting your filters.</MudAlert>
+    }
+</MudContainer>
+
+@code {
+    private int? _selectedSeason;
+    private string? _selectedPlayer;
+    private string? _selectedPosition;
+    private bool _isLoading = false;
+    private bool _hasSearched = false;
+    
+    private List<int> _availableSeasons = new();
+    private List<NFLPlayerResult> _results = new();
+    private int _totalResults = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSeasons();
+        await LoadResults();
+    }
+
+    private async Task LoadSeasons()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<SeasonsResponse>(
+                $"http://backend:8000/db/games/nfl/seasons");
+            _availableSeasons = response?.Seasons ?? new List<int>();
+            
+            // Default to most recent season
+            if (_availableSeasons.Any() && !_selectedSeason.HasValue)
+            {
+                _selectedSeason = _availableSeasons.First();
+            }
+        }
+        catch
+        {
+            _availableSeasons = Enumerable.Range(2020, 6).Reverse().ToList();
+        }
+    }
+
+    private async Task LoadResults()
+    {
+        _isLoading = true;
+        _hasSearched = true;
+        StateHasChanged();
+        
+        try
+        {
+            var url = $"http://backend:8000/db/games/nfl/list?limit=500";
+            
+            if (_selectedSeason.HasValue)
+                url += $"&season={_selectedSeason.Value}";
+            if (!string.IsNullOrEmpty(_selectedPlayer))
+                url += $"&player={Uri.EscapeDataString(_selectedPlayer)}";
+            
+            var response = await Http.GetFromJsonAsync<NFLResultsResponse>(url);
+            
+            // Transform metadata into structured results
+            _results = (response?.Results ?? new())
+                .Select(r => new NFLPlayerResult
+                {
+                    Season = r.Season,
+                    PlayerName = r.PlayerName,
+                    Position = r.Position,
+                    Team = r.Team,
+                    Games = r.Games,
+                    PassYds = r.PassYds ?? 0,
+                    PassTd = r.PassTd ?? 0,
+                    RushYds = r.RushYds ?? 0,
+                    RushTd = r.RushTd ?? 0,
+                    Rec = r.Rec,
+                    RecYds = r.RecYds ?? 0,
+                    RecTd = r.RecTd ?? 0
+                })
+                .Where(r => string.IsNullOrEmpty(_selectedPosition) || r.Position == _selectedPosition)
+                .OrderByDescending(r => r.Season)
+                .ThenByDescending(r => r.PassYds + r.RushYds + r.RecYds)
+                .ToList();
+            
+            _totalResults = response?.Count ?? _results.Count;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading results: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task<IEnumerable<string>> SearchPlayers(string value, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length < 2)
+            return Enumerable.Empty<string>();
+        
+        try
+        {
+            var response = await Http.GetFromJsonAsync<ProfileListResponse>(
+                $"http://backend:8000/db/profiles/nfl/list?entity_type=player&search={Uri.EscapeDataString(value)}&limit=20",
+                ct);
+            return response?.Entities?.Select(e => e.Name) ?? Enumerable.Empty<string>();
+        }
+        catch
+        {
+            return Enumerable.Empty<string>();
+        }
+    }
+
+    private void OnPlayerChanged(string player)
+    {
+        _selectedPlayer = player;
+    }
+
+    private Color GetPositionColor(string? position) => position switch
+    {
+        "QB" => Color.Primary,
+        "RB" => Color.Success,
+        "WR" => Color.Warning,
+        "TE" => Color.Info,
+        _ => Color.Default
+    };
+
+    // Response Models
+    private class SeasonsResponse
+    {
+        public List<int> Seasons { get; set; } = new();
+    }
+
+    private class ProfileListResponse
+    {
+        public List<EntityInfo> Entities { get; set; } = new();
+    }
+
+    private class EntityInfo
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+    }
+
+    private class NFLResultsResponse
+    {
+        public List<NFLResultItem> Results { get; set; } = new();
+        public int Count { get; set; }
+    }
+
+    private class NFLResultItem
+    {
+        public int Id { get; set; }
+        public int Season { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("player_name")]
+        public string? PlayerName { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("position")]
+        public string? Position { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("team")]
+        public string? Team { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("games")]
+        public int? Games { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("pass_yds")]
+        public int? PassYds { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("pass_td")]
+        public int? PassTd { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rush_yds")]
+        public int? RushYds { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rush_td")]
+        public int? RushTd { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rec")]
+        public int? Rec { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rec_yds")]
+        public int? RecYds { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rec_td")]
+        public int? RecTd { get; set; }
+    }
+
+    private class NFLPlayerResult
+    {
+        public int Season { get; set; }
+        public string? PlayerName { get; set; }
+        public string? Position { get; set; }
+        public string? Team { get; set; }
+        public int? Games { get; set; }
+        public int PassYds { get; set; }
+        public int PassTd { get; set; }
+        public int RushYds { get; set; }
+        public int RushTd { get; set; }
+        public int? Rec { get; set; }
+        public int RecYds { get; set; }
+        public int RecTd { get; set; }
+    }
+}

@@ -1168,7 +1168,13 @@ async def get_sport_profiles(
 
 @router.get("/profiles/{sport}/{name}")
 async def get_player_profile(sport: str, name: str):
-    """Get detailed player profile with stats."""
+    """Get detailed player profile with stats.
+    
+    Uses 3-tier lookup:
+    1. Exact name match in entities
+    2. Fuzzy ILIKE match in entities  
+    3. Fallback to results metadata if no entity found
+    """
     if sport not in ["nfl", "nba", "nascar"]:
         raise HTTPException(status_code=400, detail=f"Invalid sport: {sport}")
     
@@ -1178,7 +1184,7 @@ async def get_player_profile(sport: str, name: str):
         if not sport_id:
             raise HTTPException(status_code=404, detail=f"Sport '{sport}' not found")
         
-        # Get player entity
+        # Tier 1: Exact name match in entities
         entity = await conn.fetchrow(
             """SELECT id, name, type, series, metadata
                FROM entities
@@ -1187,10 +1193,86 @@ async def get_player_profile(sport: str, name: str):
             sport_id, name
         )
         
+        # Tier 2: Fuzzy ILIKE match in entities
         if not entity:
-            raise HTTPException(status_code=404, detail=f"Player '{name}' not found")
+            entity = await conn.fetchrow(
+                """SELECT id, name, type, series, metadata
+                   FROM entities
+                   WHERE sport_id = $1 AND name ILIKE $2
+                   LIMIT 1""",
+                sport_id, f"%{name}%"
+            )
         
-        # Get stats
+        # Tier 3: Fallback to results metadata if no entity found
+        if not entity:
+            # Search results table for player_name in metadata
+            result_row = await conn.fetchrow(
+                """SELECT metadata
+                   FROM results
+                   WHERE sport_id = $1 
+                     AND (metadata->>'player_name' ILIKE $2 OR metadata->>'player_name' ILIKE $3)
+                   ORDER BY season DESC
+                   LIMIT 1""",
+                sport_id, name, f"%{name}%"
+            )
+            
+            if result_row and result_row["metadata"]:
+                # Construct synthetic entity from results metadata
+                meta = json.loads(result_row["metadata"]) if isinstance(result_row["metadata"], str) else result_row["metadata"]
+                player_name = meta.get("player_name", name)
+                
+                # Get all results for this player to build stats
+                all_results = await conn.fetch(
+                    """SELECT season, metadata
+                       FROM results
+                       WHERE sport_id = $1 AND metadata->>'player_name' = $2
+                       ORDER BY season DESC
+                       LIMIT 50""",
+                    sport_id, player_name
+                )
+                
+                # Build stats from results
+                stats = {}
+                recent_games = []
+                for row in all_results:
+                    row_meta = json.loads(row["metadata"]) if isinstance(row["metadata"], str) else row["metadata"]
+                    season = row["season"]
+                    if season not in stats:
+                        stats[season] = {}
+                    # Merge stats from this result
+                    for k, v in row_meta.items():
+                        if k not in ["player_id", "player_name", "position", "team"]:
+                            stats[season][k] = v
+                    
+                    if len(recent_games) < 10:
+                        recent_games.append({"season": season, **row_meta})
+                
+                return {
+                    "id": 0,  # Synthetic entity
+                    "name": player_name,
+                    "type": "player",
+                    "series": sport,
+                    "metadata": {
+                        "position": meta.get("position"),
+                        "team": meta.get("team"),
+                    },
+                    "stats": stats,
+                    "recent_games": recent_games
+                }
+            
+            # No data found anywhere - return empty profile instead of crashing
+            return {
+                "id": 0,
+                "name": name,
+                "type": "player",
+                "series": sport,
+                "metadata": {},
+                "stats": {},
+                "recent_games": [],
+                "not_found": True
+            }
+        
+        # Entity found - get stats and recent games
         stats_rows = await conn.fetch(
             """SELECT season, stat_type, stats
                FROM stats
@@ -1207,15 +1289,23 @@ async def get_player_profile(sport: str, name: str):
                 stats[season] = {}
             stats[season].update(json.loads(row["stats"]) if row["stats"] else {})
         
-        # Get recent games (from results)
+        # Get entity's gsis_id from metadata for cross-referencing results
+        entity_meta = json.loads(entity["metadata"]) if entity["metadata"] else {}
+        gsis_id = entity_meta.get("gsis_id")
+        
+        # Get recent games (from results) - search by entity name AND gsis_id
         recent_games = await conn.fetch(
             """SELECT season, metadata
                FROM results
                WHERE sport_id = $1 
-                 AND (metadata->>'player_name' = $2 OR metadata->>'player_id' = $3)
+                 AND (
+                     metadata->>'player_name' ILIKE $2
+                     OR metadata->>'player_id' = $3
+                     OR metadata->>'gsis_id' = $3
+                 )
                ORDER BY season DESC, (metadata->>'week')::int DESC NULLS LAST
                LIMIT 10""",
-            sport_id, name, name
+            sport_id, f"%{entity['name']}%", gsis_id or ""
         )
         
         return {
@@ -1223,7 +1313,7 @@ async def get_player_profile(sport: str, name: str):
             "name": entity["name"],
             "type": entity["type"],
             "series": entity["series"],
-            "metadata": json.loads(entity["metadata"]) if entity["metadata"] else {},
+            "metadata": entity_meta,
             "stats": stats,
             "recent_games": [
                 {

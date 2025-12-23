@@ -1,0 +1,348 @@
+@page "/nfl-player-profiles"
+@rendermode InteractiveServer
+@using MudBlazor
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>NFL Player Profiles</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">
+        <MudIcon Icon="@Icons.Material.Filled.SportsFootball" Class="mr-2" />
+        NFL Player Profiles
+    </MudText>
+
+    <MudGrid>
+        <!-- Search & Selection -->
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" Class="mb-3">Find Player</MudText>
+                
+                <MudAutocomplete T="string" Label="Search Player"
+                                 Value="_selectedPlayer"
+                                 ValueChanged="OnPlayerSelected"
+                                 SearchFunc="SearchPlayers"
+                                 MaxItems="50"
+                                 AdornmentIcon="@Icons.Material.Filled.Search"
+                                 Variant="Variant.Outlined"
+                                 Dense="true"
+                                 Immediate="true"
+                                 Placeholder="Type player name..." />
+                
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-3" FullWidth="true"
+                           OnClick="LoadProfile" Disabled="@(string.IsNullOrEmpty(_selectedPlayer) || _isLoading)">
+                    @if (_isLoading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Load Profile
+                </MudButton>
+            </MudPaper>
+            
+            <MudAlert Severity="Severity.Info" Class="mt-2">
+                Search for NFL players to view their season stats and recent game history.
+            </MudAlert>
+        </MudItem>
+
+        <!-- Profile Display -->
+        <MudItem xs="12" md="8">
+            @if (_profile != null)
+            {
+                <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+                    <!-- Overview Tab -->
+                    <MudTabPanel Text="Overview" Icon="@Icons.Material.Filled.Person">
+                        <MudPaper Class="pa-4 mb-4" Elevation="1" Style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
+                                <MudAvatar Size="Size.Large" Color="Color.Warning">
+                                    @(_profile.Name?.Substring(0, 1) ?? "?")
+                                </MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.h5" Style="color: white;">@_profile.Name</MudText>
+                                    <MudText Typo="Typo.subtitle1" Style="color: rgba(255,255,255,0.8);">
+                                        @(_profile.Metadata?.GetValueOrDefault("position")?.ToString() ?? "NFL") • 
+                                        @(_profile.Metadata?.GetValueOrDefault("team")?.ToString() ?? "")
+                                    </MudText>
+                                </div>
+                                <MudSpacer />
+                                <MudChip T="string" Color="Color.Warning" Size="Size.Small">NFL</MudChip>
+                            </MudStack>
+                        </MudPaper>
+
+                        <!-- Recent Games Card -->
+                        @if (_profile.RecentGames != null && _profile.RecentGames.Any())
+                        {
+                            <MudPaper Class="pa-4 mb-4" Elevation="2">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
+                                    <MudText Typo="Typo.h6">
+                                        <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-2" />
+                                        Recent Seasons
+                                    </MudText>
+                                    <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                                               Href="@($"/nfl-results?player={Uri.EscapeDataString(_profile.Name ?? "")}")">
+                                        View All Results →
+                                    </MudButton>
+                                </MudStack>
+                                
+                                <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                    <thead>
+                                        <tr>
+                                            <th>Season</th>
+                                            <th>Team</th>
+                                            <th>Games</th>
+                                            <th>Pass Yds</th>
+                                            <th>Rush Yds</th>
+                                            <th>Rec Yds</th>
+                                            <th>TDs</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var game in _profile.RecentGames.Take(5))
+                                        {
+                                            var passTd = GetIntValue(game, "pass_td");
+                                            var rushTd = GetIntValue(game, "rush_td");
+                                            var recTd = GetIntValue(game, "rec_td");
+                                            <tr>
+                                                <td>@game.GetValueOrDefault("season")?.ToString()</td>
+                                                <td>@game.GetValueOrDefault("team")?.ToString()</td>
+                                                <td>@game.GetValueOrDefault("games")?.ToString()</td>
+                                                <td><strong>@FormatNumber(GetIntValue(game, "pass_yds"))</strong></td>
+                                                <td><strong>@FormatNumber(GetIntValue(game, "rush_yds"))</strong></td>
+                                                <td><strong>@FormatNumber(GetIntValue(game, "rec_yds"))</strong></td>
+                                                <td>
+                                                    @if (passTd + rushTd + recTd > 0)
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Success">
+                                                            @(passTd + rushTd + recTd)
+                                                        </MudChip>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span>-</span>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            </MudPaper>
+                        }
+
+                        <!-- Stats by Season -->
+                        @if (_profile.Stats != null && _profile.Stats.Any())
+                        {
+                            <MudText Typo="Typo.h6" Class="mb-2">Season Statistics</MudText>
+                            <div style="max-height: 500px; overflow-y: auto;">
+                                @foreach (var seasonStats in _profile.Stats.OrderByDescending(s => s.Key))
+                                {
+                                    <MudText Typo="Typo.subtitle2" Class="mb-1">@seasonStats.Key Season</MudText>
+                                    <MudGrid Class="mb-3">
+                                        @foreach (var stat in seasonStats.Value.Where(s => ShouldShowStat(s.Key)).Take(12))
+                                        {
+                                            <MudItem xs="6" sm="4" md="3">
+                                                <MudPaper Class="pa-3 text-center" Elevation="1">
+                                                    <MudText Typo="Typo.h6" Color="Color.Primary">@stat.Value</MudText>
+                                                    <MudText Typo="Typo.caption">@FormatStatName(stat.Key)</MudText>
+                                                </MudPaper>
+                                            </MudItem>
+                                        }
+                                    </MudGrid>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Info">No stats available for this player.</MudAlert>
+                        }
+                    </MudTabPanel>
+                </MudTabs>
+            }
+            else if (_isLoading)
+            {
+                <MudPaper Class="pa-8 d-flex flex-column align-center justify-center">
+                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+                    <MudText Class="mt-4">Loading profile...</MudText>
+                </MudPaper>
+            }
+            else if (_notFound)
+            {
+                <MudAlert Severity="Severity.Warning">
+                    Player "@_selectedPlayer" not found. Try searching for a different name.
+                </MudAlert>
+            }
+            else
+            {
+                <MudPaper Class="pa-8 d-flex flex-column align-center justify-center" Elevation="1">
+                    <MudIcon Icon="@Icons.Material.Filled.PersonSearch" Size="Size.Large" Color="Color.Secondary" />
+                    <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mt-2">Search for a player</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Type a player name to view their profile</MudText>
+                </MudPaper>
+            }
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    private string _selectedPlayer = "";
+    private bool _isLoading = false;
+    private bool _notFound = false;
+    
+    private List<string> _playerList = new();
+    private PlayerProfile? _profile;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Check for query parameters from deep links
+        var uri = new Uri(Navigation.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        
+        var playerParam = query["player"];
+        
+        await LoadPlayerList();
+        
+        // If player specified in URL, auto-load their profile
+        if (!string.IsNullOrEmpty(playerParam))
+        {
+            _selectedPlayer = playerParam;
+            await LoadProfile();
+        }
+    }
+
+    private async Task LoadPlayerList()
+    {
+        try
+        {
+            var url = $"http://backend:8000/db/profiles/nfl/list?entity_type=player&limit=1000";
+            var response = await Http.GetFromJsonAsync<ProfileListResponse>(url);
+            if (response?.Entities != null)
+            {
+                _playerList = response.Entities.Select(e => e.Name).Distinct().ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading players: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    private Task<IEnumerable<string>> SearchPlayers(string value, CancellationToken token)
+    {
+        if (string.IsNullOrEmpty(value))
+            return Task.FromResult(_playerList.Take(50).AsEnumerable());
+        
+        return Task.FromResult(_playerList
+            .Where(d => d.Contains(value, StringComparison.OrdinalIgnoreCase))
+            .Take(50)
+            .AsEnumerable());
+    }
+
+    private async Task OnPlayerSelected(string player)
+    {
+        _selectedPlayer = player;
+        _profile = null;
+        _notFound = false;
+        
+        if (!string.IsNullOrEmpty(player))
+        {
+            await LoadProfile();
+        }
+    }
+
+    private async Task LoadProfile()
+    {
+        if (string.IsNullOrEmpty(_selectedPlayer)) return;
+        
+        _isLoading = true;
+        _notFound = false;
+        try
+        {
+            var url = $"http://backend:8000/db/profiles/nfl/{Uri.EscapeDataString(_selectedPlayer)}";
+            _profile = await Http.GetFromJsonAsync<PlayerProfile>(url);
+            
+            // Check if profile was not found (API returns not_found flag)
+            if (_profile?.NotFound == true)
+            {
+                _notFound = true;
+                _profile = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading profile: {ex.Message}", Severity.Error);
+            _notFound = true;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private bool ShouldShowStat(string key)
+    {
+        var skipKeys = new[] { "player_id", "player_name", "position", "team", "season", "gsis_id" };
+        return !skipKeys.Contains(key.ToLower());
+    }
+
+    private string FormatStatName(string key) => key.ToLower() switch
+    {
+        "pass_yds" => "Pass Yards",
+        "pass_td" => "Pass TDs",
+        "pass_att" => "Pass Att",
+        "pass_cmp" => "Completions",
+        "pass_int" => "INTs",
+        "rush_yds" => "Rush Yards",
+        "rush_td" => "Rush TDs",
+        "rush_att" => "Rush Att",
+        "rec" => "Receptions",
+        "rec_yds" => "Rec Yards",
+        "rec_td" => "Rec TDs",
+        "targets" => "Targets",
+        "games" => "Games",
+        "fantasy_pts" => "Fantasy Pts",
+        "fantasy_pts_ppr" => "Fantasy PPR",
+        _ => key.Replace("_", " ").ToUpperInvariant()
+    };
+
+    private int GetIntValue(Dictionary<string, object> dict, string key)
+    {
+        if (dict.TryGetValue(key, out var value))
+        {
+            if (value is int i) return i;
+            if (value is long l) return (int)l;
+            if (value is System.Text.Json.JsonElement je && je.ValueKind == System.Text.Json.JsonValueKind.Number)
+                return je.GetInt32();
+            if (int.TryParse(value?.ToString(), out var parsed)) return parsed;
+        }
+        return 0;
+    }
+
+    private string FormatNumber(int value) => value > 0 ? value.ToString("N0") : "-";
+
+    // Response models
+    private class ProfileListResponse
+    {
+        public List<EntityInfo> Entities { get; set; } = new();
+    }
+
+    private class EntityInfo
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+    }
+
+    private class PlayerProfile
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Type { get; set; } = "";
+        public string? Series { get; set; }
+        public Dictionary<string, object>? Metadata { get; set; }
+        public Dictionary<string, Dictionary<string, object>>? Stats { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("recent_games")]
+        public List<Dictionary<string, object>>? RecentGames { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("not_found")]
+        public bool? NotFound { get; set; }
+    }
+}
