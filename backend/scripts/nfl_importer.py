@@ -412,6 +412,226 @@ async def ensure_sport_exists(conn) -> int:
 BATCH_SIZE = 1000
 
 
+async def import_stats_via_nflreadpy(conn, sport_id: int, player_map: dict, progress_callback=None) -> dict:
+    """Import player stats using nflreadpy - handles all years including 2025.
+    
+    This uses the official nflverse Python package which:
+    - Handles data fetching and caching automatically
+    - Provides pre-aggregated season stats via summary_level="reg"
+    - Includes current (2025) season data
+    """
+    try:
+        import nflreadpy as nfl
+    except ImportError:
+        logger.error("nflreadpy not installed. Run: pip install nflreadpy")
+        return {"error": "nflreadpy not installed", "imported": 0}
+    
+    if progress_callback:
+        progress_callback("Loading player stats from nflverse (2020-2025)...")
+    
+    imported = 0
+    stats_computed = 0
+    
+    try:
+        # Get season-level aggregates for all years in one call
+        # summary_level="reg" gives us regular season totals pre-aggregated
+        stats_df = nfl.load_player_stats(
+            seasons=[2020, 2021, 2022, 2023, 2024, 2025],
+            summary_level="reg"
+        ).to_pandas()
+        
+        if progress_callback:
+            progress_callback(f"Processing {len(stats_df)} player-season records...")
+        
+        logger.info(f"Loaded {len(stats_df)} player-season records from nflreadpy")
+        
+        for i, (_, row) in enumerate(stats_df.iterrows()):
+            if progress_callback and i % 500 == 0:
+                progress_callback(f"Processing player stats {i}/{len(stats_df)}...")
+            
+            player_id = row.get('player_id')
+            if pd.isna(player_id):
+                continue
+            
+            season = row.get('season')
+            if pd.isna(season):
+                continue
+            
+            # Build metadata with all available stats
+            def safe_val(val):
+                if pd.isna(val):
+                    return None
+                if isinstance(val, float):
+                    return int(val) if val == int(val) else round(val, 2)
+                return val
+            
+            metadata = {
+                'player_id': str(player_id),
+                'player_name': safe_val(row.get('player_display_name') or row.get('player_name')),
+                'position': safe_val(row.get('position')),
+                'team': safe_val(row.get('recent_team')),
+                'season': int(season),
+                'games': safe_val(row.get('games')),
+                # Passing
+                'pass_att': safe_val(row.get('attempts')),
+                'pass_cmp': safe_val(row.get('completions')),
+                'pass_yds': safe_val(row.get('passing_yards')),
+                'pass_td': safe_val(row.get('passing_tds')),
+                'pass_int': safe_val(row.get('interceptions')),
+                # Rushing
+                'rush_att': safe_val(row.get('carries')),
+                'rush_yds': safe_val(row.get('rushing_yards')),
+                'rush_td': safe_val(row.get('rushing_tds')),
+                # Receiving  
+                'rec': safe_val(row.get('receptions')),
+                'targets': safe_val(row.get('targets')),
+                'rec_yds': safe_val(row.get('receiving_yards')),
+                'rec_td': safe_val(row.get('receiving_tds')),
+                # Fantasy
+                'fantasy_pts': safe_val(row.get('fantasy_points')),
+                'fantasy_pts_ppr': safe_val(row.get('fantasy_points_ppr')),
+            }
+            
+            # Remove None values
+            metadata = {k: v for k, v in metadata.items() if v is not None}
+            
+            content_hash = compute_hash({
+                'sport': 'nfl',
+                'player_id': str(player_id),
+                'season': int(season),
+                'type': 'season_stats'
+            })
+            
+            try:
+                # Insert into results table
+                await conn.execute(
+                    """INSERT INTO results (sport_id, season, series, metadata, content_hash)
+                       VALUES ($1, $2, 'nfl', $3, $4)
+                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                       DO UPDATE SET metadata = EXCLUDED.metadata""",
+                    sport_id, int(season), json.dumps(metadata), content_hash
+                )
+                
+                # ALSO insert into stats table (for profile queries)
+                entity_id = player_map.get(str(player_id))
+                
+                # If not in player_map, try name-based lookup
+                if not entity_id:
+                    player_name = metadata.get('player_name', '')
+                    if player_name:
+                        entity_id = await conn.fetchval(
+                            """SELECT id FROM entities 
+                               WHERE sport_id = $1 AND name ILIKE $2
+                               LIMIT 1""",
+                            sport_id, f"%{player_name}%"
+                        )
+                
+                if entity_id:
+                    stats_dict = {k: v for k, v in metadata.items() 
+                                 if k not in ['player_id', 'player_name', 'player_display_name']}
+                    
+                    stats_hash = compute_hash({
+                        'entity_id': entity_id,
+                        'season': int(season),
+                        'sport': 'nfl',
+                        'stat_type': 'season'
+                    })
+                    
+                    await conn.execute(
+                        """INSERT INTO stats (entity_id, season, stat_type, stats, content_hash)
+                           VALUES ($1, $2, 'season', $3, $4)
+                           ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                           DO UPDATE SET stats = EXCLUDED.stats""",
+                        entity_id, int(season), json.dumps(stats_dict), stats_hash
+                    )
+                    stats_computed += 1
+                
+                imported += 1
+                
+            except Exception as e:
+                logger.debug(f"Error importing stat row: {e}")
+            
+            # Periodic garbage collection
+            if i % 1000 == 0:
+                gc.collect()
+        
+        logger.info(f"Imported {imported} player stats via nflreadpy, {stats_computed} stats table entries")
+        return {"imported": imported, "stats_computed": stats_computed}
+        
+    except Exception as e:
+        logger.error(f"Error loading stats via nflreadpy: {e}")
+        return {"error": str(e), "imported": 0}
+
+
+async def import_players_via_nflreadpy(conn, sport_id: int, progress_callback=None) -> dict:
+    """Import NFL players using nflreadpy."""
+    try:
+        import nflreadpy as nfl
+    except ImportError:
+        logger.error("nflreadpy not installed")
+        return {"imported": 0, "player_map": {}}
+    
+    if progress_callback:
+        progress_callback("Loading player data from nflverse...")
+    
+    try:
+        players_df = nfl.load_players().to_pandas()
+        
+        if progress_callback:
+            progress_callback(f"Processing {len(players_df)} players...")
+        
+        player_map = {}
+        imported = 0
+        
+        for i, (_, row) in enumerate(players_df.iterrows()):
+            if progress_callback and i % 500 == 0:
+                progress_callback(f"Importing players {i}/{len(players_df)}...")
+            
+            player_id = row.get('gsis_id') or row.get('player_id')
+            if pd.isna(player_id):
+                continue
+            
+            name = row.get('display_name') or row.get('name')
+            if pd.isna(name):
+                continue
+            
+            position = row.get('position')
+            team = row.get('team_abbr')
+            
+            metadata = {
+                'gsis_id': str(player_id),
+                'position': str(position) if not pd.isna(position) else None,
+                'team': str(team) if not pd.isna(team) else None,
+                'height': str(row.get('height')) if not pd.isna(row.get('height')) else None,
+                'weight': str(row.get('weight')) if not pd.isna(row.get('weight')) else None,
+            }
+            metadata = {k: v for k, v in metadata.items() if v is not None}
+            
+            content_hash = compute_hash({'sport': 'nfl', 'player_id': str(player_id)})
+            
+            try:
+                entity_id = await conn.fetchval(
+                    """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
+                       VALUES ($1, $2, 'player', 'nfl', $3, $4)
+                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                       DO UPDATE SET name = EXCLUDED.name, metadata = EXCLUDED.metadata
+                       RETURNING id""",
+                    sport_id, str(name), json.dumps(metadata), content_hash
+                )
+                if entity_id:
+                    player_map[str(player_id)] = entity_id
+                    imported += 1
+            except Exception as e:
+                logger.debug(f"Error importing player {name}: {e}")
+        
+        logger.info(f"Imported {imported} players via nflreadpy")
+        return {"imported": imported, "player_map": player_map}
+        
+    except Exception as e:
+        logger.error(f"Error loading players via nflreadpy: {e}")
+        return {"imported": 0, "player_map": {}}
+
+
 async def import_players(conn, sport_id: int, progress_callback=None) -> dict:
     """Import NFL players from nflverse players.csv with batching."""
     players_file = NFLVERSE_DIR / "players.csv"
@@ -708,27 +928,16 @@ async def import_all_nfl(clear_existing: bool = False, progress_callback=None) -
                 sport_id
             )
         
-        # Step 4: Import players
-        player_result = await import_players(conn, sport_id, progress_callback)
+        # Step 4: Import players (using nflreadpy)
+        player_result = await import_players_via_nflreadpy(conn, sport_id, progress_callback)
         results["players_imported"] = player_result.get("imported", 0)
         player_map = player_result.get("player_map", {})
         
-        # Step 5: Import player stats (2020-2024 from pre-computed season files)
-        stats_result = await import_player_stats(conn, sport_id, player_map, progress_callback)
+        # Step 5: Import player stats using nflreadpy (2020-2025 all in one call!)
+        # This uses the official nflverse package with pre-aggregated season stats
+        stats_result = await import_stats_via_nflreadpy(conn, sport_id, player_map, progress_callback)
         results["games_imported"] = stats_result.get("imported", 0)
         results["stats_computed"] = stats_result.get("stats_computed", 0)
-        
-        # Step 6: Download and import 2025 PBP data (since nflverse doesn't publish season stats for ongoing season)
-        if progress_callback:
-            progress_callback("Downloading 2025 play-by-play data...")
-        
-        pbp_downloaded = await download_pbp_2025(progress_callback)
-        results["pbp_2025_downloaded"] = len(pbp_downloaded)
-        
-        if pbp_downloaded:
-            pbp_result = await import_pbp_2025(conn, sport_id, player_map, progress_callback)
-            results["pbp_2025_imported"] = pbp_result.get("imported", 0)
-            results["pbp_2025_games"] = pbp_result.get("games_processed", 0)
         
         if progress_callback:
             progress_callback("NFL import complete!")

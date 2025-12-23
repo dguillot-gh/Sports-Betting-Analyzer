@@ -17,3 +17,5 @@ asyncpg>=0.29.0
 sportsdataverse
 pyarrow
 requests
+nflreadpy
+polars
