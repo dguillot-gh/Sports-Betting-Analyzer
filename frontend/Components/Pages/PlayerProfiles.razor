@@ -275,17 +275,20 @@
         try
         {
             var http = HttpClientFactory.CreateClient("PythonML");
-            var response = await http.GetAsync($"/db/profiles/{_selectedSport}/list");
+            // Request full player list with proper parameters
+            var response = await http.GetAsync($"/db/profiles/{_selectedSport}/list?entity_type=player&limit=5000");
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
                 var data = System.Text.Json.JsonSerializer.Deserialize<EntitiesResponse>(json, 
                     new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                _availablePlayers = data?.Entities?.Select(e => e.Name).Where(n => !string.IsNullOrEmpty(n)).ToList() ?? new();
+                _availablePlayers = data?.Entities?.Select(e => e.Name).Where(n => !string.IsNullOrEmpty(n)).OrderBy(n => n).ToList() ?? new();
+                Console.WriteLine($"Loaded {_availablePlayers.Count} {_selectedSport} players");
             }
         }
-        catch
+        catch (Exception ex)
         {
+            Console.WriteLine($"LoadPlayerList error: {ex}");
             _availablePlayers = new();
         }
     }

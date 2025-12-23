@@ -27,6 +27,18 @@
             </MudItem>
             
             <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="string" Label="Team" @bind-Value="_selectedTeam" 
+                           Variant="Variant.Outlined" Dense="true" Clearable="true"
+                           MaxHeight="400">
+                    <MudSelectItem Value="@((string?)null)">All Teams</MudSelectItem>
+                    @foreach (var team in _nflTeams.OrderBy(t => t.Value))
+                    {
+                        <MudSelectItem Value="@team.Key">@team.Value</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            
+            <MudItem xs="12" sm="6" md="2">
                 <MudAutocomplete T="string" Label="Player"
                                  Value="_selectedPlayer"
                                  ValueChanged="OnPlayerChanged"
@@ -186,12 +198,53 @@
     private int? _selectedSeason;
     private string? _selectedPlayer;
     private string? _selectedPosition;
+    private string? _selectedTeam;
     private bool _isLoading = false;
     private bool _hasSearched = false;
     
     private List<int> _availableSeasons = new();
     private List<NFLPlayerResult> _results = new();
     private int _totalResults = 0;
+    
+    // NFL Team abbreviation to full name mapping
+    private readonly Dictionary<string, string> _nflTeams = new()
+    {
+        { "ARI", "Arizona Cardinals" },
+        { "ATL", "Atlanta Falcons" },
+        { "BAL", "Baltimore Ravens" },
+        { "BUF", "Buffalo Bills" },
+        { "CAR", "Carolina Panthers" },
+        { "CHI", "Chicago Bears" },
+        { "CIN", "Cincinnati Bengals" },
+        { "CLE", "Cleveland Browns" },
+        { "DAL", "Dallas Cowboys" },
+        { "DEN", "Denver Broncos" },
+        { "DET", "Detroit Lions" },
+        { "GB", "Green Bay Packers" },
+        { "HOU", "Houston Texans" },
+        { "IND", "Indianapolis Colts" },
+        { "JAX", "Jacksonville Jaguars" },
+        { "KC", "Kansas City Chiefs" },
+        { "LV", "Las Vegas Raiders" },
+        { "LAC", "Los Angeles Chargers" },
+        { "LA", "Los Angeles Rams" },
+        { "LAR", "Los Angeles Rams" },
+        { "MIA", "Miami Dolphins" },
+        { "MIN", "Minnesota Vikings" },
+        { "NE", "New England Patriots" },
+        { "NO", "New Orleans Saints" },
+        { "NYG", "New York Giants" },
+        { "NYJ", "New York Jets" },
+        { "OAK", "Las Vegas Raiders" },
+        { "PHI", "Philadelphia Eagles" },
+        { "PIT", "Pittsburgh Steelers" },
+        { "SF", "San Francisco 49ers" },
+        { "SEA", "Seattle Seahawks" },
+        { "TB", "Tampa Bay Buccaneers" },
+        { "TEN", "Tennessee Titans" },
+        { "WAS", "Washington Commanders" },
+        { "WSH", "Washington Commanders" }
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -254,6 +307,7 @@
                     RecTd = r.RecTd ?? 0
                 })
                 .Where(r => string.IsNullOrEmpty(_selectedPosition) || r.Position == _selectedPosition)
+                .Where(r => string.IsNullOrEmpty(_selectedTeam) || r.Team == _selectedTeam)
                 .OrderByDescending(r => r.Season)
                 .ThenByDescending(r => r.PassYds + r.RushYds + r.RecYds)
                 .ToList();

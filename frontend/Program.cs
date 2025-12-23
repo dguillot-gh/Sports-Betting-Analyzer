@@ -44,7 +44,8 @@ builder.Services.AddHttpClient("PythonML", client =>
 builder.Services.AddServerSideBlazor()
     .AddCircuitOptions(options =>
     {
-        options.DetailedErrors = builder.Environment.IsDevelopment();
+        // TEMPORARY: Force detailed errors for debugging circuit issues
+        options.DetailedErrors = true;  // Was: builder.Environment.IsDevelopment();
         options.DisconnectedCircuitMaxRetained = 100;
         options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(10);
         options.JSInteropDefaultCallTimeout = TimeSpan.FromMinutes(5);
