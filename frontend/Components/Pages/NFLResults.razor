@@ -284,6 +284,8 @@
             
             if (_selectedSeason.HasValue)
                 url += $"&season={_selectedSeason.Value}";
+            if (!string.IsNullOrEmpty(_selectedTeam))
+                url += $"&team={Uri.EscapeDataString(_selectedTeam)}";
             if (!string.IsNullOrEmpty(_selectedPlayer))
                 url += $"&player={Uri.EscapeDataString(_selectedPlayer)}";
             

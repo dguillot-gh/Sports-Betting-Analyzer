@@ -56,7 +56,7 @@
                         <MudPaper Class="pa-4 mb-4" Elevation="1" Style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);">
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
                                 <MudAvatar Size="Size.Large" Color="Color.Warning">
-                                    @(_profile.Name?.Substring(0, 1) ?? "?")
+                                    @(string.IsNullOrEmpty(_profile.Name) ? "?" : _profile.Name[0].ToString())
                                 </MudAvatar>
                                 <div>
                                     <MudText Typo="Typo.h5" Style="color: white;">@_profile.Name</MudText>
@@ -98,15 +98,16 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        @foreach (var game in _profile.RecentGames.Take(5))
+                                        @foreach (var game in _profile.RecentGames?.Take(5) ?? Enumerable.Empty<Dictionary<string, object>>())
                                         {
+                                            if (game == null) continue;
                                             var passTd = GetIntValue(game, "pass_td");
                                             var rushTd = GetIntValue(game, "rush_td");
                                             var recTd = GetIntValue(game, "rec_td");
                                             <tr>
-                                                <td>@game.GetValueOrDefault("season")?.ToString()</td>
-                                                <td>@game.GetValueOrDefault("team")?.ToString()</td>
-                                                <td>@game.GetValueOrDefault("games")?.ToString()</td>
+                                                <td>@(game.GetValueOrDefault("season")?.ToString() ?? "-")</td>
+                                                <td>@(game.GetValueOrDefault("team")?.ToString() ?? "-")</td>
+                                                <td>@(game.GetValueOrDefault("games")?.ToString() ?? "-")</td>
                                                 <td><strong>@FormatNumber(GetIntValue(game, "pass_yds"))</strong></td>
                                                 <td><strong>@FormatNumber(GetIntValue(game, "rush_yds"))</strong></td>
                                                 <td><strong>@FormatNumber(GetIntValue(game, "rec_yds"))</strong></td>
@@ -259,26 +260,38 @@
         
         _isLoading = true;
         _notFound = false;
+        _profile = null;  // Clear previous profile
+        StateHasChanged();
+        
         try
         {
             var url = $"http://backend:8000/db/profiles/nfl/{Uri.EscapeDataString(_selectedPlayer)}";
+            Console.WriteLine($"Loading profile from: {url}");
             _profile = await Http.GetFromJsonAsync<PlayerProfile>(url);
             
             // Check if profile was not found (API returns not_found flag)
             if (_profile?.NotFound == true)
             {
+                Console.WriteLine($"Profile not found for: {_selectedPlayer}");
                 _notFound = true;
                 _profile = null;
+            }
+            else
+            {
+                Console.WriteLine($"Loaded profile: {_profile?.Name}, Stats: {_profile?.Stats?.Count ?? 0}, Games: {_profile?.RecentGames?.Count ?? 0}");
             }
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"LoadProfile error: {ex}");
             Snackbar.Add($"Error loading profile: {ex.Message}", Severity.Error);
             _notFound = true;
+            _profile = null;
         }
         finally
         {
             _isLoading = false;
+            StateHasChanged();
         }
     }
 
@@ -308,15 +321,21 @@
         _ => key.Replace("_", " ").ToUpperInvariant()
     };
 
-    private int GetIntValue(Dictionary<string, object> dict, string key)
+    private int GetIntValue(Dictionary<string, object>? dict, string key)
     {
+        if (dict == null) return 0;
         if (dict.TryGetValue(key, out var value))
         {
+            if (value == null) return 0;
             if (value is int i) return i;
             if (value is long l) return (int)l;
-            if (value is System.Text.Json.JsonElement je && je.ValueKind == System.Text.Json.JsonValueKind.Number)
-                return je.GetInt32();
-            if (int.TryParse(value?.ToString(), out var parsed)) return parsed;
+            if (value is double d) return (int)d;
+            if (value is System.Text.Json.JsonElement je)
+            {
+                if (je.ValueKind == System.Text.Json.JsonValueKind.Number)
+                    return je.TryGetInt32(out var num) ? num : 0;
+            }
+            if (int.TryParse(value.ToString(), out var parsed)) return parsed;
         }
         return 0;
     }
