@@ -110,6 +110,217 @@ async def download_nflverse(progress_callback=None):
     return downloaded
 
 
+async def download_pbp_2025(progress_callback=None) -> list:
+    """Download 2025 play-by-play RDS files from nflverse-pbp releases."""
+    import gzip
+    
+    PBP_DIR = NFLVERSE_DIR / "pbp_2025"
+    PBP_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # Get list of available files from GitHub API
+    api_url = f"https://api.github.com/repos/nflverse/nflverse-pbp/releases/tags/{PBP_2025_TAG}"
+    
+    try:
+        if progress_callback:
+            progress_callback("Fetching 2025 PBP file list...")
+        
+        response = requests.get(api_url, timeout=30)
+        if response.status_code != 200:
+            logger.warning(f"Failed to get PBP 2025 release info: {response.status_code}")
+            return []
+        
+        release_data = response.json()
+        assets = release_data.get("assets", [])
+        
+        # Filter for .rds files (smaller than .json.gz)
+        rds_files = [a for a in assets if a["name"].endswith(".rds")]
+        
+        if progress_callback:
+            progress_callback(f"Found {len(rds_files)} PBP game files for 2025...")
+        
+        downloaded = []
+        for i, asset in enumerate(rds_files):
+            name = asset["name"]
+            url = asset["browser_download_url"]
+            
+            file_path = PBP_DIR / name
+            
+            # Skip if already downloaded
+            if file_path.exists():
+                downloaded.append(name)
+                continue
+            
+            try:
+                if progress_callback and i % 20 == 0:
+                    progress_callback(f"Downloading PBP {i+1}/{len(rds_files)}: {name}...")
+                
+                resp = requests.get(url, timeout=60)
+                if resp.status_code == 200:
+                    file_path.write_bytes(resp.content)
+                    downloaded.append(name)
+                    logger.info(f"Downloaded {name}")
+            except Exception as e:
+                logger.error(f"Error downloading {name}: {e}")
+        
+        logger.info(f"Downloaded {len(downloaded)} PBP 2025 files")
+        return downloaded
+    
+    except Exception as e:
+        logger.error(f"Error fetching PBP 2025 list: {e}")
+        return []
+
+
+async def import_pbp_2025(conn, sport_id: int, progress_callback=None) -> dict:
+    """Import 2025 player stats from play-by-play RDS files."""
+    try:
+        import pyreadr
+    except ImportError:
+        logger.error("pyreadr not installed. Run: pip install pyreadr")
+        return {"error": "pyreadr not installed"}
+    
+    PBP_DIR = NFLVERSE_DIR / "pbp_2025"
+    rds_files = sorted(PBP_DIR.glob("*.rds"))
+    
+    if not rds_files:
+        logger.warning("No PBP 2025 RDS files found")
+        return {"imported": 0}
+    
+    if progress_callback:
+        progress_callback(f"Processing {len(rds_files)} PBP 2025 game files...")
+    
+    # Aggregate player stats across all games
+    player_stats = {}  # player_id -> cumulative stats
+    games_processed = 0
+    
+    for i, rds_file in enumerate(rds_files):
+        try:
+            if progress_callback and i % 20 == 0:
+                progress_callback(f"Processing game {i+1}/{len(rds_files)}: {rds_file.name}...")
+            
+            # Read RDS file
+            result = pyreadr.read_r(str(rds_file))
+            if not result:
+                continue
+            
+            df = list(result.values())[0]
+            
+            # Aggregate stats by player from play-by-play
+            # Common columns: passer_player_id, rusher_player_id, receiver_player_id
+            # Stats: passing_yards, rushing_yards, receiving_yards, etc.
+            
+            for _, play in df.iterrows():
+                # Passing stats
+                passer_id = play.get('passer_player_id')
+                if passer_id and not pd.isna(passer_id):
+                    if passer_id not in player_stats:
+                        player_stats[passer_id] = {
+                            'player_id': str(passer_id),
+                            'player_name': play.get('passer_player_name'),
+                            'position': 'QB',
+                            'team': play.get('posteam'),
+                            'season': 2025,
+                            'games': set(),
+                            'pass_att': 0, 'pass_cmp': 0, 'pass_yds': 0, 'pass_td': 0, 'pass_int': 0,
+                            'rush_att': 0, 'rush_yds': 0, 'rush_td': 0,
+                            'rec': 0, 'targets': 0, 'rec_yds': 0, 'rec_td': 0,
+                        }
+                    player_stats[passer_id]['games'].add(play.get('game_id'))
+                    if play.get('pass_attempt') == 1:
+                        player_stats[passer_id]['pass_att'] += 1
+                    if play.get('complete_pass') == 1:
+                        player_stats[passer_id]['pass_cmp'] += 1
+                    player_stats[passer_id]['pass_yds'] += int(play.get('passing_yards') or 0)
+                    if play.get('pass_touchdown') == 1:
+                        player_stats[passer_id]['pass_td'] += 1
+                    if play.get('interception') == 1:
+                        player_stats[passer_id]['pass_int'] += 1
+                
+                # Rushing stats
+                rusher_id = play.get('rusher_player_id')
+                if rusher_id and not pd.isna(rusher_id):
+                    if rusher_id not in player_stats:
+                        player_stats[rusher_id] = {
+                            'player_id': str(rusher_id),
+                            'player_name': play.get('rusher_player_name'),
+                            'position': 'RB',
+                            'team': play.get('posteam'),
+                            'season': 2025,
+                            'games': set(),
+                            'pass_att': 0, 'pass_cmp': 0, 'pass_yds': 0, 'pass_td': 0, 'pass_int': 0,
+                            'rush_att': 0, 'rush_yds': 0, 'rush_td': 0,
+                            'rec': 0, 'targets': 0, 'rec_yds': 0, 'rec_td': 0,
+                        }
+                    player_stats[rusher_id]['games'].add(play.get('game_id'))
+                    if play.get('rush_attempt') == 1:
+                        player_stats[rusher_id]['rush_att'] += 1
+                    player_stats[rusher_id]['rush_yds'] += int(play.get('rushing_yards') or 0)
+                    if play.get('rush_touchdown') == 1:
+                        player_stats[rusher_id]['rush_td'] += 1
+                
+                # Receiving stats
+                receiver_id = play.get('receiver_player_id')
+                if receiver_id and not pd.isna(receiver_id):
+                    if receiver_id not in player_stats:
+                        player_stats[receiver_id] = {
+                            'player_id': str(receiver_id),
+                            'player_name': play.get('receiver_player_name'),
+                            'position': 'WR',
+                            'team': play.get('posteam'),
+                            'season': 2025,
+                            'games': set(),
+                            'pass_att': 0, 'pass_cmp': 0, 'pass_yds': 0, 'pass_td': 0, 'pass_int': 0,
+                            'rush_att': 0, 'rush_yds': 0, 'rush_td': 0,
+                            'rec': 0, 'targets': 0, 'rec_yds': 0, 'rec_td': 0,
+                        }
+                    player_stats[receiver_id]['games'].add(play.get('game_id'))
+                    player_stats[receiver_id]['targets'] += 1
+                    if play.get('complete_pass') == 1:
+                        player_stats[receiver_id]['rec'] += 1
+                    player_stats[receiver_id]['rec_yds'] += int(play.get('receiving_yards') or 0)
+                    if play.get('pass_touchdown') == 1:
+                        player_stats[receiver_id]['rec_td'] += 1
+            
+            games_processed += 1
+            gc.collect()
+            
+        except Exception as e:
+            logger.error(f"Error processing {rds_file.name}: {e}")
+    
+    # Insert aggregated stats into database
+    if progress_callback:
+        progress_callback(f"Inserting {len(player_stats)} player season stats for 2025...")
+    
+    imported = 0
+    for player_id, stats in player_stats.items():
+        # Convert games set to count
+        stats['games'] = len(stats['games'])
+        
+        # Clean metadata
+        metadata = {k: v for k, v in stats.items() if v is not None and v != 0}
+        
+        content_hash = compute_hash({
+            'sport': 'nfl',
+            'player_id': str(player_id),
+            'season': 2025,
+            'type': 'season_stats'
+        })
+        
+        try:
+            await conn.execute(
+                """INSERT INTO results (sport_id, season, series, metadata, content_hash)
+                   VALUES ($1, $2, 'nfl', $3, $4)
+                   ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                   DO UPDATE SET metadata = EXCLUDED.metadata""",
+                sport_id, 2025, json.dumps(metadata), content_hash
+            )
+            imported += 1
+        except Exception as e:
+            logger.debug(f"Error inserting player {player_id}: {e}")
+    
+    logger.info(f"Processed {games_processed} games, imported {imported} player 2025 stats")
+    return {"games_processed": games_processed, "imported": imported}
+
+
 async def get_db_connection():
     """Get database connection."""
     return await asyncpg.connect(DATABASE_URL)
@@ -423,10 +634,22 @@ async def import_all_nfl(clear_existing: bool = False, progress_callback=None) -
         results["players_imported"] = player_result.get("imported", 0)
         player_map = player_result.get("player_map", {})
         
-        # Step 5: Import player stats
+        # Step 5: Import player stats (2020-2024)
         stats_result = await import_player_stats(conn, sport_id, player_map, progress_callback)
         results["games_imported"] = stats_result.get("imported", 0)
         results["stats_computed"] = stats_result.get("stats_computed", 0)
+        
+        # Step 6: Download and import 2025 PBP data
+        if progress_callback:
+            progress_callback("Downloading 2025 play-by-play data...")
+        
+        pbp_downloaded = await download_pbp_2025(progress_callback)
+        results["pbp_2025_downloaded"] = len(pbp_downloaded)
+        
+        if pbp_downloaded:
+            pbp_result = await import_pbp_2025(conn, sport_id, progress_callback)
+            results["pbp_2025_imported"] = pbp_result.get("imported", 0)
+            results["pbp_2025_games"] = pbp_result.get("games_processed", 0)
         
         if progress_callback:
             progress_callback("NFL import complete!")
