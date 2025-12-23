@@ -23,11 +23,12 @@
                                  Value="_selectedPlayer"
                                  ValueChanged="OnPlayerSelected"
                                  SearchFunc="SearchPlayers"
-                                 MaxItems="50"
+                                 MaxItems="100"
+                                 MaxHeight="400"
                                  AdornmentIcon="@Icons.Material.Filled.Search"
                                  Variant="Variant.Outlined"
                                  Dense="true"
-                                 Immediate="true"
+                                 DebounceInterval="300"
                                  Placeholder="Type player name..." />
                 
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-3" FullWidth="true"
@@ -212,27 +213,31 @@
     {
         try
         {
-            var url = $"http://backend:8000/db/profiles/nfl/list?entity_type=player&limit=1000";
+            // Load ALL players for search - increase limit significantly
+            var url = $"http://backend:8000/db/profiles/nfl/list?entity_type=player&limit=5000";
             var response = await Http.GetFromJsonAsync<ProfileListResponse>(url);
             if (response?.Entities != null)
             {
-                _playerList = response.Entities.Select(e => e.Name).Distinct().ToList();
+                _playerList = response.Entities.Select(e => e.Name).Distinct().OrderBy(n => n).ToList();
+                Console.WriteLine($"Loaded {_playerList.Count} players");
             }
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Error loading players: {ex.Message}", Severity.Warning);
+            Console.WriteLine($"LoadPlayerList error: {ex}");
         }
     }
 
     private Task<IEnumerable<string>> SearchPlayers(string value, CancellationToken token)
     {
         if (string.IsNullOrEmpty(value))
-            return Task.FromResult(_playerList.Take(50).AsEnumerable());
+            return Task.FromResult(_playerList.Take(100).AsEnumerable());
         
+        // Filter by search term and return up to 100 results
         return Task.FromResult(_playerList
             .Where(d => d.Contains(value, StringComparison.OrdinalIgnoreCase))
-            .Take(50)
+            .Take(100)
             .AsEnumerable());
     }
 

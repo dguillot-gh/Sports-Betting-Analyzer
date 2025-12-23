@@ -40,11 +40,12 @@
                                      Value="_selectedPlayer"
                                      ValueChanged="OnPlayerSelected"
                                      SearchFunc="SearchPlayers"
-                                     MaxItems="50"
+                                     MaxItems="100"
+                                     MaxHeight="400"
                                      AdornmentIcon="@Icons.Material.Filled.Search"
                                      Variant="Variant.Outlined"
                                      Dense="true"
-                                     Immediate="true"
+                                     DebounceInterval="300"
                                      Placeholder="Type player name..." />
                 </MudItem>
                 <MudItem xs="12" md="2">
@@ -300,7 +301,7 @@
             .AsEnumerable());
     }
 
-    private async Task OnPlayerSelected(string player)
+    private void OnPlayerSelected(string player)
     {
         _selectedPlayer = player;
         _playerStats = null;
@@ -311,6 +312,8 @@
         if (string.IsNullOrEmpty(_selectedPlayer)) return;
         
         _isLoading = true;
+        StateHasChanged();
+        
         try
         {
             var http = HttpClientFactory.CreateClient("PythonML");
@@ -321,25 +324,46 @@
                 var profile = System.Text.Json.JsonSerializer.Deserialize<ProfileResponse>(json,
                     new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                 
-                if (profile != null)
+                if (profile != null && profile.Name != null)
                 {
+                    // Safely get season stats with null checks
+                    var seasonStats = profile.Stats?.GetValueOrDefault(_season) ?? new Dictionary<string, object>();
+                    
+                    // Safely build last 5 games list
+                    var last5Games = new List<GameLog>();
+                    if (profile.RecentGames != null)
+                    {
+                        foreach (var g in profile.RecentGames.Take(5))
+                        {
+                            try
+                            {
+                                last5Games.Add(new GameLog
+                                {
+                                    Date = g?.GetValueOrDefault("game_date")?.ToString() ?? g?.GetValueOrDefault("week")?.ToString() ?? "?",
+                                    Opponent = g?.GetValueOrDefault("opponent")?.ToString() ?? "?",
+                                    Stats = GetGameStats(g ?? new Dictionary<string, object>(), _selectedSport)
+                                });
+                            }
+                            catch { /* Skip malformed games */ }
+                        }
+                    }
+                    
                     _playerStats = new PlayerStatsData
                     {
                         Player = profile.Name ?? _selectedPlayer,
                         Team = profile.Metadata?.GetValueOrDefault("team")?.ToString() ?? "",
                         Position = profile.Metadata?.GetValueOrDefault("position")?.ToString() ?? "",
-                        SeasonStats = profile.Stats?.GetValueOrDefault(_season) ?? new(),
-                        Last5Games = profile.RecentGames?.Take(5).Select(g => new GameLog
-                        {
-                            Date = g.GetValueOrDefault("game_date")?.ToString() ?? g.GetValueOrDefault("week")?.ToString() ?? "?",
-                            Opponent = g.GetValueOrDefault("opponent")?.ToString() ?? "?",
-                            Stats = GetGameStats(g, _selectedSport)
-                        }).ToList() ?? new()
+                        SeasonStats = seasonStats,
+                        Last5Games = last5Games
                     };
                     
                     _last5Headers = _selectedSport == "nba" 
                         ? new[] { "PTS", "REB", "AST", "STL", "BLK" }
                         : new[] { "Pass Yds", "Rush Yds", "Rec Yds", "TDs" };
+                }
+                else
+                {
+                    Snackbar.Add("Player data incomplete", Severity.Warning);
                 }
             }
             else
@@ -349,11 +373,13 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            Console.WriteLine($"LoadPlayerStats error: {ex}");
+            Snackbar.Add($"Error loading player: {ex.Message}", Severity.Error);
         }
         finally
         {
             _isLoading = false;
+            StateHasChanged();
         }
     }
     

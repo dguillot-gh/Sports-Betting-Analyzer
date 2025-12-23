@@ -1121,7 +1121,7 @@ async def get_sport_profiles(
     sport: str,
     entity_type: str = "player",
     search: str = None,
-    limit: int = 100
+    limit: int = 1000  # Increased default to support NFL player lists
 ):
     """Get list of players/teams for a sport."""
     if sport not in ["nfl", "nba", "nascar"]:
