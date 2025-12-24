@@ -1,0 +1,254 @@
+@page "/nba-game-results"
+@rendermode InteractiveServer
+@using MudBlazor
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>NBA Game Results</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">
+        <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Class="mr-2" />
+        NBA Game Results
+    </MudText>
+
+    <!-- Filters -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="2">
+                <MudSelect T="int?" Label="Season" @bind-Value="_selectedSeason" 
+                           Variant="Variant.Outlined" Dense="true" Clearable="true">
+                    @foreach (var season in _availableSeasons)
+                    {
+                        <MudSelectItem T="int?" Value="@season">@season</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="string" Label="Team" @bind-Value="_selectedTeam" 
+                           Variant="Variant.Outlined" Dense="true" Clearable="true"
+                           MaxHeight="400">
+                    <MudSelectItem Value="@((string?)null)">All Teams</MudSelectItem>
+                    @foreach (var team in _nbaTeams.OrderBy(t => t.Value))
+                    {
+                        <MudSelectItem Value="@team.Key">@team.Value</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            
+            <MudItem xs="12" sm="6" md="2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" 
+                           OnClick="LoadResults" Disabled="_isLoading" FullWidth="true">
+                    @if (_isLoading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Search
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- Results -->
+    @if (_isLoading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+    
+    @if (_games.Any())
+    {
+        <MudGrid>
+            @foreach (var game in _games)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudCard Elevation="2" Class="game-card">
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @game.GameDate
+                                </MudText>
+                            </CardHeaderContent>
+                            <CardHeaderActions>
+                                @if (game.IsCompleted)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Final</MudChip>
+                                }
+                            </CardHeaderActions>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            <MudStack Spacing="2">
+                                <!-- Away Team -->
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                        <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Size="Size.Small" />
+                                        <MudText Typo="Typo.body1" Style="@(game.AwayScore > game.HomeScore ? "font-weight: bold;" : "")">
+                                            @game.AwayTeam
+                                        </MudText>
+                                    </MudStack>
+                                    <MudText Typo="Typo.h6" Style="@(game.AwayScore > game.HomeScore ? "font-weight: bold; color: #4caf50;" : "")">
+                                        @game.AwayScore
+                                    </MudText>
+                                </MudStack>
+                                
+                                <!-- Home Team -->
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                        <MudIcon Icon="@Icons.Material.Filled.Home" Size="Size.Small" />
+                                        <MudText Typo="Typo.body1" Style="@(game.HomeScore > game.AwayScore ? "font-weight: bold;" : "")">
+                                            @game.HomeTeam
+                                        </MudText>
+                                    </MudStack>
+                                    <MudText Typo="Typo.h6" Style="@(game.HomeScore > game.AwayScore ? "font-weight: bold; color: #4caf50;" : "")">
+                                        @game.HomeScore
+                                    </MudText>
+                                </MudStack>
+                            </MudStack>
+                        </MudCardContent>
+                        @if (!string.IsNullOrEmpty(game.TopScorer))
+                        {
+                            <MudCardActions>
+                                <MudText Typo="Typo.caption">
+                                    ⭐ @game.TopScorer: @game.TopScorerPoints PTS
+                                </MudText>
+                            </MudCardActions>
+                        }
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+        
+        <MudText Typo="Typo.caption" Class="mt-4">
+            Showing @_games.Count games
+        </MudText>
+    }
+    else if (!_isLoading && _hasSearched)
+    {
+        <MudAlert Severity="Severity.Info">No games found. Try adjusting your filters.</MudAlert>
+    }
+</MudContainer>
+
+<style>
+    .game-card:hover {
+        transform: translateY(-2px);
+        transition: transform 0.2s;
+    }
+</style>
+
+@code {
+    private int? _selectedSeason;
+    private string? _selectedTeam;
+    private bool _isLoading = false;
+    private bool _hasSearched = false;
+    
+    private List<int> _availableSeasons = new();
+    private List<NBAGame> _games = new();
+    
+    private readonly Dictionary<string, string> _nbaTeams = new()
+    {
+        { "ATL", "Hawks" }, { "BOS", "Celtics" }, { "BKN", "Nets" }, { "CHA", "Hornets" },
+        { "CHI", "Bulls" }, { "CLE", "Cavaliers" }, { "DAL", "Mavericks" }, { "DEN", "Nuggets" },
+        { "DET", "Pistons" }, { "GSW", "Warriors" }, { "HOU", "Rockets" }, { "IND", "Pacers" },
+        { "LAC", "Clippers" }, { "LAL", "Lakers" }, { "MEM", "Grizzlies" }, { "MIA", "Heat" },
+        { "MIL", "Bucks" }, { "MIN", "Timberwolves" }, { "NOP", "Pelicans" }, { "NYK", "Knicks" },
+        { "OKC", "Thunder" }, { "ORL", "Magic" }, { "PHI", "76ers" }, { "PHX", "Suns" },
+        { "POR", "Trail Blazers" }, { "SAC", "Kings" }, { "SAS", "Spurs" }, { "TOR", "Raptors" },
+        { "UTA", "Jazz" }, { "WAS", "Wizards" }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _availableSeasons = Enumerable.Range(2020, 6).Reverse().ToList();
+        _selectedSeason = _availableSeasons.FirstOrDefault();
+        await LoadResults();
+    }
+
+    private async Task LoadResults()
+    {
+        _isLoading = true;
+        _hasSearched = true;
+        StateHasChanged();
+        
+        try
+        {
+            var url = $"http://backend:8000/db/games/nba/schedule?limit=50";
+            
+            if (_selectedSeason.HasValue)
+                url += $"&season={_selectedSeason.Value}";
+            if (!string.IsNullOrEmpty(_selectedTeam))
+                url += $"&team={Uri.EscapeDataString(_selectedTeam)}";
+            
+            var response = await Http.GetFromJsonAsync<NBAScheduleResponse>(url);
+            
+            _games = (response?.Games ?? new())
+                .Select(g => new NBAGame
+                {
+                    GameDate = g.GameDate ?? "TBD",
+                    HomeTeam = g.HomeTeam ?? "Home",
+                    AwayTeam = g.AwayTeam ?? "Away",
+                    HomeScore = g.HomeScore ?? 0,
+                    AwayScore = g.AwayScore ?? 0,
+                    IsCompleted = g.IsCompleted ?? (g.HomeScore > 0 || g.AwayScore > 0),
+                    TopScorer = g.TopScorer,
+                    TopScorerPoints = g.TopScorerPoints ?? 0
+                })
+                .OrderByDescending(g => g.GameDate)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading games: {ex.Message}");
+            Snackbar.Add($"Error loading games: {ex.Message}", Severity.Warning);
+            _games = new();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private class NBAScheduleResponse
+    {
+        public List<NBAGameItem> Games { get; set; } = new();
+    }
+
+    private class NBAGameItem
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("game_date")]
+        public string? GameDate { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("home_team")]
+        public string? HomeTeam { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("away_team")]
+        public string? AwayTeam { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("home_score")]
+        public int? HomeScore { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("away_score")]
+        public int? AwayScore { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("is_completed")]
+        public bool? IsCompleted { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("top_scorer")]
+        public string? TopScorer { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("top_scorer_points")]
+        public int? TopScorerPoints { get; set; }
+    }
+
+    private class NBAGame
+    {
+        public string GameDate { get; set; } = "";
+        public string HomeTeam { get; set; } = "";
+        public string AwayTeam { get; set; } = "";
+        public int HomeScore { get; set; }
+        public int AwayScore { get; set; }
+        public bool IsCompleted { get; set; }
+        public string? TopScorer { get; set; }
+        public int TopScorerPoints { get; set; }
+    }
+}

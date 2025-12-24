@@ -563,6 +563,111 @@ async def import_stats_via_nflreadpy(conn, sport_id: int, player_map: dict, prog
         return {"error": str(e), "imported": 0}
 
 
+async def import_weekly_stats_via_nflreadpy(conn, sport_id: int, player_map: dict, progress_callback=None) -> dict:
+    """Import NFL weekly (game-by-game) stats using nflreadpy for hit rate calculations."""
+    try:
+        import nflreadpy as nfl
+    except ImportError:
+        logger.warning("nflreadpy not installed - skipping weekly stats")
+        return {"imported": 0}
+    
+    if progress_callback:
+        progress_callback("Loading weekly NFL stats for hit rates...")
+    
+    imported = 0
+    
+    try:
+        # Load weekly stats (no summary_level = game-by-game data)
+        # Only load recent seasons to keep DB size manageable
+        weekly_df = nfl.load_player_stats(
+            seasons=[2023, 2024, 2025]
+        ).to_pandas()
+        
+        if progress_callback:
+            progress_callback(f"Processing {len(weekly_df)} weekly game records...")
+        
+        logger.info(f"Loaded {len(weekly_df)} weekly stats from nflreadpy")
+        
+        for i, (_, row) in enumerate(weekly_df.iterrows()):
+            if progress_callback and i % 1000 == 0:
+                progress_callback(f"Importing weekly stats {i}/{len(weekly_df)}...")
+            
+            player_id = row.get('player_id')
+            if pd.isna(player_id):
+                continue
+            
+            season = row.get('season')
+            week = row.get('week')
+            if pd.isna(season) or pd.isna(week):
+                continue
+            
+            def safe_val(val):
+                if pd.isna(val):
+                    return None
+                if isinstance(val, float):
+                    return int(val) if val == int(val) else round(val, 2)
+                return val
+            
+            metadata = {
+                'player_id': str(player_id),
+                'player_name': safe_val(row.get('player_display_name') or row.get('player_name')),
+                'position': safe_val(row.get('position')),
+                'team': safe_val(row.get('recent_team')),
+                'season': int(season),
+                'week': int(week),
+                # Passing
+                'pass_att': safe_val(row.get('attempts')),
+                'pass_cmp': safe_val(row.get('completions')),
+                'pass_yds': safe_val(row.get('passing_yards')),
+                'pass_td': safe_val(row.get('passing_tds')),
+                'pass_int': safe_val(row.get('interceptions')),
+                # Rushing
+                'rush_att': safe_val(row.get('carries')),
+                'rush_yds': safe_val(row.get('rushing_yards')),
+                'rush_td': safe_val(row.get('rushing_tds')),
+                # Receiving  
+                'rec': safe_val(row.get('receptions')),
+                'targets': safe_val(row.get('targets')),
+                'rec_yds': safe_val(row.get('receiving_yards')),
+                'rec_td': safe_val(row.get('receiving_tds')),
+                # Fantasy
+                'fantasy_pts': safe_val(row.get('fantasy_points')),
+                'fantasy_pts_ppr': safe_val(row.get('fantasy_points_ppr')),
+            }
+            
+            metadata = {k: v for k, v in metadata.items() if v is not None}
+            
+            content_hash = compute_hash({
+                'sport': 'nfl',
+                'player_id': str(player_id),
+                'season': int(season),
+                'week': int(week),
+                'type': 'weekly_stats'
+            })
+            
+            try:
+                await conn.execute(
+                    """INSERT INTO results (sport_id, season, series, metadata, content_hash)
+                       VALUES ($1, $2, 'nfl_weekly', $3, $4)
+                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                       DO UPDATE SET metadata = EXCLUDED.metadata""",
+                    sport_id, int(season), json.dumps(metadata), content_hash
+                )
+                imported += 1
+            except Exception as e:
+                logger.debug(f"Error importing weekly stat: {e}")
+            
+            if i % 2000 == 0:
+                gc.collect()
+        
+        logger.info(f"Imported {imported} weekly NFL stats")
+        return {"imported": imported}
+        
+    except Exception as e:
+        logger.error(f"Error loading weekly stats: {e}")
+        return {"imported": 0, "error": str(e)}
+
+
 async def import_players_via_nflreadpy(conn, sport_id: int, progress_callback=None) -> dict:
     """Import NFL players using nflreadpy."""
     try:
@@ -939,6 +1044,14 @@ async def import_all_nfl(clear_existing: bool = False, progress_callback=None) -
         results["games_imported"] = stats_result.get("imported", 0)
         results["stats_computed"] = stats_result.get("stats_computed", 0)
         
+        # Step 6: Import game schedules using nflreadpy
+        schedule_result = await import_schedules_via_nflreadpy(conn, sport_id, progress_callback)
+        results["schedules_imported"] = schedule_result.get("imported", 0)
+        
+        # Step 7: Import weekly game-by-game stats for hit rate calculations
+        weekly_result = await import_weekly_stats_via_nflreadpy(conn, sport_id, player_map, progress_callback)
+        results["weekly_stats_imported"] = weekly_result.get("imported", 0)
+        
         if progress_callback:
             progress_callback("NFL import complete!")
         
@@ -953,6 +1066,96 @@ async def import_all_nfl(clear_existing: bool = False, progress_callback=None) -
             await conn.close()
     
     return results
+
+
+async def import_schedules_via_nflreadpy(conn, sport_id: int, progress_callback=None) -> dict:
+    """Import NFL game schedules using nflreadpy's load_schedules()."""
+    try:
+        import nflreadpy as nfl
+    except ImportError:
+        logger.warning("nflreadpy not installed - skipping schedule import")
+        return {"imported": 0}
+    
+    if progress_callback:
+        progress_callback("Loading NFL schedules (2020-2025)...")
+    
+    imported = 0
+    
+    try:
+        # Load schedules for all years
+        schedules_df = nfl.load_schedules(seasons=[2020, 2021, 2022, 2023, 2024, 2025]).to_pandas()
+        
+        if progress_callback:
+            progress_callback(f"Processing {len(schedules_df)} games...")
+        
+        logger.info(f"Loaded {len(schedules_df)} games from nflreadpy schedules")
+        
+        for i, (_, row) in enumerate(schedules_df.iterrows()):
+            if progress_callback and i % 100 == 0:
+                progress_callback(f"Importing schedules {i}/{len(schedules_df)}...")
+            
+            game_id = row.get('game_id')
+            if pd.isna(game_id):
+                continue
+            
+            season = row.get('season')
+            week = row.get('week')
+            
+            def safe_val(val):
+                if pd.isna(val):
+                    return None
+                if isinstance(val, float):
+                    return int(val) if val == int(val) else round(val, 2)
+                return val
+            
+            metadata = {
+                'game_id': str(game_id),
+                'season': safe_val(season),
+                'week': safe_val(week),
+                'game_type': safe_val(row.get('game_type')),
+                'gameday': safe_val(row.get('gameday')),
+                'weekday': safe_val(row.get('weekday')),
+                'gametime': safe_val(row.get('gametime')),
+                'away_team': safe_val(row.get('away_team')),
+                'home_team': safe_val(row.get('home_team')),
+                'away_score': safe_val(row.get('away_score')),
+                'home_score': safe_val(row.get('home_score')),
+                'result': safe_val(row.get('result')),
+                'total': safe_val(row.get('total')),
+                'overtime': safe_val(row.get('overtime')),
+                'spread_line': safe_val(row.get('spread_line')),
+                'total_line': safe_val(row.get('total_line')),
+                'away_moneyline': safe_val(row.get('away_moneyline')),
+                'home_moneyline': safe_val(row.get('home_moneyline')),
+                'stadium': safe_val(row.get('stadium')),
+                'roof': safe_val(row.get('roof')),
+                'surface': safe_val(row.get('surface')),
+            }
+            
+            metadata = {k: v for k, v in metadata.items() if v is not None}
+            
+            content_hash = compute_hash({'sport': 'nfl', 'game_id': str(game_id)})
+            
+            try:
+                await conn.execute(
+                    """INSERT INTO results (sport_id, season, series, metadata, content_hash)
+                       VALUES ($1, $2, 'nfl_schedule', $3, $4)
+                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                       DO UPDATE SET metadata = EXCLUDED.metadata""",
+                    sport_id, int(season) if season else None, json.dumps(metadata), content_hash
+                )
+                imported += 1
+            except Exception as e:
+                logger.debug(f"Error importing schedule: {e}")
+        
+        gc.collect()
+        
+    except Exception as e:
+        logger.error(f"Error in schedule import: {e}")
+        return {"imported": imported, "error": str(e)}
+    
+    logger.info(f"Imported {imported} NFL schedules")
+    return {"imported": imported}
 
 
 if __name__ == "__main__":

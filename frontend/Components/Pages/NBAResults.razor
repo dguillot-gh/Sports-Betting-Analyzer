@@ -1,0 +1,424 @@
+@page "/nba-results"
+@rendermode InteractiveServer
+@using MudBlazor
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>NBA Player Stats</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">
+        <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Class="mr-2" />
+        NBA Player Stats
+    </MudText>
+
+    <!-- Filters -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="2">
+                <MudSelect T="int?" Label="Season" @bind-Value="_selectedSeason" 
+                           Variant="Variant.Outlined" Dense="true" Clearable="true">
+                    @foreach (var season in _availableSeasons)
+                    {
+                        <MudSelectItem T="int?" Value="@season">@season</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="string" Label="Team" @bind-Value="_selectedTeam" 
+                           Variant="Variant.Outlined" Dense="true" Clearable="true"
+                           MaxHeight="400">
+                    <MudSelectItem Value="@((string?)null)">All Teams</MudSelectItem>
+                    @foreach (var team in _nbaTeams.OrderBy(t => t.Value))
+                    {
+                        <MudSelectItem Value="@team.Key">@team.Value</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            
+            <MudItem xs="12" sm="6" md="2">
+                <MudAutocomplete T="string" Label="Player"
+                                 Value="_selectedPlayer"
+                                 ValueChanged="OnPlayerChanged"
+                                 SearchFunc="SearchPlayers"
+                                 MaxItems="50"
+                                 MaxHeight="400"
+                                 Variant="Variant.Outlined"
+                                 Dense="true"
+                                 DebounceInterval="300"
+                                 Clearable="true"
+                                 Placeholder="Filter by player..." />
+            </MudItem>
+            
+            <MudItem xs="12" sm="6" md="2">
+                <MudSelect T="string" Label="Position" @bind-Value="_selectedPosition" 
+                           Variant="Variant.Outlined" Dense="true" Clearable="true">
+                    <MudSelectItem Value="@((string?)null)">All Positions</MudSelectItem>
+                    <MudSelectItem Value="@("PG")">Point Guard</MudSelectItem>
+                    <MudSelectItem Value="@("SG")">Shooting Guard</MudSelectItem>
+                    <MudSelectItem Value="@("SF")">Small Forward</MudSelectItem>
+                    <MudSelectItem Value="@("PF")">Power Forward</MudSelectItem>
+                    <MudSelectItem Value="@("C")">Center</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            
+            <MudItem xs="12" sm="6" md="2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" 
+                           OnClick="LoadResults" Disabled="_isLoading" FullWidth="true">
+                    @if (_isLoading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Search
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- Results Table -->
+    @if (_isLoading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+    
+    @if (_results.Any())
+    {
+        <MudPaper Elevation="2">
+            <MudTable Items="@_results" Dense="true" Hover="true" Striped="true" 
+                      FixedHeader="true" Height="600px">
+                <HeaderContent>
+                    <MudTh>Season</MudTh>
+                    <MudTh>Player</MudTh>
+                    <MudTh>Pos</MudTh>
+                    <MudTh>Team</MudTh>
+                    <MudTh Style="text-align: right">GP</MudTh>
+                    <MudTh Style="text-align: right">PTS</MudTh>
+                    <MudTh Style="text-align: right">REB</MudTh>
+                    <MudTh Style="text-align: right">AST</MudTh>
+                    <MudTh Style="text-align: right">STL</MudTh>
+                    <MudTh Style="text-align: right">BLK</MudTh>
+                    <MudTh Style="text-align: right">FG%</MudTh>
+                    <MudTh Style="text-align: right">3P%</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Season">@context.Season</MudTd>
+                    <MudTd DataLabel="Player">
+                        <MudLink Href="@($"/nba-player-profiles?player={Uri.EscapeDataString(context.PlayerName ?? "")}")" 
+                                 Color="Color.Primary">
+                            @context.PlayerName
+                        </MudLink>
+                    </MudTd>
+                    <MudTd DataLabel="Pos">
+                        <MudChip T="string" Size="Size.Small" Color="@GetPositionColor(context.Position)">
+                            @context.Position
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Team">@context.Team</MudTd>
+                    <MudTd DataLabel="GP" Style="text-align: right">@(context.Games ?? 0)</MudTd>
+                    <MudTd DataLabel="PTS" Style="text-align: right">
+                        @if (context.Points > 0)
+                        {
+                            <strong>@context.Points.ToString("0.0")</strong>
+                        }
+                        else
+                        {
+                            <span>-</span>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="REB" Style="text-align: right">
+                        @if (context.Rebounds > 0)
+                        {
+                            <strong>@context.Rebounds.ToString("0.0")</strong>
+                        }
+                        else
+                        {
+                            <span>-</span>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="AST" Style="text-align: right">
+                        @if (context.Assists > 0)
+                        {
+                            <strong>@context.Assists.ToString("0.0")</strong>
+                        }
+                        else
+                        {
+                            <span>-</span>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="STL" Style="text-align: right">@context.Steals.ToString("0.0")</MudTd>
+                    <MudTd DataLabel="BLK" Style="text-align: right">@context.Blocks.ToString("0.0")</MudTd>
+                    <MudTd DataLabel="FG%" Style="text-align: right">
+                        @if (context.FgPct > 0)
+                        {
+                            <span>@context.FgPct.ToString("0.0")%</span>
+                        }
+                        else
+                        {
+                            <span>-</span>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="3P%" Style="text-align: right">
+                        @if (context.Fg3Pct > 0)
+                        {
+                            <span>@context.Fg3Pct.ToString("0.0")%</span>
+                        }
+                        else
+                        {
+                            <span>-</span>
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="new int[] { 50, 100, 200, 500 }" />
+                </PagerContent>
+            </MudTable>
+        </MudPaper>
+        
+        <MudText Typo="Typo.caption" Class="mt-2">
+            Showing @_results.Count of @_totalResults results
+        </MudText>
+    }
+    else if (!_isLoading && _hasSearched)
+    {
+        <MudAlert Severity="Severity.Info">No results found. Try adjusting your filters.</MudAlert>
+    }
+</MudContainer>
+
+@code {
+    private int? _selectedSeason;
+    private string? _selectedPlayer;
+    private string? _selectedPosition;
+    private string? _selectedTeam;
+    private bool _isLoading = false;
+    private bool _hasSearched = false;
+    
+    private List<int> _availableSeasons = new();
+    private List<NBAPlayerResult> _results = new();
+    private int _totalResults = 0;
+    
+    // NBA Team abbreviation to full name mapping
+    private readonly Dictionary<string, string> _nbaTeams = new()
+    {
+        { "ATL", "Atlanta Hawks" },
+        { "BOS", "Boston Celtics" },
+        { "BKN", "Brooklyn Nets" },
+        { "CHA", "Charlotte Hornets" },
+        { "CHI", "Chicago Bulls" },
+        { "CLE", "Cleveland Cavaliers" },
+        { "DAL", "Dallas Mavericks" },
+        { "DEN", "Denver Nuggets" },
+        { "DET", "Detroit Pistons" },
+        { "GSW", "Golden State Warriors" },
+        { "HOU", "Houston Rockets" },
+        { "IND", "Indiana Pacers" },
+        { "LAC", "Los Angeles Clippers" },
+        { "LAL", "Los Angeles Lakers" },
+        { "MEM", "Memphis Grizzlies" },
+        { "MIA", "Miami Heat" },
+        { "MIL", "Milwaukee Bucks" },
+        { "MIN", "Minnesota Timberwolves" },
+        { "NOP", "New Orleans Pelicans" },
+        { "NYK", "New York Knicks" },
+        { "OKC", "Oklahoma City Thunder" },
+        { "ORL", "Orlando Magic" },
+        { "PHI", "Philadelphia 76ers" },
+        { "PHX", "Phoenix Suns" },
+        { "POR", "Portland Trail Blazers" },
+        { "SAC", "Sacramento Kings" },
+        { "SAS", "San Antonio Spurs" },
+        { "TOR", "Toronto Raptors" },
+        { "UTA", "Utah Jazz" },
+        { "WAS", "Washington Wizards" }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSeasons();
+        await LoadResults();
+    }
+
+    private async Task LoadSeasons()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<SeasonsResponse>(
+                $"http://backend:8000/db/games/nba/seasons");
+            _availableSeasons = response?.Seasons ?? new List<int>();
+            
+            if (_availableSeasons.Any() && !_selectedSeason.HasValue)
+            {
+                _selectedSeason = _availableSeasons.First();
+            }
+        }
+        catch
+        {
+            _availableSeasons = Enumerable.Range(2020, 6).Reverse().ToList();
+        }
+    }
+
+    private async Task LoadResults()
+    {
+        _isLoading = true;
+        _hasSearched = true;
+        StateHasChanged();
+        
+        try
+        {
+            var url = $"http://backend:8000/db/games/nba/list?limit=500";
+            
+            if (_selectedSeason.HasValue)
+                url += $"&season={_selectedSeason.Value}";
+            if (!string.IsNullOrEmpty(_selectedTeam))
+                url += $"&team={Uri.EscapeDataString(_selectedTeam)}";
+            if (!string.IsNullOrEmpty(_selectedPlayer))
+                url += $"&player={Uri.EscapeDataString(_selectedPlayer)}";
+            
+            var response = await Http.GetFromJsonAsync<NBAResultsResponse>(url);
+            
+            _results = (response?.Results ?? new())
+                .Select(r => new NBAPlayerResult
+                {
+                    Season = r.Season,
+                    PlayerName = r.PlayerName,
+                    Position = r.Position,
+                    Team = r.Team,
+                    Games = r.Games,
+                    Points = r.Points ?? 0,
+                    Rebounds = r.Rebounds ?? 0,
+                    Assists = r.Assists ?? 0,
+                    Steals = r.Steals ?? 0,
+                    Blocks = r.Blocks ?? 0,
+                    FgPct = r.FgPct ?? 0,
+                    Fg3Pct = r.Fg3Pct ?? 0
+                })
+                .Where(r => string.IsNullOrEmpty(_selectedPosition) || r.Position == _selectedPosition)
+                .Where(r => string.IsNullOrEmpty(_selectedTeam) || r.Team == _selectedTeam)
+                .OrderByDescending(r => r.Season)
+                .ThenByDescending(r => r.Points)
+                .ToList();
+            
+            _totalResults = response?.Count ?? _results.Count;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading results: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task<IEnumerable<string>> SearchPlayers(string value, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length < 2)
+            return Enumerable.Empty<string>();
+        
+        try
+        {
+            var response = await Http.GetFromJsonAsync<ProfileListResponse>(
+                $"http://backend:8000/db/profiles/nba/list?entity_type=player&search={Uri.EscapeDataString(value)}&limit=20",
+                ct);
+            return response?.Entities?.Select(e => e.Name) ?? Enumerable.Empty<string>();
+        }
+        catch
+        {
+            return Enumerable.Empty<string>();
+        }
+    }
+
+    private void OnPlayerChanged(string player)
+    {
+        _selectedPlayer = player;
+    }
+
+    private Color GetPositionColor(string? position) => position switch
+    {
+        "PG" => Color.Primary,
+        "SG" => Color.Info,
+        "SF" => Color.Warning,
+        "PF" => Color.Success,
+        "C" => Color.Error,
+        _ => Color.Default
+    };
+
+    // Response Models
+    private class SeasonsResponse
+    {
+        public List<int> Seasons { get; set; } = new();
+    }
+
+    private class ProfileListResponse
+    {
+        public List<EntityInfo> Entities { get; set; } = new();
+    }
+
+    private class EntityInfo
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+    }
+
+    private class NBAResultsResponse
+    {
+        public List<NBAResultItem> Results { get; set; } = new();
+        public int Count { get; set; }
+    }
+
+    private class NBAResultItem
+    {
+        public int Id { get; set; }
+        public int Season { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("player_name")]
+        public string? PlayerName { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("position")]
+        public string? Position { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("team")]
+        public string? Team { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("games")]
+        public int? Games { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("pts")]
+        public decimal? Points { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("reb")]
+        public decimal? Rebounds { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("ast")]
+        public decimal? Assists { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("stl")]
+        public decimal? Steals { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("blk")]
+        public decimal? Blocks { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("fg_pct")]
+        public decimal? FgPct { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("fg3_pct")]
+        public decimal? Fg3Pct { get; set; }
+    }
+
+    private class NBAPlayerResult
+    {
+        public int Season { get; set; }
+        public string? PlayerName { get; set; }
+        public string? Position { get; set; }
+        public string? Team { get; set; }
+        public int? Games { get; set; }
+        public decimal Points { get; set; }
+        public decimal Rebounds { get; set; }
+        public decimal Assists { get; set; }
+        public decimal Steals { get; set; }
+        public decimal Blocks { get; set; }
+        public decimal FgPct { get; set; }
+        public decimal Fg3Pct { get; set; }
+    }
+}

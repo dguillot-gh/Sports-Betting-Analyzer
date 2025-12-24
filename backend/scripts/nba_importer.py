@@ -27,21 +27,20 @@ logger = logging.getLogger(__name__)
 # Database URL
 DATABASE_URL = "postgresql://sports_user:sportsbetting2024@postgres:5432/sports_betting"
 
-# sportsdataverse data releases (hoopR uses this)
-SPORTSDATAVERSE_BASE = "https://github.com/sportsdataverse/sportsdataverse-data/releases/download"
+# NOTE: hoopR-nba-data repository does NOT have GitHub releases.
+# The sportsdataverse Python package accesses data via internal APIs.
+# We'll skip direct parquet downloads and rely on:
+# 1. sportsdataverse Python API (if XGBoost compatible)
+# 2. Basketball Reference (primary - season stats + advanced)
+# 3. Kaggle fallback (historical data)
 
-# Get current year for dynamic file downloads
-CURRENT_YEAR = datetime.now().year
-
-# NBA data files to download - year-specific player box scores
-# hoopR provides data via sportsdataverse-data releases
+# Parquet download is deprecated - no release assets available
 HOOPDATA_FILES = {}
-for year in range(2020, CURRENT_YEAR + 1):
-    HOOPDATA_FILES[f"player_box_{year}"] = f"{SPORTSDATAVERSE_BASE}/espn_nba_player_box/player_box_{year}.parquet"
 
 # Local data paths
 DATA_DIR = Path("/app/data/nba")
 HOOPDATA_DIR = Path("/app/data/hoopdata")
+
 
 
 async def download_hoopdata(progress_callback=None):
@@ -942,6 +941,14 @@ async def import_all_nba(clear_existing: bool = False, progress_callback=None) -
         results["br_stats_imported"] = br_result.get("imported", 0)
         results["br_stats_computed"] = br_result.get("stats_computed", 0)
         
+        # Step 7: Import game schedules using nba_api
+        schedule_result = await import_schedules_via_nba_api(conn, sport_id, progress_callback)
+        results["schedules_imported"] = schedule_result.get("imported", 0)
+        
+        # Step 8: Import player game logs for hit rate calculations
+        game_log_result = await import_game_logs_via_nba_api(conn, sport_id, progress_callback)
+        results["game_logs_imported"] = game_log_result.get("imported", 0)
+        
         if progress_callback:
             progress_callback("NBA import complete!")
         
@@ -956,6 +963,259 @@ async def import_all_nba(clear_existing: bool = False, progress_callback=None) -
             await conn.close()
     
     return results
+
+
+async def import_schedules_via_nba_api(conn, sport_id: int, progress_callback=None) -> dict:
+    """Import NBA game schedules using nba_api's LeagueGameFinder."""
+    try:
+        from nba_api.stats.endpoints import leaguegamefinder
+        import time
+    except ImportError:
+        logger.warning("nba_api not installed - skipping schedule import")
+        return {"imported": 0}
+    
+    if progress_callback:
+        progress_callback("Loading NBA schedules via nba_api...")
+    
+    imported = 0
+    
+    try:
+        # Format seasons for nba_api (e.g., "2024-25")
+        seasons_to_load = ["2020-21", "2021-22", "2022-23", "2023-24", "2024-25"]
+        
+        all_games = []
+        
+        for season in seasons_to_load:
+            try:
+                if progress_callback:
+                    progress_callback(f"Loading NBA games for {season}...")
+                
+                # LeagueGameFinder returns games with scores
+                gamefinder = leaguegamefinder.LeagueGameFinder(
+                    season_nullable=season,
+                    league_id_nullable='00'  # NBA
+                )
+                games_df = gamefinder.get_data_frames()[0]
+                
+                if games_df is not None and len(games_df) > 0:
+                    all_games.append(games_df)
+                    logger.info(f"Loaded {len(games_df)} game records for {season}")
+                
+                # Rate limit to avoid API throttling
+                time.sleep(1)
+                
+            except Exception as e:
+                logger.warning(f"Error loading {season} schedule: {e}")
+                continue
+        
+        if not all_games:
+            logger.warning("No NBA games loaded from nba_api")
+            return {"imported": 0}
+        
+        # Combine all seasons
+        games_df = pd.concat(all_games, ignore_index=True)
+        
+        # Group by game_id to get home/away pairs
+        # Each game appears twice (once per team)
+        game_ids = games_df['GAME_ID'].unique()
+        
+        if progress_callback:
+            progress_callback(f"Processing {len(game_ids)} unique NBA games...")
+        
+        for i, game_id in enumerate(game_ids):
+            if progress_callback and i % 100 == 0:
+                progress_callback(f"Importing NBA schedule {i}/{len(game_ids)}...")
+            
+            game_rows = games_df[games_df['GAME_ID'] == game_id]
+            if len(game_rows) < 2:
+                continue
+            
+            # Determine home (@) vs away
+            home_row = game_rows[game_rows['MATCHUP'].str.contains(' vs. ', na=False)]
+            away_row = game_rows[game_rows['MATCHUP'].str.contains(' @ ', na=False)]
+            
+            if home_row.empty or away_row.empty:
+                continue
+            
+            home_row = home_row.iloc[0]
+            away_row = away_row.iloc[0]
+            
+            # Extract season year from season string
+            season_str = home_row.get('SEASON_ID', '')
+            season_year = int(season_str[1:5]) if len(season_str) >= 5 else 2024
+            
+            def safe_val(val):
+                if pd.isna(val):
+                    return None
+                if isinstance(val, float):
+                    return int(val) if val == int(val) else round(val, 2)
+                return val
+            
+            metadata = {
+                'game_id': str(game_id),
+                'season': season_year,
+                'game_date': safe_val(home_row.get('GAME_DATE')),
+                'home_team': safe_val(home_row.get('TEAM_ABBREVIATION')),
+                'away_team': safe_val(away_row.get('TEAM_ABBREVIATION')),
+                'home_score': safe_val(home_row.get('PTS')),
+                'away_score': safe_val(away_row.get('PTS')),
+                'home_team_name': safe_val(home_row.get('TEAM_NAME')),
+                'away_team_name': safe_val(away_row.get('TEAM_NAME')),
+                'wl_home': safe_val(home_row.get('WL')),
+                'wl_away': safe_val(away_row.get('WL')),
+            }
+            
+            metadata = {k: v for k, v in metadata.items() if v is not None}
+            
+            content_hash = compute_hash({'sport': 'nba', 'game_id': str(game_id)})
+            
+            try:
+                await conn.execute(
+                    """INSERT INTO results (sport_id, season, series, metadata, content_hash)
+                       VALUES ($1, $2, 'nba_schedule', $3, $4)
+                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                       DO UPDATE SET metadata = EXCLUDED.metadata""",
+                    sport_id, season_year, json.dumps(metadata), content_hash
+                )
+                imported += 1
+            except Exception as e:
+                logger.debug(f"Error importing NBA schedule: {e}")
+        
+        gc.collect()
+        
+    except Exception as e:
+        logger.error(f"Error in NBA schedule import: {e}")
+        return {"imported": imported, "error": str(e)}
+    
+    logger.info(f"Imported {imported} NBA game schedules")
+    return {"imported": imported}
+
+
+async def import_game_logs_via_nba_api(conn, sport_id: int, progress_callback=None) -> dict:
+    """Import NBA player game logs for hit rate calculations."""
+    try:
+        from nba_api.stats.endpoints import leaguegamelog
+        import time
+    except ImportError:
+        logger.warning("nba_api not installed - skipping game logs")
+        return {"imported": 0}
+    
+    if progress_callback:
+        progress_callback("Loading NBA player game logs for hit rates...")
+    
+    imported = 0
+    
+    try:
+        # Load game logs by season
+        seasons = ["2023-24", "2024-25"]
+        
+        all_logs = []
+        for season in seasons:
+            try:
+                if progress_callback:
+                    progress_callback(f"Loading NBA game logs for {season}...")
+                
+                # Get player game logs for the season
+                game_log = leaguegamelog.LeagueGameLog(
+                    season=season,
+                    player_or_team_abbreviation='P',  # Player logs
+                    season_type_all_star='Regular Season'
+                )
+                logs_df = game_log.get_data_frames()[0]
+                
+                if logs_df is not None and len(logs_df) > 0:
+                    all_logs.append(logs_df)
+                    logger.info(f"Loaded {len(logs_df)} game logs for {season}")
+                
+                time.sleep(1)  # Rate limit
+                
+            except Exception as e:
+                logger.warning(f"Error loading {season} game logs: {e}")
+                continue
+        
+        if not all_logs:
+            logger.warning("No NBA game logs loaded")
+            return {"imported": 0}
+        
+        logs_df = pd.concat(all_logs, ignore_index=True)
+        
+        if progress_callback:
+            progress_callback(f"Processing {len(logs_df)} NBA game log records...")
+        
+        for i, (_, row) in enumerate(logs_df.iterrows()):
+            if progress_callback and i % 500 == 0:
+                progress_callback(f"Importing NBA game logs {i}/{len(logs_df)}...")
+            
+            player_id = row.get('PLAYER_ID')
+            game_id = row.get('GAME_ID')
+            if pd.isna(player_id) or pd.isna(game_id):
+                continue
+            
+            def safe_val(val):
+                if pd.isna(val):
+                    return None
+                if isinstance(val, float):
+                    return int(val) if val == int(val) else round(val, 2)
+                return val
+            
+            # Extract season year
+            season_id = row.get('SEASON_ID', '')
+            season_year = int(season_id[1:5]) if len(str(season_id)) >= 5 else 2024
+            
+            metadata = {
+                'player_id': str(player_id),
+                'game_id': str(game_id),
+                'player_name': safe_val(row.get('PLAYER_NAME')),
+                'team': safe_val(row.get('TEAM_ABBREVIATION')),
+                'game_date': safe_val(row.get('GAME_DATE')),
+                'matchup': safe_val(row.get('MATCHUP')),
+                'wl': safe_val(row.get('WL')),
+                'min': safe_val(row.get('MIN')),
+                'pts': safe_val(row.get('PTS')),
+                'reb': safe_val(row.get('REB')),
+                'ast': safe_val(row.get('AST')),
+                'stl': safe_val(row.get('STL')),
+                'blk': safe_val(row.get('BLK')),
+                'tov': safe_val(row.get('TOV')),
+                'fgm': safe_val(row.get('FGM')),
+                'fga': safe_val(row.get('FGA')),
+                'fg3m': safe_val(row.get('FG3M')),
+                'fg3a': safe_val(row.get('FG3A')),
+                'ftm': safe_val(row.get('FTM')),
+                'fta': safe_val(row.get('FTA')),
+                'plus_minus': safe_val(row.get('PLUS_MINUS')),
+            }
+            
+            metadata = {k: v for k, v in metadata.items() if v is not None}
+            
+            content_hash = compute_hash({
+                'sport': 'nba',
+                'player_id': str(player_id),
+                'game_id': str(game_id),
+                'type': 'game_log'
+            })
+            
+            try:
+                await conn.execute(
+                    """INSERT INTO results (sport_id, season, series, metadata, content_hash)
+                       VALUES ($1, $2, 'nba_game_log', $3, $4)
+                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                       DO UPDATE SET metadata = EXCLUDED.metadata""",
+                    sport_id, season_year, json.dumps(metadata), content_hash
+                )
+                imported += 1
+            except Exception as e:
+                logger.debug(f"Error importing NBA game log: {e}")
+            
+            if i % 1000 == 0:
+                gc.collect()
+        
+        logger.info(f"Imported {imported} NBA game logs")
+        return {"imported": imported}
+        
+    except Exception as e:
+        logger.error(f"Error importing NBA game logs: {e}")
+        return {"imported": 0, "error": str(e)}
 
 
 if __name__ == "__main__":
