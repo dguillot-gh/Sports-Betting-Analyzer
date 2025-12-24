@@ -257,7 +257,7 @@
         try
         {
             var response = await Http.GetFromJsonAsync<SeasonsResponse>(
-                $"http://backend:8000/db/games/nfl/seasons");
+                $"http://backend:8000/db/stats/nfl/seasons");
             _availableSeasons = response?.Seasons ?? new List<int>();
             
             // Default to most recent season
@@ -280,7 +280,7 @@
         
         try
         {
-            var url = $"http://backend:8000/db/games/nfl/list?limit=500";
+            var url = $"http://backend:8000/db/stats/nfl/list?limit=500";
             
             if (_selectedSeason.HasValue)
                 url += $"&season={_selectedSeason.Value}";
@@ -288,6 +288,8 @@
                 url += $"&team={Uri.EscapeDataString(_selectedTeam)}";
             if (!string.IsNullOrEmpty(_selectedPlayer))
                 url += $"&player={Uri.EscapeDataString(_selectedPlayer)}";
+            if (!string.IsNullOrEmpty(_selectedPosition))
+                url += $"&position={Uri.EscapeDataString(_selectedPosition)}";
             
             var response = await Http.GetFromJsonAsync<NFLResultsResponse>(url);
             

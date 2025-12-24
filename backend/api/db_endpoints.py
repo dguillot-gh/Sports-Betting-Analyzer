@@ -1172,6 +1172,131 @@ async def get_game_list(
         await conn.close()
 
 
+@router.get("/stats/{sport}/list")
+async def get_stats_list(
+    sport: str,
+    season: int = None,
+    player: str = None,
+    team: str = None,
+    position: str = None,
+    limit: int = 500,
+    offset: int = 0
+):
+    """
+    Get season totals/aggregated player stats.
+    For NFL: series='nfl', For NBA: series='nba' (season totals, not game-by-game)
+    """
+    conn = await get_db_connection()
+    try:
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
+        if not sport_id:
+            raise HTTPException(status_code=404, detail=f"Sport '{sport}' not found")
+        
+        # Season stats are stored with series = sport name (e.g., 'nfl', 'nba')
+        series_name = sport
+        
+        query = """
+            SELECT r.id, r.season, r.metadata
+            FROM results r
+            WHERE r.sport_id = $1 AND r.series = $2
+        """
+        params = [sport_id, series_name]
+        param_count = 2
+        
+        if season:
+            param_count += 1
+            query += f" AND r.season = ${param_count}"
+            params.append(season)
+        
+        if player:
+            param_count += 1
+            query += f" AND LOWER(r.metadata->>'player_name') LIKE LOWER(${param_count})"
+            params.append(f"%{player}%")
+        
+        if team:
+            param_count += 1
+            query += f" AND LOWER(r.metadata->>'team') = LOWER(${param_count})"
+            params.append(team)
+        
+        if position:
+            param_count += 1
+            query += f" AND LOWER(r.metadata->>'position') = LOWER(${param_count})"
+            params.append(position)
+        
+        query += " ORDER BY r.season DESC, (r.metadata->>'player_name') ASC"
+        param_count += 1
+        query += f" LIMIT ${param_count}"
+        params.append(limit)
+        param_count += 1
+        query += f" OFFSET ${param_count}"
+        params.append(offset)
+        
+        results = await conn.fetch(query, *params)
+        
+        # Format results
+        stat_results = []
+        for row in results:
+            meta = json.loads(row["metadata"]) if row["metadata"] else {}
+            stat_results.append({
+                "id": row["id"],
+                "season": row["season"],
+                "player_name": meta.get("player_name"),
+                "team": meta.get("team"),
+                "position": meta.get("position"),
+                "games": meta.get("games"),
+                # NFL stats
+                "pass_yds": meta.get("pass_yds"),
+                "pass_td": meta.get("pass_td"),
+                "pass_int": meta.get("pass_int"),
+                "rush_yds": meta.get("rush_yds"),
+                "rush_td": meta.get("rush_td"),
+                "rec": meta.get("rec"),
+                "rec_yds": meta.get("rec_yds"),
+                "rec_td": meta.get("rec_td"),
+                # NBA stats
+                "pts": meta.get("pts"),
+                "reb": meta.get("reb"),
+                "ast": meta.get("ast"),
+                "stl": meta.get("stl"),
+                "blk": meta.get("blk"),
+                "fg3m": meta.get("fg3m"),
+            })
+        
+        return {
+            "results": stat_results,
+            "count": len(stat_results),
+            "limit": limit,
+            "offset": offset
+        }
+    finally:
+        await conn.close()
+
+
+@router.get("/stats/{sport}/seasons")
+async def get_stats_seasons(sport: str):
+    """Get available seasons for season stats."""
+    conn = await get_db_connection()
+    try:
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
+        if not sport_id:
+            return {"seasons": [2025, 2024, 2023, 2022, 2021, 2020]}
+        
+        # Query stats data for seasons
+        rows = await conn.fetch(
+            """SELECT DISTINCT season FROM results 
+               WHERE sport_id = $1 AND series = $2 AND season IS NOT NULL 
+               ORDER BY season DESC""",
+            sport_id, sport  # series = sport name for season totals
+        )
+        
+        if rows:
+            return {"seasons": [row["season"] for row in rows]}
+        
+        return {"seasons": [2025, 2024, 2023, 2022, 2021, 2020]}
+    finally:
+        await conn.close()
+
+
 @router.get("/games/{sport}/seasons")
 async def get_game_seasons(sport: str):
     """Get available seasons for game schedules."""

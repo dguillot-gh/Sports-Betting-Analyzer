@@ -21,14 +21,22 @@
     <!-- Search and Filters -->
     <MudPaper Elevation="2" Class="pa-4 mb-4">
         <MudGrid>
-            <MudItem xs="12" md="4">
+            <MudItem xs="12" md="2">
+                <MudSelect T="int" @bind-Value="_selectedSeason" Label="Season" Variant="Variant.Outlined" Dense="true">
+                    @foreach (var season in _availableSeasons)
+                    {
+                        <MudSelectItem Value="@season">@season</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
                 <MudTextField @bind-Value="_searchPlayer" Label="Player Search" Variant="Variant.Outlined" Dense="true"
                               Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
                               Placeholder="LeBron James, Shai Gilgeous-Alexander..."
                               DebounceInterval="500" OnDebounceIntervalElapsed="SearchPlayers" />
             </MudItem>
-            <MudItem xs="12" md="3">
-                <MudSelect T="string" @bind-Value="_selectedStat" Label="Stat Type" Variant="Variant.Outlined" Dense="true">
+            <MudItem xs="12" md="2">
+                <MudSelect T="string" Value="_selectedStat" ValueChanged="OnStatChanged" Label="Stat Type" Variant="Variant.Outlined" Dense="true">
                     <MudSelectItem Value="@("pts")">Points</MudSelectItem>
                     <MudSelectItem Value="@("reb")">Rebounds</MudSelectItem>
                     <MudSelectItem Value="@("ast")">Assists</MudSelectItem>
@@ -68,7 +76,7 @@
                                 <div>
                                     <MudText Typo="Typo.h6">@player.PlayerName</MudText>
                                     <MudText Typo="Typo.body2" Color="Color.Secondary">
-                                        Over @_threshold @GetStatLabel(_selectedStat)
+                                        Over @_threshold @GetStatLabel(_selectedStat) (@_selectedSeason)
                                     </MudText>
                                 </div>
                                 <MudAvatar Color="@GetRateColor(player.SeasonRate)" Size="Size.Large">
@@ -170,10 +178,48 @@
     private string _searchPlayer = "";
     private string _selectedStat = "pts";
     private int _threshold = 20;
+    private int _selectedSeason = 2025;
     private bool _isLoading = false;
     private bool _searchCompleted = false;
     
+    private List<int> _availableSeasons = new() { 2025, 2024, 2023 };
     private List<HitRateResult> _hitRates = new();
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSeasons();
+    }
+    
+    private async Task LoadSeasons()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<SeasonsResponse>(
+                "http://backend:8000/db/games/nba/seasons");
+            if (response?.Seasons?.Any() == true)
+            {
+                _availableSeasons = response.Seasons;
+                _selectedSeason = _availableSeasons.First();
+            }
+        }
+        catch { }
+    }
+    
+    private void OnStatChanged(string newStat)
+    {
+        _selectedStat = newStat;
+        // Auto-adjust thresholds based on stat type
+        _threshold = newStat switch
+        {
+            "pts" => 20,
+            "reb" => 8,
+            "ast" => 6,
+            "fg3" => 3,
+            "stl" => 2,
+            "blk" => 2,
+            _ => 10
+        };
+    }
     
     private async Task SearchPlayers()
     {
@@ -191,8 +237,8 @@
             _searchCompleted = false;
             StateHasChanged();
             
-            // Fetch game results and calculate locally
-            var url = $"http://backend:8000/db/games/nba/list?limit=500";
+            // Fetch game results filtered by season
+            var url = $"http://backend:8000/db/games/nba/list?limit=1000&season={_selectedSeason}";
             if (!string.IsNullOrEmpty(_searchPlayer))
                 url += $"&player={Uri.EscapeDataString(_searchPlayer)}";
             
@@ -224,7 +270,7 @@
             
             _hitRates = playerGames.Select(pg =>
             {
-                var allGames = pg.OrderByDescending(g => g.Season).ThenByDescending(g => g.GameDate ?? "").ToList();
+                var allGames = pg.OrderByDescending(g => g.GameDate ?? "").ToList();
                 var last5 = allGames.Take(5).ToList();
                 var last10 = allGames.Take(10).ToList();
                 
@@ -252,7 +298,9 @@
                     SeasonAvg = allGames.Count > 0 ? allGames.Average(g => GetStatValue(g)) : 0,
                 };
             })
+            .Where(h => h.SeasonGames > 0)
             .OrderByDescending(h => h.SeasonRate)
+            .ThenByDescending(h => h.SeasonGames)
             .Take(50)
             .ToList();
             
@@ -295,6 +343,11 @@
     };
     
     // Models
+    public class SeasonsResponse
+    {
+        public List<int> Seasons { get; set; } = new();
+    }
+    
     public class HitRateResult
     {
         public string PlayerName { get; set; } = "";

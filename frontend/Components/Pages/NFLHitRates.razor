@@ -21,14 +21,22 @@
     <!-- Search and Filters -->
     <MudPaper Elevation="2" Class="pa-4 mb-4">
         <MudGrid>
-            <MudItem xs="12" md="4">
+            <MudItem xs="12" md="2">
+                <MudSelect T="int" @bind-Value="_selectedSeason" Label="Season" Variant="Variant.Outlined" Dense="true">
+                    @foreach (var season in _availableSeasons)
+                    {
+                        <MudSelectItem Value="@season">@season</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
                 <MudTextField @bind-Value="_searchPlayer" Label="Player Search" Variant="Variant.Outlined" Dense="true"
                               Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
                               Placeholder="Patrick Mahomes, Derrick Henry..."
                               DebounceInterval="500" OnDebounceIntervalElapsed="SearchPlayers" />
             </MudItem>
-            <MudItem xs="12" md="3">
-                <MudSelect T="string" @bind-Value="_selectedStat" Label="Stat Type" Variant="Variant.Outlined" Dense="true">
+            <MudItem xs="12" md="2">
+                <MudSelect T="string" Value="_selectedStat" ValueChanged="OnStatChanged" Label="Stat Type" Variant="Variant.Outlined" Dense="true">
                     <MudSelectItem Value="@("pass_yds")">Pass Yards</MudSelectItem>
                     <MudSelectItem Value="@("rush_yds")">Rush Yards</MudSelectItem>
                     <MudSelectItem Value="@("rec_yds")">Receiving Yards</MudSelectItem>
@@ -49,6 +57,13 @@
                 </MudButton>
             </MudItem>
         </MudGrid>
+        @if (_isPassingStat)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
+                <MudIcon Icon="@Icons.Material.Filled.Info" Class="mr-1" Size="Size.Small" />
+                Filtering to QBs only for passing stats
+            </MudAlert>
+        }
     </MudPaper>
     
     @if (_isLoading)
@@ -69,7 +84,7 @@
                                 <div>
                                     <MudText Typo="Typo.h6">@player.PlayerName</MudText>
                                     <MudText Typo="Typo.body2" Color="Color.Secondary">
-                                        Over @_threshold @GetStatLabel(_selectedStat)
+                                        Over @_threshold @GetStatLabel(_selectedStat) (@_selectedSeason)
                                     </MudText>
                                 </div>
                                 <MudAvatar Color="@GetRateColor(player.SeasonRate)" Size="Size.Large">
@@ -173,10 +188,50 @@
     private string _searchPlayer = "";
     private string _selectedStat = "pass_yds";
     private int _threshold = 250;
+    private int _selectedSeason = 2025;
     private bool _isLoading = false;
     private bool _searchCompleted = false;
+    private bool _isPassingStat => _selectedStat == "pass_yds" || _selectedStat == "pass_td";
     
+    private List<int> _availableSeasons = new() { 2025, 2024, 2023 };
     private List<HitRateResult> _hitRates = new();
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSeasons();
+    }
+    
+    private async Task LoadSeasons()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<SeasonsResponse>(
+                "http://backend:8000/db/games/nfl/seasons");
+            if (response?.Seasons?.Any() == true)
+            {
+                _availableSeasons = response.Seasons;
+                _selectedSeason = _availableSeasons.First();
+            }
+        }
+        catch { }
+    }
+    
+    private void OnStatChanged(string newStat)
+    {
+        _selectedStat = newStat;
+        // Auto-adjust thresholds based on stat type
+        _threshold = newStat switch
+        {
+            "pass_yds" => 250,
+            "rush_yds" => 60,
+            "rec_yds" => 50,
+            "rec" => 4,
+            "pass_td" => 2,
+            "rush_td" => 1,
+            "rec_td" => 1,
+            _ => 50
+        };
+    }
     
     private async Task SearchPlayers()
     {
@@ -194,8 +249,8 @@
             _searchCompleted = false;
             StateHasChanged();
             
-            // Fetch game results and calculate locally
-            var url = $"http://backend:8000/db/games/nfl/list?limit=500";
+            // Fetch game results filtered by season
+            var url = $"http://backend:8000/db/games/nfl/list?limit=1000&season={_selectedSeason}";
             if (!string.IsNullOrEmpty(_searchPlayer))
                 url += $"&player={Uri.EscapeDataString(_searchPlayer)}";
             
@@ -219,15 +274,19 @@
                 return;
             }
             
+            // Filter to QBs only for passing stats
+            var filteredGames = games.Results.Where(g => !string.IsNullOrEmpty(g.PlayerName));
+            if (_isPassingStat)
+            {
+                filteredGames = filteredGames.Where(g => g.Position == "QB");
+            }
+            
             // Group by player
-            var playerGames = games.Results
-                .Where(g => !string.IsNullOrEmpty(g.PlayerName))
-                .GroupBy(g => g.PlayerName)
-                .ToList();
+            var playerGames = filteredGames.GroupBy(g => g.PlayerName).ToList();
             
             _hitRates = playerGames.Select(pg =>
             {
-                var allGames = pg.OrderByDescending(g => g.Season).ThenByDescending(g => g.Week ?? 0).ToList();
+                var allGames = pg.OrderByDescending(g => g.Week ?? 0).ToList();
                 var last5 = allGames.Take(5).ToList();
                 var last10 = allGames.Take(10).ToList();
                 
@@ -257,7 +316,9 @@
                     SeasonAvg = allGames.Count > 0 ? allGames.Average(g => GetStatValue(g)) : 0,
                 };
             })
+            .Where(h => h.SeasonGames > 0)
             .OrderByDescending(h => h.SeasonRate)
+            .ThenByDescending(h => h.SeasonGames)
             .Take(50)
             .ToList();
             
@@ -301,6 +362,11 @@
     };
     
     // Models
+    public class SeasonsResponse
+    {
+        public List<int> Seasons { get; set; } = new();
+    }
+    
     public class HitRateResult
     {
         public string PlayerName { get; set; } = "";
