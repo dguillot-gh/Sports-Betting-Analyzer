@@ -174,6 +174,34 @@
                     </MudTd>
                 </RowTemplate>
             </MudTable>
+            
+            <!-- Averages Summary -->
+            @if (_hitRates.Any())
+            {
+                <MudDivider Class="my-3" />
+                <MudText Typo="Typo.subtitle2" Class="mb-2">
+                    <MudIcon Icon="@Icons.Material.Filled.Analytics" Size="Size.Small" Class="mr-1" />
+                    Season Averages (Selected Players)
+                </MudText>
+                <MudStack Row="true" Spacing="4" Justify="Justify.SpaceAround">
+                    <MudPaper Class="pa-3 text-center" Elevation="1" Style="min-width: 120px;">
+                        <MudText Typo="Typo.h5" Color="Color.Primary">@GetOverallAvg("pass_yds").ToString("F1")</MudText>
+                        <MudText Typo="Typo.caption">Avg Pass Yds</MudText>
+                    </MudPaper>
+                    <MudPaper Class="pa-3 text-center" Elevation="1" Style="min-width: 120px;">
+                        <MudText Typo="Typo.h5" Color="Color.Secondary">@GetOverallAvg("rush_yds").ToString("F1")</MudText>
+                        <MudText Typo="Typo.caption">Avg Rush Yds</MudText>
+                    </MudPaper>
+                    <MudPaper Class="pa-3 text-center" Elevation="1" Style="min-width: 120px;">
+                        <MudText Typo="Typo.h5" Color="Color.Tertiary">@GetOverallAvg("rec_yds").ToString("F1")</MudText>
+                        <MudText Typo="Typo.caption">Avg Rec Yds</MudText>
+                    </MudPaper>
+                    <MudPaper Class="pa-3 text-center" Elevation="1" Style="min-width: 120px;">
+                        <MudText Typo="Typo.h5" Color="Color.Info">@GetOverallAvg("rec").ToString("F1")</MudText>
+                        <MudText Typo="Typo.caption">Avg Receptions</MudText>
+                    </MudPaper>
+                </MudStack>
+            }
         </MudPaper>
     }
     else if (!_isLoading && _searchCompleted)
@@ -195,6 +223,7 @@
     
     private List<int> _availableSeasons = new() { 2025, 2024, 2023 };
     private List<HitRateResult> _hitRates = new();
+    private List<GameResult> _allGameResults = new(); // For computing multi-stat averages
     
     protected override async Task OnInitializedAsync()
     {
@@ -205,8 +234,9 @@
     {
         try
         {
+            // Query seasons from nfl_weekly data (game-by-game data)
             var response = await Http.GetFromJsonAsync<SeasonsResponse>(
-                "http://backend:8000/db/games/nfl/seasons");
+                "http://backend:8000/db/games/nfl/seasons?series=nfl_weekly");
             if (response?.Seasons?.Any() == true)
             {
                 _availableSeasons = response.Seasons;
@@ -281,8 +311,11 @@
                 filteredGames = filteredGames.Where(g => g.Position == "QB");
             }
             
+            // Store for computing multi-stat averages
+            _allGameResults = filteredGames.ToList();
+            
             // Group by player
-            var playerGames = filteredGames.GroupBy(g => g.PlayerName).ToList();
+            var playerGames = _allGameResults.GroupBy(g => g.PlayerName).ToList();
             
             _hitRates = playerGames.Select(pg =>
             {
@@ -360,6 +393,26 @@
         "rec_td" => "Rec TDs",
         _ => stat
     };
+    
+    // Calculate overall average for any stat across all displayed players
+    private double GetOverallAvg(string stat)
+    {
+        if (!_allGameResults.Any()) return 0;
+        
+        var values = _allGameResults.Select(g => stat switch
+        {
+            "pass_yds" => g.PassYds ?? 0,
+            "rush_yds" => g.RushYds ?? 0,
+            "rec_yds" => g.RecYds ?? 0,
+            "rec" => g.Rec ?? 0,
+            "pass_td" => g.PassTd ?? 0,
+            "rush_td" => g.RushTd ?? 0,
+            "rec_td" => g.RecTd ?? 0,
+            _ => 0
+        }).Where(v => v > 0); // Only count games with stats
+        
+        return values.Any() ? values.Average() : 0;
+    }
     
     // Models
     public class SeasonsResponse

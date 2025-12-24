@@ -19,6 +19,7 @@
     <PackageReference Include="Microsoft.ML" Version="4.0.3" />
     <PackageReference Include="Microsoft.ML.FastTree" Version="4.0.3" />
     <PackageReference Include="MudBlazor" Version="8.14.0" />
+    <PackageReference Include="Blazor-ApexCharts" Version="4.0.0" />
     <PackageReference Include="Tesseract" Version="5.2.0" />
     <PackageReference Include="Tesseract.Drawing" Version="5.2.0" />
   </ItemGroup>

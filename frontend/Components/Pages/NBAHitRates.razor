@@ -164,6 +164,34 @@
                     </MudTd>
                 </RowTemplate>
             </MudTable>
+            
+            <!-- Averages Summary -->
+            @if (_hitRates.Any())
+            {
+                <MudDivider Class="my-3" />
+                <MudText Typo="Typo.subtitle2" Class="mb-2">
+                    <MudIcon Icon="@Icons.Material.Filled.Analytics" Size="Size.Small" Class="mr-1" />
+                    Season Averages (Selected Players)
+                </MudText>
+                <MudStack Row="true" Spacing="4" Justify="Justify.SpaceAround">
+                    <MudPaper Class="pa-3 text-center" Elevation="1" Style="min-width: 120px;">
+                        <MudText Typo="Typo.h5" Color="Color.Primary">@GetOverallAvg("pts").ToString("F1")</MudText>
+                        <MudText Typo="Typo.caption">Avg Points</MudText>
+                    </MudPaper>
+                    <MudPaper Class="pa-3 text-center" Elevation="1" Style="min-width: 120px;">
+                        <MudText Typo="Typo.h5" Color="Color.Secondary">@GetOverallAvg("reb").ToString("F1")</MudText>
+                        <MudText Typo="Typo.caption">Avg Rebounds</MudText>
+                    </MudPaper>
+                    <MudPaper Class="pa-3 text-center" Elevation="1" Style="min-width: 120px;">
+                        <MudText Typo="Typo.h5" Color="Color.Tertiary">@GetOverallAvg("ast").ToString("F1")</MudText>
+                        <MudText Typo="Typo.caption">Avg Assists</MudText>
+                    </MudPaper>
+                    <MudPaper Class="pa-3 text-center" Elevation="1" Style="min-width: 120px;">
+                        <MudText Typo="Typo.h5" Color="Color.Info">@GetOverallAvg("fg3").ToString("F1")</MudText>
+                        <MudText Typo="Typo.caption">Avg 3PM</MudText>
+                    </MudPaper>
+                </MudStack>
+            }
         </MudPaper>
     }
     else if (!_isLoading && _searchCompleted)
@@ -184,6 +212,7 @@
     
     private List<int> _availableSeasons = new() { 2025, 2024, 2023 };
     private List<HitRateResult> _hitRates = new();
+    private List<GameResult> _allGameResults = new(); // For computing multi-stat averages
     
     protected override async Task OnInitializedAsync()
     {
@@ -194,8 +223,9 @@
     {
         try
         {
+            // Query seasons from the nba_game_log data (not schedules)
             var response = await Http.GetFromJsonAsync<SeasonsResponse>(
-                "http://backend:8000/db/games/nba/seasons");
+                "http://backend:8000/db/games/nba/seasons?series=nba_game_log");
             if (response?.Seasons?.Any() == true)
             {
                 _availableSeasons = response.Seasons;
@@ -262,9 +292,11 @@
                 return;
             }
             
+            // Store for multi-stat averages
+            _allGameResults = games.Results.Where(g => !string.IsNullOrEmpty(g.PlayerName)).ToList();
+            
             // Group by player
-            var playerGames = games.Results
-                .Where(g => !string.IsNullOrEmpty(g.PlayerName))
+            var playerGames = _allGameResults
                 .GroupBy(g => g.PlayerName)
                 .ToList();
             
@@ -341,6 +373,25 @@
         "fg3" => "3PM",
         _ => stat
     };
+    
+    // Calculate overall average for any stat across all displayed players
+    private double GetOverallAvg(string stat)
+    {
+        if (!_allGameResults.Any()) return 0;
+        
+        var values = _allGameResults.Select(g => stat switch
+        {
+            "pts" => g.Pts ?? 0,
+            "reb" => g.Reb ?? 0,
+            "ast" => g.Ast ?? 0,
+            "stl" => g.Stl ?? 0,
+            "blk" => g.Blk ?? 0,
+            "fg3" => g.Fg3 ?? 0,
+            _ => 0
+        }).Where(v => v > 0); // Only count games with stats
+        
+        return values.Any() ? values.Average() : 0;
+    }
     
     // Models
     public class SeasonsResponse

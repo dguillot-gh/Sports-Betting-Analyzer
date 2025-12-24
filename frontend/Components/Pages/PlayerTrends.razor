@@ -1,0 +1,544 @@
+@page "/player-trends"
+@page "/player-trends/{Sport}"
+@rendermode InteractiveServer
+@using MudBlazor
+@using AC = ApexCharts
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>Player Trends - Sports Betting Analyzer</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudStack Spacing="4">
+        <!-- Header -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <div class="d-flex align-center justify-space-between flex-wrap" style="gap: 16px;">
+                <div class="d-flex align-center">
+                    <MudIcon Icon="@Icons.Material.Filled.ShowChart" Size="Size.Large" Color="Color.Primary" Class="mr-3" />
+                    <div>
+                        <MudText Typo="Typo.h5">Player Performance Trends</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Game-by-game stats visualization</MudText>
+                    </div>
+                </div>
+                
+                <!-- Sport Tabs -->
+                <MudButtonGroup Color="Color.Primary" Variant="Variant.Outlined">
+                    <MudButton Variant="@(_selectedSport == "nfl" ? Variant.Filled : Variant.Outlined)"
+                               OnClick="@(() => SelectSport("nfl"))">
+                        NFL
+                    </MudButton>
+                    <MudButton Variant="@(_selectedSport == "nba" ? Variant.Filled : Variant.Outlined)"
+                               OnClick="@(() => SelectSport("nba"))">
+                        NBA
+                    </MudButton>
+                </MudButtonGroup>
+            </div>
+        </MudPaper>
+
+        <!-- Search Controls -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudGrid>
+                <MudItem xs="12" md="5">
+                    <MudTextField @bind-Value="_searchPlayer" Label="Player Name" 
+                                  Variant="Variant.Outlined" Dense="true"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Person"
+                                  Placeholder="@(_selectedSport == "nfl" ? "Patrick Mahomes, Derrick Henry..." : "LeBron James, Shai Gilgeous-Alexander...")"
+                                  DebounceInterval="300" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudSelect T="int" @bind-Value="_selectedSeason" Label="Season" 
+                               Variant="Variant.Outlined" Dense="true">
+                        @foreach (var season in _availableSeasons)
+                        {
+                            <MudSelectItem Value="@season">@season</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                               OnClick="LoadPlayerData" Disabled="@(string.IsNullOrWhiteSpace(_searchPlayer) || _isLoading)">
+                        @if (_isLoading)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Analyze
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        @if (_isLoading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+
+        @if (_gameData.Any())
+        {
+            <!-- Summary Cards -->
+            <MudGrid>
+                @foreach (var stat in GetSummaryStats())
+                {
+                    <MudItem xs="6" md="3">
+                        <MudPaper Class="pa-4 text-center" Elevation="2">
+                            <MudText Typo="Typo.h4" Color="Color.Primary">@stat.Value</MudText>
+                            <MudText Typo="Typo.caption">@stat.Label</MudText>
+                            @if (stat.HitRate > 0)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="@GetHitRateColor(stat.HitRate)" Class="mt-1">
+                                    @stat.HitRate.ToString("P0") over @stat.Line
+                                </MudChip>
+                            }
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+
+            <!-- Main Performance Chart -->
+            <MudPaper Class="pa-4" Elevation="2">
+                <div class="d-flex justify-space-between align-center mb-3">
+                    <MudText Typo="Typo.h6">
+                        <MudIcon Icon="@Icons.Material.Filled.Timeline" Class="mr-2" />
+                        @_playerName - Game by Game Performance
+                    </MudText>
+                    <MudSelect T="string" @bind-Value="_selectedChartStat" Label="Stat" Dense="true"
+                               Variant="Variant.Outlined" Style="max-width: 180px;">
+                        @foreach (var stat in GetAvailableStats())
+                        {
+                            <MudSelectItem Value="@stat.Key">@stat.Value</MudSelectItem>
+                        }
+                    </MudSelect>
+                </div>
+                
+                <AC.ApexChart TItem="GameDataPoint"
+                           Title=""
+                           Height="350"
+                           Options="_chartOptions">
+                    <AC.ApexPointSeries TItem="GameDataPoint"
+                                     Items="_chartData"
+                                     Name="@GetStatLabel(_selectedChartStat)"
+                                     SeriesType="AC.SeriesType.Line"
+                                     XValue="_getXValue"
+                                     YValue="_getYValue" />
+                </AC.ApexChart>
+            </MudPaper>
+
+            <!-- Hit Rates Summary -->
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" Class="mb-3">
+                    <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Class="mr-2" />
+                    Hit Rate Analysis
+                </MudText>
+                <MudGrid>
+                    @foreach (var hr in GetHitRateSummary())
+                    {
+                        <MudItem xs="12" md="4">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="pa-2"
+                                      Style="background: var(--mud-palette-background-default); border-radius: 4px;">
+                                <div>
+                                    <MudText Typo="Typo.body1"><strong>Over @hr.Line @hr.StatLabel</strong></MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@hr.Hits / @hr.Games games</MudText>
+                                </div>
+                                <MudChip T="string" Color="@GetHitRateColor(hr.Rate)" Size="Size.Medium">
+                                    @hr.Rate.ToString("P0")
+                                </MudChip>
+                            </MudStack>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudPaper>
+
+            <!-- Recent Games Table -->
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" Class="mb-3">
+                    <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-2" />
+                    Recent Games
+                </MudText>
+                <MudTable Items="@_gameData.Take(10)" Dense="true" Hover="true" Striped="true">
+                    <HeaderContent>
+                        @if (_selectedSport == "nfl")
+                        {
+                            <MudTh>Week</MudTh>
+                            <MudTh>Opp</MudTh>
+                            <MudTh>Pass Yds</MudTh>
+                            <MudTh>Rush Yds</MudTh>
+                            <MudTh>Rec Yds</MudTh>
+                            <MudTh>TDs</MudTh>
+                        }
+                        else
+                        {
+                            <MudTh>Date</MudTh>
+                            <MudTh>Opp</MudTh>
+                            <MudTh>PTS</MudTh>
+                            <MudTh>REB</MudTh>
+                            <MudTh>AST</MudTh>
+                            <MudTh>3PM</MudTh>
+                        }
+                    </HeaderContent>
+                    <RowTemplate>
+                        @if (_selectedSport == "nfl")
+                        {
+                            <MudTd>Wk @context.Week</MudTd>
+                            <MudTd>@context.Opponent</MudTd>
+                            <MudTd Style="@GetCellStyle(context.PassYds, 250)">@context.PassYds</MudTd>
+                            <MudTd Style="@GetCellStyle(context.RushYds, 60)">@context.RushYds</MudTd>
+                            <MudTd Style="@GetCellStyle(context.RecYds, 50)">@context.RecYds</MudTd>
+                            <MudTd>@(context.PassTd + context.RushTd + context.RecTd)</MudTd>
+                        }
+                        else
+                        {
+                            <MudTd>@context.GameDate</MudTd>
+                            <MudTd>@context.Opponent</MudTd>
+                            <MudTd Style="@GetCellStyle(context.Pts, 20)">@context.Pts</MudTd>
+                            <MudTd Style="@GetCellStyle(context.Reb, 8)">@context.Reb</MudTd>
+                            <MudTd Style="@GetCellStyle(context.Ast, 6)">@context.Ast</MudTd>
+                            <MudTd>@context.Fg3</MudTd>
+                        }
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        }
+        else if (!_isLoading && _hasSearched)
+        {
+            <MudAlert Severity="Severity.Info">
+                No game data found for "@_searchPlayer" in @_selectedSeason season. Try a different player or season.
+            </MudAlert>
+        }
+        else if (!_isLoading)
+        {
+            <MudAlert Severity="Severity.Normal">
+                Enter a player name and click Analyze to view their performance trends.
+            </MudAlert>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    [Parameter] public string? Sport { get; set; }
+    
+    private string _selectedSport = "nfl";
+    private string _searchPlayer = "";
+    private string _playerName = "";
+    private int _selectedSeason = 2025;
+    private string _selectedChartStat = "pass_yds";
+    private bool _isLoading = false;
+    private bool _hasSearched = false;
+    
+    private List<int> _availableSeasons = new() { 2025, 2024, 2023 };
+    private List<GameDataPoint> _gameData = new();
+    private List<GameDataPoint> _chartData = new();
+    
+    // ApexChart value functions
+    private Func<GameDataPoint, object> _getXValue => e => e.GameLabel;
+    private Func<GameDataPoint, decimal> _getYValue => e => _selectedChartStat switch
+    {
+        "pass_yds" => e.PassYds,
+        "rush_yds" => e.RushYds,
+        "rec_yds" => e.RecYds,
+        "rec" => e.Rec,
+        "pts" => e.Pts,
+        "reb" => e.Reb,
+        "ast" => e.Ast,
+        "fg3" => e.Fg3,
+        _ => 0
+    };
+    
+    private AC.ApexChartOptions<GameDataPoint> _chartOptions = new()
+    {
+        Chart = new AC.Chart
+        {
+            Toolbar = new AC.Toolbar { Show = true },
+            Background = "transparent"
+        },
+        Theme = new AC.Theme { Mode = AC.Mode.Dark },
+        Stroke = new AC.Stroke { Curve = AC.Curve.Smooth, Width = 3 },
+        Markers = new AC.Markers { Size = 5 },
+        Xaxis = new AC.XAxis { Title = new AC.AxisTitle { Text = "Game" } },
+        Yaxis = new List<AC.YAxis> { new AC.YAxis { Title = new AC.AxisTitle { Text = "Value" } } },
+        Colors = new List<string> { "#00bcd4" }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrEmpty(Sport))
+        {
+            _selectedSport = Sport.ToLower();
+        }
+        _selectedChartStat = _selectedSport == "nfl" ? "pass_yds" : "pts";
+        await LoadSeasons();
+    }
+
+    private async Task LoadSeasons()
+    {
+        try
+        {
+            var series = _selectedSport == "nfl" ? "nfl_weekly" : "nba_game_log";
+            var response = await Http.GetFromJsonAsync<SeasonsResponse>(
+                $"http://backend:8000/db/games/{_selectedSport}/seasons?series={series}");
+            if (response?.Seasons?.Any() == true)
+            {
+                _availableSeasons = response.Seasons;
+                _selectedSeason = _availableSeasons.First();
+            }
+        }
+        catch { }
+    }
+
+    private void SelectSport(string sport)
+    {
+        _selectedSport = sport;
+        _selectedChartStat = sport == "nfl" ? "pass_yds" : "pts";
+        _gameData = new();
+        _chartData = new();
+        _hasSearched = false;
+        _ = LoadSeasons();
+    }
+
+    private async Task LoadPlayerData()
+    {
+        if (string.IsNullOrWhiteSpace(_searchPlayer)) return;
+        
+        _isLoading = true;
+        _hasSearched = true;
+        StateHasChanged();
+        
+        try
+        {
+            var url = $"http://backend:8000/db/games/{_selectedSport}/list?limit=100&season={_selectedSeason}&player={Uri.EscapeDataString(_searchPlayer)}";
+            var response = await Http.GetFromJsonAsync<GameResultsResponse>(url);
+            
+            if (response?.Results?.Any() == true)
+            {
+                _gameData = response.Results
+                    .OrderBy(g => _selectedSport == "nfl" ? (g.Week ?? 0) : 0)
+                    .ThenBy(g => g.GameDate ?? "")
+                    .Select((g, i) => new GameDataPoint
+                    {
+                        Week = g.Week ?? 0,
+                        GameDate = g.GameDate ?? "",
+                        GameLabel = _selectedSport == "nfl" ? $"Wk {g.Week}" : $"G{i + 1}",
+                        Opponent = g.Team ?? "",
+                        // NFL stats
+                        PassYds = g.PassYds ?? 0,
+                        RushYds = g.RushYds ?? 0,
+                        RecYds = g.RecYds ?? 0,
+                        Rec = g.Rec ?? 0,
+                        PassTd = g.PassTd ?? 0,
+                        RushTd = g.RushTd ?? 0,
+                        RecTd = g.RecTd ?? 0,
+                        // NBA stats
+                        Pts = g.Pts ?? 0,
+                        Reb = g.Reb ?? 0,
+                        Ast = g.Ast ?? 0,
+                        Stl = g.Stl ?? 0,
+                        Blk = g.Blk ?? 0,
+                        Fg3 = g.Fg3 ?? 0
+                    })
+                    .ToList();
+                
+                _chartData = _gameData;
+                _playerName = response.Results.FirstOrDefault()?.PlayerName ?? _searchPlayer;
+            }
+            else
+            {
+                _gameData = new();
+                _chartData = new();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            _gameData = new();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private Dictionary<string, string> GetAvailableStats()
+    {
+        if (_selectedSport == "nfl")
+        {
+            return new Dictionary<string, string>
+            {
+                { "pass_yds", "Pass Yards" },
+                { "rush_yds", "Rush Yards" },
+                { "rec_yds", "Rec Yards" },
+                { "rec", "Receptions" }
+            };
+        }
+        return new Dictionary<string, string>
+        {
+            { "pts", "Points" },
+            { "reb", "Rebounds" },
+            { "ast", "Assists" },
+            { "fg3", "3-Pointers" }
+        };
+    }
+
+    private string GetStatLabel(string stat) => GetAvailableStats().GetValueOrDefault(stat, stat);
+
+    private decimal GetStatValueForChart(GameDataPoint g) => _selectedChartStat switch
+    {
+        "pass_yds" => g.PassYds,
+        "rush_yds" => g.RushYds,
+        "rec_yds" => g.RecYds,
+        "rec" => g.Rec,
+        "pts" => g.Pts,
+        "reb" => g.Reb,
+        "ast" => g.Ast,
+        "fg3" => g.Fg3,
+        _ => 0
+    };
+
+    private List<StatSummary> GetSummaryStats()
+    {
+        if (!_gameData.Any()) return new();
+        
+        if (_selectedSport == "nfl")
+        {
+            return new List<StatSummary>
+            {
+                new() { Label = "Avg Pass Yds", Value = _gameData.Average(g => g.PassYds).ToString("F1"), 
+                        Line = 250, HitRate = (double)_gameData.Count(g => g.PassYds >= 250) / _gameData.Count },
+                new() { Label = "Avg Rush Yds", Value = _gameData.Average(g => g.RushYds).ToString("F1"),
+                        Line = 60, HitRate = (double)_gameData.Count(g => g.RushYds >= 60) / _gameData.Count },
+                new() { Label = "Avg Rec Yds", Value = _gameData.Average(g => g.RecYds).ToString("F1"),
+                        Line = 50, HitRate = (double)_gameData.Count(g => g.RecYds >= 50) / _gameData.Count },
+                new() { Label = "Games", Value = _gameData.Count.ToString() }
+            };
+        }
+        
+        return new List<StatSummary>
+        {
+            new() { Label = "Avg Points", Value = _gameData.Average(g => g.Pts).ToString("F1"),
+                    Line = 20, HitRate = (double)_gameData.Count(g => g.Pts >= 20) / _gameData.Count },
+            new() { Label = "Avg Rebounds", Value = _gameData.Average(g => g.Reb).ToString("F1"),
+                    Line = 8, HitRate = (double)_gameData.Count(g => g.Reb >= 8) / _gameData.Count },
+            new() { Label = "Avg Assists", Value = _gameData.Average(g => g.Ast).ToString("F1"),
+                    Line = 6, HitRate = (double)_gameData.Count(g => g.Ast >= 6) / _gameData.Count },
+            new() { Label = "Games", Value = _gameData.Count.ToString() }
+        };
+    }
+
+    private List<HitRateSummary> GetHitRateSummary()
+    {
+        if (!_gameData.Any()) return new();
+        
+        var lines = _selectedSport == "nfl" 
+            ? new[] { ("pass_yds", "Pass Yds", 250), ("pass_yds", "Pass Yds", 275), ("pass_yds", "Pass Yds", 300),
+                      ("rush_yds", "Rush Yds", 50), ("rush_yds", "Rush Yds", 75), ("rush_yds", "Rush Yds", 100),
+                      ("rec_yds", "Rec Yds", 50), ("rec_yds", "Rec Yds", 75), ("rec_yds", "Rec Yds", 100) }
+            : new[] { ("pts", "Points", 15), ("pts", "Points", 20), ("pts", "Points", 25),
+                      ("reb", "Rebounds", 6), ("reb", "Rebounds", 8), ("reb", "Rebounds", 10),
+                      ("ast", "Assists", 4), ("ast", "Assists", 6), ("ast", "Assists", 8) };
+        
+        return lines.Select(l =>
+        {
+            var count = _gameData.Count(g => GetStatValue(g, l.Item1) >= l.Item3);
+            return new HitRateSummary
+            {
+                StatLabel = l.Item2,
+                Line = l.Item3,
+                Hits = count,
+                Games = _gameData.Count,
+                Rate = (double)count / _gameData.Count
+            };
+        }).Where(h => h.Rate > 0).Take(9).ToList();
+    }
+
+    private int GetStatValue(GameDataPoint g, string stat) => stat switch
+    {
+        "pass_yds" => g.PassYds,
+        "rush_yds" => g.RushYds,
+        "rec_yds" => g.RecYds,
+        "rec" => g.Rec,
+        "pts" => g.Pts,
+        "reb" => g.Reb,
+        "ast" => g.Ast,
+        "fg3" => g.Fg3,
+        _ => 0
+    };
+
+    private Color GetHitRateColor(double rate)
+    {
+        if (rate >= 0.80) return Color.Success;
+        if (rate >= 0.60) return Color.Warning;
+        return Color.Error;
+    }
+
+    private string GetCellStyle(int value, int threshold)
+    {
+        if (value >= threshold) return "color: #4caf50; font-weight: bold;";
+        return "";
+    }
+
+    // Data Models
+    public class SeasonsResponse { public List<int> Seasons { get; set; } = new(); }
+    
+    public class GameResultsResponse { public List<GameResult> Results { get; set; } = new(); }
+    
+    public class GameResult
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("week")] public int? Week { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("game_date")] public string? GameDate { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("player_name")] public string? PlayerName { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("team")] public string? Team { get; set; }
+        // NFL
+        [System.Text.Json.Serialization.JsonPropertyName("pass_yds")] public int? PassYds { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("rush_yds")] public int? RushYds { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("rec_yds")] public int? RecYds { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("rec")] public int? Rec { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("pass_td")] public int? PassTd { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("rush_td")] public int? RushTd { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("rec_td")] public int? RecTd { get; set; }
+        // NBA
+        [System.Text.Json.Serialization.JsonPropertyName("pts")] public int? Pts { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("reb")] public int? Reb { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("ast")] public int? Ast { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("stl")] public int? Stl { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("blk")] public int? Blk { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("fg3")] public int? Fg3 { get; set; }
+    }
+    
+    public class GameDataPoint
+    {
+        public int Week { get; set; }
+        public string GameDate { get; set; } = "";
+        public string GameLabel { get; set; } = "";
+        public string Opponent { get; set; } = "";
+        // NFL
+        public int PassYds { get; set; }
+        public int RushYds { get; set; }
+        public int RecYds { get; set; }
+        public int Rec { get; set; }
+        public int PassTd { get; set; }
+        public int RushTd { get; set; }
+        public int RecTd { get; set; }
+        // NBA
+        public int Pts { get; set; }
+        public int Reb { get; set; }
+        public int Ast { get; set; }
+        public int Stl { get; set; }
+        public int Blk { get; set; }
+        public int Fg3 { get; set; }
+    }
+    
+    public class StatSummary
+    {
+        public string Label { get; set; } = "";
+        public string Value { get; set; } = "";
+        public int Line { get; set; }
+        public double HitRate { get; set; }
+    }
+    
+    public class HitRateSummary
+    {
+        public string StatLabel { get; set; } = "";
+        public int Line { get; set; }
+        public int Hits { get; set; }
+        public int Games { get; set; }
+        public double Rate { get; set; }
+    }
+}

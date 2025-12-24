@@ -1298,13 +1298,25 @@ async def get_stats_seasons(sport: str):
 
 
 @router.get("/games/{sport}/seasons")
-async def get_game_seasons(sport: str):
-    """Get available seasons for game schedules."""
+async def get_game_seasons(sport: str, series: str = None):
+    """Get available seasons for game data. Optionally filter by series."""
     conn = await get_db_connection()
     try:
         sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
         if not sport_id:
             raise HTTPException(status_code=404, detail=f"Sport '{sport}' not found")
+        
+        # If series is specified, query that directly
+        if series:
+            rows = await conn.fetch(
+                """SELECT DISTINCT season FROM results 
+                   WHERE sport_id = $1 AND series = $2 AND season IS NOT NULL 
+                   ORDER BY season DESC""",
+                sport_id, series
+            )
+            if rows:
+                return {"seasons": [row["season"] for row in rows]}
+            return {"seasons": [2025, 2024, 2023]}
         
         # Check schedule table first
         schedule_series = f"{sport}_schedule"
