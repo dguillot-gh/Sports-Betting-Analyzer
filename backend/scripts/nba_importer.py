@@ -75,6 +75,12 @@ async def import_via_sportsdataverse_api(conn, sport_id: int, progress_callback=
     except ImportError:
         logger.warning("sportsdataverse not installed - skipping API import")
         return {"players": 0, "games": 0}
+    except Exception as e:
+        # Handle XGBoost model loading errors from sportsdataverse
+        if "XGBoost" in str(e) or "Failed to load model" in str(e):
+            logger.warning(f"sportsdataverse has XGBoost compatibility issues - using parquet fallback: {e}")
+            return {"players": 0, "games": 0}
+        raise
     
     if progress_callback:
         progress_callback("Loading NBA data via sportsdataverse API...")
