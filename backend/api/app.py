@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from api.log_capture import setup_log_capture, get_logs, LOG_BUFFER
 from api.db_endpoints import router as db_router
+from api.odds_endpoints import router as odds_router
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
@@ -36,6 +37,7 @@ app = FastAPI(title='Sports ML API', version='1.2')
 
 setup_log_capture()  # Enable log capture for /logs endpoint
 app.include_router(db_router)  # Database endpoints
+app.include_router(odds_router)  # Live odds endpoints
 
 # Dev CORS. Tighten for production.
 app.add_middleware(

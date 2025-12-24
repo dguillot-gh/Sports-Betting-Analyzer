@@ -1,0 +1,293 @@
+@page "/live-odds"
+@rendermode InteractiveServer
+@using MudBlazor
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+<PageTitle>Live Odds - Sports Betting Analyzer</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudStack Spacing="4">
+        <!-- Header -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <div class="d-flex align-center justify-space-between flex-wrap" style="gap: 16px;">
+                <div class="d-flex align-center">
+                    <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Size="Size.Large" Color="Color.Primary" Class="mr-3" />
+                    <div>
+                        <MudText Typo="Typo.h5">Live Betting Lines</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Real-time odds from sportsbooks</MudText>
+                    </div>
+                </div>
+                
+                <div class="d-flex align-center" style="gap: 12px;">
+                    <MudSelect T="string" @bind-Value="_selectedSportsbook" Label="Sportsbook" Dense="true"
+                               Variant="Variant.Outlined" Style="min-width: 160px;">
+                        @foreach (var book in _sportsbooks)
+                        {
+                            <MudSelectItem Value="@book">@FormatBookName(book)</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="RefreshOdds" 
+                               Disabled="_isLoading" StartIcon="@Icons.Material.Filled.Refresh">
+                        @if (_isLoading)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Refresh
+                    </MudButton>
+                </div>
+            </div>
+        </MudPaper>
+
+        @if (_isLoading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <MudAlert Severity="Severity.Error">@_errorMessage</MudAlert>
+        }
+        else if (_games.Any())
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                @_games.Count games found for @DateTime.Today.ToString("MMM dd, yyyy") via @FormatBookName(_selectedSportsbook)
+            </MudText>
+            
+            <MudGrid>
+                @foreach (var game in _games)
+                {
+                    <MudItem xs="12" md="6" lg="4">
+                        <MudCard Elevation="2" Class="game-card">
+                            <MudCardHeader>
+                                <CardHeaderContent>
+                                    <div class="d-flex justify-space-between align-center">
+                                        <MudText Typo="Typo.h6">@game.AwayTeam</MudText>
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">@@</MudText>
+                                        <MudText Typo="Typo.h6">@game.HomeTeam</MudText>
+                                    </div>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@game.Status</MudText>
+                                </CardHeaderContent>
+                            </MudCardHeader>
+                            <MudCardContent>
+                                <MudGrid>
+                                    <!-- Moneyline -->
+                                    <MudItem xs="12">
+                                        <MudText Typo="Typo.overline" Color="Color.Secondary">MONEYLINE</MudText>
+                                        <div class="d-flex justify-space-between">
+                                            <MudChip T="string" Color="@GetOddsColor(game.AwayMoneyline)" Size="Size.Small">
+                                                @game.AwayTeam: @FormatOdds(game.AwayMoneyline)
+                                            </MudChip>
+                                            <MudChip T="string" Color="@GetOddsColor(game.HomeMoneyline)" Size="Size.Small">
+                                                @game.HomeTeam: @FormatOdds(game.HomeMoneyline)
+                                            </MudChip>
+                                        </div>
+                                    </MudItem>
+                                    
+                                    <!-- Spread -->
+                                    @if (game.Spread.HasValue)
+                                    {
+                                        <MudItem xs="6">
+                                            <MudText Typo="Typo.overline" Color="Color.Secondary">SPREAD</MudText>
+                                            <MudText Typo="Typo.body1">@FormatSpread(game.Spread.Value)</MudText>
+                                        </MudItem>
+                                    }
+                                    
+                                    <!-- Over/Under -->
+                                    @if (game.OverUnder.HasValue)
+                                    {
+                                        <MudItem xs="6">
+                                            <MudText Typo="Typo.overline" Color="Color.Secondary">O/U TOTAL</MudText>
+                                            <MudText Typo="Typo.body1">@game.OverUnder.Value</MudText>
+                                        </MudItem>
+                                    }
+                                </MudGrid>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+        else if (!_isLoading)
+        {
+            <MudAlert Severity="Severity.Info">
+                No NBA games scheduled for today. Check back later!
+            </MudAlert>
+        }
+
+        <!-- Kelly Calculator -->
+        <MudExpansionPanels>
+            <MudExpansionPanel Text="Kelly Criterion Calculator" Icon="@Icons.Material.Filled.Calculate">
+                <MudGrid>
+                    <MudItem xs="12" md="3">
+                        <MudNumericField @bind-Value="_kellyWinProb" Label="Win Probability" 
+                                        Min="0" Max="1" Step="0.01" Format="P0"
+                                        Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudNumericField @bind-Value="_kellyOdds" Label="American Odds"
+                                        Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudNumericField @bind-Value="_kellyBankroll" Label="Bankroll"
+                                        Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.AttachMoney"
+                                        Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" md="3" Class="d-flex align-end">
+                        <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="CalculateKelly">
+                            Calculate
+                        </MudButton>
+                    </MudItem>
+                </MudGrid>
+                
+                @if (_kellyResult != null)
+                {
+                    <MudPaper Class="pa-4 mt-3" Elevation="1" Style="background: var(--mud-palette-background-default);">
+                        <MudGrid>
+                            <MudItem xs="6" md="3">
+                                <MudText Typo="Typo.overline" Color="Color.Secondary">IMPLIED PROB</MudText>
+                                <MudText Typo="Typo.h6">@(_kellyResult.ImpliedProbability)%</MudText>
+                            </MudItem>
+                            <MudItem xs="6" md="3">
+                                <MudText Typo="Typo.overline" Color="Color.Secondary">MODEL EDGE</MudText>
+                                <MudText Typo="Typo.h6" Color="@(_kellyResult.ModelEdge > 0 ? Color.Success : Color.Error)">
+                                    @(_kellyResult.ModelEdge > 0 ? "+" : "")@(_kellyResult.ModelEdge)%
+                                </MudText>
+                            </MudItem>
+                            <MudItem xs="6" md="3">
+                                <MudText Typo="Typo.overline" Color="Color.Secondary">RECOMMENDED BET</MudText>
+                                <MudText Typo="Typo.h6" Color="Color.Primary">$@(_kellyResult.RecommendedBet)</MudText>
+                            </MudItem>
+                            <MudItem xs="6" md="3">
+                                <MudText Typo="Typo.overline" Color="Color.Secondary">% OF BANKROLL</MudText>
+                                <MudText Typo="Typo.h6">@(_kellyResult.BetPercentage)%</MudText>
+                            </MudItem>
+                        </MudGrid>
+                    </MudPaper>
+                }
+            </MudExpansionPanel>
+        </MudExpansionPanels>
+    </MudStack>
+</MudContainer>
+
+@code {
+    private bool _isLoading = false;
+    private string _errorMessage = "";
+    private string _selectedSportsbook = "fanduel";
+    private List<string> _sportsbooks = new() { "fanduel", "draftkings", "betmgm", "pointsbet", "caesars" };
+    private List<GameOdds> _games = new();
+    
+    // Kelly Calculator
+    private double _kellyWinProb = 0.55;
+    private int _kellyOdds = -110;
+    private double _kellyBankroll = 1000;
+    private KellyResult? _kellyResult;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshOdds();
+    }
+
+    private async Task RefreshOdds()
+    {
+        _isLoading = true;
+        _errorMessage = "";
+        StateHasChanged();
+        
+        try
+        {
+            var response = await Http.GetFromJsonAsync<OddsResponse>(
+                $"http://backend:8000/odds/nba?sportsbook={_selectedSportsbook}");
+            
+            if (response?.Error != null)
+            {
+                _errorMessage = response.Error;
+                _games = new();
+            }
+            else if (response?.Games != null)
+            {
+                _games = response.Games;
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to fetch odds: {ex.Message}";
+            Snackbar.Add(_errorMessage, Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task CalculateKelly()
+    {
+        try
+        {
+            var url = $"http://backend:8000/odds/nba/calculate-kelly?win_probability={_kellyWinProb}&american_odds={_kellyOdds}&bankroll={_kellyBankroll}";
+            _kellyResult = await Http.GetFromJsonAsync<KellyResult>(url);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private string FormatBookName(string book) => book switch
+    {
+        "fanduel" => "FanDuel",
+        "draftkings" => "DraftKings",
+        "betmgm" => "BetMGM",
+        "pointsbet" => "PointsBet",
+        "caesars" => "Caesars",
+        "wynn" => "Wynn",
+        "bet_rivers_ny" => "BetRivers NY",
+        _ => book
+    };
+
+    private string FormatOdds(int? odds)
+    {
+        if (!odds.HasValue) return "N/A";
+        return odds.Value > 0 ? $"+{odds.Value}" : odds.Value.ToString();
+    }
+
+    private string FormatSpread(double spread)
+    {
+        return spread > 0 ? $"+{spread}" : spread.ToString();
+    }
+
+    private Color GetOddsColor(int? odds)
+    {
+        if (!odds.HasValue) return Color.Default;
+        return odds.Value < 0 ? Color.Warning : Color.Success;
+    }
+
+    // Models
+    public class OddsResponse
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("date")] public string? Date { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("sportsbook")] public string? Sportsbook { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("games")] public List<GameOdds> Games { get; set; } = new();
+        [System.Text.Json.Serialization.JsonPropertyName("error")] public string? Error { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("message")] public string? Message { get; set; }
+    }
+    
+    public class GameOdds
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("home_team")] public string HomeTeam { get; set; } = "";
+        [System.Text.Json.Serialization.JsonPropertyName("away_team")] public string AwayTeam { get; set; } = "";
+        [System.Text.Json.Serialization.JsonPropertyName("home_moneyline")] public int? HomeMoneyline { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("away_moneyline")] public int? AwayMoneyline { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("spread")] public double? Spread { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("over_under")] public double? OverUnder { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("status")] public string Status { get; set; } = "scheduled";
+    }
+    
+    public class KellyResult
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("implied_probability")] public double ImpliedProbability { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("model_edge")] public double ModelEdge { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("recommended_bet")] public double RecommendedBet { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("bet_percentage")] public double BetPercentage { get; set; }
+    }
+}

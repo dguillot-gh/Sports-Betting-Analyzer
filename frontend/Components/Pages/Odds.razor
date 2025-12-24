@@ -1,4 +1,4 @@
-@page "/odds"
+@page "/game-matchups"
 @using SportsBettingAnalyzer.Services
 @using SportsBettingAnalyzer.Models
 @inject OddsService OddsService
@@ -12,8 +12,8 @@
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
     <div class="d-flex justify-space-between align-center mb-4">
         <div>
-            <MudText Typo="Typo.h4" GutterBottom="true">Live Betting Odds</MudText>
-            <MudText Typo="Typo.body1">Real-time odds from DraftKings and FanDuel.</MudText>
+            <MudText Typo="Typo.h4" GutterBottom="true">Sports Odds</MudText>
+            <MudText Typo="Typo.body1">Multi-sport odds from the-odds-api (NFL, NBA, MLB, NHL, NASCAR).</MudText>
         </div>
         <div class="d-flex gap-4 align-center">
             @if (OddsService.LastQuotaUsage.RequestsRemaining > 0 || OddsService.LastQuotaUsage.RequestsUsed > 0)

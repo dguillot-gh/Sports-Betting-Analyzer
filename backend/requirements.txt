@@ -21,3 +21,4 @@ nflreadpy
 polars
 basketball_reference_web_scraper
 nba_api
+sbrscrape
