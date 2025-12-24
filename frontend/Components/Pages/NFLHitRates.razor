@@ -1,31 +1,21 @@
-@page "/hit-rates"
+@page "/nfl-hit-rates"
 @using SportsBettingAnalyzer.Services
-@inject IHttpClientFactory HttpClientFactory
+@inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @rendermode InteractiveServer
 
-<PageTitle>Hit Rates</PageTitle>
+<PageTitle>NFL Hit Rates</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
     <div class="d-flex justify-space-between align-center mb-4">
         <div>
             <MudText Typo="Typo.h4" GutterBottom="true">
-                <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Class="mr-2" />
-                Hit Rates
+                <MudIcon Icon="@Icons.Material.Filled.SportsFootball" Class="mr-2" />
+                NFL Hit Rates
             </MudText>
-            <MudText Typo="Typo.body2" Color="Color.Secondary">Prop bet analysis - Find consistent performers</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Prop bet analysis - Find consistent NFL performers</MudText>
         </div>
-        
-        <!-- Sport Toggle -->
-        <MudToggleGroup T="string" @bind-Value="_selectedSport" Color="Color.Primary" Outline="true" Size="Size.Large">
-            <MudToggleItem Value="@("nfl")">
-                <MudIcon Icon="@Icons.Material.Filled.SportsFootball" Class="mr-1" /> NFL
-            </MudToggleItem>
-            <MudToggleItem Value="@("nba")">
-                <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Class="mr-1" /> NBA
-            </MudToggleItem>
-        </MudToggleGroup>
     </div>
     
     <!-- Search and Filters -->
@@ -34,29 +24,18 @@
             <MudItem xs="12" md="4">
                 <MudTextField @bind-Value="_searchPlayer" Label="Player Search" Variant="Variant.Outlined" Dense="true"
                               Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                              Placeholder="LeBron James, Patrick Mahomes..."
+                              Placeholder="Patrick Mahomes, Derrick Henry..."
                               DebounceInterval="500" OnDebounceIntervalElapsed="SearchPlayers" />
             </MudItem>
             <MudItem xs="12" md="3">
                 <MudSelect T="string" @bind-Value="_selectedStat" Label="Stat Type" Variant="Variant.Outlined" Dense="true">
-                    @if (_selectedSport == "nba")
-                    {
-                        <MudSelectItem Value="@("pts")">Points</MudSelectItem>
-                        <MudSelectItem Value="@("reb")">Rebounds</MudSelectItem>
-                        <MudSelectItem Value="@("ast")">Assists</MudSelectItem>
-                        <MudSelectItem Value="@("fg3")">3-Pointers Made</MudSelectItem>
-                        <MudSelectItem Value="@("stl")">Steals</MudSelectItem>
-                        <MudSelectItem Value="@("blk")">Blocks</MudSelectItem>
-                    }
-                    else
-                    {
-                        <MudSelectItem Value="@("pass_yds")">Pass Yards</MudSelectItem>
-                        <MudSelectItem Value="@("rush_yds")">Rush Yards</MudSelectItem>
-                        <MudSelectItem Value="@("rec_yds")">Receiving Yards</MudSelectItem>
-                        <MudSelectItem Value="@("rec")">Receptions</MudSelectItem>
-                        <MudSelectItem Value="@("pass_td")">Pass TDs</MudSelectItem>
-                        <MudSelectItem Value="@("rush_td")">Rush TDs</MudSelectItem>
-                    }
+                    <MudSelectItem Value="@("pass_yds")">Pass Yards</MudSelectItem>
+                    <MudSelectItem Value="@("rush_yds")">Rush Yards</MudSelectItem>
+                    <MudSelectItem Value="@("rec_yds")">Receiving Yards</MudSelectItem>
+                    <MudSelectItem Value="@("rec")">Receptions</MudSelectItem>
+                    <MudSelectItem Value="@("pass_td")">Pass TDs</MudSelectItem>
+                    <MudSelectItem Value="@("rush_td")">Rush TDs</MudSelectItem>
+                    <MudSelectItem Value="@("rec_td")">Receiving TDs</MudSelectItem>
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" md="2">
@@ -139,7 +118,7 @@
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>
-                        <MudLink Href="@($"/player-profiles?sport={_selectedSport}&player={Uri.EscapeDataString(context.PlayerName)}")" 
+                        <MudLink Href="@($"/nfl-player-profiles?player={Uri.EscapeDataString(context.PlayerName)}")" 
                                  Color="Color.Primary">
                             @context.PlayerName
                         </MudLink>
@@ -191,34 +170,13 @@
 </MudContainer>
 
 @code {
-    private string _selectedSport = "nba";
     private string _searchPlayer = "";
-    private string _selectedStat = "pts";
-    private int _threshold = 20;
+    private string _selectedStat = "pass_yds";
+    private int _threshold = 250;
     private bool _isLoading = false;
     private bool _searchCompleted = false;
     
     private List<HitRateResult> _hitRates = new();
-    
-    protected override void OnInitialized()
-    {
-        // Set defaults based on sport
-        UpdateDefaults();
-    }
-    
-    private void UpdateDefaults()
-    {
-        if (_selectedSport == "nba")
-        {
-            _selectedStat = "pts";
-            _threshold = 20;
-        }
-        else
-        {
-            _selectedStat = "pass_yds";
-            _threshold = 250;
-        }
-    }
     
     private async Task SearchPlayers()
     {
@@ -236,110 +194,84 @@
             _searchCompleted = false;
             StateHasChanged();
             
-            // Call API to get hit rates
-            var url = $"/db/hitrates/{_selectedSport}?stat={_selectedStat}&threshold={_threshold}";
+            // Fetch game results and calculate locally
+            var url = $"http://backend:8000/db/games/nfl/list?limit=500";
             if (!string.IsNullOrEmpty(_searchPlayer))
                 url += $"&player={Uri.EscapeDataString(_searchPlayer)}";
             
-            var http = HttpClientFactory.CreateClient("PythonML");
-            var response = await http.GetAsync(url);
-            if (response.IsSuccessStatusCode)
+            var response = await Http.GetAsync(url);
+            if (!response.IsSuccessStatusCode)
             {
-                var json = await response.Content.ReadAsStringAsync();
-                var data = System.Text.Json.JsonSerializer.Deserialize<HitRatesResponse>(json, 
-                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                _hitRates = data?.Results ?? new List<HitRateResult>();
+                Snackbar.Add("Error loading game data", Severity.Error);
+                _hitRates = new();
+                _searchCompleted = true;
+                return;
             }
-            else
+            
+            var json = await response.Content.ReadAsStringAsync();
+            var games = System.Text.Json.JsonSerializer.Deserialize<GameResultsResponse>(json,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            
+            if (games?.Results == null || !games.Results.Any())
             {
-                // Fallback: Calculate locally from game results
-                await CalculateLocalHitRates();
+                _hitRates = new();
+                _searchCompleted = true;
+                return;
             }
+            
+            // Group by player
+            var playerGames = games.Results
+                .Where(g => !string.IsNullOrEmpty(g.PlayerName))
+                .GroupBy(g => g.PlayerName)
+                .ToList();
+            
+            _hitRates = playerGames.Select(pg =>
+            {
+                var allGames = pg.OrderByDescending(g => g.Season).ThenByDescending(g => g.Week ?? 0).ToList();
+                var last5 = allGames.Take(5).ToList();
+                var last10 = allGames.Take(10).ToList();
+                
+                int GetStatValue(GameResult g) => _selectedStat switch
+                {
+                    "pass_yds" => g.PassYds ?? 0,
+                    "rush_yds" => g.RushYds ?? 0,
+                    "rec_yds" => g.RecYds ?? 0,
+                    "rec" => g.Rec ?? 0,
+                    "pass_td" => g.PassTd ?? 0,
+                    "rush_td" => g.RushTd ?? 0,
+                    "rec_td" => g.RecTd ?? 0,
+                    _ => 0
+                };
+                
+                return new HitRateResult
+                {
+                    PlayerName = pg.Key!,
+                    Team = pg.FirstOrDefault()?.Team ?? "",
+                    Position = pg.FirstOrDefault()?.Position ?? "",
+                    Last5Games = last5.Count,
+                    Last5Hits = last5.Count(g => GetStatValue(g) >= _threshold),
+                    Last10Games = last10.Count,
+                    Last10Hits = last10.Count(g => GetStatValue(g) >= _threshold),
+                    SeasonGames = allGames.Count,
+                    SeasonHits = allGames.Count(g => GetStatValue(g) >= _threshold),
+                    SeasonAvg = allGames.Count > 0 ? allGames.Average(g => GetStatValue(g)) : 0,
+                };
+            })
+            .OrderByDescending(h => h.SeasonRate)
+            .Take(50)
+            .ToList();
             
             _searchCompleted = true;
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
-            _hitRates = new List<HitRateResult>();
+            _hitRates = new();
         }
         finally
         {
             _isLoading = false;
         }
-    }
-    
-    private async Task CalculateLocalHitRates()
-    {
-        // Fetch game results and calculate locally
-        var url = $"/db/games/{_selectedSport}/list?limit=500";
-        if (!string.IsNullOrEmpty(_searchPlayer))
-            url += $"&player={Uri.EscapeDataString(_searchPlayer)}";
-        
-        var http = HttpClientFactory.CreateClient("PythonML");
-        var response = await http.GetAsync(url);
-        if (!response.IsSuccessStatusCode)
-        {
-            _hitRates = new List<HitRateResult>();
-            return;
-        }
-        
-        var json = await response.Content.ReadAsStringAsync();
-        var games = System.Text.Json.JsonSerializer.Deserialize<GameResultsResponse>(json,
-            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-        
-        if (games?.Results == null)
-        {
-            _hitRates = new List<HitRateResult>();
-            return;
-        }
-        
-        // Group by player
-        var playerGames = games.Results
-            .Where(g => !string.IsNullOrEmpty(g.PlayerName))
-            .GroupBy(g => g.PlayerName)
-            .ToList();
-        
-        _hitRates = playerGames.Select(pg =>
-        {
-            var allGames = pg.OrderByDescending(g => g.Season).ThenByDescending(g => g.Week ?? 0).ToList();
-            var last5 = allGames.Take(5).ToList();
-            var last10 = allGames.Take(10).ToList();
-            
-            int GetStatValue(GameResult g) => _selectedStat switch
-            {
-                "pts" => g.Pts ?? 0,
-                "reb" => g.Reb ?? 0,
-                "ast" => g.Ast ?? 0,
-                "stl" => g.Stl ?? 0,
-                "blk" => g.Blk ?? 0,
-                "fg3" => g.Fg3 ?? 0,
-                "pass_yds" => g.PassYds ?? 0,
-                "rush_yds" => g.RushYds ?? 0,
-                "rec_yds" => g.RecYds ?? 0,
-                "rec" => g.Rec ?? 0,
-                "pass_td" => g.PassTd ?? 0,
-                "rush_td" => g.RushTd ?? 0,
-                _ => 0
-            };
-            
-            return new HitRateResult
-            {
-                PlayerName = pg.Key!,
-                Team = pg.FirstOrDefault()?.Team ?? "",
-                Position = pg.FirstOrDefault()?.Position ?? "",
-                Last5Games = last5.Count,
-                Last5Hits = last5.Count(g => GetStatValue(g) >= _threshold),
-                Last10Games = last10.Count,
-                Last10Hits = last10.Count(g => GetStatValue(g) >= _threshold),
-                SeasonGames = allGames.Count,
-                SeasonHits = allGames.Count(g => GetStatValue(g) >= _threshold),
-                SeasonAvg = allGames.Count > 0 ? allGames.Average(g => GetStatValue(g)) : 0,
-            };
-        })
-        .OrderByDescending(h => h.SeasonRate)
-        .Take(50)
-        .ToList();
     }
     
     private Color GetRateColor(double rate)
@@ -358,27 +290,17 @@
     
     private string GetStatLabel(string stat) => stat switch
     {
-        "pts" => "Points",
-        "reb" => "Rebounds",
-        "ast" => "Assists",
-        "stl" => "Steals",
-        "blk" => "Blocks",
-        "fg3" => "3PM",
         "pass_yds" => "Pass Yds",
         "rush_yds" => "Rush Yds",
         "rec_yds" => "Rec Yds",
         "rec" => "Receptions",
         "pass_td" => "Pass TDs",
         "rush_td" => "Rush TDs",
+        "rec_td" => "Rec TDs",
         _ => stat
     };
     
     // Models
-    public class HitRatesResponse
-    {
-        public List<HitRateResult> Results { get; set; } = new();
-    }
-    
     public class HitRateResult
     {
         public string PlayerName { get; set; } = "";
@@ -419,26 +341,6 @@
         [System.Text.Json.Serialization.JsonPropertyName("position")]
         public string? Position { get; set; }
         
-        // NBA stats
-        [System.Text.Json.Serialization.JsonPropertyName("pts")]
-        public int? Pts { get; set; }
-        
-        [System.Text.Json.Serialization.JsonPropertyName("reb")]
-        public int? Reb { get; set; }
-        
-        [System.Text.Json.Serialization.JsonPropertyName("ast")]
-        public int? Ast { get; set; }
-        
-        [System.Text.Json.Serialization.JsonPropertyName("stl")]
-        public int? Stl { get; set; }
-        
-        [System.Text.Json.Serialization.JsonPropertyName("blk")]
-        public int? Blk { get; set; }
-        
-        [System.Text.Json.Serialization.JsonPropertyName("fg3")]
-        public int? Fg3 { get; set; }
-        
-        // NFL stats
         [System.Text.Json.Serialization.JsonPropertyName("pass_yds")]
         public int? PassYds { get; set; }
         
@@ -456,5 +358,8 @@
         
         [System.Text.Json.Serialization.JsonPropertyName("rush_td")]
         public int? RushTd { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rec_td")]
+        public int? RecTd { get; set; }
     }
 }
