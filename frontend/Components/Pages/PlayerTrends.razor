@@ -230,7 +230,7 @@
     
     // ApexChart value functions
     private Func<GameDataPoint, object> _getXValue => e => e.GameLabel;
-    private Func<GameDataPoint, decimal> _getYValue => e => _selectedChartStat switch
+    private Func<GameDataPoint, decimal?> _getYValue => e => _selectedChartStat switch
     {
         "pass_yds" => e.PassYds,
         "rush_yds" => e.RushYds,
@@ -461,11 +461,11 @@
         _ => 0
     };
 
-    private Color GetHitRateColor(double rate)
+    private MudBlazor.Color GetHitRateColor(double rate)
     {
-        if (rate >= 0.80) return Color.Success;
-        if (rate >= 0.60) return Color.Warning;
-        return Color.Error;
+        if (rate >= 0.80) return MudBlazor.Color.Success;
+        if (rate >= 0.60) return MudBlazor.Color.Warning;
+        return MudBlazor.Color.Error;
     }
 
     private string GetCellStyle(int value, int threshold)

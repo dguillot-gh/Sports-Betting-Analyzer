@@ -4,7 +4,7 @@
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 
-<PageTitle>Live Odds - Sports Betting Analyzer</PageTitle>
+<PageTitle>Live NBA Odds - Sports Betting Analyzer</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
     <MudStack Spacing="4">
@@ -12,10 +12,10 @@
         <MudPaper Class="pa-4" Elevation="2">
             <div class="d-flex align-center justify-space-between flex-wrap" style="gap: 16px;">
                 <div class="d-flex align-center">
-                    <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Size="Size.Large" Color="Color.Primary" Class="mr-3" />
+                    <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Size="Size.Large" Color="Color.Primary" Class="mr-3" />
                     <div>
-                        <MudText Typo="Typo.h5">Live Betting Lines</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Real-time odds from sportsbooks</MudText>
+                        <MudText Typo="Typo.h5">Live NBA Odds & Predictions</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Real-time odds with model analysis</MudText>
                     </div>
                 </div>
                 
@@ -27,19 +27,23 @@
                             <MudSelectItem Value="@book">@FormatBookName(book)</MudSelectItem>
                         }
                     </MudSelect>
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="RefreshOdds" 
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="RefreshOdds" 
                                Disabled="_isLoading" StartIcon="@Icons.Material.Filled.Refresh">
-                        @if (_isLoading)
+                        Refresh
+                    </MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="RunAnalysis" 
+                               Disabled="_isLoading || !_games.Any()" StartIcon="@Icons.Material.Filled.Analytics">
+                        @if (_isAnalyzing)
                         {
                             <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
                         }
-                        Refresh
+                        Run Analysis
                     </MudButton>
                 </div>
             </div>
         </MudPaper>
 
-        @if (_isLoading)
+        @if (_isLoading || _isAnalyzing)
         {
             <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
         }
@@ -48,17 +52,136 @@
         {
             <MudAlert Severity="Severity.Error">@_errorMessage</MudAlert>
         }
-        else if (_games.Any())
+
+        <!-- Value Bets Summary -->
+        @if (_analyzedGames.Any(g => g.HasValue))
+        {
+            <MudAlert Severity="Severity.Success" Icon="@Icons.Material.Filled.Whatshot">
+                <strong>@_analyzedGames.Count(g => g.HasValue) Value Bet(s) Found!</strong>
+                @foreach (var game in _analyzedGames.Where(g => g.HasValue))
+                {
+                    <MudText Typo="Typo.body2">
+                        @game.AwayTeam @@ @game.HomeTeam: @string.Join(", ", game.ValueBets)
+                    </MudText>
+                }
+            </MudAlert>
+        }
+
+        @if (_analyzedGames.Any())
         {
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
-                @_games.Count games found for @DateTime.Today.ToString("MMM dd, yyyy") via @FormatBookName(_selectedSportsbook)
+                @_analyzedGames.Count games analyzed for @DateTime.Today.ToString("MMM dd, yyyy") via @FormatBookName(_selectedSportsbook)
             </MudText>
             
+            <MudGrid>
+                @foreach (var game in _analyzedGames)
+                {
+                    <MudItem xs="12" md="6">
+                        <MudCard Elevation="3" Style="@(game.HasValue ? "border-left: 4px solid #4caf50;" : "")">
+                            <MudCardHeader Style="padding-bottom: 8px;">
+                                <CardHeaderContent>
+                                    <div class="d-flex justify-space-between align-center">
+                                        <div class="text-center" style="flex: 1;">
+                                            <MudText Typo="Typo.h6">@game.AwayTeam</MudText>
+                                            <MudText Typo="Typo.caption">@(game.AwayWinProbability.HasValue ? $"{(game.AwayWinProbability.Value * 100):F0}%" : "")</MudText>
+                                        </div>
+                                        <div class="mx-2">
+                                            <MudText Typo="Typo.body2" Color="Color.Secondary">@@</MudText>
+                                        </div>
+                                        <div class="text-center" style="flex: 1;">
+                                            <MudText Typo="Typo.h6">@game.HomeTeam</MudText>
+                                            <MudText Typo="Typo.caption">@(game.HomeWinProbability.HasValue ? $"{(game.HomeWinProbability.Value * 100):F0}%" : "")</MudText>
+                                        </div>
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(game.PredictedWinner))
+                                    {
+                                        <MudChip T="string" Color="Color.Primary" Size="Size.Small" Class="mt-2">
+                                            Pick: @game.PredictedWinner (@game.ConfidenceLevel)
+                                        </MudChip>
+                                    }
+                                </CardHeaderContent>
+                            </MudCardHeader>
+                            <MudCardContent Style="padding-top: 0;">
+                                <MudDivider Class="mb-3" />
+                                <MudGrid Spacing="2">
+                                    <!-- Moneyline -->
+                                    <MudItem xs="4">
+                                        <MudText Typo="Typo.overline" Color="Color.Secondary">MONEYLINE</MudText>
+                                        <div class="d-flex flex-column">
+                                            <MudText Typo="Typo.body2">@game.AwayTeam: @FormatOdds(game.AwayMoneyline)</MudText>
+                                            <MudText Typo="Typo.body2">@game.HomeTeam: @FormatOdds(game.HomeMoneyline)</MudText>
+                                        </div>
+                                        @if (game.MlValue)
+                                        {
+                                            <MudChip T="string" Color="Color.Success" Size="Size.Small">
+                                                @game.MlPick +@(game.HomeMlEdge)%
+                                            </MudChip>
+                                        }
+                                    </MudItem>
+                                    
+                                    <!-- Spread -->
+                                    <MudItem xs="4">
+                                        <MudText Typo="Typo.overline" Color="Color.Secondary">SPREAD</MudText>
+                                        <MudText Typo="Typo.body1">@(game.Spread.HasValue ? FormatSpread(game.Spread.Value) : "N/A")</MudText>
+                                        @if (game.SpreadValue)
+                                        {
+                                            <MudChip T="string" Color="Color.Success" Size="Size.Small">
+                                                @game.SpreadPick @(game.SpreadEdge > 0 ? "+" : "")@game.SpreadEdge
+                                            </MudChip>
+                                        }
+                                        else if (!string.IsNullOrEmpty(game.SpreadPick))
+                                        {
+                                            <MudText Typo="Typo.caption">Pick: @game.SpreadPick</MudText>
+                                        }
+                                    </MudItem>
+                                    
+                                    <!-- O/U -->
+                                    <MudItem xs="4">
+                                        <MudText Typo="Typo.overline" Color="Color.Secondary">O/U TOTAL</MudText>
+                                        <MudText Typo="Typo.body1">@(game.OverUnder.HasValue ? game.OverUnder.Value.ToString() : "N/A")</MudText>
+                                        @if (game.OuValue)
+                                        {
+                                            <MudChip T="string" Color="Color.Success" Size="Size.Small">
+                                                @game.OuPick @(game.OuEdge > 0 ? "+" : "")@game.OuEdge
+                                            </MudChip>
+                                        }
+                                        else if (!string.IsNullOrEmpty(game.OuPick))
+                                        {
+                                            <MudText Typo="Typo.caption">Pick: @game.OuPick</MudText>
+                                        }
+                                    </MudItem>
+                                </MudGrid>
+                                
+                                <!-- Model Prediction Details -->
+                                @if (game.PredictedTotal.HasValue)
+                                {
+                                    <MudDivider Class="my-2" />
+                                    <div class="d-flex justify-space-between">
+                                        <MudText Typo="Typo.caption">
+                                            Pred Total: <strong>@game.PredictedTotal</strong>
+                                        </MudText>
+                                        <MudText Typo="Typo.caption">
+                                            Pred Margin: <strong>@(game.PredictedMargin > 0 ? "+" : "")@game.PredictedMargin</strong>
+                                        </MudText>
+                                    </div>
+                                }
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+        else if (_games.Any() && !_isAnalyzing)
+        {
+            <!-- Show basic odds before analysis -->
+            <MudAlert Severity="Severity.Info" Class="mb-3">
+                Click <strong>Run Analysis</strong> to get predictions and value bet recommendations!
+            </MudAlert>
             <MudGrid>
                 @foreach (var game in _games)
                 {
                     <MudItem xs="12" md="6" lg="4">
-                        <MudCard Elevation="2" Class="game-card">
+                        <MudCard Elevation="2">
                             <MudCardHeader>
                                 <CardHeaderContent>
                                     <div class="d-flex justify-space-between align-center">
@@ -66,12 +189,10 @@
                                         <MudText Typo="Typo.body2" Color="Color.Secondary">@@</MudText>
                                         <MudText Typo="Typo.h6">@game.HomeTeam</MudText>
                                     </div>
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@game.Status</MudText>
                                 </CardHeaderContent>
                             </MudCardHeader>
                             <MudCardContent>
                                 <MudGrid>
-                                    <!-- Moneyline -->
                                     <MudItem xs="12">
                                         <MudText Typo="Typo.overline" Color="Color.Secondary">MONEYLINE</MudText>
                                         <div class="d-flex justify-space-between">
@@ -83,8 +204,6 @@
                                             </MudChip>
                                         </div>
                                     </MudItem>
-                                    
-                                    <!-- Spread -->
                                     @if (game.Spread.HasValue)
                                     {
                                         <MudItem xs="6">
@@ -92,12 +211,10 @@
                                             <MudText Typo="Typo.body1">@FormatSpread(game.Spread.Value)</MudText>
                                         </MudItem>
                                     }
-                                    
-                                    <!-- Over/Under -->
                                     @if (game.OverUnder.HasValue)
                                     {
                                         <MudItem xs="6">
-                                            <MudText Typo="Typo.overline" Color="Color.Secondary">O/U TOTAL</MudText>
+                                            <MudText Typo="Typo.overline" Color="Color.Secondary">O/U</MudText>
                                             <MudText Typo="Typo.body1">@game.OverUnder.Value</MudText>
                                         </MudItem>
                                     }
@@ -172,10 +289,12 @@
 
 @code {
     private bool _isLoading = false;
+    private bool _isAnalyzing = false;
     private string _errorMessage = "";
     private string _selectedSportsbook = "fanduel";
     private List<string> _sportsbooks = new() { "fanduel", "draftkings", "betmgm", "pointsbet", "caesars" };
     private List<GameOdds> _games = new();
+    private List<AnalyzedGame> _analyzedGames = new();
     
     // Kelly Calculator
     private double _kellyWinProb = 0.55;
@@ -192,6 +311,7 @@
     {
         _isLoading = true;
         _errorMessage = "";
+        _analyzedGames = new();
         StateHasChanged();
         
         try
@@ -217,6 +337,42 @@
         finally
         {
             _isLoading = false;
+        }
+    }
+
+    private async Task RunAnalysis()
+    {
+        _isAnalyzing = true;
+        StateHasChanged();
+        
+        try
+        {
+            var response = await Http.PostAsync(
+                $"http://backend:8000/odds/nba/analyze-all?sportsbook={_selectedSportsbook}", null);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<AnalysisResponse>();
+                if (result?.Games != null)
+                {
+                    _analyzedGames = result.Games;
+                    var valueBets = _analyzedGames.Count(g => g.HasValue);
+                    Snackbar.Add($"Analysis complete! {valueBets} value bet(s) found.", 
+                        valueBets > 0 ? Severity.Success : Severity.Info);
+                }
+            }
+            else
+            {
+                Snackbar.Add("Analysis failed", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isAnalyzing = false;
         }
     }
 
@@ -281,6 +437,46 @@
         [System.Text.Json.Serialization.JsonPropertyName("spread")] public double? Spread { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("over_under")] public double? OverUnder { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("status")] public string Status { get; set; } = "scheduled";
+    }
+    
+    public class AnalysisResponse
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("games")] public List<AnalyzedGame> Games { get; set; } = new();
+        [System.Text.Json.Serialization.JsonPropertyName("value_bets_found")] public int ValueBetsFound { get; set; }
+    }
+    
+    public class AnalyzedGame
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("home_team")] public string HomeTeam { get; set; } = "";
+        [System.Text.Json.Serialization.JsonPropertyName("away_team")] public string AwayTeam { get; set; } = "";
+        [System.Text.Json.Serialization.JsonPropertyName("home_moneyline")] public int? HomeMoneyline { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("away_moneyline")] public int? AwayMoneyline { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("spread")] public double? Spread { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("over_under")] public double? OverUnder { get; set; }
+        
+        // Predictions
+        [System.Text.Json.Serialization.JsonPropertyName("predicted_winner")] public string? PredictedWinner { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("home_win_probability")] public double? HomeWinProbability { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("away_win_probability")] public double? AwayWinProbability { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("predicted_margin")] public double? PredictedMargin { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("predicted_total")] public double? PredictedTotal { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("confidence_level")] public string? ConfidenceLevel { get; set; }
+        
+        // Value indicators
+        [System.Text.Json.Serialization.JsonPropertyName("ml_pick")] public string? MlPick { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("ml_value")] public bool MlValue { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("home_ml_edge")] public double? HomeMlEdge { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("spread_pick")] public string? SpreadPick { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("spread_value")] public bool SpreadValue { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("spread_edge")] public double? SpreadEdge { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("ou_pick")] public string? OuPick { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("ou_value")] public bool OuValue { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("ou_edge")] public double? OuEdge { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("has_value")] public bool HasValue { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("value_bets")] public List<string> ValueBets { get; set; } = new();
     }
     
     public class KellyResult

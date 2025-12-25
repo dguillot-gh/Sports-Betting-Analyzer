@@ -67,3 +67,67 @@ async def calculate_kelly_bet(
         "bankroll": bankroll,
         "bet_percentage": round(bet_amount / bankroll * 100, 2) if bankroll > 0 else 0
     }
+
+
+@router.post("/nba/predict")
+async def predict_game(
+    home_team: str = Query(..., description="Home team name"),
+    away_team: str = Query(..., description="Away team name"),
+    spread: float = Query(None, description="Point spread (away team perspective)"),
+    over_under: float = Query(None, description="Over/under total"),
+    home_ml: int = Query(None, description="Home team moneyline"),
+    away_ml: int = Query(None, description="Away team moneyline")
+):
+    """
+    Predict game outcome with value bet detection.
+    """
+    from scripts.nba_predictor import analyze_matchup
+    return await analyze_matchup(home_team, away_team, spread, over_under, home_ml, away_ml)
+
+
+@router.post("/nba/analyze-all")
+async def analyze_all_games(
+    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from")
+):
+    """
+    Fetch today's games and run predictions on all of them.
+    Returns games with predictions and value bet flags.
+    """
+    from scripts.nba_odds import get_todays_nba_odds
+    from scripts.nba_predictor import analyze_matchup
+    
+    # Get today's odds
+    odds_data = await get_todays_nba_odds(sportsbook)
+    
+    if odds_data.get("error") or not odds_data.get("games"):
+        return odds_data
+    
+    # Analyze each game
+    analyzed_games = []
+    for game in odds_data["games"]:
+        try:
+            prediction = await analyze_matchup(
+                home_team=game.get("home_team", ""),
+                away_team=game.get("away_team", ""),
+                spread=game.get("spread"),
+                over_under=game.get("over_under"),
+                home_ml=game.get("home_moneyline"),
+                away_ml=game.get("away_moneyline")
+            )
+            
+            # Combine odds data with prediction
+            analyzed_game = {**game, **prediction}
+            analyzed_games.append(analyzed_game)
+            
+        except Exception as e:
+            logger.error(f"Error analyzing game: {e}")
+            analyzed_games.append({**game, "prediction_error": str(e)})
+    
+    return {
+        "date": odds_data.get("date"),
+        "sportsbook": sportsbook,
+        "games": analyzed_games,
+        "count": len(analyzed_games),
+        "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False))
+    }
+
