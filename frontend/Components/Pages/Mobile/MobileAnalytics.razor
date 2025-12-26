@@ -1,0 +1,52 @@
+@page "/m/analytics"
+@layout MobileLayout
+@rendermode InteractiveServer
+@using MudBlazor
+@inject HttpClient Http
+
+<PageTitle>Analytics</PageTitle>
+
+<MudText Typo="Typo.h6" Class="mb-3">📊 Betting Analytics</MudText>
+
+<!-- Quick Stats Cards -->
+<MudGrid Spacing="2">
+    <MudItem xs="6">
+        <MudPaper Class="pa-3 text-center" Elevation="2" 
+                  Style="background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);">
+            <MudText Typo="Typo.h4">--</MudText>
+            <MudText Typo="Typo.caption">Win Rate</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6">
+        <MudPaper Class="pa-3 text-center" Elevation="2"
+                  Style="background: linear-gradient(135deg, #2196f3 0%, #1565c0 100%);">
+            <MudText Typo="Typo.h4">--</MudText>
+            <MudText Typo="Typo.caption">ROI</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6">
+        <MudPaper Class="pa-3 text-center" Elevation="2"
+                  Style="background: linear-gradient(135deg, #ff9800 0%, #e65100 100%);">
+            <MudText Typo="Typo.h4">--</MudText>
+            <MudText Typo="Typo.caption">Total Bets</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6">
+        <MudPaper Class="pa-3 text-center" Elevation="2"
+                  Style="background: linear-gradient(135deg, #9c27b0 0%, #6a1b9a 100%);">
+            <MudText Typo="Typo.h4">--</MudText>
+            <MudText Typo="Typo.caption">Profit/Loss</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudDivider Class="my-4" />
+
+<MudText Typo="Typo.subtitle2" Class="mb-2">Recent Performance</MudText>
+<MudAlert Severity="Severity.Info" Dense="true">
+    Connect to desktop app to sync bet history and view analytics.
+</MudAlert>
+
+@code {
+    // Analytics data will be fetched from backend
+}

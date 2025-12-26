@@ -25,6 +25,12 @@
     <script src="_content/Blazor-ApexCharts/js/blazor-apexcharts.js"></script>
     <script src="js/export.js"></script>
     <script>
+        // Mobile device detection for auto-redirect
+        window.isMobileDevice = function() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+                   || window.innerWidth <= 768;
+        };
+        
         // Register service worker for PWA
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {

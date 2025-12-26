@@ -1,0 +1,74 @@
+@inherits LayoutComponentBase
+@inject NavigationManager NavigationManager
+
+<MudThemeProvider IsDarkMode="true" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <!-- Mobile App Bar -->
+    <MudAppBar Elevation="1" Dense="true" Style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="ToggleDrawer" />
+        <MudText Typo="Typo.h6" Class="ml-2">SBA</MudText>
+        <MudSpacer />
+        <MudIconButton Icon="@Icons.Material.Filled.DesktopWindows" Color="Color.Inherit" 
+                       Href="/" Title="Switch to Desktop" />
+    </MudAppBar>
+
+    <!-- Mobile Bottom Nav -->
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="2" Variant="DrawerVariant.Temporary"
+               Anchor="Anchor.Left" Style="background: #1a1a2e;">
+        <MudNavMenu>
+            <MudText Typo="Typo.subtitle2" Class="px-4 py-2" Color="Color.Secondary">BETTING</MudText>
+            <MudNavLink Href="/m/live-odds" Icon="@Icons.Material.Filled.SportsBasketball">NBA Odds</MudNavLink>
+            <MudNavLink Href="/m/live-nfl-odds" Icon="@Icons.Material.Filled.SportsFootball">NFL Odds</MudNavLink>
+            
+            <MudDivider Class="my-2" />
+            <MudText Typo="Typo.subtitle2" Class="px-4 py-2" Color="Color.Secondary">ANALYTICS</MudText>
+            <MudNavLink Href="/m/analytics" Icon="@Icons.Material.Filled.Analytics">Analytics</MudNavLink>
+            <MudNavLink Href="/m/trends" Icon="@Icons.Material.Filled.TrendingUp">Trends</MudNavLink>
+            <MudNavLink Href="/m/history" Icon="@Icons.Material.Filled.History">Bet History</MudNavLink>
+            <MudNavLink Href="/m/hit-rates" Icon="@Icons.Material.Filled.CheckCircle">Hit Rates</MudNavLink>
+            
+            <MudDivider Class="my-2" />
+            <MudText Typo="Typo.subtitle2" Class="px-4 py-2" Color="Color.Secondary">DATA</MudText>
+            <MudNavLink Href="/m/game-results" Icon="@Icons.Material.Filled.EmojiEvents">Game Results</MudNavLink>
+            <MudNavLink Href="/m/player-profiles" Icon="@Icons.Material.Filled.Person">Players</MudNavLink>
+            <MudNavLink Href="/m/ocr" Icon="@Icons.Material.Filled.CameraAlt">Scan Bet</MudNavLink>
+            
+            <MudDivider Class="my-2" />
+            <MudNavLink Href="/" Icon="@Icons.Material.Filled.DesktopWindows">Desktop View</MudNavLink>
+        </MudNavMenu>
+    </MudDrawer>
+
+    <MudMainContent Class="pt-14 pb-16">
+        <MudContainer MaxWidth="MaxWidth.Small" Class="pa-2">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+
+    <!-- Bottom Quick Nav -->
+    <MudAppBar Bottom="true" Fixed="true" Dense="true" Elevation="2" 
+               Style="background: #1a1a2e; justify-content: space-around;">
+        <MudIconButton Icon="@Icons.Material.Filled.SportsBasketball" Color="@GetNavColor("/m/live-odds")" 
+                       Href="/m/live-odds" Size="Size.Medium" />
+        <MudIconButton Icon="@Icons.Material.Filled.SportsFootball" Color="@GetNavColor("/m/live-nfl-odds")" 
+                       Href="/m/live-nfl-odds" Size="Size.Medium" />
+        <MudIconButton Icon="@Icons.Material.Filled.Analytics" Color="@GetNavColor("/m/analytics")" 
+                       Href="/m/analytics" Size="Size.Medium" />
+        <MudIconButton Icon="@Icons.Material.Filled.History" Color="@GetNavColor("/m/history")" 
+                       Href="/m/history" Size="Size.Medium" />
+        <MudIconButton Icon="@Icons.Material.Filled.CameraAlt" Color="@GetNavColor("/m/ocr")" 
+                       Href="/m/ocr" Size="Size.Medium" />
+    </MudAppBar>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = false;
+    
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+    
+    private Color GetNavColor(string href) => 
+        NavigationManager.Uri.Contains(href) ? Color.Primary : Color.Default;
+}

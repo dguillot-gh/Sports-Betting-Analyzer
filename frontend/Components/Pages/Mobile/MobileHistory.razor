@@ -1,0 +1,57 @@
+@page "/m/history"
+@layout MobileLayout
+@rendermode InteractiveServer
+@using MudBlazor
+@inject HttpClient Http
+
+<PageTitle>Bet History</PageTitle>
+
+<MudText Typo="Typo.h6" Class="mb-3">📜 Bet History</MudText>
+
+<!-- Quick Add Button -->
+<MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Class="mb-3"
+           StartIcon="@Icons.Material.Filled.Add">
+    Log New Bet
+</MudButton>
+
+<!-- Recent Bets -->
+<MudText Typo="Typo.subtitle2" Class="mb-2">Recent Bets</MudText>
+
+<MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+    Bet tracking coming soon. Use desktop app for full history.
+</MudAlert>
+
+<!-- Sample bet cards for layout reference -->
+<MudCard Class="mb-2" Elevation="1">
+    <MudCardContent Class="pa-3">
+        <MudStack Row="true" Justify="Justify.SpaceBetween">
+            <div>
+                <MudText Typo="Typo.body2">Lakers ML</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Dec 25, 2025</MudText>
+            </div>
+            <MudStack AlignItems="AlignItems.End">
+                <MudChip T="string" Size="Size.Small" Color="Color.Success">+$45</MudChip>
+                <MudText Typo="Typo.caption">$100 @@ -110</MudText>
+            </MudStack>
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+<MudCard Class="mb-2" Elevation="1">
+    <MudCardContent Class="pa-3">
+        <MudStack Row="true" Justify="Justify.SpaceBetween">
+            <div>
+                <MudText Typo="Typo.body2">Chiefs -3.5</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Dec 24, 2025</MudText>
+            </div>
+            <MudStack AlignItems="AlignItems.End">
+                <MudChip T="string" Size="Size.Small" Color="Color.Error">-$50</MudChip>
+                <MudText Typo="Typo.caption">$50 @@ -110</MudText>
+            </MudStack>
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    // Bet history will be fetched from backend
+}

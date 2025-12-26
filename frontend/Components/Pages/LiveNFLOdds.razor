@@ -384,6 +384,63 @@
                     </MudPaper>
                 }
             </MudExpansionPanel>
+            
+            <!-- Hot/Cold Players Edge Section (merged from EdgePredictions) -->
+            <MudExpansionPanel Text="🔥 Hot & Cold Players" Icon="@Icons.Material.Filled.TrendingUp">
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                    Players performing above/below their season average (Edge Score = recent vs avg)
+                </MudText>
+                
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadEdgeData" 
+                           Disabled="_isLoadingEdge" Class="mb-3">
+                    @if (_isLoadingEdge)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Load Hot/Cold Players
+                </MudButton>
+                
+                @if (_edgeData != null)
+                {
+                    <MudGrid>
+                        <!-- Hot Players -->
+                        <MudItem xs="12" md="6">
+                            <MudPaper Class="pa-3" Elevation="1" Style="border-left: 3px solid #4caf50;">
+                                <MudText Typo="Typo.subtitle2">🔥 Hot Players</MudText>
+                                @foreach (var player in _edgeData.HotPlayers.Take(5))
+                                {
+                                    <div class="d-flex justify-space-between align-center py-1">
+                                        <MudText Typo="Typo.body2"><strong>@player.Player</strong> (@player.Team)</MudText>
+                                        <MudChip T="string" Color="Color.Success" Size="Size.Small">+@player.EdgeScore</MudChip>
+                                    </div>
+                                }
+                                @if (!_edgeData.HotPlayers.Any())
+                                {
+                                    <MudText Typo="Typo.caption">No hot players found</MudText>
+                                }
+                            </MudPaper>
+                        </MudItem>
+                        
+                        <!-- Cold Players -->
+                        <MudItem xs="12" md="6">
+                            <MudPaper Class="pa-3" Elevation="1" Style="border-left: 3px solid #f44336;">
+                                <MudText Typo="Typo.subtitle2">❄️ Cold Players</MudText>
+                                @foreach (var player in _edgeData.ColdPlayers.Take(5))
+                                {
+                                    <div class="d-flex justify-space-between align-center py-1">
+                                        <MudText Typo="Typo.body2"><strong>@player.Player</strong> (@player.Team)</MudText>
+                                        <MudChip T="string" Color="Color.Error" Size="Size.Small">@player.EdgeScore</MudChip>
+                                    </div>
+                                }
+                                @if (!_edgeData.ColdPlayers.Any())
+                                {
+                                    <MudText Typo="Typo.caption">No cold players found</MudText>
+                                }
+                            </MudPaper>
+                        </MudItem>
+                    </MudGrid>
+                }
+            </MudExpansionPanel>
         </MudExpansionPanels>
     </MudStack>
 </MudContainer>
@@ -403,6 +460,10 @@
     private int _kellyOdds = -110;
     private double _kellyBankroll = 1000;
     private KellyResult? _kellyResult;
+    
+    // Edge Predictions
+    private bool _isLoadingEdge = false;
+    private EdgeResponse? _edgeData;
 
     protected override async Task OnInitializedAsync()
     {
@@ -520,6 +581,30 @@
         catch (Exception ex)
         {
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadEdgeData()
+    {
+        _isLoadingEdge = true;
+        StateHasChanged();
+        
+        try
+        {
+            var url = $"http://backend:8000/edge/nfl/players?season={DateTime.Now.Year}&limit=50";
+            _edgeData = await Http.GetFromJsonAsync<EdgeResponse>(url);
+            if (_edgeData != null)
+            {
+                Snackbar.Add($"Loaded {_edgeData.TotalAnalyzed} players", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Edge data error: {ex.Message}", Severity.Warning);
+        }
+        finally
+        {
+            _isLoadingEdge = false;
         }
     }
 
@@ -672,5 +757,29 @@
         [System.Text.Json.Serialization.JsonPropertyName("ml_accuracy")] public double MlAccuracy { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("ou_mae")] public double OuMae { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("samples_trained")] public int SamplesTrained { get; set; }
+    }
+    
+    // Edge Predictions classes (merged from EdgePredictions.razor)
+    public class EdgeResponse
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("sport")] public string Sport { get; set; } = "";
+        [System.Text.Json.Serialization.JsonPropertyName("season")] public int Season { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("total_analyzed")] public int TotalAnalyzed { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("primary_stat")] public string PrimaryStat { get; set; } = "";
+        [System.Text.Json.Serialization.JsonPropertyName("players")] public List<PlayerEdge> Players { get; set; } = new();
+        [System.Text.Json.Serialization.JsonPropertyName("hot_players")] public List<PlayerEdge> HotPlayers { get; set; } = new();
+        [System.Text.Json.Serialization.JsonPropertyName("cold_players")] public List<PlayerEdge> ColdPlayers { get; set; } = new();
+    }
+
+    public class PlayerEdge
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("player")] public string Player { get; set; } = "";
+        [System.Text.Json.Serialization.JsonPropertyName("team")] public string Team { get; set; } = "";
+        [System.Text.Json.Serialization.JsonPropertyName("position")] public string Position { get; set; } = "";
+        [System.Text.Json.Serialization.JsonPropertyName("edge_score")] public double EdgeScore { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("trend")] public string Trend { get; set; } = "";
+        [System.Text.Json.Serialization.JsonPropertyName("season_avg")] public double SeasonAvg { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("recent_avg")] public double RecentAvg { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("games_played")] public int GamesPlayed { get; set; }
     }
 }

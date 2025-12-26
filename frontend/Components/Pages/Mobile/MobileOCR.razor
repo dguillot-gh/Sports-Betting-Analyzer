@@ -1,0 +1,44 @@
+@page "/m/ocr"
+@layout MobileLayout
+@rendermode InteractiveServer
+@using MudBlazor
+
+<PageTitle>Scan Bet</PageTitle>
+
+<MudText Typo="Typo.h6" Class="mb-3">📷 Scan Betting Slip</MudText>
+
+<!-- Camera Preview Area -->
+<MudPaper Class="pa-4 mb-3" Elevation="2" 
+          Style="min-height: 300px; background: #0a0a0a; border: 2px dashed #444; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+    <MudIcon Icon="@Icons.Material.Filled.CameraAlt" Size="Size.Large" Color="Color.Secondary" />
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-3">Camera Preview</MudText>
+    <MudText Typo="Typo.caption" Color="Color.Secondary">Coming Soon!</MudText>
+</MudPaper>
+
+<!-- Scan Button -->
+<MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" 
+           Size="Size.Large" Class="mb-3" Disabled="true"
+           StartIcon="@Icons.Material.Filled.PhotoCamera">
+    Take Photo
+</MudButton>
+
+<MudDivider Class="my-3" />
+
+<!-- Instructions -->
+<MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">
+    <MudText Typo="Typo.subtitle2">How it will work:</MudText>
+    <ul style="margin: 0; padding-left: 20px;">
+        <li>Take photo of your betting slip</li>
+        <li>OCR extracts team, odds, stake</li>
+        <li>Auto-logs to your bet history</li>
+    </ul>
+</MudAlert>
+
+<MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Center" Class="mt-3">
+    OCR integration in development. For now, use manual bet logging.
+</MudText>
+
+@code {
+    // OCR functionality will be integrated later
+    // Placeholder UI for now
+}

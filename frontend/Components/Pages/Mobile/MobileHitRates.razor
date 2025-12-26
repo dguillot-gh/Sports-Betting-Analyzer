@@ -1,0 +1,49 @@
+@page "/m/hit-rates"
+@layout MobileLayout
+@rendermode InteractiveServer
+@using MudBlazor
+
+<PageTitle>Hit Rates</PageTitle>
+
+<MudText Typo="Typo.h6" Class="mb-3">🎯 Player Hit Rates</MudText>
+
+<!-- Sport Toggle -->
+<MudButtonGroup Color="Color.Primary" Variant="Variant.Outlined" Class="mb-3">
+    <MudButton Variant="@(_sport == "nba" ? Variant.Filled : Variant.Outlined)"
+               OnClick="@(() => _sport = "nba")">NBA</MudButton>
+    <MudButton Variant="@(_sport == "nfl" ? Variant.Filled : Variant.Outlined)"
+               OnClick="@(() => _sport = "nfl")">NFL</MudButton>
+</MudButtonGroup>
+
+<MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+    Hit rate analysis available on desktop app.
+</MudAlert>
+
+<!-- Sample Data -->
+<MudText Typo="Typo.subtitle2" Class="mb-2">Top Hitters (Points)</MudText>
+<MudCard Class="mb-2" Elevation="1">
+    <MudCardContent Class="pa-3">
+        <MudStack Row="true" Justify="Justify.SpaceBetween">
+            <div>
+                <MudText Typo="Typo.body2"><strong>LeBron James</strong></MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">O 25.5 PTS</MudText>
+            </div>
+            <MudChip T="string" Size="Size.Small" Color="Color.Success">78%</MudChip>
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+<MudCard Class="mb-2" Elevation="1">
+    <MudCardContent Class="pa-3">
+        <MudStack Row="true" Justify="Justify.SpaceBetween">
+            <div>
+                <MudText Typo="Typo.body2"><strong>Luka Doncic</strong></MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">O 28.5 PTS</MudText>
+            </div>
+            <MudChip T="string" Size="Size.Small" Color="Color.Success">72%</MudChip>
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    private string _sport = "nba";
+}

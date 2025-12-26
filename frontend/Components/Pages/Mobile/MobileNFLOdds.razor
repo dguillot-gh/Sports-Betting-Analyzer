@@ -1,0 +1,159 @@
+@page "/m/live-nfl-odds"
+@layout MobileLayout
+@rendermode InteractiveServer
+@using MudBlazor
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+<PageTitle>NFL Odds</PageTitle>
+
+@if (_isLoading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2" />
+}
+
+<MudStack Row="true" Justify="Justify.SpaceBetween" Class="mb-2">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" 
+               OnClick="RefreshOdds" Disabled="_isLoading">
+        <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" Class="mr-1" />
+        Refresh
+    </MudButton>
+    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Size="Size.Small"
+               OnClick="RunAnalysis" Disabled="_isAnalyzing">
+        @if (_isAnalyzing) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1" /> }
+        Analyze
+    </MudButton>
+</MudStack>
+
+@if (_analyzedGames.Any(g => g.HasValue))
+{
+    <MudAlert Severity="Severity.Success" Dense="true" Class="mb-2">
+        🔥 @_analyzedGames.Count(g => g.HasValue) Value Bet(s)!
+    </MudAlert>
+}
+
+@if (_analyzedGames.Any())
+{
+    @foreach (var game in _analyzedGames)
+    {
+        <MudCard Class="mb-2" Elevation="2" Style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);">
+            <MudCardContent Class="pa-3">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <div>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@game.AwayTeam</MudText>
+                        <MudText Typo="Typo.h6">@game.HomeTeam</MudText>
+                    </div>
+                    <MudStack AlignItems="AlignItems.End">
+                        <MudChip T="string" Size="Size.Small" 
+                                 Color="@(game.HomeWinProbability > 0.5 ? Color.Success : Color.Warning)">
+                            @(((game.HomeWinProbability ?? 0.5) * 100).ToString("F0"))%
+                        </MudChip>
+                        @if (game.HasValue) { <MudChip T="string" Size="Size.Small" Color="Color.Primary">VALUE</MudChip> }
+                    </MudStack>
+                </MudStack>
+                
+                <MudDivider Class="my-2" />
+                <MudStack Row="true" Justify="Justify.SpaceAround">
+                    <div class="text-center">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">ML</MudText>
+                        <MudText Typo="Typo.body2">@(game.HomeMoneyline?.ToString() ?? "N/A")</MudText>
+                    </div>
+                    <div class="text-center">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Spread</MudText>
+                        <MudText Typo="Typo.body2">@(game.Spread?.ToString("+0;-0") ?? "N/A")</MudText>
+                    </div>
+                    <div class="text-center">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">O/U</MudText>
+                        <MudText Typo="Typo.body2">@game.OverUnder</MudText>
+                    </div>
+                </MudStack>
+                
+                @if (!string.IsNullOrEmpty(game.PredictedWinner))
+                {
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.body2" Align="Align.Center">
+                        Pick: <strong>@game.PredictedWinner</strong>
+                    </MudText>
+                }
+            </MudCardContent>
+        </MudCard>
+    }
+}
+else if (_games.Any())
+{
+    @foreach (var game in _games)
+    {
+        <MudCard Class="mb-2" Elevation="1">
+            <MudCardContent Class="pa-3">
+                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                    <div>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@game.AwayTeam</MudText>
+                        <MudText Typo="Typo.body1">@game.HomeTeam</MudText>
+                    </div>
+                    <MudStack AlignItems="AlignItems.End">
+                        <MudText Typo="Typo.body2">@game.HomeMoneyline</MudText>
+                        <MudText Typo="Typo.caption">O/U @game.OverUnder</MudText>
+                    </MudStack>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    }
+}
+else
+{
+    <MudAlert Severity="Severity.Info" Dense="true">No games found.</MudAlert>
+}
+
+@code {
+    private bool _isLoading = false;
+    private bool _isAnalyzing = false;
+    private List<GameOdds> _games = new();
+    private List<AnalyzedGame> _analyzedGames = new();
+
+    protected override async Task OnInitializedAsync() => await RefreshOdds();
+
+    private async Task RefreshOdds()
+    {
+        _isLoading = true;
+        try
+        {
+            var response = await Http.GetFromJsonAsync<OddsResponse>("http://backend:8000/odds/nfl?sportsbook=fanduel");
+            _games = response?.Games ?? new();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _isLoading = false; }
+    }
+
+    private async Task RunAnalysis()
+    {
+        _isAnalyzing = true;
+        try
+        {
+            var response = await Http.PostAsync("http://backend:8000/odds/nfl/analyze-all?sportsbook=fanduel", null);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<AnalysisResponse>();
+                _analyzedGames = result?.Games ?? new();
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _isAnalyzing = false; }
+    }
+
+    public class OddsResponse { public List<GameOdds> Games { get; set; } = new(); }
+    public class GameOdds
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("home_team")] public string HomeTeam { get; set; } = "";
+        [System.Text.Json.Serialization.JsonPropertyName("away_team")] public string AwayTeam { get; set; } = "";
+        [System.Text.Json.Serialization.JsonPropertyName("home_moneyline")] public int? HomeMoneyline { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("over_under")] public double? OverUnder { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("spread")] public double? Spread { get; set; }
+    }
+    public class AnalysisResponse { public List<AnalyzedGame> Games { get; set; } = new(); }
+    public class AnalyzedGame : GameOdds
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("home_win_probability")] public double? HomeWinProbability { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("predicted_winner")] public string PredictedWinner { get; set; } = "";
+        [System.Text.Json.Serialization.JsonPropertyName("has_value")] public bool HasValue { get; set; }
+    }
+}

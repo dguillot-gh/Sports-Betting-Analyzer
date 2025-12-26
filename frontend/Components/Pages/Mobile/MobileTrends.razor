@@ -1,0 +1,39 @@
+@page "/m/trends"
+@layout MobileLayout
+@rendermode InteractiveServer
+@using MudBlazor
+
+<PageTitle>Trends</PageTitle>
+
+<MudText Typo="Typo.h6" Class="mb-3">📈 Betting Trends</MudText>
+
+<!-- Trend Cards -->
+<MudCard Class="mb-2" Elevation="2">
+    <MudCardContent Class="pa-3">
+        <MudText Typo="Typo.subtitle2">🔥 Hot Trends</MudText>
+        <MudDivider Class="my-2" />
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.body2">• NBA Home teams: 58% ATS</MudText>
+            <MudText Typo="Typo.body2">• NFL Favorites: 52% ML</MudText>
+            <MudText Typo="Typo.body2">• Unders hitting 55% this week</MudText>
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+<MudCard Class="mb-2" Elevation="2">
+    <MudCardContent Class="pa-3">
+        <MudText Typo="Typo.subtitle2">❄️ Cold Trends</MudText>
+        <MudDivider Class="my-2" />
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.body2">• Road underdogs: 41% ML</MudText>
+            <MudText Typo="Typo.body2">• Large spreads (-10+): 45%</MudText>
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+<MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
+    Full trend analysis available on desktop.
+</MudAlert>
+
+@code {
+}

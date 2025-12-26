@@ -223,7 +223,8 @@ async def analyze_all_nfl_games(
         "sportsbook": sportsbook,
         "games": analyzed_games,
         "count": len(analyzed_games),
-        "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False))
+        "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False)),
+        "epa_loaded": True  # EPA is loaded from nflreadpy on each analysis
     }
 
 

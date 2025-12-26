@@ -66,35 +66,53 @@ class NFLPredictor:
         try:
             import nfl_data_py as nfl
             
-            # Get current season play-by-play (2024-2025)
+            # Try current season first, fall back to 2024 if 2025 not available
             logger.info("Loading EPA data from nflreadpy...")
-            pbp = nfl.import_pbp_data([2024, 2025])
+            try:
+                pbp = nfl.import_pbp_data([2024, 2025])
+                logger.info(f"Loaded pbp data with {len(pbp)} plays")
+            except Exception as e:
+                logger.warning(f"Could not load 2025 pbp, trying 2024 only: {e}")
+                pbp = nfl.import_pbp_data([2024])
+            
+            if pbp is None or len(pbp) == 0:
+                logger.warning("No play-by-play data loaded")
+                self._epa_loaded = True
+                return
             
             # Calculate team EPA stats
-            for team in pbp['posteam'].dropna().unique():
+            teams_found = pbp['posteam'].dropna().unique()
+            logger.info(f"Found {len(teams_found)} teams in pbp data")
+            
+            for team in teams_found:
                 # Offensive EPA (when team has ball)
                 off_plays = pbp[pbp['posteam'] == team]
                 off_epa = off_plays['epa'].mean() if len(off_plays) > 0 else 0.0
-                pass_epa = off_plays[off_plays['play_type'] == 'pass']['epa'].mean() if len(off_plays[off_plays['play_type'] == 'pass']) > 0 else 0.0
-                rush_epa = off_plays[off_plays['play_type'] == 'run']['epa'].mean() if len(off_plays[off_plays['play_type'] == 'run']) > 0 else 0.0
+                pass_plays = off_plays[off_plays['play_type'] == 'pass']
+                pass_epa = pass_plays['epa'].mean() if len(pass_plays) > 0 else 0.0
+                run_plays = off_plays[off_plays['play_type'] == 'run']
+                rush_epa = run_plays['epa'].mean() if len(run_plays) > 0 else 0.0
                 
                 # Defensive EPA (when opponent has ball)
                 def_plays = pbp[pbp['defteam'] == team]
                 def_epa = def_plays['epa'].mean() if len(def_plays) > 0 else 0.0
                 
+                import numpy as np
                 self._epa_cache[team] = {
-                    'off_epa_per_play': round(off_epa, 3) if not np.isnan(off_epa) else 0.0,
-                    'def_epa_per_play': round(def_epa, 3) if not np.isnan(def_epa) else 0.0,
-                    'pass_epa': round(pass_epa, 3) if not np.isnan(pass_epa) else 0.0,
-                    'rush_epa': round(rush_epa, 3) if not np.isnan(rush_epa) else 0.0,
-                    'net_epa': round(off_epa - def_epa, 3) if not (np.isnan(off_epa) or np.isnan(def_epa)) else 0.0
+                    'off_epa_per_play': round(float(off_epa), 3) if not np.isnan(off_epa) else 0.0,
+                    'def_epa_per_play': round(float(def_epa), 3) if not np.isnan(def_epa) else 0.0,
+                    'pass_epa': round(float(pass_epa), 3) if not np.isnan(pass_epa) else 0.0,
+                    'rush_epa': round(float(rush_epa), 3) if not np.isnan(rush_epa) else 0.0,
+                    'net_epa': round(float(off_epa - def_epa), 3) if not (np.isnan(off_epa) or np.isnan(def_epa)) else 0.0
                 }
             
             self._epa_loaded = True
-            logger.info(f"Loaded EPA stats for {len(self._epa_cache)} teams")
+            logger.info(f"Loaded EPA stats for {len(self._epa_cache)} teams: {list(self._epa_cache.keys())[:5]}...")
             
         except Exception as e:
-            logger.warning(f"Could not load EPA stats: {e}")
+            logger.error(f"Could not load EPA stats: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             self._epa_loaded = True  # Don't retry
     
     def get_team_epa(self, team_name: str) -> Dict[str, float]:

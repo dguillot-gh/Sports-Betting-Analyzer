@@ -1,0 +1,51 @@
+@page "/m/game-results"
+@layout MobileLayout
+@rendermode InteractiveServer
+@using MudBlazor
+
+<PageTitle>Game Results</PageTitle>
+
+<MudText Typo="Typo.h6" Class="mb-3">🏆 Game Results</MudText>
+
+<!-- Sport Toggle -->
+<MudButtonGroup Color="Color.Primary" Variant="Variant.Outlined" Class="mb-3">
+    <MudButton Variant="@(_sport == "nba" ? Variant.Filled : Variant.Outlined)"
+               OnClick="@(() => _sport = "nba")">NBA</MudButton>
+    <MudButton Variant="@(_sport == "nfl" ? Variant.Filled : Variant.Outlined)"
+               OnClick="@(() => _sport = "nfl")">NFL</MudButton>
+</MudButtonGroup>
+
+<MudText Typo="Typo.subtitle2" Class="mb-2">Recent Games</MudText>
+
+<!-- Sample game results -->
+<MudCard Class="mb-2" Elevation="1">
+    <MudCardContent Class="pa-3">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <div>
+                <MudText Typo="Typo.body2">Lakers 112 - 108 Celtics</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Dec 25, 2025</MudText>
+            </div>
+            <MudChip T="string" Size="Size.Small" Color="Color.Default">Final</MudChip>
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+<MudCard Class="mb-2" Elevation="1">
+    <MudCardContent Class="pa-3">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <div>
+                <MudText Typo="Typo.body2">Chiefs 28 - 24 Ravens</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Dec 24, 2025</MudText>
+            </div>
+            <MudChip T="string" Size="Size.Small" Color="Color.Default">Final</MudChip>
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+<MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
+    Full box scores available on desktop.
+</MudAlert>
+
+@code {
+    private string _sport = "nba";
+}

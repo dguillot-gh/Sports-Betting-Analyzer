@@ -1,0 +1,63 @@
+@page "/m/player-profiles"
+@layout MobileLayout
+@rendermode InteractiveServer
+@using MudBlazor
+
+<PageTitle>Players</PageTitle>
+
+<MudText Typo="Typo.h6" Class="mb-3">👤 Player Profiles</MudText>
+
+<!-- Search -->
+<MudTextField @bind-Value="_search" Placeholder="Search players..." 
+              Variant="Variant.Outlined" Dense="true" Class="mb-3"
+              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+
+<!-- Sport Toggle -->
+<MudButtonGroup Color="Color.Primary" Variant="Variant.Outlined" Class="mb-3">
+    <MudButton Variant="@(_sport == "nba" ? Variant.Filled : Variant.Outlined)"
+               OnClick="@(() => _sport = "nba")">NBA</MudButton>
+    <MudButton Variant="@(_sport == "nfl" ? Variant.Filled : Variant.Outlined)"
+               OnClick="@(() => _sport = "nfl")">NFL</MudButton>
+</MudButtonGroup>
+
+<!-- Sample Players -->
+<MudCard Class="mb-2" Elevation="1">
+    <MudCardContent Class="pa-3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+            <MudAvatar Color="Color.Primary">LJ</MudAvatar>
+            <div>
+                <MudText Typo="Typo.body1"><strong>LeBron James</strong></MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">LAL • SF • 25.2 PPG</MudText>
+            </div>
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+<MudCard Class="mb-2" Elevation="1">
+    <MudCardContent Class="pa-3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+            <MudAvatar Color="Color.Info">SC</MudAvatar>
+            <div>
+                <MudText Typo="Typo.body1"><strong>Stephen Curry</strong></MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">GSW • PG • 27.8 PPG</MudText>
+            </div>
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+<MudCard Class="mb-2" Elevation="1">
+    <MudCardContent Class="pa-3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+            <MudAvatar Color="Color.Warning">PM</MudAvatar>
+            <div>
+                <MudText Typo="Typo.body1"><strong>Patrick Mahomes</strong></MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">KC • QB • 285 YPG</MudText>
+            </div>
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    private string _search = "";
+    private string _sport = "nba";
+}
