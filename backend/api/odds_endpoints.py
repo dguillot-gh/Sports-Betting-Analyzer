@@ -131,3 +131,72 @@ async def analyze_all_games(
         "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False))
     }
 
+
+# =========== NFL ENDPOINTS ===========
+
+@router.get("/nfl")
+async def get_nfl_odds(
+    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from"),
+):
+    """
+    Get today's NFL betting odds from specified sportsbook.
+    """
+    from scripts.nfl_predictor import get_todays_nfl_odds
+    return await get_todays_nfl_odds(sportsbook)
+
+
+@router.post("/nfl/predict")
+async def predict_nfl_game(
+    home_team: str = Query(..., description="Home team name"),
+    away_team: str = Query(..., description="Away team name"),
+    spread: float = Query(None, description="Point spread (away team perspective)"),
+    over_under: float = Query(None, description="Over/under total"),
+    home_ml: int = Query(None, description="Home team moneyline"),
+    away_ml: int = Query(None, description="Away team moneyline")
+):
+    """
+    Predict NFL game outcome with value bet detection.
+    """
+    from scripts.nfl_predictor import analyze_nfl_matchup
+    return await analyze_nfl_matchup(home_team, away_team, spread, over_under, home_ml, away_ml)
+
+
+@router.post("/nfl/analyze-all")
+async def analyze_all_nfl_games(
+    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from")
+):
+    """
+    Fetch today's NFL games and run predictions on all of them.
+    """
+    from scripts.nfl_predictor import get_todays_nfl_odds, analyze_nfl_matchup
+    
+    odds_data = await get_todays_nfl_odds(sportsbook)
+    
+    if odds_data.get("error") or not odds_data.get("games"):
+        return odds_data
+    
+    analyzed_games = []
+    for game in odds_data["games"]:
+        try:
+            prediction = await analyze_nfl_matchup(
+                home_team=game.get("home_team", ""),
+                away_team=game.get("away_team", ""),
+                spread=game.get("spread"),
+                over_under=game.get("over_under"),
+                home_ml=game.get("home_moneyline"),
+                away_ml=game.get("away_moneyline")
+            )
+            analyzed_game = {**game, **prediction}
+            analyzed_games.append(analyzed_game)
+        except Exception as e:
+            logger.error(f"Error analyzing NFL game: {e}")
+            analyzed_games.append({**game, "prediction_error": str(e)})
+    
+    return {
+        "date": odds_data.get("date"),
+        "sportsbook": sportsbook,
+        "games": analyzed_games,
+        "count": len(analyzed_games),
+        "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False))
+    }
+

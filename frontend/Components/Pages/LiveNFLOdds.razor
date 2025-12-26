@@ -1,10 +1,10 @@
-@page "/live-odds"
+@page "/live-nfl-odds"
 @rendermode InteractiveServer
 @using MudBlazor
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 
-<PageTitle>Live NBA Odds - Sports Betting Analyzer</PageTitle>
+<PageTitle>Live NFL Odds - Sports Betting Analyzer</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
     <MudStack Spacing="4">
@@ -12,9 +12,9 @@
         <MudPaper Class="pa-4" Elevation="2">
             <div class="d-flex align-center justify-space-between flex-wrap" style="gap: 16px;">
                 <div class="d-flex align-center">
-                    <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Size="Size.Large" Color="Color.Primary" Class="mr-3" />
+                    <MudIcon Icon="@Icons.Material.Filled.SportsFootball" Size="Size.Large" Color="Color.Primary" Class="mr-3" />
                     <div>
-                        <MudText Typo="Typo.h5">Live NBA Odds & Predictions</MudText>
+                        <MudText Typo="Typo.h5">Live NFL Odds & Predictions</MudText>
                         <MudText Typo="Typo.caption" Color="Color.Secondary">Real-time odds with model analysis</MudText>
                     </div>
                 </div>
@@ -70,7 +70,7 @@
         @if (_analyzedGames.Any())
         {
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
-                @_analyzedGames.Count games analyzed for @DateTime.Today.ToString("MMM dd, yyyy") via @FormatBookName(_selectedSportsbook)
+                @_analyzedGames.Count games analyzed via @FormatBookName(_selectedSportsbook)
             </MudText>
             
             <MudGrid>
@@ -104,7 +104,6 @@
                             <MudCardContent Style="padding-top: 0;">
                                 <MudDivider Class="mb-3" />
                                 <MudGrid Spacing="2">
-                                    <!-- Moneyline -->
                                     <MudItem xs="4">
                                         <MudText Typo="Typo.overline" Color="Color.Secondary">MONEYLINE</MudText>
                                         <div class="d-flex flex-column">
@@ -119,7 +118,6 @@
                                         }
                                     </MudItem>
                                     
-                                    <!-- Spread -->
                                     <MudItem xs="4">
                                         <MudText Typo="Typo.overline" Color="Color.Secondary">SPREAD</MudText>
                                         <MudText Typo="Typo.body1">@(game.Spread.HasValue ? FormatSpread(game.Spread.Value) : "N/A")</MudText>
@@ -135,7 +133,6 @@
                                         }
                                     </MudItem>
                                     
-                                    <!-- O/U -->
                                     <MudItem xs="4">
                                         <MudText Typo="Typo.overline" Color="Color.Secondary">O/U TOTAL</MudText>
                                         <MudText Typo="Typo.body1">@(game.OverUnder.HasValue ? game.OverUnder.Value.ToString() : "N/A")</MudText>
@@ -152,7 +149,6 @@
                                     </MudItem>
                                 </MudGrid>
                                 
-                                <!-- Model Prediction Details -->
                                 @if (game.PredictedTotal.HasValue)
                                 {
                                     <MudDivider Class="my-2" />
@@ -173,7 +169,6 @@
         }
         else if (_games.Any() && !_isAnalyzing)
         {
-            <!-- Show basic odds before analysis -->
             <MudAlert Severity="Severity.Info" Class="mb-3">
                 Click <strong>Run Analysis</strong> to get predictions and value bet recommendations!
             </MudAlert>
@@ -228,7 +223,7 @@
         else if (!_isLoading)
         {
             <MudAlert Severity="Severity.Info">
-                No NBA games scheduled for today. Check back later!
+                No NFL games scheduled for today. Check back on game days!
             </MudAlert>
         }
 
@@ -236,39 +231,27 @@
         <MudExpansionPanels>
             <MudExpansionPanel Text="Kelly Criterion Calculator" Icon="@Icons.Material.Filled.Calculate">
                 <MudAlert Severity="Severity.Info" Class="mb-4" Dense="true">
-                    <strong>How to use:</strong> The Kelly Criterion calculates optimal bet sizing based on your edge vs the market.
+                    <strong>How to use:</strong> The Kelly Criterion calculates optimal bet sizing based on your edge.
                     <ol class="mt-2 mb-0" style="padding-left: 20px;">
                         <li><strong>Win Probability</strong> - Your estimated chance the bet wins (0.55 = 55%)</li>
-                        <li><strong>American Odds</strong> - The sportsbook line (e.g., -110 for favorites, +150 for underdogs)</li>
+                        <li><strong>American Odds</strong> - The sportsbook line (e.g., -110 or +150)</li>
                         <li><strong>Bankroll</strong> - Your total betting budget</li>
                     </ol>
-                    <MudText Typo="Typo.caption" Class="mt-2">
-                        💡 Tip: After running analysis above, use the model's predicted win probability from a game card.
-                    </MudText>
                 </MudAlert>
                 <MudGrid>
                     <MudItem xs="12" md="3">
-                        <MudTooltip Text="Your model's predicted probability (0-1). Example: 0.60 = 60% chance">
-                            <MudNumericField @bind-Value="_kellyWinProb" Label="Win Probability" 
-                                            Min="0" Max="1" Step="0.01" Format="P0"
-                                            HelperText="0.55 = 55%"
-                                            Variant="Variant.Outlined" />
-                        </MudTooltip>
+                        <MudNumericField @bind-Value="_kellyWinProb" Label="Win Probability" 
+                                        Min="0" Max="1" Step="0.01" HelperText="0.55 = 55%"
+                                        Variant="Variant.Outlined" />
                     </MudItem>
                     <MudItem xs="12" md="3">
-                        <MudTooltip Text="Sportsbook odds. Negative = favorite (-110), Positive = underdog (+150)">
-                            <MudNumericField @bind-Value="_kellyOdds" Label="American Odds"
-                                            HelperText="-110 or +150"
-                                            Variant="Variant.Outlined" />
-                        </MudTooltip>
+                        <MudNumericField @bind-Value="_kellyOdds" Label="American Odds"
+                                        HelperText="-110 or +150" Variant="Variant.Outlined" />
                     </MudItem>
                     <MudItem xs="12" md="3">
-                        <MudTooltip Text="Your total betting budget">
-                            <MudNumericField @bind-Value="_kellyBankroll" Label="Bankroll"
-                                            Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.AttachMoney"
-                                            HelperText="Total budget"
-                                            Variant="Variant.Outlined" />
-                        </MudTooltip>
+                        <MudNumericField @bind-Value="_kellyBankroll" Label="Bankroll"
+                                        Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.AttachMoney"
+                                        Variant="Variant.Outlined" />
                     </MudItem>
                     <MudItem xs="12" md="3" Class="d-flex align-end">
                         <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="CalculateKelly">
@@ -337,7 +320,7 @@
         try
         {
             var response = await Http.GetFromJsonAsync<OddsResponse>(
-                $"http://backend:8000/odds/nba?sportsbook={_selectedSportsbook}");
+                $"http://backend:8000/odds/nfl?sportsbook={_selectedSportsbook}");
             
             if (response?.Error != null)
             {
@@ -368,7 +351,7 @@
         try
         {
             var response = await Http.PostAsync(
-                $"http://backend:8000/odds/nba/analyze-all?sportsbook={_selectedSportsbook}", null);
+                $"http://backend:8000/odds/nfl/analyze-all?sportsbook={_selectedSportsbook}", null);
             
             if (response.IsSuccessStatusCode)
             {
@@ -416,8 +399,6 @@
         "betmgm" => "BetMGM",
         "pointsbet" => "PointsBet",
         "caesars" => "Caesars",
-        "wynn" => "Wynn",
-        "bet_rivers_ny" => "BetRivers NY",
         _ => book
     };
 
@@ -474,7 +455,6 @@
         [System.Text.Json.Serialization.JsonPropertyName("spread")] public double? Spread { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("over_under")] public double? OverUnder { get; set; }
         
-        // Predictions
         [System.Text.Json.Serialization.JsonPropertyName("predicted_winner")] public string? PredictedWinner { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("home_win_probability")] public double? HomeWinProbability { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("away_win_probability")] public double? AwayWinProbability { get; set; }
@@ -482,7 +462,6 @@
         [System.Text.Json.Serialization.JsonPropertyName("predicted_total")] public double? PredictedTotal { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("confidence_level")] public string? ConfidenceLevel { get; set; }
         
-        // Value indicators
         [System.Text.Json.Serialization.JsonPropertyName("ml_pick")] public string? MlPick { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("ml_value")] public bool MlValue { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("home_ml_edge")] public double? HomeMlEdge { get; set; }
