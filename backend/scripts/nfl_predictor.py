@@ -8,6 +8,7 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 import math
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -48,16 +49,93 @@ NFL_TEAM_MAPPINGS = {
 class NFLPredictor:
     """
     Simple NFL game predictor using team statistics.
-    Uses points per game and home-field advantage.
+    Uses points per game, home-field advantage, and EPA.
     """
     
     def __init__(self, db_connection=None):
         self.db = db_connection
         self._team_stats_cache: Dict[str, Dict] = {}
+        self._epa_cache: Dict[str, Dict] = {}
+        self._epa_loaded = False
+    
+    def _load_epa_stats(self):
+        """Load EPA stats from nflreadpy play-by-play data."""
+        if self._epa_loaded:
+            return
+        
+        try:
+            import nfl_data_py as nfl
+            
+            # Get current season play-by-play (2024-2025)
+            logger.info("Loading EPA data from nflreadpy...")
+            pbp = nfl.import_pbp_data([2024, 2025])
+            
+            # Calculate team EPA stats
+            for team in pbp['posteam'].dropna().unique():
+                # Offensive EPA (when team has ball)
+                off_plays = pbp[pbp['posteam'] == team]
+                off_epa = off_plays['epa'].mean() if len(off_plays) > 0 else 0.0
+                pass_epa = off_plays[off_plays['play_type'] == 'pass']['epa'].mean() if len(off_plays[off_plays['play_type'] == 'pass']) > 0 else 0.0
+                rush_epa = off_plays[off_plays['play_type'] == 'run']['epa'].mean() if len(off_plays[off_plays['play_type'] == 'run']) > 0 else 0.0
+                
+                # Defensive EPA (when opponent has ball)
+                def_plays = pbp[pbp['defteam'] == team]
+                def_epa = def_plays['epa'].mean() if len(def_plays) > 0 else 0.0
+                
+                self._epa_cache[team] = {
+                    'off_epa_per_play': round(off_epa, 3) if not np.isnan(off_epa) else 0.0,
+                    'def_epa_per_play': round(def_epa, 3) if not np.isnan(def_epa) else 0.0,
+                    'pass_epa': round(pass_epa, 3) if not np.isnan(pass_epa) else 0.0,
+                    'rush_epa': round(rush_epa, 3) if not np.isnan(rush_epa) else 0.0,
+                    'net_epa': round(off_epa - def_epa, 3) if not (np.isnan(off_epa) or np.isnan(def_epa)) else 0.0
+                }
+            
+            self._epa_loaded = True
+            logger.info(f"Loaded EPA stats for {len(self._epa_cache)} teams")
+            
+        except Exception as e:
+            logger.warning(f"Could not load EPA stats: {e}")
+            self._epa_loaded = True  # Don't retry
+    
+    def get_team_epa(self, team_name: str) -> Dict[str, float]:
+        """Get EPA stats for a team."""
+        self._load_epa_stats()
+        
+        # Try various team abbreviations
+        team = NFL_TEAM_MAPPINGS.get(team_name, team_name)
+        
+        # Map full names to abbreviations used in pbp data
+        abbr_map = {
+            'Arizona Cardinals': 'ARI', 'Atlanta Falcons': 'ATL', 'Baltimore Ravens': 'BAL',
+            'Buffalo Bills': 'BUF', 'Carolina Panthers': 'CAR', 'Chicago Bears': 'CHI',
+            'Cincinnati Bengals': 'CIN', 'Cleveland Browns': 'CLE', 'Dallas Cowboys': 'DAL',
+            'Denver Broncos': 'DEN', 'Detroit Lions': 'DET', 'Green Bay Packers': 'GB',
+            'Houston Texans': 'HOU', 'Indianapolis Colts': 'IND', 'Jacksonville Jaguars': 'JAX',
+            'Kansas City Chiefs': 'KC', 'Las Vegas Raiders': 'LV', 'Los Angeles Chargers': 'LAC',
+            'Los Angeles Rams': 'LA', 'Miami Dolphins': 'MIA', 'Minnesota Vikings': 'MIN',
+            'New England Patriots': 'NE', 'New Orleans Saints': 'NO', 'New York Giants': 'NYG',
+            'New York Jets': 'NYJ', 'Philadelphia Eagles': 'PHI', 'Pittsburgh Steelers': 'PIT',
+            'San Francisco 49ers': 'SF', 'Seattle Seahawks': 'SEA', 'Tampa Bay Buccaneers': 'TB',
+            'Tennessee Titans': 'TEN', 'Washington Commanders': 'WAS'
+        }
+        
+        abbr = abbr_map.get(team, team)
+        
+        if abbr in self._epa_cache:
+            return self._epa_cache[abbr]
+        
+        # Default EPA values
+        return {
+            'off_epa_per_play': 0.0,
+            'def_epa_per_play': 0.0,
+            'pass_epa': 0.0,
+            'rush_epa': 0.0,
+            'net_epa': 0.0
+        }
     
     def get_team_stats(self, team_name: str) -> Dict[str, float]:
         """
-        Get team statistics. Falls back to league averages if not available.
+        Get team statistics including EPA.
         """
         team = NFL_TEAM_MAPPINGS.get(team_name, team_name)
         
@@ -74,6 +152,10 @@ class NFLPredictor:
             'home_win_pct': 0.55,
             'away_win_pct': 0.45,
         }
+        
+        # Add EPA stats
+        epa = self.get_team_epa(team)
+        stats.update(epa)
         
         self._team_stats_cache[team] = stats
         return stats
@@ -236,5 +318,88 @@ async def analyze_nfl_matchup(home_team: str, away_team: str,
     
     prediction['value_bets'] = value_bets
     prediction['has_value'] = len(value_bets) > 0
+    prediction['model'] = 'simple'
+    
+    # Add EPA breakdown for display
+    home_epa = predictor.get_team_epa(home_team)
+    away_epa = predictor.get_team_epa(away_team)
+    prediction['epa_breakdown'] = {
+        'home': {
+            'team': home_team,
+            'off_epa': home_epa.get('off_epa_per_play', 0),
+            'def_epa': home_epa.get('def_epa_per_play', 0),
+            'net_epa': home_epa.get('net_epa', 0)
+        },
+        'away': {
+            'team': away_team,
+            'off_epa': away_epa.get('off_epa_per_play', 0),
+            'def_epa': away_epa.get('def_epa_per_play', 0),
+            'net_epa': away_epa.get('net_epa', 0)
+        },
+        'epa_edge': home_team if home_epa.get('net_epa', 0) > away_epa.get('net_epa', 0) else away_team
+    }
     
     return prediction
+
+
+async def analyze_nfl_matchup_dual(home_team: str, away_team: str, 
+                                   spread: float = None, over_under: float = None,
+                                   home_ml: int = None, away_ml: int = None) -> Dict[str, Any]:
+    """
+    NFL matchup analysis with BOTH simple and XGBoost models.
+    Returns predictions from both models for side-by-side comparison.
+    """
+    # Get simple model prediction
+    simple_pred = await analyze_nfl_matchup(home_team, away_team, spread, over_under, home_ml, away_ml)
+    
+    # Try to get XGBoost prediction
+    xgb_pred = None
+    try:
+        from scripts.nfl_xgb_trainer import predict_nfl_xgb
+        predictor = NFLPredictor()
+        home_stats = predictor.get_team_stats(home_team)
+        away_stats = predictor.get_team_stats(away_team)
+        
+        xgb_result = await predict_nfl_xgb(home_team, away_team, home_stats, away_stats)
+        
+        if xgb_result and "error" not in xgb_result:
+            xgb_pred = {
+                'model': 'xgboost',
+                'home_win_probability': xgb_result.get('home_win_probability'),
+                'away_win_probability': xgb_result.get('away_win_probability'),
+                'predicted_total': xgb_result.get('predicted_total'),
+                'predicted_winner': home_team if xgb_result.get('home_win_probability', 0) > 0.5 else away_team,
+            }
+            
+            # Calculate XGBoost value vs odds
+            if home_ml and away_ml:
+                def implied_prob(odds):
+                    if odds > 0:
+                        return 100 / (odds + 100)
+                    else:
+                        return abs(odds) / (abs(odds) + 100)
+                
+                home_implied = implied_prob(home_ml)
+                xgb_home_prob = xgb_result.get('home_win_probability', 0.5)
+                xgb_edge = xgb_home_prob - home_implied
+                xgb_pred['home_ml_edge'] = round(xgb_edge * 100, 1)
+                xgb_pred['ml_value'] = abs(xgb_edge) >= 0.05
+                xgb_pred['ml_pick'] = home_team if xgb_edge > 0 else away_team
+                
+    except Exception as e:
+        logger.warning(f"NFL XGBoost prediction failed: {e}")
+        xgb_pred = {'model': 'xgboost', 'error': 'Not available - train model first'}
+    
+    # Return combined result
+    return {
+        'home_team': home_team,
+        'away_team': away_team,
+        'simple_model': simple_pred,
+        'xgboost_model': xgb_pred,
+        'home_moneyline': home_ml,
+        'away_moneyline': away_ml,
+        'spread': spread,
+        'over_under': over_under,
+        **simple_pred
+    }
+

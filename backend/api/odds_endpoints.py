@@ -85,6 +85,32 @@ async def predict_game(
     return await analyze_matchup(home_team, away_team, spread, over_under, home_ml, away_ml)
 
 
+@router.post("/nba/predict-dual")
+async def predict_game_dual(
+    home_team: str = Query(..., description="Home team name"),
+    away_team: str = Query(..., description="Away team name"),
+    spread: float = Query(None, description="Point spread"),
+    over_under: float = Query(None, description="Over/under total"),
+    home_ml: int = Query(None, description="Home team moneyline"),
+    away_ml: int = Query(None, description="Away team moneyline")
+):
+    """
+    Predict with BOTH simple and XGBoost models for comparison.
+    """
+    from scripts.nba_predictor import analyze_matchup_dual
+    return await analyze_matchup_dual(home_team, away_team, spread, over_under, home_ml, away_ml)
+
+
+@router.post("/nba/train")
+async def train_nba_model(epochs: int = Query(500, description="Training epochs")):
+    """
+    Train XGBoost model on historical data.
+    """
+    from scripts.nba_xgb_trainer import train_nba_model
+    return await train_nba_model(epochs)
+
+
+
 @router.post("/nba/analyze-all")
 async def analyze_all_games(
     sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from")
@@ -199,4 +225,29 @@ async def analyze_all_nfl_games(
         "count": len(analyzed_games),
         "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False))
     }
+
+
+@router.post("/nfl/train")
+async def train_nfl_model(epochs: int = Query(500, description="Training epochs")):
+    """
+    Train NFL XGBoost model on historical data.
+    """
+    from scripts.nfl_xgb_trainer import train_nfl_model
+    return await train_nfl_model(epochs)
+
+
+@router.post("/nfl/predict-dual")
+async def predict_nfl_game_dual(
+    home_team: str = Query(..., description="Home team name"),
+    away_team: str = Query(..., description="Away team name"),
+    spread: float = Query(None, description="Point spread"),
+    over_under: float = Query(None, description="Over/under total"),
+    home_ml: int = Query(None, description="Home team moneyline"),
+    away_ml: int = Query(None, description="Away team moneyline")
+):
+    """
+    Predict NFL game with BOTH simple and XGBoost models.
+    """
+    from scripts.nfl_predictor import analyze_nfl_matchup_dual
+    return await analyze_nfl_matchup_dual(home_team, away_team, spread, over_under, home_ml, away_ml)
 

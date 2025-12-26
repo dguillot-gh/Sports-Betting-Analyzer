@@ -39,6 +39,14 @@
                         }
                         Run Analysis
                     </MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="TrainModel"
+                               Disabled="_isTraining" StartIcon="@Icons.Material.Filled.ModelTraining">
+                        @if (_isTraining)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Train XGB
+                    </MudButton>
                 </div>
             </div>
         </MudPaper>
@@ -52,6 +60,43 @@
         {
             <MudAlert Severity="Severity.Error">@_errorMessage</MudAlert>
         }
+
+        <!-- Help & Info Section -->
+        <MudExpansionPanels>
+            <MudExpansionPanel Text="📖 How This Works" Icon="@Icons.Material.Filled.Help" Dense="true">
+                <MudGrid>
+                    <MudItem xs="12" md="4">
+                        <MudText Typo="Typo.subtitle2" Color="Color.Primary">🎯 Simple Model</MudText>
+                        <MudText Typo="Typo.body2">
+                            Uses basic team stats (PPG, opponent PPG, win %) to estimate win probability.
+                            Quick baseline prediction.
+                        </MudText>
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudText Typo="Typo.subtitle2" Color="Color.Info">🤖 XGBoost Model</MudText>
+                        <MudText Typo="Typo.body2">
+                            Machine learning model trained on 6+ years of real NFL games (2018-2024).
+                            <strong>Click "Train XGB"</strong> to create/update the model. Training takes ~30 seconds.
+                        </MudText>
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudText Typo="Typo.subtitle2" Color="Color.Success">📊 EPA (Expected Points Added)</MudText>
+                        <MudText Typo="Typo.body2">
+                            Measures per-play efficiency from play-by-play data:<br/>
+                            • <strong>Off EPA</strong>: Higher = better offense (positive is good)<br/>
+                            • <strong>Def EPA</strong>: Lower = better defense (negative is good)<br/>
+                            • <strong>Net EPA</strong>: Off minus Def (higher wins more)
+                        </MudText>
+                    </MudItem>
+                </MudGrid>
+                <MudDivider Class="my-3" />
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    <strong>Training:</strong> Model trains from nflreadpy data when you click "Train XGB".
+                    EPA data is fetched live from 2024 play-by-play each time you run analysis.
+                    Re-train periodically (weekly) for best accuracy.
+                </MudAlert>
+            </MudExpansionPanel>
+        </MudExpansionPanels>
 
         <!-- Value Bets Summary -->
         @if (_analyzedGames.Any(g => g.HasValue))
@@ -160,6 +205,59 @@
                                             Pred Margin: <strong>@(game.PredictedMargin > 0 ? "+" : "")@game.PredictedMargin</strong>
                                         </MudText>
                                     </div>
+                                }
+                                
+                                @if (game.XgbModel != null)
+                                {
+                                    <MudDivider Class="my-2" />
+                                    <MudText Typo="Typo.overline" Color="Color.Secondary" Class="mb-2">MODEL COMPARISON</MudText>
+                                    <MudSimpleTable Dense="true" Hover="true" Style="background: transparent;">
+                                        <thead><tr><th></th><th>Simple</th><th>XGBoost</th></tr></thead>
+                                        <tbody>
+                                            <tr>
+                                                <td><MudText Typo="Typo.caption">Home Win%</MudText></td>
+                                                <td><strong>@(((game.HomeWinProbability ?? 0) * 100).ToString("F0"))%</strong></td>
+                                                <td style="color: #2196f3;">@(game.XgbModel.HomeWinProb.HasValue ? $"{(game.XgbModel.HomeWinProb.Value * 100):F0}%" : "N/A")</td>
+                                            </tr>
+                                            <tr>
+                                                <td><MudText Typo="Typo.caption">Pick</MudText></td>
+                                                <td>@game.PredictedWinner</td>
+                                                <td style="color: #2196f3;">@(game.XgbModel.PredictedWinner ?? "N/A")</td>
+                                            </tr>
+                                        </tbody>
+                                    </MudSimpleTable>
+                                }
+                                
+                                @if (game.EpaBreakdown != null)
+                                {
+                                    <MudDivider Class="my-2" />
+                                    <MudText Typo="Typo.overline" Color="Color.Secondary" Class="mb-2">📊 EPA ANALYSIS</MudText>
+                                    <MudSimpleTable Dense="true" Hover="true" Style="background: transparent;">
+                                        <thead><tr><th></th><th>@game.AwayTeam</th><th>@game.HomeTeam</th></tr></thead>
+                                        <tbody>
+                                            <tr>
+                                                <td><MudText Typo="Typo.caption">Off EPA/Play</MudText></td>
+                                                <td style="@GetEpaStyle(game.EpaBreakdown.AwayOffEpa)">@FormatEpa(game.EpaBreakdown.AwayOffEpa)</td>
+                                                <td style="@GetEpaStyle(game.EpaBreakdown.HomeOffEpa)">@FormatEpa(game.EpaBreakdown.HomeOffEpa)</td>
+                                            </tr>
+                                            <tr>
+                                                <td><MudText Typo="Typo.caption">Def EPA/Play</MudText></td>
+                                                <td style="@GetDefEpaStyle(game.EpaBreakdown.AwayDefEpa)">@FormatEpa(game.EpaBreakdown.AwayDefEpa)</td>
+                                                <td style="@GetDefEpaStyle(game.EpaBreakdown.HomeDefEpa)">@FormatEpa(game.EpaBreakdown.HomeDefEpa)</td>
+                                            </tr>
+                                            <tr style="font-weight: bold;">
+                                                <td><MudText Typo="Typo.caption">Net EPA</MudText></td>
+                                                <td style="@GetEpaStyle(game.EpaBreakdown.AwayNetEpa)">@FormatEpa(game.EpaBreakdown.AwayNetEpa)</td>
+                                                <td style="@GetEpaStyle(game.EpaBreakdown.HomeNetEpa)">@FormatEpa(game.EpaBreakdown.HomeNetEpa)</td>
+                                            </tr>
+                                        </tbody>
+                                    </MudSimpleTable>
+                                    @if (!string.IsNullOrEmpty(game.EpaBreakdown.EpaEdge))
+                                    {
+                                        <MudChip T="string" Color="Color.Info" Size="Size.Small" Class="mt-2">
+                                            EPA Edge: @game.EpaBreakdown.EpaEdge
+                                        </MudChip>
+                                    }
                                 }
                             </MudCardContent>
                         </MudCard>
@@ -293,6 +391,7 @@
 @code {
     private bool _isLoading = false;
     private bool _isAnalyzing = false;
+    private bool _isTraining = false;
     private string _errorMessage = "";
     private string _selectedSportsbook = "fanduel";
     private List<string> _sportsbooks = new() { "fanduel", "draftkings", "betmgm", "pointsbet", "caesars" };
@@ -379,6 +478,38 @@
         }
     }
 
+    private async Task TrainModel()
+    {
+        _isTraining = true;
+        StateHasChanged();
+        
+        try
+        {
+            var response = await Http.PostAsync("http://backend:8000/odds/nfl/train?epochs=500", null);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<TrainingResult>();
+                if (result != null)
+                {
+                    Snackbar.Add($"NFL XGBoost trained! ML Accuracy: {result.MlAccuracy}%, O/U MAE: {result.OuMae} pts", Severity.Success);
+                }
+            }
+            else
+            {
+                Snackbar.Add("Training failed", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Training error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isTraining = false;
+        }
+    }
+
     private async Task CalculateKelly()
     {
         try
@@ -417,6 +548,24 @@
     {
         if (!odds.HasValue) return Color.Default;
         return odds.Value < 0 ? Color.Warning : Color.Success;
+    }
+
+    private string FormatEpa(double epa)
+    {
+        return epa >= 0 ? $"+{epa:F3}" : $"{epa:F3}";
+    }
+
+    private string GetEpaStyle(double epa)
+    {
+        return epa > 0 ? "color: #4caf50; font-weight: bold;" : 
+               epa < 0 ? "color: #f44336;" : "";
+    }
+
+    private string GetDefEpaStyle(double epa)
+    {
+        // Lower defensive EPA is better (opponent scores less)
+        return epa < 0 ? "color: #4caf50; font-weight: bold;" : 
+               epa > 0 ? "color: #f44336;" : "";
     }
 
     // Models
@@ -476,6 +625,38 @@
         
         [System.Text.Json.Serialization.JsonPropertyName("has_value")] public bool HasValue { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("value_bets")] public List<string> ValueBets { get; set; } = new();
+        
+        [System.Text.Json.Serialization.JsonPropertyName("xgboost_model")] public XgbModelData? XgbModel { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("epa_breakdown")] public EpaBreakdown? EpaBreakdown { get; set; }
+    }
+    
+    public class EpaBreakdown
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("home")] public EpaTeamData? Home { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("away")] public EpaTeamData? Away { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("epa_edge")] public string? EpaEdge { get; set; }
+        
+        public double HomeOffEpa => Home?.OffEpa ?? 0;
+        public double HomeDefEpa => Home?.DefEpa ?? 0;
+        public double HomeNetEpa => Home?.NetEpa ?? 0;
+        public double AwayOffEpa => Away?.OffEpa ?? 0;
+        public double AwayDefEpa => Away?.DefEpa ?? 0;
+        public double AwayNetEpa => Away?.NetEpa ?? 0;
+    }
+    
+    public class EpaTeamData
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("team")] public string? Team { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("off_epa")] public double OffEpa { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("def_epa")] public double DefEpa { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("net_epa")] public double NetEpa { get; set; }
+    }
+    
+    public class XgbModelData
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("home_win_probability")] public double? HomeWinProb { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("predicted_winner")] public string? PredictedWinner { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("error")] public string? Error { get; set; }
     }
     
     public class KellyResult
@@ -484,5 +665,12 @@
         [System.Text.Json.Serialization.JsonPropertyName("model_edge")] public double ModelEdge { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("recommended_bet")] public double RecommendedBet { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("bet_percentage")] public double BetPercentage { get; set; }
+    }
+    
+    public class TrainingResult
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("ml_accuracy")] public double MlAccuracy { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("ou_mae")] public double OuMae { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("samples_trained")] public int SamplesTrained { get; set; }
     }
 }

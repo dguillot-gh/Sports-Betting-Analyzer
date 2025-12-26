@@ -258,5 +258,70 @@ async def analyze_matchup(home_team: str, away_team: str,
     
     prediction['value_bets'] = value_bets
     prediction['has_value'] = len(value_bets) > 0
+    prediction['model'] = 'simple'  # Tag as simple model
     
     return prediction
+
+
+async def analyze_matchup_dual(home_team: str, away_team: str, 
+                               spread: float = None, over_under: float = None,
+                               home_ml: int = None, away_ml: int = None) -> Dict[str, Any]:
+    """
+    Comprehensive matchup analysis with BOTH simple and XGBoost models.
+    Returns predictions from both models for side-by-side comparison.
+    """
+    # Get simple model prediction
+    simple_pred = await analyze_matchup(home_team, away_team, spread, over_under, home_ml, away_ml)
+    
+    # Try to get XGBoost prediction
+    xgb_pred = None
+    try:
+        from scripts.nba_xgb_trainer import predict_with_xgb
+        predictor = NBAPredictor()
+        home_stats = await predictor.get_team_stats(home_team)
+        away_stats = await predictor.get_team_stats(away_team)
+        
+        xgb_result = await predict_with_xgb(home_team, away_team, home_stats, away_stats)
+        
+        if xgb_result and "error" not in xgb_result:
+            xgb_pred = {
+                'model': 'xgboost',
+                'home_win_probability': xgb_result.get('home_win_probability'),
+                'away_win_probability': xgb_result.get('away_win_probability'),
+                'predicted_total': xgb_result.get('predicted_total'),
+                'predicted_winner': home_team if xgb_result.get('home_win_probability', 0) > 0.5 else away_team,
+            }
+            
+            # Calculate XGBoost value vs odds
+            if home_ml and away_ml:
+                def implied_prob(odds):
+                    if odds > 0:
+                        return 100 / (odds + 100)
+                    else:
+                        return abs(odds) / (abs(odds) + 100)
+                
+                home_implied = implied_prob(home_ml)
+                xgb_home_prob = xgb_result.get('home_win_probability', 0.5)
+                xgb_edge = xgb_home_prob - home_implied
+                xgb_pred['home_ml_edge'] = round(xgb_edge * 100, 1)
+                xgb_pred['ml_value'] = abs(xgb_edge) >= 0.05
+                xgb_pred['ml_pick'] = home_team if xgb_edge > 0 else away_team
+                
+    except Exception as e:
+        logger.warning(f"XGBoost prediction failed: {e}")
+        xgb_pred = {'model': 'xgboost', 'error': 'Not available - train model first'}
+    
+    # Return combined result
+    return {
+        'home_team': home_team,
+        'away_team': away_team,
+        'simple_model': simple_pred,
+        'xgboost_model': xgb_pred,
+        'home_moneyline': home_ml,
+        'away_moneyline': away_ml,
+        'spread': spread,
+        'over_under': over_under,
+        # Use simple model for main display, XGBoost for comparison
+        **simple_pred
+    }
+
