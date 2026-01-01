@@ -139,6 +139,18 @@
                         @if (status != null)
                         {
                             <MudStack Spacing="2">
+                                @* Last Import Summary *@
+                                @{
+                                    var lastImport = status.Datasets?.Where(d => !string.IsNullOrEmpty(d.LastUpdated))
+                                                          .OrderByDescending(d => d.LastUpdated).FirstOrDefault();
+                                }
+                                @if (lastImport != null)
+                                {
+                                    <MudAlert Severity="Severity.Success" Dense="true" Class="mb-2">
+                                        <strong>Last Import:</strong> @FormatDate(lastImport.LastUpdated)
+                                    </MudAlert>
+                                }
+                                
                                 <!-- Datasets List -->
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">CONFIGURED DATASETS</MudText>
                                 

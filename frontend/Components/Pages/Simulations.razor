@@ -1,0 +1,394 @@
+@page "/simulations"
+@page "/predictions"
+@page "/simulation"
+@page "/advanced-predictions"
+@rendermode InteractiveServer
+@using SportsBettingAnalyzer.Services
+@using System.Text.Json
+@inject PythonMLServiceClient MLClient
+@inject ISnackbar Snackbar
+@inject ILogger<Simulations> Logger
+@inject SimulationStateService SimulationState
+@inject FileExportService FileExportService
+
+<PageTitle>Race Simulations & Predictions</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" GutterBottom="true">Race Simulations & Predictions</MudText>
+    <MudText Typo="Typo.body1" Class="mb-4">NASCAR predictions, interactive simulator, and Monte Carlo simulations</MudText>
+
+    <MudTabs @bind-ActivePanelIndex="_activeTab" Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+        <!-- Tab 1: Quick Predict -->
+        <MudTabPanel Text="Quick Predict" Icon="@Icons.Material.Filled.FlashOn">
+            @if (!_isPythonServiceAvailable)
+            {
+                <MudAlert Severity="Severity.Error" Class="mb-4">Python ML Service is not available.</MudAlert>
+            }
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudCard Elevation="2">
+                        <MudCardHeader>
+                            <MudText Typo="Typo.h6">Make a Prediction</MudText>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            <MudStack Spacing="3">
+                                <MudSelect @bind-Value="_nascarSeries" Label="Series" Dense="true">
+                                    <MudSelectItem Value="@("cup")">Cup Series</MudSelectItem>
+                                    <MudSelectItem Value="@("truck")">Truck Series</MudSelectItem>
+                                    <MudSelectItem Value="@("xfinity")">Xfinity Series</MudSelectItem>
+                                </MudSelect>
+                                <MudSelect @bind-Value="_predictionTask" Label="Prediction Type" Dense="true">
+                                    <MudSelectItem Value="@("classification")">Win Probability</MudSelectItem>
+                                    <MudSelectItem Value="@("regression")">Finishing Position</MudSelectItem>
+                                </MudSelect>
+                                <MudDivider />
+                                <MudTextField @bind-Value="_driver" Label="Driver Name" />
+                                <MudTextField @bind-Value="_track" Label="Track Name" />
+                                <MudTextField @bind-Value="_trackType" Label="Track Type" Hint="e.g., superspeedway, short track, road course" />
+                                <MudNumericField @bind-Value="_year" Label="Season Year" Min="1949" Max="2025" />
+                                <MudNumericField @bind-Value="_startPos" Label="Starting Position" Min="1" Max="40" />
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" 
+                                           OnClick="MakeQuickPrediction" Disabled="@(_isPredicting || string.IsNullOrEmpty(_driver))">
+                                    @if (_isPredicting) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                                    Get Prediction
+                                </MudButton>
+                            </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    @if (_predictionResult != null)
+                    {
+                        <MudCard Elevation="2">
+                            <MudCardHeader><MudText Typo="Typo.h6">Prediction Results</MudText></MudCardHeader>
+                            <MudCardContent>
+                                <MudAlert Severity="Severity.Success" Class="mb-3">Prediction completed!</MudAlert>
+                                <MudText Typo="Typo.subtitle2">Driver: <strong>@_driver</strong></MudText>
+                                <MudText Typo="Typo.caption" Class="mb-3">Track: @_track (@_trackType)</MudText>
+                                <MudDivider Class="my-3" />
+                                @if (_predictionTask == "classification")
+                                {
+                                    var prob = (_predictionResult.Probability ?? 0.5) * 100;
+                                    <MudText Typo="Typo.h5">Win Probability: <strong>@prob.ToString("F1")%</strong></MudText>
+                                    <MudProgressLinear Color="@(prob >= 50 ? Color.Success : prob >= 30 ? Color.Warning : Color.Error)" Value="@prob" Class="my-3" />
+                                }
+                                else
+                                {
+                                    var position = Convert.ToInt32(_predictionResult.Prediction);
+                                    <MudText Typo="Typo.h5">Predicted Finish: <MudChip T="string" Color="@(position <= 5 ? Color.Success : position <= 10 ? Color.Info : Color.Warning)">P@position</MudChip></MudText>
+                                }
+                            </MudCardContent>
+                        </MudCard>
+                    }
+                    else
+                    {
+                        <MudCard Elevation="1"><MudCardContent Class="pa-8 text-center">
+                            <MudText Color="Color.Secondary">Fill in race details and click "Get Prediction"</MudText>
+                        </MudCardContent></MudCard>
+                    }
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
+        <!-- Tab 2: Interactive Simulator -->
+        <MudTabPanel Text="Interactive Simulator" Icon="@Icons.Material.Filled.Tune">
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6" GutterBottom="true">Model Configuration</MudText>
+                        <MudSelect T="string" Label="Series" @bind-Value="_simSeries" Variant="Variant.Outlined" Class="mb-3">
+                            <MudSelectItem Value="@("cup")">Cup</MudSelectItem>
+                            <MudSelectItem Value="@("truck")">Truck</MudSelectItem>
+                            <MudSelectItem Value="@("xfinity")">Xfinity</MudSelectItem>
+                        </MudSelect>
+                        <MudSelect T="string" Label="Task" @bind-Value="_simTask" Variant="Variant.Outlined" Class="mb-3">
+                            <MudSelectItem Value="@("classification")">Classification (Win/Loss)</MudSelectItem>
+                            <MudSelectItem Value="@("regression")">Regression (Position)</MudSelectItem>
+                        </MudSelect>
+                        <MudDivider Class="my-4" />
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadSimFeatures" 
+                                   Disabled="@_isLoadingSimFeatures" FullWidth="true" Class="mb-2">
+                            @(_isLoadingSimFeatures ? "Loading..." : "Load Features")
+                        </MudButton>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" md="8">
+                    <MudPaper Class="pa-4" Style="min-height: 400px;">
+                        <MudText Typo="Typo.h6" GutterBottom="true">Feature Inputs</MudText>
+                        @if (_isLoadingSimFeatures)
+                        {
+                            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                        }
+                        else if (_simFeaturesLoaded)
+                        {
+                            <MudGrid>
+                                @foreach (var feature in _simCategoricalFeatures.Take(6))
+                                {
+                                    <MudItem xs="12" sm="6">
+                                        <MudSelect T="string" Label="@FormatLabel(feature)" @bind-Value="_simCategoricalInputs[feature]" 
+                                                   Variant="Variant.Outlined" Dense="true">
+                                            @if (_simFeatureValues.ContainsKey(feature))
+                                            {
+                                                @foreach (var val in _simFeatureValues[feature].Take(50))
+                                                {
+                                                    <MudSelectItem Value="@val.ToString()">@val</MudSelectItem>
+                                                }
+                                            }
+                                        </MudSelect>
+                                    </MudItem>
+                                }
+                                @foreach (var feature in _simNumericFeatures.Take(6))
+                                {
+                                    <MudItem xs="12" sm="6">
+                                        <MudNumericField T="double?" Label="@FormatLabel(feature)" @bind-Value="_simNumericInputs[feature]" 
+                                                         Variant="Variant.Outlined" Dense="true" />
+                                    </MudItem>
+                                }
+                            </MudGrid>
+                            <MudDivider Class="my-4" />
+                            <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="RunSimPrediction" 
+                                       Disabled="@_isSimPredicting" FullWidth="true" Size="Size.Large">
+                                @(_isSimPredicting ? "Predicting..." : "Run Prediction")
+                            </MudButton>
+                        }
+                        else
+                        {
+                            <MudText Color="Color.Secondary">Click "Load Features" to start.</MudText>
+                        }
+                        @if (_simPredictionResult != null)
+                        {
+                            <MudPaper Class="pa-4 mt-4" Elevation="4">
+                                <MudText Typo="Typo.h5" Color="Color.Primary">Prediction: @_simPredictionResult.Prediction</MudText>
+                                @if (_simPredictionResult.Probability.HasValue)
+                                {
+                                    <MudText>Probability: @($"{_simPredictionResult.Probability:P1}")</MudText>
+                                }
+                            </MudPaper>
+                        }
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
+        <!-- Tab 3: Monte Carlo -->
+        <MudTabPanel Text="Monte Carlo" Icon="@Icons.Material.Filled.Casino">
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6" Class="mb-3">Configuration</MudText>
+                        <MudSelect T="int" Label="Year" @bind-Value="_mcYear" Variant="Variant.Outlined" Class="mb-4">
+                            @foreach (var year in _mcYears) { <MudSelectItem Value="@year">@year</MudSelectItem> }
+                        </MudSelect>
+                        <MudSelect T="string" Label="Track Type" @bind-Value="_mcTrackType" Variant="Variant.Outlined" Class="mb-4">
+                            <MudSelectItem Value="@("Intermediate")">Intermediate</MudSelectItem>
+                            <MudSelectItem Value="@("Short Track")">Short Track</MudSelectItem>
+                            <MudSelectItem Value="@("Superspeedway")">Superspeedway</MudSelectItem>
+                            <MudSelectItem Value="@("Road Course")">Road Course</MudSelectItem>
+                        </MudSelect>
+                        <MudNumericField @bind-Value="_mcNumSimulations" Label="Simulations" Variant="Variant.Outlined" 
+                                         Min="100" Max="10000" Step="100" Class="mb-4" />
+                        <MudDivider Class="my-4" />
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">Driver Selection</MudText>
+                        <div class="d-flex gap-2 mb-2">
+                            <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="MCSelectAll">All</MudButton>
+                            <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="MCDeselectAll">None</MudButton>
+                            <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="MCSelectTop20">Top 20</MudButton>
+                        </div>
+                        <MudText Typo="Typo.caption" Class="mb-2">Selected: @_mcSelectedDrivers.Count()</MudText>
+                        <MudSelect T="string" Label="Drivers" MultiSelection="true" @bind-SelectedValues="_mcSelectedDrivers" 
+                                   Variant="Variant.Outlined" Class="mb-4">
+                            @foreach (var driver in _mcAllDrivers) { <MudSelectItem Value="@driver">@driver</MudSelectItem> }
+                        </MudSelect>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="RunMonteCarlo" 
+                                   Disabled="@(_mcIsLoading || !_mcSelectedDrivers.Any())">
+                            @if (_mcIsLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                            Run Simulation
+                        </MudButton>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" md="8">
+                    @if (_mcResponse != null)
+                    {
+                        <MudPaper Class="pa-4">
+                            <div class="d-flex justify-space-between align-center mb-4">
+                                <MudText Typo="Typo.h6">Results - @_mcResponse.Metadata.Simulations simulations</MudText>
+                                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportMCResults">Export</MudButton>
+                            </div>
+                            <MudTable Items="@_mcResponse.Results" Dense="true" Hover="true" Striped="true">
+                                <HeaderContent>
+                                    <MudTh>Driver</MudTh><MudTh>Win %</MudTh><MudTh>Top 5 %</MudTh><MudTh>Top 10 %</MudTh><MudTh>Avg Finish</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd><b>@context.Driver</b></MudTd>
+                                    <MudTd><MudText Color="@(context.WinProb > 0.1 ? Color.Success : Color.Default)">@($"{context.WinProb:P1}")</MudText></MudTd>
+                                    <MudTd>@($"{context.Top5Prob:P1}")</MudTd>
+                                    <MudTd>@($"{context.Top10Prob:P1}")</MudTd>
+                                    <MudTd>@($"{context.AvgFinish:F1}")</MudTd>
+                                </RowTemplate>
+                                <PagerContent><MudTablePager /></PagerContent>
+                            </MudTable>
+                        </MudPaper>
+                    }
+                    else if (!_mcIsLoading)
+                    {
+                        <MudPaper Class="pa-16 d-flex justify-center align-center">
+                            <MudText Typo="Typo.h6" Color="Color.Secondary">Select drivers and run simulation</MudText>
+                        </MudPaper>
+                    }
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
+        <!-- Tab 4: NFL Season Simulator (Placeholder) -->
+        <MudTabPanel Text="NFL Season" Icon="@Icons.Material.Filled.SportsFootball" Disabled="true">
+            <MudAlert Severity="Severity.Info">NFL Season Simulator (nflseedR) coming soon!</MudAlert>
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
+
+@code {
+    private int _activeTab = 0;
+    private bool _isPythonServiceAvailable = true;
+
+    // Quick Predict State
+    private string _nascarSeries = "cup";
+    private string _predictionTask = "classification";
+    private bool _isPredicting = false;
+    private PredictResponse? _predictionResult;
+    private string _driver = "";
+    private string _track = "";
+    private string _trackType = "";
+    private int _year = 2025;
+    private int _startPos = 15;
+
+    // Interactive Simulator State
+    private string _simSeries = "cup";
+    private string _simTask = "classification";
+    private bool _isLoadingSimFeatures = false;
+    private bool _simFeaturesLoaded = false;
+    private bool _isSimPredicting = false;
+    private List<string> _simCategoricalFeatures = new();
+    private List<string> _simNumericFeatures = new();
+    private Dictionary<string, List<object>> _simFeatureValues = new();
+    private Dictionary<string, string> _simCategoricalInputs = new();
+    private Dictionary<string, double?> _simNumericInputs = new();
+    private PredictResponse? _simPredictionResult;
+
+    // Monte Carlo State
+    private int _mcYear = DateTime.Now.Year;
+    private string _mcTrackType = "Intermediate";
+    private int _mcNumSimulations = 1000;
+    private List<int> _mcYears = Enumerable.Range(2018, DateTime.Now.Year - 2018 + 1).Reverse().ToList();
+    private List<string> _mcAllDrivers = new();
+    private IEnumerable<string> _mcSelectedDrivers = new HashSet<string>();
+    private bool _mcIsLoading = false;
+    private SimulationResponse? _mcResponse;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _isPythonServiceAvailable = await MLClient.IsHealthyAsync();
+            _mcAllDrivers = await MLClient.GetDriversAsync("nascar", "cup");
+            _mcAllDrivers.Sort();
+            MCSelectTop20();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initializing Simulations page");
+        }
+    }
+
+    // Quick Predict Methods
+    private async Task MakeQuickPrediction()
+    {
+        _isPredicting = true;
+        _predictionResult = null;
+        try
+        {
+            var features = new Dictionary<string, object>
+            {
+                ["driver"] = _driver, ["track"] = _track, ["track_type"] = _trackType,
+                ["year"] = _year, ["start"] = _startPos, ["status"] = "running"
+            };
+            var request = new PredictRequest { Features = features };
+            _predictionResult = await MLClient.PredictAsync("nascar", _predictionTask, request, _nascarSeries);
+            Snackbar.Add("Prediction completed!", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Prediction failed: {ex.Message}", Severity.Error); }
+        finally { _isPredicting = false; }
+    }
+
+    // Interactive Simulator Methods
+    private async Task LoadSimFeatures()
+    {
+        _isLoadingSimFeatures = true;
+        _simFeaturesLoaded = false;
+        try
+        {
+            var schema = await MLClient.GetSchemaAsync("nascar");
+            if (schema.Features != null)
+            {
+                _simCategoricalFeatures = schema.Features.GetValueOrDefault("categorical", new List<string>());
+                _simNumericFeatures = schema.Features.GetValueOrDefault("numeric", new List<string>());
+            }
+            _simFeatureValues = await MLClient.GetFeatureValuesAsync("nascar", _simSeries);
+            _simCategoricalInputs.Clear();
+            foreach (var f in _simCategoricalFeatures) _simCategoricalInputs[f] = "";
+            _simNumericInputs.Clear();
+            foreach (var f in _simNumericFeatures) _simNumericInputs[f] = null;
+            _simFeaturesLoaded = true;
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error); }
+        finally { _isLoadingSimFeatures = false; }
+    }
+
+    private async Task RunSimPrediction()
+    {
+        _isSimPredicting = true;
+        _simPredictionResult = null;
+        try
+        {
+            var features = new Dictionary<string, object>();
+            foreach (var kvp in _simCategoricalInputs) if (!string.IsNullOrEmpty(kvp.Value)) features[kvp.Key] = kvp.Value;
+            foreach (var kvp in _simNumericInputs) if (kvp.Value.HasValue) features[kvp.Key] = kvp.Value.Value;
+            var request = new PredictRequest { Features = features };
+            _simPredictionResult = await MLClient.PredictAsync("nascar", _simTask, request, _simSeries);
+        }
+        catch (Exception ex) { Snackbar.Add($"Prediction failed: {ex.Message}", Severity.Error); }
+        finally { _isSimPredicting = false; }
+    }
+
+    // Monte Carlo Methods
+    private void MCSelectAll() => _mcSelectedDrivers = _mcAllDrivers.ToHashSet();
+    private void MCDeselectAll() => _mcSelectedDrivers = new HashSet<string>();
+    private void MCSelectTop20() => _mcSelectedDrivers = _mcAllDrivers.Take(20).ToHashSet();
+
+    private async Task RunMonteCarlo()
+    {
+        _mcIsLoading = true;
+        _mcResponse = null;
+        try
+        {
+            var request = new SimulationRequest
+            {
+                Drivers = _mcSelectedDrivers.ToList(), Year = _mcYear,
+                TrackType = _mcTrackType, NumSimulations = _mcNumSimulations
+            };
+            _mcResponse = await MLClient.SimulateRaceAsync("nascar", request, "cup");
+            Snackbar.Add("Simulation complete!", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Simulation failed: {ex.Message}", Severity.Error); }
+        finally { _mcIsLoading = false; }
+    }
+
+    private async Task ExportMCResults()
+    {
+        if (_mcResponse?.Results == null) return;
+        await FileExportService.ExportToCsv(_mcResponse.Results, $"simulation_{_mcYear}_{_mcTrackType}.csv");
+        Snackbar.Add("Exported to CSV", Severity.Success);
+    }
+
+    private string FormatLabel(string name) => 
+        System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(name.Replace("_", " "));
+}

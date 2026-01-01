@@ -219,28 +219,83 @@ class NBAXGBTrainer:
     def train(self, epochs: int = 500) -> Dict[str, float]:
         """
         Train XGBoost models for moneyline and over/under.
+        Uses TimeSeriesSplit cross-validation to prevent data leaking.
         Returns accuracy metrics.
         """
         if not XGB_AVAILABLE:
             return {"error": "XGBoost not installed"}
         
-        logger.info("Starting XGBoost training...")
+        logger.info("Starting XGBoost training with TimeSeriesSplit...")
         
-        # Load data
+        # Load data (already sorted by date)
         features, win_labels, totals = self._load_training_data()
         X = self._features_to_matrix(features)
         y_win = np.array(win_labels)
         y_total = np.array(totals)
         
-        # Split train/test (80/20)
-        split_idx = int(len(X) * 0.8)
-        X_train, X_test = X[:split_idx], X[split_idx:]
-        y_win_train, y_win_test = y_win[:split_idx], y_win[split_idx:]
-        y_total_train, y_total_test = y_total[:split_idx], y_total[split_idx:]
+        # Use TimeSeriesSplit to prevent data leaking
+        # This ensures we only train on past data, test on future data
+        from sklearn.model_selection import TimeSeriesSplit
+        tscv = TimeSeriesSplit(n_splits=5)
         
-        # Train moneyline model (classification)
-        dtrain_ml = xgb.DMatrix(X_train, label=y_win_train)
-        dtest_ml = xgb.DMatrix(X_test, label=y_win_test)
+        ml_accuracies = []
+        ou_maes = []
+        
+        logger.info(f"Running 5-fold TimeSeriesSplit cross-validation on {len(X)} samples...")
+        
+        for fold, (train_idx, test_idx) in enumerate(tscv.split(X)):
+            X_train, X_test = X[train_idx], X[test_idx]
+            y_win_train, y_win_test = y_win[train_idx], y_win[test_idx]
+            y_total_train, y_total_test = y_total[train_idx], y_total[test_idx]
+            
+            # Train moneyline model (classification)
+            dtrain_ml = xgb.DMatrix(X_train, label=y_win_train)
+            dtest_ml = xgb.DMatrix(X_test, label=y_win_test)
+            
+            params_ml = {
+                'max_depth': 4,
+                'eta': 0.05,
+                'objective': 'binary:logistic',
+                'eval_metric': 'logloss'
+            }
+            
+            model_ml = xgb.train(params_ml, dtrain_ml, epochs // 5)  # Fewer epochs per fold
+            
+            # Evaluate ML model
+            preds_ml = model_ml.predict(dtest_ml)
+            preds_binary = (preds_ml > 0.5).astype(int)
+            fold_accuracy = (preds_binary == y_win_test).mean()
+            ml_accuracies.append(fold_accuracy)
+            
+            # Train over/under model (regression)
+            dtrain_ou = xgb.DMatrix(X_train, label=y_total_train)
+            dtest_ou = xgb.DMatrix(X_test, label=y_total_test)
+            
+            params_ou = {
+                'max_depth': 4,
+                'eta': 0.05,
+                'objective': 'reg:squarederror',
+            }
+            
+            model_ou = xgb.train(params_ou, dtrain_ou, epochs // 5)
+            
+            # Evaluate OU model
+            preds_ou = model_ou.predict(dtest_ou)
+            fold_mae = np.abs(preds_ou - y_total_test).mean()
+            ou_maes.append(fold_mae)
+            
+            logger.info(f"Fold {fold + 1}: ML accuracy={fold_accuracy:.2%}, OU MAE={fold_mae:.1f}")
+        
+        # Average cross-validation scores
+        cv_ml_accuracy = np.mean(ml_accuracies)
+        cv_ou_mae = np.mean(ou_maes)
+        
+        logger.info(f"CV Results: ML accuracy={cv_ml_accuracy:.2%} (±{np.std(ml_accuracies):.2%}), OU MAE={cv_ou_mae:.1f}")
+        
+        # Now train final model on ALL data for production use
+        logger.info("Training final model on full dataset...")
+        dtrain_ml_full = xgb.DMatrix(X, label=y_win)
+        dtrain_ou_full = xgb.DMatrix(X, label=y_total)
         
         params_ml = {
             'max_depth': 4,
@@ -248,52 +303,42 @@ class NBAXGBTrainer:
             'objective': 'binary:logistic',
             'eval_metric': 'logloss'
         }
-        
-        self.model_ml = xgb.train(params_ml, dtrain_ml, epochs)
-        
-        # Evaluate ML model
-        preds_ml = self.model_ml.predict(dtest_ml)
-        preds_binary = (preds_ml > 0.5).astype(int)
-        ml_accuracy = (preds_binary == y_win_test).mean()
-        
-        # Train over/under model (regression)
-        dtrain_ou = xgb.DMatrix(X_train, label=y_total_train)
-        dtest_ou = xgb.DMatrix(X_test, label=y_total_test)
+        self.model_ml = xgb.train(params_ml, dtrain_ml_full, epochs)
         
         params_ou = {
             'max_depth': 4,
             'eta': 0.05,
             'objective': 'reg:squarederror',
         }
-        
-        self.model_ou = xgb.train(params_ou, dtrain_ou, epochs)
-        
-        # Evaluate OU model
-        preds_ou = self.model_ou.predict(dtest_ou)
-        ou_mae = np.abs(preds_ou - y_total_test).mean()
+        self.model_ou = xgb.train(params_ou, dtrain_ou_full, epochs)
         
         # Save models
         self.model_ml.save_model(f"{MODELS_DIR}/xgb_moneyline.json")
         self.model_ou.save_model(f"{MODELS_DIR}/xgb_overunder.json")
         
-        # Save metadata
+        # Save metadata with CV results
         metadata = {
             "trained_at": datetime.now().isoformat(),
             "samples": len(X),
-            "ml_accuracy": float(ml_accuracy),
-            "ou_mae": float(ou_mae),
+            "ml_accuracy": float(cv_ml_accuracy),
+            "ml_accuracy_std": float(np.std(ml_accuracies)),
+            "ou_mae": float(cv_ou_mae),
+            "ou_mae_std": float(np.std(ou_maes)),
             "epochs": epochs,
+            "cv_folds": 5,
+            "cv_method": "TimeSeriesSplit",
             "features": self.feature_names
         }
         with open(f"{MODELS_DIR}/training_metadata.json", "w") as f:
             json.dump(metadata, f, indent=2)
         
-        logger.info(f"Training complete: ML accuracy={ml_accuracy:.2%}, OU MAE={ou_mae:.1f}")
+        logger.info(f"Training complete: CV ML accuracy={cv_ml_accuracy:.2%}, CV OU MAE={cv_ou_mae:.1f}")
         
         return {
-            "ml_accuracy": round(ml_accuracy * 100, 1),
-            "ou_mae": round(ou_mae, 1),
+            "ml_accuracy": round(cv_ml_accuracy * 100, 1),
+            "ou_mae": round(cv_ou_mae, 1),
             "samples_trained": len(X),
+            "cv_folds": 5,
             "model_path": MODELS_DIR
         }
     

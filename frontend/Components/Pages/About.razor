@@ -197,39 +197,39 @@
                 <MudItem xs="12" md="6" lg="4">
                     <MudList T="string" Dense="true">
                         <MudListItem Icon="@Icons.Material.Filled.TrendingUp">
-                            <MudText Typo="Typo.body2"><strong>ML Training</strong> - Train custom models</MudText>
+                            <MudText Typo="Typo.body2"><strong>ML Training</strong> - XGBoost with TimeSeriesSplit CV</MudText>
                         </MudListItem>
                         <MudListItem Icon="@Icons.Material.Filled.ShowChart">
                             <MudText Typo="Typo.body2"><strong>Monte Carlo</strong> - Race simulations</MudText>
                         </MudListItem>
                         <MudListItem Icon="@Icons.Material.Filled.AttachMoney">
-                            <MudText Typo="Typo.body2"><strong>Live Odds</strong> - DraftKings/FanDuel</MudText>
+                            <MudText Typo="Typo.body2"><strong>Live Odds</strong> - DraftKings/FanDuel integration</MudText>
                         </MudListItem>
                         <MudListItem Icon="@Icons.Material.Filled.Speed">
-                            <MudText Typo="Typo.body2"><strong>Edge Meters</strong> - Value analysis gauges</MudText>
+                            <MudText Typo="Typo.body2"><strong>Value Bet Detection</strong> - Model vs sportsbook odds</MudText>
                         </MudListItem>
                     </MudList>
                 </MudItem>
                 <MudItem xs="12" md="6" lg="4">
                     <MudList T="string" Dense="true">
-                        <MudListItem Icon="@Icons.Material.Filled.Analytics">
-                            <MudText Typo="Typo.body2"><strong>Analytics</strong> - Correlation matrices</MudText>
+                        <MudListItem Icon="@Icons.Material.Filled.Calculate">
+                            <MudText Typo="Typo.body2"><strong>Kelly Calculator</strong> - Optimal bet sizing</MudText>
                         </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.HealthAndSafety">
-                            <MudText Typo="Typo.body2"><strong>Data Health</strong> - Quality scoring</MudText>
+                        <MudListItem Icon="@Icons.Material.Filled.Analytics">
+                            <MudText Typo="Typo.body2"><strong>ROI Tracking</strong> - Win/Loss record, yield %</MudText>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.History">
+                            <MudText Typo="Typo.body2"><strong>Analysis History</strong> - Persisted daily picks</MudText>
                         </MudListItem>
                         <MudListItem Icon="@Icons.Material.Filled.Insights">
                             <MudText Typo="Typo.body2"><strong>Model Insights</strong> - Feature importance</MudText>
                         </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.ShowChart">
-                            <MudText Typo="Typo.body2"><strong>Trends Analysis</strong> - Historical patterns</MudText>
-                        </MudListItem>
                     </MudList>
                 </MudItem>
                 <MudItem xs="12" md="6" lg="4">
                     <MudList T="string" Dense="true">
-                <MudListItem Icon="@Icons.Material.Filled.Storage">
-                            <MudText Typo="Typo.body2"><strong>Data Management</strong> - Auto-sync datasets</MudText>
+                        <MudListItem Icon="@Icons.Material.Filled.Storage">
+                            <MudText Typo="Typo.body2"><strong>Data Management</strong> - Last import tracking</MudText>
                         </MudListItem>
                         <MudListItem Icon="@Icons.Material.Filled.Person">
                             <MudText Typo="Typo.body2"><strong>Player Profiles</strong> - NBA/NFL player stats</MudText>
@@ -237,25 +237,39 @@
                         <MudListItem Icon="@Icons.Material.Filled.Build">
                             <MudText Typo="Typo.body2"><strong>Feature Engineering</strong> - Custom features</MudText>
                         </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.TrendingUp">
+                            <MudText Typo="Typo.body2"><strong>Hit Rates</strong> - Prop bet analysis (L5/L10)</MudText>
+                        </MudListItem>
                     </MudList>
                 </MudItem>
                 <MudItem xs="12" md="6" lg="4">
                     <MudList T="string" Dense="true">
-                        <MudListItem Icon="@Icons.Material.Filled.Whatshot">
-                            <MudText Typo="Typo.body2"><strong>Edge Predictions</strong> - Hot/Cold players</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.EmojiEvents">
-                            <MudText Typo="Typo.body2"><strong>Power Rankings</strong> - Weekly team rankings</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.TrendingUp">
-                            <MudText Typo="Typo.body2"><strong>Hit Rates</strong> - Prop bet analysis (L5/L10/Season)</MudText>
+                        <MudListItem Icon="@Icons.Material.Filled.Casino">
+                            <MudText Typo="Typo.body2"><strong>Simulations</strong> - NASCAR & NFL predictions</MudText>
                         </MudListItem>
                         <MudListItem Icon="@Icons.Material.Filled.SportsMma">
                             <MudText Typo="Typo.body2"><strong>Game Results</strong> - NFL/NBA box scores</MudText>
                         </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.HealthAndSafety">
+                            <MudText Typo="Typo.body2"><strong>Data Health</strong> - Quality scoring</MudText>
+                        </MudListItem>
                     </MudList>
                 </MudItem>
             </MudGrid>
+            
+            <!-- Recent Updates -->
+            <MudDivider Class="my-3" />
+            <MudText Typo="Typo.subtitle1" Class="mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.NewReleases" Size="Size.Small" Class="mr-1" />
+                Recent Updates (v2.0)
+            </MudText>
+            <MudChipSet T="string" ReadOnly="true">
+                <MudChip T="string" Color="Color.Success" Size="Size.Small">TimeSeriesSplit CV</MudChip>
+                <MudChip T="string" Color="Color.Success" Size="Size.Small">ROI Tracking</MudChip>
+                <MudChip T="string" Color="Color.Success" Size="Size.Small">History Persistence</MudChip>
+                <MudChip T="string" Color="Color.Success" Size="Size.Small">Data Import Timestamps</MudChip>
+                <MudChip T="string" Color="Color.Info" Size="Size.Small">Consolidated Simulations</MudChip>
+            </MudChipSet>
         </MudPaper>
 
         <!-- Tech Stack -->
