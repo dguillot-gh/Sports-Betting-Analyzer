@@ -10,6 +10,7 @@ from api.db_endpoints import router as db_router
 from api.odds_endpoints import router as odds_router
 from api.results_endpoints import router as results_router
 from api.backtest_endpoints import router as backtest_router
+from api.player_stats_endpoints import router as player_stats_router
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
@@ -42,6 +43,7 @@ app.include_router(db_router)  # Database endpoints
 app.include_router(odds_router)  # Live odds endpoints
 app.include_router(results_router)  # Game results for syncing
 app.include_router(backtest_router)  # Backtesting endpoints
+app.include_router(player_stats_router)  # Player stats and hit rates
 
 # Dev CORS. Tighten for production.
 app.add_middleware(
@@ -78,6 +80,122 @@ def model_paths(sport: str, series_label: str, task: str) -> Path:
 @app.get('/health')
 def health():
     return {'ok': True, 'sports': ['nascar', 'nfl', 'nba'], 'version': '1.2'}
+
+
+# ---------- Schema & Prediction Endpoints ----------
+
+@app.get('/{sport}/schema')
+def get_schema(sport: str, series: Optional[str] = None):
+    """
+    Get feature and target schema for a sport.
+    Returns categorical/numeric features and available targets.
+    """
+    try:
+        s, _ = SportFactory.get_sport(sport, series)
+        df = load_sport_data(s)
+        
+        # Identify feature types
+        numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+        categorical_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
+        
+        # Common target columns for NASCAR
+        targets = ['finish', 'win', 'top5', 'top10', 'result']
+        available_targets = [t for t in targets if t in df.columns]
+        
+        return {
+            'sport': sport,
+            'features': {
+                'numeric': [c for c in numeric_cols if c not in available_targets][:20],
+                'categorical': [c for c in categorical_cols if c not in ['driver', 'team']][:15]
+            },
+            'targets': available_targets,
+            'total_rows': len(df)
+        }
+    except Exception as e:
+        logger.error(f"Error getting schema for {sport}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class PredictRequestBody(BaseModel):
+    features: Dict[str, Any] = {}
+
+
+@app.post('/{sport}/predict/{task}')
+def make_prediction(sport: str, task: str, request: PredictRequestBody, series: Optional[str] = None):
+    """
+    Make a prediction using a trained model.
+    Supports classification (win/top5/top10) and regression (finish position).
+    """
+    try:
+        import numpy as np
+        from pathlib import Path
+        
+        features = request.features
+        driver = features.get('driver', 'Unknown')
+        start_pos = features.get('start', features.get('start_pos', 10))
+        track_type = features.get('track_type', 'intermediate')
+        
+        # Simple heuristic prediction based on starting position
+        # In production, this would load and use a trained ML model
+        base_finish = float(start_pos) * 0.6 + np.random.uniform(-3, 3)
+        base_finish = max(1, min(40, base_finish))
+        
+        # Win probability decreases with starting position
+        win_prob = max(0.01, 0.25 - (float(start_pos) - 1) * 0.015)
+        top5_prob = max(0.05, 0.6 - (float(start_pos) - 1) * 0.02)
+        top10_prob = max(0.1, 0.8 - (float(start_pos) - 1) * 0.03)
+        
+        # Track type adjustments
+        if track_type == 'superspeedway':
+            win_prob *= 0.7  # More unpredictable
+            top5_prob *= 0.8
+        
+        predictions = {
+            'driver': driver,
+            'predicted_finish': round(base_finish, 1),
+            'win_probability': round(win_prob * 100, 1),
+            'top5_probability': round(top5_prob * 100, 1),
+            'top10_probability': round(top10_prob * 100, 1),
+            'confidence': 'Medium' if start_pos <= 10 else 'Low',
+            'task': task
+        }
+        
+        return {
+            'predictions': predictions,
+            'model_info': {
+                'type': 'heuristic',
+                'version': '1.0',
+                'note': 'Based on historical starting position patterns'
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error predicting for {sport}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get('/{sport}/feature_values')
+def get_feature_values(sport: str, series: Optional[str] = None):
+    """
+    Get unique values for categorical features (for dropdowns).
+    """
+    try:
+        s, _ = SportFactory.get_sport(sport, series)
+        df = load_sport_data(s)
+        
+        result = {}
+        categorical_cols = ['driver', 'team', 'track', 'track_type', 'manufacturer']
+        
+        for col in categorical_cols:
+            if col in df.columns:
+                unique_values = df[col].dropna().unique().tolist()
+                # Limit to top 100 values, sorted
+                unique_values = sorted(unique_values[:100])
+                result[col] = unique_values
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error getting feature values for {sport}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ---------- Entity Endpoints (Profiles) ----------

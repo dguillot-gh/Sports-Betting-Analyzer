@@ -1,12 +1,16 @@
 @page "/live-nfl-odds"
 @rendermode InteractiveServer
 @using MudBlazor
+@using System.Text.Json
 @inject HttpClient Http
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
 <PageTitle>Live NFL Odds - Sports Betting Analyzer</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudTabs @bind-ActivePanelIndex="_activeTab" Elevation="0" Rounded="true" ApplyEffectsToContainer="true" Class="mb-4">
+        <MudTabPanel Text="Live Analysis" Icon="@Icons.Material.Filled.Analytics">
     <MudStack Spacing="4">
         <!-- Header -->
         <MudPaper Class="pa-4" Elevation="2">
@@ -39,14 +43,16 @@
                         }
                         Run Analysis
                     </MudButton>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="TrainModel"
-                               Disabled="_isTraining" StartIcon="@Icons.Material.Filled.ModelTraining">
-                        @if (_isTraining)
-                        {
-                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                        }
-                        Train XGB
-                    </MudButton>
+                    <MudTooltip Text="Train XGBoost ML model using TimeSeriesSplit cross-validation">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="TrainModel"
+                                   Disabled="_isTraining" StartIcon="@Icons.Material.Filled.ModelTraining">
+                            @if (_isTraining)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            }
+                            Train XGB
+                        </MudButton>
+                    </MudTooltip>
                 </div>
             </div>
         </MudPaper>
@@ -61,48 +67,10 @@
             <MudAlert Severity="Severity.Error">@_errorMessage</MudAlert>
         }
 
-        <!-- Help & Info Section -->
-        <MudExpansionPanels>
-            <MudExpansionPanel Text="📖 How This Works" Icon="@Icons.Material.Filled.Help" Dense="true">
-                <MudGrid>
-                    <MudItem xs="12" md="4">
-                        <MudText Typo="Typo.subtitle2" Color="Color.Primary">🎯 Simple Model</MudText>
-                        <MudText Typo="Typo.body2">
-                            Uses basic team stats (PPG, opponent PPG, win %) to estimate win probability.
-                            Quick baseline prediction.
-                        </MudText>
-                    </MudItem>
-                    <MudItem xs="12" md="4">
-                        <MudText Typo="Typo.subtitle2" Color="Color.Info">🤖 XGBoost Model</MudText>
-                        <MudText Typo="Typo.body2">
-                            Machine learning model trained on 6+ years of real NFL games (2018-2024).
-                            <strong>Click "Train XGB"</strong> to create/update the model. Training takes ~30 seconds.
-                        </MudText>
-                    </MudItem>
-                    <MudItem xs="12" md="4">
-                        <MudText Typo="Typo.subtitle2" Color="Color.Success">📊 EPA (Expected Points Added)</MudText>
-                        <MudText Typo="Typo.body2">
-                            Measures per-play efficiency from play-by-play data:<br/>
-                            • <strong>Off EPA</strong>: Higher = better offense (positive is good)<br/>
-                            • <strong>Def EPA</strong>: Lower = better defense (negative is good)<br/>
-                            • <strong>Net EPA</strong>: Off minus Def (higher wins more)
-                        </MudText>
-                    </MudItem>
-                </MudGrid>
-                <MudDivider Class="my-3" />
-                <MudAlert Severity="Severity.Info" Dense="true">
-                    <strong>Training:</strong> Model trains from nflreadpy data when you click "Train XGB".
-                    EPA data is fetched live from 2024 play-by-play each time you run analysis.
-                    Re-train periodically (weekly) for best accuracy.
-                </MudAlert>
-            </MudExpansionPanel>
-        </MudExpansionPanels>
-
-        <!-- Value Bets Summary -->
         @if (_analyzedGames.Any(g => g.HasValue))
         {
-            <MudAlert Severity="Severity.Success" Icon="@Icons.Material.Filled.Whatshot">
-                <strong>@_analyzedGames.Count(g => g.HasValue) Value Bet(s) Found!</strong>
+            <MudAlert Severity="Severity.Success" Variant="Variant.Filled">
+                <strong>🎯 Value Bets Found!</strong>
                 @foreach (var game in _analyzedGames.Where(g => g.HasValue))
                 {
                     <MudText Typo="Typo.body2">
@@ -115,7 +83,7 @@
         @if (_analyzedGames.Any())
         {
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
-                @_analyzedGames.Count games analyzed via @FormatBookName(_selectedSportsbook)
+                @_analyzedGames.Count games analyzed for @DateTime.Today.ToString("MMM dd, yyyy") via @FormatBookName(_selectedSportsbook)
             </MudText>
             
             <MudGrid>
@@ -128,14 +96,12 @@
                                     <div class="d-flex justify-space-between align-center">
                                         <div class="text-center" style="flex: 1;">
                                             <MudText Typo="Typo.h6">@game.AwayTeam</MudText>
-                                            <MudText Typo="Typo.caption">@(game.AwayWinProbability.HasValue ? $"{(game.AwayWinProbability.Value * 100):F0}%" : "")</MudText>
+                                            <MudText Typo="Typo.body2" Color="Color.Secondary">@FormatOdds(game.AwayMoneyline)</MudText>
                                         </div>
-                                        <div class="mx-2">
-                                            <MudText Typo="Typo.body2" Color="Color.Secondary">@@</MudText>
-                                        </div>
+                                        <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mx-2">@@</MudText>
                                         <div class="text-center" style="flex: 1;">
                                             <MudText Typo="Typo.h6">@game.HomeTeam</MudText>
-                                            <MudText Typo="Typo.caption">@(game.HomeWinProbability.HasValue ? $"{(game.HomeWinProbability.Value * 100):F0}%" : "")</MudText>
+                                            <MudText Typo="Typo.body2" Color="Color.Secondary">@FormatOdds(game.HomeMoneyline)</MudText>
                                         </div>
                                     </div>
                                     @if (!string.IsNullOrEmpty(game.PredictedWinner))
@@ -150,115 +116,30 @@
                                 <MudDivider Class="mb-3" />
                                 <MudGrid Spacing="2">
                                     <MudItem xs="4">
-                                        <MudText Typo="Typo.overline" Color="Color.Secondary">MONEYLINE</MudText>
-                                        <div class="d-flex flex-column">
-                                            <MudText Typo="Typo.body2">@game.AwayTeam: @FormatOdds(game.AwayMoneyline)</MudText>
-                                            <MudText Typo="Typo.body2">@game.HomeTeam: @FormatOdds(game.HomeMoneyline)</MudText>
-                                        </div>
-                                        @if (game.MlValue)
-                                        {
-                                            <MudChip T="string" Color="Color.Success" Size="Size.Small">
-                                                @game.MlPick +@(game.HomeMlEdge)%
-                                            </MudChip>
-                                        }
-                                    </MudItem>
-                                    
-                                    <MudItem xs="4">
                                         <MudText Typo="Typo.overline" Color="Color.Secondary">SPREAD</MudText>
-                                        <MudText Typo="Typo.body1">@(game.Spread.HasValue ? FormatSpread(game.Spread.Value) : "N/A")</MudText>
-                                        @if (game.SpreadValue)
-                                        {
-                                            <MudChip T="string" Color="Color.Success" Size="Size.Small">
-                                                @game.SpreadPick @(game.SpreadEdge > 0 ? "+" : "")@game.SpreadEdge
-                                            </MudChip>
-                                        }
-                                        else if (!string.IsNullOrEmpty(game.SpreadPick))
-                                        {
-                                            <MudText Typo="Typo.caption">Pick: @game.SpreadPick</MudText>
-                                        }
+                                        <MudText Typo="Typo.body1">@game.Spread</MudText>
                                     </MudItem>
-                                    
                                     <MudItem xs="4">
-                                        <MudText Typo="Typo.overline" Color="Color.Secondary">O/U TOTAL</MudText>
-                                        <MudText Typo="Typo.body1">@(game.OverUnder.HasValue ? game.OverUnder.Value.ToString() : "N/A")</MudText>
-                                        @if (game.OuValue)
-                                        {
-                                            <MudChip T="string" Color="Color.Success" Size="Size.Small">
-                                                @game.OuPick @(game.OuEdge > 0 ? "+" : "")@game.OuEdge
-                                            </MudChip>
-                                        }
-                                        else if (!string.IsNullOrEmpty(game.OuPick))
-                                        {
-                                            <MudText Typo="Typo.caption">Pick: @game.OuPick</MudText>
-                                        }
+                                        <MudText Typo="Typo.overline" Color="Color.Secondary">O/U</MudText>
+                                        <MudText Typo="Typo.body1">@game.OverUnder</MudText>
+                                    </MudItem>
+                                    <MudItem xs="4">
+                                        <MudText Typo="Typo.overline" Color="Color.Secondary">WIN %</MudText>
+                                        <MudText Typo="Typo.body1">@(game.HomeWinProb?.ToString("P0") ?? "--")</MudText>
                                     </MudItem>
                                 </MudGrid>
                                 
-                                @if (game.PredictedTotal.HasValue)
+                                @if (game.HasValue)
                                 {
-                                    <MudDivider Class="my-2" />
-                                    <div class="d-flex justify-space-between">
-                                        <MudText Typo="Typo.caption">
-                                            Pred Total: <strong>@game.PredictedTotal</strong>
-                                        </MudText>
-                                        <MudText Typo="Typo.caption">
-                                            Pred Margin: <strong>@(game.PredictedMargin > 0 ? "+" : "")@game.PredictedMargin</strong>
-                                        </MudText>
-                                    </div>
+                                    <MudAlert Severity="Severity.Success" Dense="true" Class="mt-3">
+                                        <strong>Value:</strong> @string.Join(", ", game.ValueBets)
+                                    </MudAlert>
                                 }
                                 
-                                @if (game.XgbModel != null)
-                                {
-                                    <MudDivider Class="my-2" />
-                                    <MudText Typo="Typo.overline" Color="Color.Secondary" Class="mb-2">MODEL COMPARISON</MudText>
-                                    <MudSimpleTable Dense="true" Hover="true" Style="background: transparent;">
-                                        <thead><tr><th></th><th>Simple</th><th>XGBoost</th></tr></thead>
-                                        <tbody>
-                                            <tr>
-                                                <td><MudText Typo="Typo.caption">Home Win%</MudText></td>
-                                                <td><strong>@(((game.HomeWinProbability ?? 0) * 100).ToString("F0"))%</strong></td>
-                                                <td style="color: #2196f3;">@(game.XgbModel.HomeWinProb.HasValue ? $"{(game.XgbModel.HomeWinProb.Value * 100):F0}%" : "N/A")</td>
-                                            </tr>
-                                            <tr>
-                                                <td><MudText Typo="Typo.caption">Pick</MudText></td>
-                                                <td>@game.PredictedWinner</td>
-                                                <td style="color: #2196f3;">@(game.XgbModel.PredictedWinner ?? "N/A")</td>
-                                            </tr>
-                                        </tbody>
-                                    </MudSimpleTable>
-                                }
-                                
-                                @if (game.EpaBreakdown != null)
-                                {
-                                    <MudDivider Class="my-2" />
-                                    <MudText Typo="Typo.overline" Color="Color.Secondary" Class="mb-2">📊 EPA ANALYSIS</MudText>
-                                    <MudSimpleTable Dense="true" Hover="true" Style="background: transparent;">
-                                        <thead><tr><th></th><th>@game.AwayTeam</th><th>@game.HomeTeam</th></tr></thead>
-                                        <tbody>
-                                            <tr>
-                                                <td><MudText Typo="Typo.caption">Off EPA/Play</MudText></td>
-                                                <td style="@GetEpaStyle(game.EpaBreakdown.AwayOffEpa)">@FormatEpa(game.EpaBreakdown.AwayOffEpa)</td>
-                                                <td style="@GetEpaStyle(game.EpaBreakdown.HomeOffEpa)">@FormatEpa(game.EpaBreakdown.HomeOffEpa)</td>
-                                            </tr>
-                                            <tr>
-                                                <td><MudText Typo="Typo.caption">Def EPA/Play</MudText></td>
-                                                <td style="@GetDefEpaStyle(game.EpaBreakdown.AwayDefEpa)">@FormatEpa(game.EpaBreakdown.AwayDefEpa)</td>
-                                                <td style="@GetDefEpaStyle(game.EpaBreakdown.HomeDefEpa)">@FormatEpa(game.EpaBreakdown.HomeDefEpa)</td>
-                                            </tr>
-                                            <tr style="font-weight: bold;">
-                                                <td><MudText Typo="Typo.caption">Net EPA</MudText></td>
-                                                <td style="@GetEpaStyle(game.EpaBreakdown.AwayNetEpa)">@FormatEpa(game.EpaBreakdown.AwayNetEpa)</td>
-                                                <td style="@GetEpaStyle(game.EpaBreakdown.HomeNetEpa)">@FormatEpa(game.EpaBreakdown.HomeNetEpa)</td>
-                                            </tr>
-                                        </tbody>
-                                    </MudSimpleTable>
-                                    @if (!string.IsNullOrEmpty(game.EpaBreakdown.EpaEdge))
-                                    {
-                                        <MudChip T="string" Color="Color.Info" Size="Size.Small" Class="mt-2">
-                                            EPA Edge: @game.EpaBreakdown.EpaEdge
-                                        </MudChip>
-                                    }
-                                }
+                                <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary" 
+                                           OnClick="@(() => AddToHistory(game))" Class="mt-2">
+                                    + Add to History
+                                </MudButton>
                             </MudCardContent>
                         </MudCard>
                     </MudItem>
@@ -267,56 +148,9 @@
         }
         else if (_games.Any() && !_isAnalyzing)
         {
-            <MudAlert Severity="Severity.Info" Class="mb-3">
-                Click <strong>Run Analysis</strong> to get predictions and value bet recommendations!
+            <MudAlert Severity="Severity.Info">
+                Click <strong>Run Analysis</strong> to get predictions!
             </MudAlert>
-            <MudGrid>
-                @foreach (var game in _games)
-                {
-                    <MudItem xs="12" md="6" lg="4">
-                        <MudCard Elevation="2">
-                            <MudCardHeader>
-                                <CardHeaderContent>
-                                    <div class="d-flex justify-space-between align-center">
-                                        <MudText Typo="Typo.h6">@game.AwayTeam</MudText>
-                                        <MudText Typo="Typo.body2" Color="Color.Secondary">@@</MudText>
-                                        <MudText Typo="Typo.h6">@game.HomeTeam</MudText>
-                                    </div>
-                                </CardHeaderContent>
-                            </MudCardHeader>
-                            <MudCardContent>
-                                <MudGrid>
-                                    <MudItem xs="12">
-                                        <MudText Typo="Typo.overline" Color="Color.Secondary">MONEYLINE</MudText>
-                                        <div class="d-flex justify-space-between">
-                                            <MudChip T="string" Color="@GetOddsColor(game.AwayMoneyline)" Size="Size.Small">
-                                                @game.AwayTeam: @FormatOdds(game.AwayMoneyline)
-                                            </MudChip>
-                                            <MudChip T="string" Color="@GetOddsColor(game.HomeMoneyline)" Size="Size.Small">
-                                                @game.HomeTeam: @FormatOdds(game.HomeMoneyline)
-                                            </MudChip>
-                                        </div>
-                                    </MudItem>
-                                    @if (game.Spread.HasValue)
-                                    {
-                                        <MudItem xs="6">
-                                            <MudText Typo="Typo.overline" Color="Color.Secondary">SPREAD</MudText>
-                                            <MudText Typo="Typo.body1">@FormatSpread(game.Spread.Value)</MudText>
-                                        </MudItem>
-                                    }
-                                    @if (game.OverUnder.HasValue)
-                                    {
-                                        <MudItem xs="6">
-                                            <MudText Typo="Typo.overline" Color="Color.Secondary">O/U</MudText>
-                                            <MudText Typo="Typo.body1">@game.OverUnder.Value</MudText>
-                                        </MudItem>
-                                    }
-                                </MudGrid>
-                            </MudCardContent>
-                        </MudCard>
-                    </MudItem>
-                }
-            </MudGrid>
         }
         else if (!_isLoading)
         {
@@ -324,147 +158,161 @@
                 No NFL games scheduled for today. Check back on game days!
             </MudAlert>
         }
-
-        <!-- Kelly Calculator -->
-        <MudExpansionPanels>
-            <MudExpansionPanel Text="Kelly Criterion Calculator" Icon="@Icons.Material.Filled.Calculate">
-                <MudAlert Severity="Severity.Info" Class="mb-4" Dense="true">
-                    <strong>How to use:</strong> The Kelly Criterion calculates optimal bet sizing based on your edge.
-                    <ol class="mt-2 mb-0" style="padding-left: 20px;">
-                        <li><strong>Win Probability</strong> - Your estimated chance the bet wins (0.55 = 55%)</li>
-                        <li><strong>American Odds</strong> - The sportsbook line (e.g., -110 or +150)</li>
-                        <li><strong>Bankroll</strong> - Your total betting budget</li>
-                    </ol>
-                </MudAlert>
-                <MudGrid>
-                    <MudItem xs="12" md="3">
-                        <MudNumericField @bind-Value="_kellyWinProb" Label="Win Probability" 
-                                        Min="0" Max="1" Step="0.01" HelperText="0.55 = 55%"
-                                        Variant="Variant.Outlined" />
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudNumericField @bind-Value="_kellyOdds" Label="American Odds"
-                                        HelperText="-110 or +150" Variant="Variant.Outlined" />
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudNumericField @bind-Value="_kellyBankroll" Label="Bankroll"
-                                        Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.AttachMoney"
-                                        Variant="Variant.Outlined" />
-                    </MudItem>
-                    <MudItem xs="12" md="3" Class="d-flex align-end">
-                        <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="CalculateKelly">
-                            Calculate
+    </MudStack>
+        </MudTabPanel>
+        
+        <!-- History Tab -->
+        <MudTabPanel Text="Today's History" Icon="@Icons.Material.Filled.History" BadgeData="@_analysisHistory.Count" BadgeColor="Color.Primary">
+            <MudPaper Class="pa-4" Elevation="2">
+                <div class="d-flex justify-space-between align-center mb-3">
+                    <MudText Typo="Typo.h6">Analysis History - @DateTime.Today.ToString("MMM dd, yyyy")</MudText>
+                    <div class="d-flex" style="gap: 8px;">
+                        <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Success" OnClick="SyncGameResults" 
+                                   Disabled="@(_isSyncingResults || !_analysisHistory.Any(h => string.IsNullOrEmpty(h.Result)))" 
+                                   StartIcon="@Icons.Material.Filled.Sync">
+                            @if (_isSyncingResults) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                            Sync Results
                         </MudButton>
-                    </MudItem>
-                </MudGrid>
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="RefreshClosingLines" 
+                                   Disabled="@_isRefreshingLines" StartIcon="@Icons.Material.Filled.Update">
+                            @if (_isRefreshingLines) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                            Update Lines
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="ClearHistory" 
+                                   Disabled="@(!_analysisHistory.Any())" StartIcon="@Icons.Material.Filled.Delete">
+                            Clear
+                        </MudButton>
+                    </div>
+                </div>
                 
-                @if (_kellyResult != null)
+                @if (_analysisHistory.Any())
                 {
-                    <MudPaper Class="pa-4 mt-3" Elevation="1" Style="background: var(--mud-palette-background-default);">
-                        <MudGrid>
-                            <MudItem xs="6" md="3">
-                                <MudText Typo="Typo.overline" Color="Color.Secondary">IMPLIED PROB</MudText>
-                                <MudText Typo="Typo.h6">@(_kellyResult.ImpliedProbability)%</MudText>
+                    <MudSimpleTable Dense="true" Hover="true" Style="font-size: 0.85rem;">
+                        <thead>
+                            <tr style="background: var(--mud-palette-surface);">
+                                <th>Time</th>
+                                <th>Matchup</th>
+                                <th>Pick</th>
+                                <th>Win%</th>
+                                <th>O/U (Open→Close)</th>
+                                <th>Spread</th>
+                                <th>Value?</th>
+                                <th>Stake</th>
+                                <th>Result</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var entry in _analysisHistory.OrderByDescending(e => e.AnalyzedAt))
+                            {
+                                <tr>
+                                    <td>@entry.AnalyzedAt.ToString("HH:mm")</td>
+                                    <td><strong>@entry.AwayTeam</strong> @@ <strong>@entry.HomeTeam</strong></td>
+                                    <td><MudChip T="string" Color="Color.Primary" Size="Size.Small">@entry.Pick</MudChip></td>
+                                    <td>@entry.WinProbability%</td>
+                                    <td>
+                                        @if (entry.OpeningOU.HasValue && entry.ClosingOU.HasValue && entry.OpeningOU != entry.ClosingOU)
+                                        {
+                                            var movement = entry.ClosingOU.Value - entry.OpeningOU.Value;
+                                            var color = movement > 0 ? "green" : "red";
+                                            <span>@entry.OpeningOU → <span style="color: @color; font-weight: bold;">@entry.ClosingOU</span></span>
+                                        }
+                                        else
+                                        {
+                                            <span>@entry.OuPick</span>
+                                        }
+                                    </td>
+                                    <td>@entry.SpreadPick</td>
+                                    <td>
+                                        @if (entry.HasValue)
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                                        }
+                                    </td>
+                                    <td>
+                                        <MudNumericField T="double" @bind-Value="entry.Stake" 
+                                                         Variant="Variant.Text" Margin="Margin.Dense"
+                                                         Style="width: 70px;" Min="0" Step="10" />
+                                    </td>
+                                    <td>
+                                        <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                                            <MudButton Color="@(entry.Result == "W" ? Color.Success : Color.Default)" 
+                                                       OnClick="@(() => MarkResult(entry, "W"))">W</MudButton>
+                                            <MudButton Color="@(entry.Result == "L" ? Color.Error : Color.Default)" 
+                                                       OnClick="@(() => MarkResult(entry, "L"))">L</MudButton>
+                                            <MudButton Color="@(entry.Result == "P" ? Color.Warning : Color.Default)" 
+                                                       OnClick="@(() => MarkResult(entry, "P"))">P</MudButton>
+                                        </MudButtonGroup>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                    
+                    <!-- ROI Summary -->
+                    <MudPaper Class="pa-3 mt-3" Elevation="1" Style="background: var(--mud-palette-background-grey);">
+                        <MudGrid Spacing="2">
+                            <MudItem xs="6" md="2">
+                                <MudText Typo="Typo.overline" Color="Color.Secondary">ANALYZED</MudText>
+                                <MudText Typo="Typo.h6">@_analysisHistory.Count</MudText>
                             </MudItem>
-                            <MudItem xs="6" md="3">
-                                <MudText Typo="Typo.overline" Color="Color.Secondary">MODEL EDGE</MudText>
-                                <MudText Typo="Typo.h6" Color="@(_kellyResult.ModelEdge > 0 ? Color.Success : Color.Error)">
-                                    @(_kellyResult.ModelEdge > 0 ? "+" : "")@(_kellyResult.ModelEdge)%
-                                </MudText>
+                            <MudItem xs="6" md="2">
+                                <MudText Typo="Typo.overline" Color="Color.Secondary">RECORD</MudText>
+                                <MudText Typo="Typo.h6" Color="@GetRecordColor()">@GetWins()-@GetLosses()-@GetPushes()</MudText>
                             </MudItem>
-                            <MudItem xs="6" md="3">
-                                <MudText Typo="Typo.overline" Color="Color.Secondary">RECOMMENDED BET</MudText>
-                                <MudText Typo="Typo.h6" Color="Color.Primary">$@(_kellyResult.RecommendedBet)</MudText>
+                            <MudItem xs="4" md="2">
+                                <MudText Typo="Typo.overline" Color="Color.Secondary">WIN RATE</MudText>
+                                <MudText Typo="Typo.h6">@GetWinRate()</MudText>
                             </MudItem>
-                            <MudItem xs="6" md="3">
-                                <MudText Typo="Typo.overline" Color="Color.Secondary">% OF BANKROLL</MudText>
-                                <MudText Typo="Typo.h6">@(_kellyResult.BetPercentage)%</MudText>
+                            <MudItem xs="4" md="2">
+                                <MudText Typo="Typo.overline" Color="Color.Secondary">STAKED</MudText>
+                                <MudText Typo="Typo.h6">$@GetTotalStaked().ToString("F0")</MudText>
+                            </MudItem>
+                            <MudItem xs="4" md="2">
+                                <MudText Typo="Typo.overline" Color="Color.Secondary">ROI</MudText>
+                                <MudText Typo="Typo.h6" Color="@GetRoiColor()">@GetRoiDisplay()</MudText>
                             </MudItem>
                         </MudGrid>
                     </MudPaper>
                 }
-            </MudExpansionPanel>
-            
-            <!-- Hot/Cold Players Edge Section (merged from EdgePredictions) -->
-            <MudExpansionPanel Text="🔥 Hot & Cold Players" Icon="@Icons.Material.Filled.TrendingUp">
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
-                    Players performing above/below their season average (Edge Score = recent vs avg)
-                </MudText>
-                
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadEdgeData" 
-                           Disabled="_isLoadingEdge" Class="mb-3">
-                    @if (_isLoadingEdge)
-                    {
-                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                    }
-                    Load Hot/Cold Players
-                </MudButton>
-                
-                @if (_edgeData != null)
+                else
                 {
-                    <MudGrid>
-                        <!-- Hot Players -->
-                        <MudItem xs="12" md="6">
-                            <MudPaper Class="pa-3" Elevation="1" Style="border-left: 3px solid #4caf50;">
-                                <MudText Typo="Typo.subtitle2">🔥 Hot Players</MudText>
-                                @foreach (var player in _edgeData.HotPlayers.Take(5))
-                                {
-                                    <div class="d-flex justify-space-between align-center py-1">
-                                        <MudText Typo="Typo.body2"><strong>@player.Player</strong> (@player.Team)</MudText>
-                                        <MudChip T="string" Color="Color.Success" Size="Size.Small">+@player.EdgeScore</MudChip>
-                                    </div>
-                                }
-                                @if (!_edgeData.HotPlayers.Any())
-                                {
-                                    <MudText Typo="Typo.caption">No hot players found</MudText>
-                                }
-                            </MudPaper>
-                        </MudItem>
-                        
-                        <!-- Cold Players -->
-                        <MudItem xs="12" md="6">
-                            <MudPaper Class="pa-3" Elevation="1" Style="border-left: 3px solid #f44336;">
-                                <MudText Typo="Typo.subtitle2">❄️ Cold Players</MudText>
-                                @foreach (var player in _edgeData.ColdPlayers.Take(5))
-                                {
-                                    <div class="d-flex justify-space-between align-center py-1">
-                                        <MudText Typo="Typo.body2"><strong>@player.Player</strong> (@player.Team)</MudText>
-                                        <MudChip T="string" Color="Color.Error" Size="Size.Small">@player.EdgeScore</MudChip>
-                                    </div>
-                                }
-                                @if (!_edgeData.ColdPlayers.Any())
-                                {
-                                    <MudText Typo="Typo.caption">No cold players found</MudText>
-                                }
-                            </MudPaper>
-                        </MudItem>
-                    </MudGrid>
+                    <MudAlert Severity="Severity.Info">No analyses yet today. Run analysis on the Live Analysis tab!</MudAlert>
                 }
-            </MudExpansionPanel>
-            
-            <!-- Compare Books Section (NEW) -->
-            <MudExpansionPanel Text="📊 Compare FanDuel vs DraftKings" Icon="@Icons.Material.Filled.CompareArrows">
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
-                    Find the best line for maximum value! Highlighted cells show better odds.
-                </MudText>
-                
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadNFLOddsComparison" 
-                           Disabled="@_isLoadingComparison" Class="mb-3">
-                    @if (_isLoadingComparison) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
-                    Load FD vs DK Comparison
-                </MudButton>
+            </MudPaper>
+        </MudTabPanel>
+        
+        <!-- Compare Books Tab -->
+        <MudTabPanel Text="Compare Books" Icon="@Icons.Material.Filled.CompareArrows">
+            <MudPaper Class="pa-4" Elevation="2">
+                <div class="d-flex justify-space-between align-center mb-4">
+                    <div>
+                        <MudText Typo="Typo.h6">FanDuel vs DraftKings</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Find the best line for maximum value</MudText>
+                    </div>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadOddsComparison" 
+                               Disabled="@_isLoadingComparison" StartIcon="@Icons.Material.Filled.Refresh">
+                        @if (_isLoadingComparison) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                        Load Comparison
+                    </MudButton>
+                </div>
                 
                 @if (_comparisonGames.Any())
                 {
                     <MudSimpleTable Dense="true" Hover="true" Striped="true">
                         <thead>
-                            <tr>
+                            <tr style="background: var(--mud-palette-surface);">
                                 <th>Game</th>
-                                <th style="background: #1976D2; color: white;">FD Home</th>
-                                <th style="background: #1976D2; color: white;">FD Away</th>
-                                <th style="background: #388E3C; color: white;">DK Home</th>
-                                <th style="background: #388E3C; color: white;">DK Away</th>
-                                <th>Best</th>
+                                <th colspan="2" style="text-align: center; background: #1976D2; color: white;">FanDuel</th>
+                                <th colspan="2" style="text-align: center; background: #388E3C; color: white;">DraftKings</th>
+                                <th>Best Line</th>
+                            </tr>
+                            <tr>
+                                <th></th>
+                                <th>Home ML</th>
+                                <th>Away ML</th>
+                                <th>Home ML</th>
+                                <th>Away ML</th>
+                                <th></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -488,21 +336,36 @@
                                         @if (game.BestHomeML != "same" || game.BestAwayML != "same")
                                         {
                                             <MudChip T="string" Size="Size.Small" Color="Color.Success">
-                                                ★ @(game.BestHomeML == "fanduel" || game.BestAwayML == "fanduel" ? "FD" : "DK")
+                                                ★ @(game.BestHomeML == "fanduel" || game.BestAwayML == "fanduel" ? "FD" : "DK") better
                                             </MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">Same</MudText>
                                         }
                                     </td>
                                 </tr>
                             }
                         </tbody>
                     </MudSimpleTable>
+                    
+                    <MudAlert Severity="Severity.Info" Class="mt-4">
+                        <strong>Tip:</strong> Highlighted cells show the better odds. Always bet at the book with the best line!
+                    </MudAlert>
                 }
-            </MudExpansionPanel>
-        </MudExpansionPanels>
-    </MudStack>
+                else if (!_isLoadingComparison)
+                {
+                    <MudAlert Severity="Severity.Normal">
+                        Click "Load Comparison" to see FanDuel vs DraftKings odds side-by-side.
+                    </MudAlert>
+                }
+            </MudPaper>
+        </MudTabPanel>
+    </MudTabs>
 </MudContainer>
 
 @code {
+    private int _activeTab = 0;
     private bool _isLoading = false;
     private bool _isAnalyzing = false;
     private bool _isTraining = false;
@@ -512,47 +375,67 @@
     private List<GameOdds> _games = new();
     private List<AnalyzedGame> _analyzedGames = new();
     
-    // Kelly Calculator
-    private double _kellyWinProb = 0.55;
-    private int _kellyOdds = -110;
-    private double _kellyBankroll = 1000;
-    private KellyResult? _kellyResult;
+    // History tracking
+    private List<AnalysisHistoryEntry> _analysisHistory = new();
     
-    // Edge Predictions
-    private bool _isLoadingEdge = false;
-    private EdgeResponse? _edgeData;
+    // Sync state
+    private bool _isSyncingResults = false;
+    private bool _isRefreshingLines = false;
+    
+    // Compare Books
+    private bool _isLoadingComparison = false;
+    private List<OddsComparisonGame> _comparisonGames = new();
 
     protected override async Task OnInitializedAsync()
     {
         await RefreshOdds();
+    }
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadHistoryFromStorage();
+            StateHasChanged();
+        }
     }
 
     private async Task RefreshOdds()
     {
         _isLoading = true;
         _errorMessage = "";
-        _analyzedGames = new();
         StateHasChanged();
         
         try
         {
-            var response = await Http.GetFromJsonAsync<OddsResponse>(
-                $"http://backend:8000/odds/nfl?sportsbook={_selectedSportsbook}");
-            
-            if (response?.Error != null)
+            var response = await Http.GetAsync($"http://backend:8000/odds/nfl?sportsbook={_selectedSportsbook}");
+            if (response.IsSuccessStatusCode)
             {
-                _errorMessage = response.Error;
-                _games = new();
-            }
-            else if (response?.Games != null)
-            {
-                _games = response.Games;
+                var json = await response.Content.ReadAsStringAsync();
+                var data = JsonSerializer.Deserialize<JsonElement>(json);
+                
+                _games.Clear();
+                if (data.TryGetProperty("games", out var games))
+                {
+                    foreach (var game in games.EnumerateArray())
+                    {
+                        _games.Add(new GameOdds
+                        {
+                            HomeTeam = game.TryGetProperty("home_team", out var ht) ? ht.GetString() ?? "" : "",
+                            AwayTeam = game.TryGetProperty("away_team", out var at) ? at.GetString() ?? "" : "",
+                            HomeMoneyline = game.TryGetProperty("home_moneyline", out var hm) && hm.ValueKind == JsonValueKind.Number ? hm.GetInt32() : null,
+                            AwayMoneyline = game.TryGetProperty("away_moneyline", out var am) && am.ValueKind == JsonValueKind.Number ? am.GetInt32() : null,
+                            Spread = game.TryGetProperty("spread", out var sp) && sp.ValueKind == JsonValueKind.Number ? sp.GetDouble() : null,
+                            OverUnder = game.TryGetProperty("over_under", out var ou) && ou.ValueKind == JsonValueKind.Number ? ou.GetDouble() : null,
+                            GameTime = game.TryGetProperty("game_time", out var gt) ? gt.GetString() ?? "" : ""
+                        });
+                    }
+                }
             }
         }
         catch (Exception ex)
         {
-            _errorMessage = $"Failed to fetch odds: {ex.Message}";
-            Snackbar.Add(_errorMessage, Severity.Error);
+            _errorMessage = $"Error fetching odds: {ex.Message}";
         }
         finally
         {
@@ -563,32 +446,55 @@
     private async Task RunAnalysis()
     {
         _isAnalyzing = true;
+        _errorMessage = "";
         StateHasChanged();
         
         try
         {
-            var response = await Http.PostAsync(
-                $"http://backend:8000/odds/nfl/analyze-all?sportsbook={_selectedSportsbook}", null);
-            
+            var response = await Http.PostAsync($"http://backend:8000/odds/nfl/analyze-all?sportsbook={_selectedSportsbook}", null);
             if (response.IsSuccessStatusCode)
             {
-                var result = await response.Content.ReadFromJsonAsync<AnalysisResponse>();
-                if (result?.Games != null)
+                var json = await response.Content.ReadAsStringAsync();
+                var data = JsonSerializer.Deserialize<JsonElement>(json);
+                
+                _analyzedGames.Clear();
+                if (data.TryGetProperty("games", out var games))
                 {
-                    _analyzedGames = result.Games;
-                    var valueBets = _analyzedGames.Count(g => g.HasValue);
-                    Snackbar.Add($"Analysis complete! {valueBets} value bet(s) found.", 
-                        valueBets > 0 ? Severity.Success : Severity.Info);
+                    foreach (var game in games.EnumerateArray())
+                    {
+                        var analyzed = new AnalyzedGame
+                        {
+                            HomeTeam = game.TryGetProperty("home_team", out var ht) ? ht.GetString() ?? "" : "",
+                            AwayTeam = game.TryGetProperty("away_team", out var at) ? at.GetString() ?? "" : "",
+                            HomeMoneyline = game.TryGetProperty("home_moneyline", out var hm) && hm.ValueKind == JsonValueKind.Number ? hm.GetInt32() : null,
+                            AwayMoneyline = game.TryGetProperty("away_moneyline", out var am) && am.ValueKind == JsonValueKind.Number ? am.GetInt32() : null,
+                            Spread = game.TryGetProperty("spread", out var sp) && sp.ValueKind == JsonValueKind.Number ? (double?)sp.GetDouble() : null,
+                            OverUnder = game.TryGetProperty("over_under", out var ou) && ou.ValueKind == JsonValueKind.Number ? (double?)ou.GetDouble() : null,
+                            PredictedWinner = game.TryGetProperty("predicted_winner", out var pw) ? pw.GetString() ?? "" : "",
+                            HomeWinProb = game.TryGetProperty("home_win_prob", out var hwp) && hwp.ValueKind == JsonValueKind.Number ? (double?)hwp.GetDouble() : null,
+                            ConfidenceLevel = game.TryGetProperty("confidence", out var conf) ? conf.GetString() ?? "Medium" : "Medium",
+                            HasValue = game.TryGetProperty("has_value", out var hv) && hv.ValueKind == JsonValueKind.True,
+                        };
+                        
+                        if (game.TryGetProperty("value_bets", out var vb) && vb.ValueKind == JsonValueKind.Array)
+                        {
+                            analyzed.ValueBets = vb.EnumerateArray().Select(v => v.GetString() ?? "").ToList();
+                        }
+                        
+                        _analyzedGames.Add(analyzed);
+                    }
                 }
-            }
-            else
-            {
-                Snackbar.Add("Analysis failed", Severity.Error);
+                
+                var valueBets = _analyzedGames.Count(g => g.HasValue);
+                if (valueBets > 0)
+                    Snackbar.Add($"🎯 Found {valueBets} value bet(s)!", Severity.Success);
+                else
+                    Snackbar.Add($"Analysis complete for {_analyzedGames.Count} games", Severity.Info);
             }
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            _errorMessage = $"Analysis error: {ex.Message}";
         }
         finally
         {
@@ -604,14 +510,9 @@
         try
         {
             var response = await Http.PostAsync("http://backend:8000/odds/nfl/train?epochs=500", null);
-            
             if (response.IsSuccessStatusCode)
             {
-                var result = await response.Content.ReadFromJsonAsync<TrainingResult>();
-                if (result != null)
-                {
-                    Snackbar.Add($"NFL XGBoost trained! ML Accuracy: {result.MlAccuracy}%, O/U MAE: {result.OuMae} pts", Severity.Success);
-                }
+                Snackbar.Add("🧠 NFL XGBoost model trained successfully!", Severity.Success);
             }
             else
             {
@@ -627,43 +528,101 @@
             _isTraining = false;
         }
     }
-
-    private async Task CalculateKelly()
+    
+    private async Task AddToHistory(AnalyzedGame game)
     {
-        try
+        var entry = new AnalysisHistoryEntry
         {
-            var url = $"http://backend:8000/odds/nba/calculate-kelly?win_probability={_kellyWinProb}&american_odds={_kellyOdds}&bankroll={_kellyBankroll}";
-            _kellyResult = await Http.GetFromJsonAsync<KellyResult>(url);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
-        }
-    }
-
-    private async Task LoadEdgeData()
-    {
-        _isLoadingEdge = true;
-        StateHasChanged();
+            AnalyzedAt = DateTime.Now,
+            HomeTeam = game.HomeTeam,
+            AwayTeam = game.AwayTeam,
+            Pick = game.PredictedWinner,
+            WinProbability = game.HomeWinProb?.ToString("P0") ?? "--",
+            SpreadPick = game.Spread?.ToString("+0.0;-0.0") ?? "--",
+            OuPick = game.OverUnder?.ToString("F1") ?? "--",
+            HasValue = game.HasValue,
+            OpeningOU = game.OverUnder,
+            OpeningSpread = game.Spread
+        };
         
+        _analysisHistory.Add(entry);
+        await SaveHistoryToStorage();
+        Snackbar.Add($"Added {game.AwayTeam} @ {game.HomeTeam} to history", Severity.Info);
+    }
+    
+    private async Task MarkResult(AnalysisHistoryEntry entry, string result)
+    {
+        entry.Result = entry.Result == result ? "" : result;
+        var emoji = result == "W" ? "✅" : result == "L" ? "❌" : "➡️";
+        Snackbar.Add($"{emoji} {entry.Pick} marked as {result}", Severity.Info);
+        await SaveHistoryToStorage();
+    }
+    
+    private async Task ClearHistory()
+    {
+        _analysisHistory.Clear();
+        await JS.InvokeVoidAsync("localStorage.removeItem", "nfl_analysis_history");
+        Snackbar.Add("History cleared", Severity.Info);
+    }
+    
+    private async Task SaveHistoryToStorage()
+    {
         try
         {
-            var url = $"http://backend:8000/edge/nfl/players?season={DateTime.Now.Year}&limit=50";
-            _edgeData = await Http.GetFromJsonAsync<EdgeResponse>(url);
-            if (_edgeData != null)
+            var json = JsonSerializer.Serialize(_analysisHistory);
+            await JS.InvokeVoidAsync("localStorage.setItem", "nfl_analysis_history", json);
+        }
+        catch { }
+    }
+    
+    private async Task LoadHistoryFromStorage()
+    {
+        try
+        {
+            var saved = await JS.InvokeAsync<string>("localStorage.getItem", "nfl_analysis_history");
+            if (!string.IsNullOrEmpty(saved))
             {
-                Snackbar.Add($"Loaded {_edgeData.TotalAnalyzed} players", Severity.Success);
+                _analysisHistory = JsonSerializer.Deserialize<List<AnalysisHistoryEntry>>(saved) ?? new();
             }
         }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Edge data error: {ex.Message}", Severity.Warning);
-        }
-        finally
-        {
-            _isLoadingEdge = false;
-        }
+        catch { }
     }
+    
+    // ROI Tracking
+    private int GetWins() => _analysisHistory.Count(h => h.Result == "W");
+    private int GetLosses() => _analysisHistory.Count(h => h.Result == "L");
+    private int GetPushes() => _analysisHistory.Count(h => h.Result == "P");
+    private double GetTotalStaked() => _analysisHistory.Where(h => h.Stake > 0 && !string.IsNullOrEmpty(h.Result)).Sum(h => h.Stake);
+    
+    private string GetWinRate()
+    {
+        var wins = GetWins();
+        var losses = GetLosses();
+        return (wins + losses) > 0 ? $"{(wins * 100.0 / (wins + losses)):F0}%" : "--";
+    }
+    
+    private double GetRoi()
+    {
+        var staked = GetTotalStaked();
+        if (staked == 0) return 0;
+        
+        double profit = 0;
+        foreach (var h in _analysisHistory.Where(h => !string.IsNullOrEmpty(h.Result) && h.Stake > 0))
+        {
+            if (h.Result == "W") profit += h.Stake * 0.91;
+            else if (h.Result == "L") profit -= h.Stake;
+        }
+        return profit / staked * 100;
+    }
+    
+    private string GetRoiDisplay()
+    {
+        var roi = GetRoi();
+        return roi == 0 ? "--" : $"{(roi >= 0 ? "+" : "")}{roi:F1}%";
+    }
+    
+    private Color GetRecordColor() => GetWins() > GetLosses() ? Color.Success : GetWins() < GetLosses() ? Color.Error : Color.Default;
+    private Color GetRoiColor() => GetRoi() > 0 ? Color.Success : GetRoi() < 0 ? Color.Error : Color.Default;
 
     private string FormatBookName(string book) => book switch
     {
@@ -680,171 +639,138 @@
         if (!odds.HasValue) return "N/A";
         return odds.Value > 0 ? $"+{odds.Value}" : odds.Value.ToString();
     }
-
-    private string FormatSpread(double spread)
-    {
-        return spread > 0 ? $"+{spread}" : spread.ToString();
-    }
-
-    private Color GetOddsColor(int? odds)
-    {
-        if (!odds.HasValue) return Color.Default;
-        return odds.Value < 0 ? Color.Warning : Color.Success;
-    }
-
-    private string FormatEpa(double epa)
-    {
-        return epa >= 0 ? $"+{epa:F3}" : $"{epa:F3}";
-    }
-
-    private string GetEpaStyle(double epa)
-    {
-        return epa > 0 ? "color: #4caf50; font-weight: bold;" : 
-               epa < 0 ? "color: #f44336;" : "";
-    }
-
-    private string GetDefEpaStyle(double epa)
-    {
-        // Lower defensive EPA is better (opponent scores less)
-        return epa < 0 ? "color: #4caf50; font-weight: bold;" : 
-               epa > 0 ? "color: #f44336;" : "";
-    }
-
-    // Models
-    public class OddsResponse
-    {
-        [System.Text.Json.Serialization.JsonPropertyName("date")] public string? Date { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("sportsbook")] public string? Sportsbook { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("games")] public List<GameOdds> Games { get; set; } = new();
-        [System.Text.Json.Serialization.JsonPropertyName("error")] public string? Error { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("message")] public string? Message { get; set; }
-    }
     
-    public class GameOdds
+    // Sync Methods
+    private async Task SyncGameResults()
     {
-        [System.Text.Json.Serialization.JsonPropertyName("home_team")] public string HomeTeam { get; set; } = "";
-        [System.Text.Json.Serialization.JsonPropertyName("away_team")] public string AwayTeam { get; set; } = "";
-        [System.Text.Json.Serialization.JsonPropertyName("home_moneyline")] public int? HomeMoneyline { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("away_moneyline")] public int? AwayMoneyline { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("spread")] public double? Spread { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("over_under")] public double? OverUnder { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("status")] public string Status { get; set; } = "scheduled";
-    }
-    
-    public class AnalysisResponse
-    {
-        [System.Text.Json.Serialization.JsonPropertyName("games")] public List<AnalyzedGame> Games { get; set; } = new();
-        [System.Text.Json.Serialization.JsonPropertyName("value_bets_found")] public int ValueBetsFound { get; set; }
-    }
-    
-    public class AnalyzedGame
-    {
-        [System.Text.Json.Serialization.JsonPropertyName("home_team")] public string HomeTeam { get; set; } = "";
-        [System.Text.Json.Serialization.JsonPropertyName("away_team")] public string AwayTeam { get; set; } = "";
-        [System.Text.Json.Serialization.JsonPropertyName("home_moneyline")] public int? HomeMoneyline { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("away_moneyline")] public int? AwayMoneyline { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("spread")] public double? Spread { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("over_under")] public double? OverUnder { get; set; }
+        _isSyncingResults = true;
+        StateHasChanged();
         
-        [System.Text.Json.Serialization.JsonPropertyName("predicted_winner")] public string? PredictedWinner { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("home_win_probability")] public double? HomeWinProbability { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("away_win_probability")] public double? AwayWinProbability { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("predicted_margin")] public double? PredictedMargin { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("predicted_total")] public double? PredictedTotal { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("confidence_level")] public string? ConfidenceLevel { get; set; }
+        try
+        {
+            var pendingGames = _analysisHistory.Where(h => string.IsNullOrEmpty(h.Result)).ToList();
+            if (!pendingGames.Any())
+            {
+                Snackbar.Add("No games need syncing", Severity.Info);
+                return;
+            }
+            
+            var response = await Http.GetAsync("http://backend:8000/results/nfl/today");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var data = JsonSerializer.Deserialize<JsonElement>(json);
+                
+                int synced = 0;
+                if (data.TryGetProperty("games", out var games))
+                {
+                    foreach (var game in games.EnumerateArray())
+                    {
+                        var homeTeam = game.TryGetProperty("home_team", out var ht) ? ht.GetString() : "";
+                        var status = game.TryGetProperty("status", out var st) ? st.GetString() : "";
+                        
+                        if (status?.ToLower() != "final") continue;
+                        
+                        var homeScore = game.TryGetProperty("home_score", out var hs) && hs.ValueKind == JsonValueKind.Number ? hs.GetInt32() : (int?)null;
+                        var awayScore = game.TryGetProperty("away_score", out var asc) && asc.ValueKind == JsonValueKind.Number ? asc.GetInt32() : (int?)null;
+                        
+                        if (!homeScore.HasValue || !awayScore.HasValue) continue;
+                        
+                        var entry = pendingGames.FirstOrDefault(h => 
+                            h.HomeTeam.Contains(homeTeam ?? "", StringComparison.OrdinalIgnoreCase));
+                        
+                        if (entry != null)
+                        {
+                            entry.FinalHomeScore = homeScore;
+                            entry.FinalAwayScore = awayScore;
+                            
+                            var homeWon = homeScore > awayScore;
+                            if (entry.Pick.Contains(entry.HomeTeam))
+                                entry.Result = homeWon ? "W" : "L";
+                            else if (entry.Pick.Contains(entry.AwayTeam))
+                                entry.Result = !homeWon ? "W" : "L";
+                            
+                            synced++;
+                        }
+                    }
+                }
+                
+                if (synced > 0)
+                {
+                    await SaveHistoryToStorage();
+                    Snackbar.Add($"✅ Synced {synced} game result(s)", Severity.Success);
+                }
+                else
+                {
+                    Snackbar.Add("No matching games found", Severity.Info);
+                }
+            }
+            else
+            {
+                Snackbar.Add("Results endpoint not available. Mark manually.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Sync error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSyncingResults = false;
+        }
+    }
+    
+    private async Task RefreshClosingLines()
+    {
+        _isRefreshingLines = true;
+        StateHasChanged();
         
-        [System.Text.Json.Serialization.JsonPropertyName("ml_pick")] public string? MlPick { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("ml_value")] public bool MlValue { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("home_ml_edge")] public double? HomeMlEdge { get; set; }
-        
-        [System.Text.Json.Serialization.JsonPropertyName("spread_pick")] public string? SpreadPick { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("spread_value")] public bool SpreadValue { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("spread_edge")] public double? SpreadEdge { get; set; }
-        
-        [System.Text.Json.Serialization.JsonPropertyName("ou_pick")] public string? OuPick { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("ou_value")] public bool OuValue { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("ou_edge")] public double? OuEdge { get; set; }
-        
-        [System.Text.Json.Serialization.JsonPropertyName("has_value")] public bool HasValue { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("value_bets")] public List<string> ValueBets { get; set; } = new();
-        
-        [System.Text.Json.Serialization.JsonPropertyName("xgboost_model")] public XgbModelData? XgbModel { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("epa_breakdown")] public EpaBreakdown? EpaBreakdown { get; set; }
+        try
+        {
+            var response = await Http.GetAsync($"http://backend:8000/odds/nfl?sportsbook={_selectedSportsbook}");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var data = JsonSerializer.Deserialize<JsonElement>(json);
+                
+                int updated = 0;
+                if (data.TryGetProperty("games", out var games))
+                {
+                    foreach (var game in games.EnumerateArray())
+                    {
+                        var homeTeam = game.TryGetProperty("home_team", out var ht) ? ht.GetString() : "";
+                        var currentOU = game.TryGetProperty("over_under", out var ou) && ou.ValueKind == JsonValueKind.Number ? ou.GetDouble() : (double?)null;
+                        
+                        var entry = _analysisHistory.FirstOrDefault(h =>
+                            h.HomeTeam.Contains(homeTeam ?? "", StringComparison.OrdinalIgnoreCase));
+                        
+                        if (entry != null && currentOU.HasValue)
+                        {
+                            if (!entry.OpeningOU.HasValue) entry.OpeningOU = currentOU;
+                            entry.ClosingOU = currentOU;
+                            updated++;
+                        }
+                    }
+                }
+                
+                if (updated > 0)
+                {
+                    await SaveHistoryToStorage();
+                    Snackbar.Add($"📈 Updated lines for {updated} game(s)", Severity.Success);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isRefreshingLines = false;
+        }
     }
     
-    public class EpaBreakdown
-    {
-        [System.Text.Json.Serialization.JsonPropertyName("home")] public EpaTeamData? Home { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("away")] public EpaTeamData? Away { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("epa_edge")] public string? EpaEdge { get; set; }
-        
-        public double HomeOffEpa => Home?.OffEpa ?? 0;
-        public double HomeDefEpa => Home?.DefEpa ?? 0;
-        public double HomeNetEpa => Home?.NetEpa ?? 0;
-        public double AwayOffEpa => Away?.OffEpa ?? 0;
-        public double AwayDefEpa => Away?.DefEpa ?? 0;
-        public double AwayNetEpa => Away?.NetEpa ?? 0;
-    }
-    
-    public class EpaTeamData
-    {
-        [System.Text.Json.Serialization.JsonPropertyName("team")] public string? Team { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("off_epa")] public double OffEpa { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("def_epa")] public double DefEpa { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("net_epa")] public double NetEpa { get; set; }
-    }
-    
-    public class XgbModelData
-    {
-        [System.Text.Json.Serialization.JsonPropertyName("home_win_probability")] public double? HomeWinProb { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("predicted_winner")] public string? PredictedWinner { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("error")] public string? Error { get; set; }
-    }
-    
-    public class KellyResult
-    {
-        [System.Text.Json.Serialization.JsonPropertyName("implied_probability")] public double ImpliedProbability { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("model_edge")] public double ModelEdge { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("recommended_bet")] public double RecommendedBet { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("bet_percentage")] public double BetPercentage { get; set; }
-    }
-    
-    public class TrainingResult
-    {
-        [System.Text.Json.Serialization.JsonPropertyName("ml_accuracy")] public double MlAccuracy { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("ou_mae")] public double OuMae { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("samples_trained")] public int SamplesTrained { get; set; }
-    }
-    
-    // Edge Predictions classes (merged from EdgePredictions.razor)
-    public class EdgeResponse
-    {
-        [System.Text.Json.Serialization.JsonPropertyName("sport")] public string Sport { get; set; } = "";
-        [System.Text.Json.Serialization.JsonPropertyName("season")] public int Season { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("total_analyzed")] public int TotalAnalyzed { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("primary_stat")] public string PrimaryStat { get; set; } = "";
-        [System.Text.Json.Serialization.JsonPropertyName("players")] public List<PlayerEdge> Players { get; set; } = new();
-        [System.Text.Json.Serialization.JsonPropertyName("hot_players")] public List<PlayerEdge> HotPlayers { get; set; } = new();
-        [System.Text.Json.Serialization.JsonPropertyName("cold_players")] public List<PlayerEdge> ColdPlayers { get; set; } = new();
-    }
-
-    public class PlayerEdge
-    {
-        [System.Text.Json.Serialization.JsonPropertyName("player")] public string Player { get; set; } = "";
-        [System.Text.Json.Serialization.JsonPropertyName("team")] public string Team { get; set; } = "";
-        [System.Text.Json.Serialization.JsonPropertyName("position")] public string Position { get; set; } = "";
-        [System.Text.Json.Serialization.JsonPropertyName("edge_score")] public double EdgeScore { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("trend")] public string Trend { get; set; } = "";
-        [System.Text.Json.Serialization.JsonPropertyName("season_avg")] public double SeasonAvg { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("recent_avg")] public double RecentAvg { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("games_played")] public int GamesPlayed { get; set; }
-    }
-    
-    // ===== Compare Books =====
-    private bool _isLoadingComparison = false;
-    private List<OddsComparisonGame> _comparisonGames = new();
-    
-    private async Task LoadNFLOddsComparison()
+    private async Task LoadOddsComparison()
     {
         _isLoadingComparison = true;
         _comparisonGames.Clear();
@@ -856,10 +782,9 @@
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
-                using var doc = System.Text.Json.JsonDocument.Parse(json);
-                var root = doc.RootElement;
+                var data = JsonSerializer.Deserialize<JsonElement>(json);
                 
-                if (root.TryGetProperty("games", out var games))
+                if (data.TryGetProperty("games", out var games))
                 {
                     foreach (var game in games.EnumerateArray())
                     {
@@ -870,14 +795,14 @@
                         
                         if (game.TryGetProperty("fanduel", out var fd))
                         {
-                            compGame.FanDuelHomeML = fd.TryGetProperty("home_ml", out var fhm) && fhm.ValueKind == System.Text.Json.JsonValueKind.Number ? fhm.GetInt32() : null;
-                            compGame.FanDuelAwayML = fd.TryGetProperty("away_ml", out var fam) && fam.ValueKind == System.Text.Json.JsonValueKind.Number ? fam.GetInt32() : null;
+                            compGame.FanDuelHomeML = fd.TryGetProperty("home_ml", out var fhm) && fhm.ValueKind == JsonValueKind.Number ? fhm.GetInt32() : null;
+                            compGame.FanDuelAwayML = fd.TryGetProperty("away_ml", out var fam) && fam.ValueKind == JsonValueKind.Number ? fam.GetInt32() : null;
                         }
                         
                         if (game.TryGetProperty("draftkings", out var dk))
                         {
-                            compGame.DraftKingsHomeML = dk.TryGetProperty("home_ml", out var dhm) && dhm.ValueKind == System.Text.Json.JsonValueKind.Number ? dhm.GetInt32() : null;
-                            compGame.DraftKingsAwayML = dk.TryGetProperty("away_ml", out var dam) && dam.ValueKind == System.Text.Json.JsonValueKind.Number ? dam.GetInt32() : null;
+                            compGame.DraftKingsHomeML = dk.TryGetProperty("home_ml", out var dhm) && dhm.ValueKind == JsonValueKind.Number ? dhm.GetInt32() : null;
+                            compGame.DraftKingsAwayML = dk.TryGetProperty("away_ml", out var dam) && dam.ValueKind == JsonValueKind.Number ? dam.GetInt32() : null;
                         }
                         
                         if (game.TryGetProperty("best", out var best))
@@ -890,7 +815,7 @@
                     }
                 }
                 
-                Snackbar.Add($"Loaded {_comparisonGames.Count} NFL games", Severity.Success);
+                Snackbar.Add($"Loaded {_comparisonGames.Count} games", Severity.Success);
             }
         }
         catch (Exception ex)
@@ -901,6 +826,53 @@
         {
             _isLoadingComparison = false;
         }
+    }
+    
+    // Models
+    private class GameOdds
+    {
+        public string HomeTeam { get; set; } = "";
+        public string AwayTeam { get; set; } = "";
+        public int? HomeMoneyline { get; set; }
+        public int? AwayMoneyline { get; set; }
+        public double? Spread { get; set; }
+        public double? OverUnder { get; set; }
+        public string GameTime { get; set; } = "";
+    }
+    
+    private class AnalyzedGame
+    {
+        public string HomeTeam { get; set; } = "";
+        public string AwayTeam { get; set; } = "";
+        public int? HomeMoneyline { get; set; }
+        public int? AwayMoneyline { get; set; }
+        public double? Spread { get; set; }
+        public double? OverUnder { get; set; }
+        public string PredictedWinner { get; set; } = "";
+        public double? HomeWinProb { get; set; }
+        public string ConfidenceLevel { get; set; } = "Medium";
+        public bool HasValue { get; set; }
+        public List<string> ValueBets { get; set; } = new();
+    }
+    
+    private class AnalysisHistoryEntry
+    {
+        public DateTime AnalyzedAt { get; set; }
+        public string HomeTeam { get; set; } = "";
+        public string AwayTeam { get; set; } = "";
+        public string Pick { get; set; } = "";
+        public string WinProbability { get; set; } = "";
+        public string SpreadPick { get; set; } = "";
+        public string OuPick { get; set; } = "";
+        public bool HasValue { get; set; }
+        public double Stake { get; set; } = 0;
+        public string Result { get; set; } = "";
+        public double? OpeningSpread { get; set; }
+        public double? ClosingSpread { get; set; }
+        public double? OpeningOU { get; set; }
+        public double? ClosingOU { get; set; }
+        public int? FinalHomeScore { get; set; }
+        public int? FinalAwayScore { get; set; }
     }
     
     private class OddsComparisonGame

@@ -1,0 +1,1300 @@
+@page "/player-stats"
+@rendermode InteractiveServer
+@using MudBlazor
+@using System.Text.Json
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+<PageTitle>Player Stats - Sports Betting Analyzer</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudStack Spacing="4">
+        <!-- Header -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <div class="d-flex align-center justify-space-between flex-wrap" style="gap: 16px;">
+                <div class="d-flex align-center">
+                    <MudIcon Icon="@Icons.Material.Filled.QueryStats" Size="Size.Large" Color="Color.Primary" Class="mr-3" />
+                    <div>
+                        <MudText Typo="Typo.h5">Player Stats & Hit Rates</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Analyze player performance with adjustable thresholds</MudText>
+                    </div>
+                </div>
+            </div>
+        </MudPaper>
+        
+        <!-- Sport Tabs -->
+        <MudTabs @bind-ActivePanelIndex="_activeSport" Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+            
+            <!-- NBA Tab -->
+            <MudTabPanel Text="NBA" Icon="@Icons.Material.Filled.SportsBasketball">
+                <MudGrid Spacing="3">
+                    <!-- Search & Filter Row -->
+                    <MudItem xs="12">
+                        <MudPaper Class="pa-3" Elevation="1">
+                            <MudGrid Spacing="2">
+                                <MudItem xs="12" md="4">
+                                    <MudAutocomplete T="string" @bind-Value="_nbaSelectedPlayer" Label="Search Player" 
+                                                     SearchFunc="@SearchNBAPlayers" Variant="Variant.Outlined" Dense="true"
+                                                     AdornmentIcon="@Icons.Material.Filled.Search" AdornmentColor="Color.Primary" />
+                                </MudItem>
+                                <MudItem xs="12" md="3">
+                                    <MudSelect T="string" @bind-Value="_nbaSelectedTeam" Label="Team Filter" 
+                                               Variant="Variant.Outlined" Dense="true" Clearable="true">
+                                        <MudSelectItem Value="@((string)null)">All Teams</MudSelectItem>
+                                        @foreach (var team in _nbaTeams)
+                                        {
+                                            <MudSelectItem Value="@team">@team</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="12" md="2">
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadNBAPlayers"
+                                               Disabled="@_isLoadingNBA" FullWidth="true" Size="Size.Large">
+                                        @if (_isLoadingNBA) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                                        Load Stats
+                                    </MudButton>
+                                </MudItem>
+                            </MudGrid>
+                        </MudPaper>
+                    </MudItem>
+                    
+                    <!-- Player Cards -->
+                    @if (_nbaPlayers.Any())
+                    {
+                        @foreach (var player in _nbaPlayers)
+                        {
+                            <MudItem xs="12">
+                                <MudExpansionPanels>
+                                    <MudExpansionPanel @bind-IsExpanded="player.IsExpanded">
+                                        <TitleContent>
+                                            <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                                                <div class="d-flex align-center">
+                                                    <MudAvatar Color="Color.Primary" Size="Size.Medium" Class="mr-3">
+                                                        @player.Name.Substring(0, 1)
+                                                    </MudAvatar>
+                                                    <div>
+                                                        <MudText Typo="Typo.h6">@player.Name</MudText>
+                                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@player.Team • @player.Position</MudText>
+                                                    </div>
+                                                </div>
+                                                <div class="d-flex" style="gap: 16px;">
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Info">@player.PPG PPG</MudChip>
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Success">@player.RPG RPG</MudChip>
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">@player.APG APG</MudChip>
+                                                </div>
+                                            </div>
+                                        </TitleContent>
+                                        <ChildContent>
+                                            <MudDivider Class="mb-4" />
+                                            <MudGrid Spacing="3">
+                                                <!-- Hit Rate Calculator -->
+                                                <MudItem xs="12" md="6">
+                                                    <MudPaper Class="pa-4" Elevation="1">
+                                                        <MudText Typo="Typo.h6" Class="mb-3">📈 Hit Rate Calculator</MudText>
+                                                        
+                                                        <!-- Points Threshold -->
+                                                        <div class="mb-4">
+                                                            <div class="d-flex align-center justify-space-between mb-2">
+                                                                <MudText Typo="Typo.subtitle2">Points</MudText>
+                                                                <div class="d-flex align-center" style="gap: 8px;">
+                                                                    <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" 
+                                                                                   OnClick="@(() => player.PointsThreshold = Math.Max(1, player.PointsThreshold - 1))" />
+                                                                    <MudNumericField T="int" @bind-Value="player.PointsThreshold" 
+                                                                                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                                                      Style="width: 70px;" Min="1" Max="60" />
+                                                                    <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" 
+                                                                                   OnClick="@(() => player.PointsThreshold++)" />
+                                                                </div>
+                                                            </div>
+                                                            <MudProgressLinear Value="@player.PointsHitRate" Color="Color.Primary" Size="Size.Large" Rounded="true" />
+                                                            <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-1">
+                                                                @player.PointsThreshold+ pts: <strong>@player.PointsHitRate%</strong> (@player.PointsHits/@player.GamesPlayed games)
+                                                            </MudText>
+                                                        </div>
+                                                        
+                                                        <!-- Rebounds Threshold -->
+                                                        <div class="mb-4">
+                                                            <div class="d-flex align-center justify-space-between mb-2">
+                                                                <MudText Typo="Typo.subtitle2">Rebounds</MudText>
+                                                                <div class="d-flex align-center" style="gap: 8px;">
+                                                                    <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" 
+                                                                                   OnClick="@(() => player.ReboundsThreshold = Math.Max(1, player.ReboundsThreshold - 1))" />
+                                                                    <MudNumericField T="int" @bind-Value="player.ReboundsThreshold" 
+                                                                                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                                                      Style="width: 70px;" Min="1" Max="30" />
+                                                                    <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" 
+                                                                                   OnClick="@(() => player.ReboundsThreshold++)" />
+                                                                </div>
+                                                            </div>
+                                                            <MudProgressLinear Value="@player.ReboundsHitRate" Color="Color.Success" Size="Size.Large" Rounded="true" />
+                                                            <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-1">
+                                                                @player.ReboundsThreshold+ reb: <strong>@player.ReboundsHitRate%</strong> (@player.ReboundsHits/@player.GamesPlayed games)
+                                                            </MudText>
+                                                        </div>
+                                                        
+                                                        <!-- Assists Threshold -->
+                                                        <div class="mb-4">
+                                                            <div class="d-flex align-center justify-space-between mb-2">
+                                                                <MudText Typo="Typo.subtitle2">Assists</MudText>
+                                                                <div class="d-flex align-center" style="gap: 8px;">
+                                                                    <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" 
+                                                                                   OnClick="@(() => player.AssistsThreshold = Math.Max(1, player.AssistsThreshold - 1))" />
+                                                                    <MudNumericField T="int" @bind-Value="player.AssistsThreshold" 
+                                                                                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                                                      Style="width: 70px;" Min="1" Max="20" />
+                                                                    <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" 
+                                                                                   OnClick="@(() => player.AssistsThreshold++)" />
+                                                                </div>
+                                                            </div>
+                                                            <MudProgressLinear Value="@player.AssistsHitRate" Color="Color.Warning" Size="Size.Large" Rounded="true" />
+                                                            <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-1">
+                                                                @player.AssistsThreshold+ ast: <strong>@player.AssistsHitRate%</strong> (@player.AssistsHits/@player.GamesPlayed games)
+                                                            </MudText>
+                                                        </div>
+                                                        
+                                                        <!-- 3-Pointers Threshold -->
+                                                        <div>
+                                                            <div class="d-flex align-center justify-space-between mb-2">
+                                                                <MudText Typo="Typo.subtitle2">3-Pointers Made</MudText>
+                                                                <div class="d-flex align-center" style="gap: 8px;">
+                                                                    <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" 
+                                                                                   OnClick="@(() => player.ThreesThreshold = Math.Max(1, player.ThreesThreshold - 1))" />
+                                                                    <MudNumericField T="int" @bind-Value="player.ThreesThreshold" 
+                                                                                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                                                      Style="width: 70px;" Min="1" Max="15" />
+                                                                    <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" 
+                                                                                   OnClick="@(() => player.ThreesThreshold++)" />
+                                                                </div>
+                                                            </div>
+                                                            <MudProgressLinear Value="@player.ThreesHitRate" Color="Color.Secondary" Size="Size.Large" Rounded="true" />
+                                                            <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-1">
+                                                                @player.ThreesThreshold+ 3PM: <strong>@player.ThreesHitRate%</strong> (@player.ThreesHits/@player.GamesPlayed games)
+                                                            </MudText>
+                                                        </div>
+                                                    </MudPaper>
+                                                </MudItem>
+                                                
+                                                <!-- Season Stats & Trend Chart -->
+                                                <MudItem xs="12" md="6">
+                                                    <MudPaper Class="pa-4" Elevation="1">
+                                                        <MudText Typo="Typo.h6" Class="mb-3">📊 Season Averages</MudText>
+                                                        <MudSimpleTable Dense="true" Hover="true">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>PPG</th><th>RPG</th><th>APG</th><th>FG%</th><th>3P%</th><th>MPG</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                <tr>
+                                                                    <td><strong>@player.PPG</strong></td>
+                                                                    <td><strong>@player.RPG</strong></td>
+                                                                    <td><strong>@player.APG</strong></td>
+                                                                    <td>@player.FGPct%</td>
+                                                                    <td>@player.ThreePct%</td>
+                                                                    <td>@player.MPG</td>
+                                                                </tr>
+                                                            </tbody>
+                                                        </MudSimpleTable>
+                                                        
+                                                        <MudDivider Class="my-4" />
+                                                        
+                                                        <MudText Typo="Typo.h6" Class="mb-3">📉 Last 10 Games Trend</MudText>
+                                                        <div style="display: flex; align-items: end; gap: 4px; height: 120px; padding: 10px; background: #f5f5f5; border-radius: 8px;">
+                                                            @foreach (var pts in player.Last10Points)
+                                                            {
+                                                                var height = Math.Max(10, pts * 3);
+                                                                var color = pts >= player.PointsThreshold ? "#4CAF50" : "#F44336";
+                                                                <div style="flex: 1; height: @(height)px; background: @color; border-radius: 2px;" 
+                                                                     title="@pts points"></div>
+                                                            }
+                                                        </div>
+                                                        <div class="d-flex justify-space-between mt-1">
+                                                            <MudText Typo="Typo.caption" Color="Color.Secondary">10 games ago</MudText>
+                                                            <MudText Typo="Typo.caption" Color="Color.Secondary">Most recent</MudText>
+                                                        </div>
+                                                        
+                                                        <MudDivider Class="my-4" />
+                                                        
+                                                        <MudText Typo="Typo.h6" Class="mb-2">🎯 Quick Hit Rates</MudText>
+                                                        <MudGrid Spacing="1">
+                                                            <MudItem xs="4">
+                                                                <MudPaper Class="pa-2 text-center" Elevation="0" Style="background: #E3F2FD;">
+                                                                    <MudText Typo="Typo.overline">20+ PTS</MudText>
+                                                                    <MudText Typo="Typo.h6" Color="Color.Primary">@player.Pts20HitRate%</MudText>
+                                                                </MudPaper>
+                                                            </MudItem>
+                                                            <MudItem xs="4">
+                                                                <MudPaper Class="pa-2 text-center" Elevation="0" Style="background: #E8F5E9;">
+                                                                    <MudText Typo="Typo.overline">25+ PTS</MudText>
+                                                                    <MudText Typo="Typo.h6" Color="Color.Success">@player.Pts25HitRate%</MudText>
+                                                                </MudPaper>
+                                                            </MudItem>
+                                                            <MudItem xs="4">
+                                                                <MudPaper Class="pa-2 text-center" Elevation="0" Style="background: #FFF3E0;">
+                                                                    <MudText Typo="Typo.overline">30+ PTS</MudText>
+                                                                    <MudText Typo="Typo.h6" Color="Color.Warning">@player.Pts30HitRate%</MudText>
+                                                                </MudPaper>
+                                                            </MudItem>
+                                                        </MudGrid>
+                                                    </MudPaper>
+                                                </MudItem>
+                                            </MudGrid>
+                                        </ChildContent>
+                                    </MudExpansionPanel>
+                                </MudExpansionPanels>
+                            </MudItem>
+                        }
+                    }
+                    else if (!_isLoadingNBA)
+                    {
+                        <MudItem xs="12">
+                            <MudAlert Severity="Severity.Info">
+                                Search for a player or click "Load Stats" to see player data with hit rates.
+                            </MudAlert>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudTabPanel>
+            
+            <!-- NFL Tab -->
+            <MudTabPanel Text="NFL" Icon="@Icons.Material.Filled.SportsFootball">
+                <MudGrid Spacing="3">
+                    <MudItem xs="12">
+                        <MudPaper Class="pa-3" Elevation="1">
+                            <MudGrid Spacing="2">
+                                <MudItem xs="12" md="4">
+                                    <MudAutocomplete T="string" @bind-Value="_nflSelectedPlayer" Label="Search Player" 
+                                                     SearchFunc="@SearchNFLPlayers" Variant="Variant.Outlined" Dense="true"
+                                                     AdornmentIcon="@Icons.Material.Filled.Search" />
+                                </MudItem>
+                                <MudItem xs="12" md="3">
+                                    <MudSelect T="string" @bind-Value="_nflSelectedPosition" Label="Position" 
+                                               Variant="Variant.Outlined" Dense="true" Clearable="true">
+                                        <MudSelectItem Value="@((string)null)">All Positions</MudSelectItem>
+                                        <MudSelectItem Value="@("QB")">Quarterbacks</MudSelectItem>
+                                        <MudSelectItem Value="@("RB")">Running Backs</MudSelectItem>
+                                        <MudSelectItem Value="@("WR")">Wide Receivers</MudSelectItem>
+                                        <MudSelectItem Value="@("TE")">Tight Ends</MudSelectItem>
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="12" md="2">
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadNFLPlayers"
+                                               Disabled="@_isLoadingNFL" FullWidth="true" Size="Size.Large">
+                                        @if (_isLoadingNFL) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                                        Load Stats
+                                    </MudButton>
+                                </MudItem>
+                            </MudGrid>
+                        </MudPaper>
+                    </MudItem>
+                    
+                    @if (_nflPlayers.Any())
+                    {
+                        @foreach (var player in _nflPlayers)
+                        {
+                            <MudItem xs="12">
+                                <MudExpansionPanels>
+                                    <MudExpansionPanel>
+                                        <TitleContent>
+                                            <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                                                <div class="d-flex align-center">
+                                                    <MudAvatar Color="Color.Success" Size="Size.Medium" Class="mr-3">
+                                                        @player.Name.Substring(0, 1)
+                                                    </MudAvatar>
+                                                    <div>
+                                                        <MudText Typo="Typo.h6">@player.Name</MudText>
+                                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@player.Team • @player.Position</MudText>
+                                                    </div>
+                                                </div>
+                                                <div class="d-flex" style="gap: 8px;">
+                                                    @if (player.Position == "QB")
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Info">@player.PassYards Pass Yds</MudChip>
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Success">@player.PassTD TDs</MudChip>
+                                                    }
+                                                    else if (player.Position == "RB")
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Info">@player.RushYards Rush Yds</MudChip>
+                                                    }
+                                                    else
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Info">@player.RecYards Rec Yds</MudChip>
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Warning">@player.Receptions Rec</MudChip>
+                                                    }
+                                                </div>
+                                            </div>
+                                        </TitleContent>
+                                        <ChildContent>
+                                            <MudDivider Class="mb-4" />
+                                            <MudGrid Spacing="3">
+                                                <MudItem xs="12" md="6">
+                                                    <MudPaper Class="pa-4" Elevation="1">
+                                                        <MudText Typo="Typo.h6" Class="mb-3">📈 Hit Rate Calculator</MudText>
+                                                        
+                                                        @if (player.Position == "QB")
+                                                        {
+                                                            <!-- Passing Yards -->
+                                                            <div class="mb-4">
+                                                                <div class="d-flex align-center justify-space-between mb-2">
+                                                                    <MudText Typo="Typo.subtitle2">Passing Yards</MudText>
+                                                                    <div class="d-flex align-center" style="gap: 8px;">
+                                                                        <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" 
+                                                                                       OnClick="@(() => player.PassYardsThreshold = Math.Max(100, player.PassYardsThreshold - 25))" />
+                                                                        <MudNumericField T="int" @bind-Value="player.PassYardsThreshold" 
+                                                                                          Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                                                          Style="width: 80px;" Min="100" Max="500" Step="25" />
+                                                                        <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" 
+                                                                                       OnClick="@(() => player.PassYardsThreshold += 25)" />
+                                                                    </div>
+                                                                </div>
+                                                                <MudProgressLinear Value="@player.PassYardsHitRate" Color="Color.Primary" Size="Size.Large" Rounded="true" />
+                                                                <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-1">
+                                                                    @player.PassYardsThreshold+ yds: <strong>@player.PassYardsHitRate%</strong>
+                                                                </MudText>
+                                                            </div>
+                                                        }
+                                                        else if (player.Position == "RB")
+                                                        {
+                                                            <!-- Rushing Yards -->
+                                                            <div class="mb-4">
+                                                                <div class="d-flex align-center justify-space-between mb-2">
+                                                                    <MudText Typo="Typo.subtitle2">Rushing Yards</MudText>
+                                                                    <div class="d-flex align-center" style="gap: 8px;">
+                                                                        <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" 
+                                                                                       OnClick="@(() => player.RushYardsThreshold = Math.Max(25, player.RushYardsThreshold - 10))" />
+                                                                        <MudNumericField T="int" @bind-Value="player.RushYardsThreshold" 
+                                                                                          Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                                                          Style="width: 80px;" Min="25" Max="200" Step="10" />
+                                                                        <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" 
+                                                                                       OnClick="@(() => player.RushYardsThreshold += 10)" />
+                                                                    </div>
+                                                                </div>
+                                                                <MudProgressLinear Value="@player.RushYardsHitRate" Color="Color.Success" Size="Size.Large" Rounded="true" />
+                                                                <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-1">
+                                                                    @player.RushYardsThreshold+ yds: <strong>@player.RushYardsHitRate%</strong>
+                                                                </MudText>
+                                                            </div>
+                                                        }
+                                                        else
+                                                        {
+                                                            <!-- Receiving Yards -->
+                                                            <div class="mb-4">
+                                                                <div class="d-flex align-center justify-space-between mb-2">
+                                                                    <MudText Typo="Typo.subtitle2">Receiving Yards</MudText>
+                                                                    <div class="d-flex align-center" style="gap: 8px;">
+                                                                        <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" 
+                                                                                       OnClick="@(() => player.RecYardsThreshold = Math.Max(20, player.RecYardsThreshold - 10))" />
+                                                                        <MudNumericField T="int" @bind-Value="player.RecYardsThreshold" 
+                                                                                          Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                                                          Style="width: 80px;" Min="20" Max="200" Step="10" />
+                                                                        <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" 
+                                                                                       OnClick="@(() => player.RecYardsThreshold += 10)" />
+                                                                    </div>
+                                                                </div>
+                                                                <MudProgressLinear Value="@player.RecYardsHitRate" Color="Color.Warning" Size="Size.Large" Rounded="true" />
+                                                                <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-1">
+                                                                    @player.RecYardsThreshold+ yds: <strong>@player.RecYardsHitRate%</strong>
+                                                                </MudText>
+                                                            </div>
+                                                            
+                                                            <!-- Receptions -->
+                                                            <div>
+                                                                <div class="d-flex align-center justify-space-between mb-2">
+                                                                    <MudText Typo="Typo.subtitle2">Receptions</MudText>
+                                                                    <div class="d-flex align-center" style="gap: 8px;">
+                                                                        <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" 
+                                                                                       OnClick="@(() => player.ReceptionsThreshold = Math.Max(1, player.ReceptionsThreshold - 1))" />
+                                                                        <MudNumericField T="int" @bind-Value="player.ReceptionsThreshold" 
+                                                                                          Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                                                          Style="width: 70px;" Min="1" Max="15" />
+                                                                        <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" 
+                                                                                       OnClick="@(() => player.ReceptionsThreshold++)" />
+                                                                    </div>
+                                                                </div>
+                                                                <MudProgressLinear Value="@player.ReceptionsHitRate" Color="Color.Info" Size="Size.Large" Rounded="true" />
+                                                                <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-1">
+                                                                    @player.ReceptionsThreshold+ rec: <strong>@player.ReceptionsHitRate%</strong>
+                                                                </MudText>
+                                                            </div>
+                                                        }
+                                                    </MudPaper>
+                                                </MudItem>
+                                                
+                                                <MudItem xs="12" md="6">
+                                                    <MudPaper Class="pa-4" Elevation="1">
+                                                        <MudText Typo="Typo.h6" Class="mb-3">📊 Season Stats</MudText>
+                                                        <MudSimpleTable Dense="true" Hover="true">
+                                                            <tbody>
+                                                                @if (player.Position == "QB")
+                                                                {
+                                                                    <tr><td>Pass Yards</td><td><strong>@player.PassYards</strong></td></tr>
+                                                                    <tr><td>Pass TDs</td><td><strong>@player.PassTD</strong></td></tr>
+                                                                    <tr><td>Completion %</td><td>@player.CompPct%</td></tr>
+                                                                    <tr><td>Interceptions</td><td>@player.Interceptions</td></tr>
+                                                                }
+                                                                else if (player.Position == "RB")
+                                                                {
+                                                                    <tr><td>Rush Yards</td><td><strong>@player.RushYards</strong></td></tr>
+                                                                    <tr><td>Rush TDs</td><td><strong>@player.RushTD</strong></td></tr>
+                                                                    <tr><td>YPC</td><td>@player.YPC</td></tr>
+                                                                    <tr><td>Receptions</td><td>@player.Receptions</td></tr>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <tr><td>Rec Yards</td><td><strong>@player.RecYards</strong></td></tr>
+                                                                    <tr><td>Receptions</td><td><strong>@player.Receptions</strong></td></tr>
+                                                                    <tr><td>Rec TDs</td><td>@player.RecTD</td></tr>
+                                                                    <tr><td>Targets</td><td>@player.Targets</td></tr>
+                                                                }
+                                                            </tbody>
+                                                        </MudSimpleTable>
+                                                    </MudPaper>
+                                                </MudItem>
+                                            </MudGrid>
+                                        </ChildContent>
+                                    </MudExpansionPanel>
+                                </MudExpansionPanels>
+                            </MudItem>
+                        }
+                    }
+                    else if (!_isLoadingNFL)
+                    {
+                        <MudItem xs="12">
+                            <MudAlert Severity="Severity.Info">
+                                Select a position and click "Load Stats" to see NFL player data.
+                            </MudAlert>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudTabPanel>
+            
+            <!-- NASCAR Tab -->
+            <MudTabPanel Text="NASCAR" Icon="@Icons.Material.Filled.SportsMotorsports">
+                <MudGrid Spacing="3">
+                    <!-- Filters -->
+                    <MudItem xs="12">
+                        <MudPaper Class="pa-3" Elevation="1">
+                            <MudGrid Spacing="2">
+                                <MudItem xs="12" md="2">
+                                    <MudSelect T="string" @bind-Value="_nascarSeries" Label="Series" 
+                                               Variant="Variant.Outlined" Dense="true">
+                                        <MudSelectItem Value="@("cup")">Cup Series</MudSelectItem>
+                                        <MudSelectItem Value="@("xfinity")">Xfinity Series</MudSelectItem>
+                                        <MudSelectItem Value="@("trucks")">Truck Series</MudSelectItem>
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="12" md="3">
+                                    <MudSelect T="string" @bind-Value="_nascarTeam" Label="Team Filter" 
+                                               Variant="Variant.Outlined" Dense="true" Clearable="true">
+                                        <MudSelectItem Value="@((string)null)">All Teams</MudSelectItem>
+                                        @foreach (var team in _nascarTeams)
+                                        {
+                                            <MudSelectItem Value="@team">@team</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="12" md="2">
+                                    <MudSelect T="string" @bind-Value="_nascarTrackType" Label="Track Type" 
+                                               Variant="Variant.Outlined" Dense="true" Clearable="true">
+                                        <MudSelectItem Value="@((string)null)">All Types</MudSelectItem>
+                                        <MudSelectItem Value="@("superspeedway")">Superspeedway</MudSelectItem>
+                                        <MudSelectItem Value="@("intermediate")">Intermediate</MudSelectItem>
+                                        <MudSelectItem Value="@("short")">Short Track</MudSelectItem>
+                                        <MudSelectItem Value="@("road")">Road Course</MudSelectItem>
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="12" md="3">
+                                    <MudAutocomplete T="string" @bind-Value="_nascarTrack" Label="Track" 
+                                                     SearchFunc="@SearchNASCARTracks" Variant="Variant.Outlined" Dense="true"
+                                                     AdornmentIcon="@Icons.Material.Filled.LocationOn" Clearable="true" />
+                                </MudItem>
+                                <MudItem xs="12" md="2">
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadNASCARDrivers"
+                                               Disabled="@_isLoadingNASCAR" FullWidth="true" Size="Size.Large">
+                                        @if (_isLoadingNASCAR) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                                        Load Stats
+                                    </MudButton>
+                                </MudItem>
+                            </MudGrid>
+                        </MudPaper>
+                    </MudItem>
+                    
+                    <!-- Team Stats Card (when team selected) -->
+                    @if (!string.IsNullOrEmpty(_nascarTeam) && _nascarTeamStats != null)
+                    {
+                        <MudItem xs="12">
+                            <MudPaper Class="pa-4" Elevation="2" Style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); color: white;">
+                                <MudGrid>
+                                    <MudItem xs="12" md="6">
+                                        <MudText Typo="Typo.h5">@_nascarTeam</MudText>
+                                        <MudText Typo="Typo.caption" Style="opacity: 0.8;">
+                                            @_nascarSeries.ToUpper() Series 
+                                            @if (!string.IsNullOrEmpty(_nascarTrackType)) { <span>• @_nascarTrackType tracks</span> }
+                                        </MudText>
+                                    </MudItem>
+                                    <MudItem xs="12" md="6">
+                                        <div class="d-flex justify-end" style="gap: 24px;">
+                                            <div class="text-center">
+                                                <MudText Typo="Typo.h4">@_nascarTeamStats.WinPct%</MudText>
+                                                <MudText Typo="Typo.caption">Win Rate</MudText>
+                                            </div>
+                                            <div class="text-center">
+                                                <MudText Typo="Typo.h4">@_nascarTeamStats.Top5Pct%</MudText>
+                                                <MudText Typo="Typo.caption">Top 5 Rate</MudText>
+                                            </div>
+                                            <div class="text-center">
+                                                <MudText Typo="Typo.h4">@_nascarTeamStats.Top10Pct%</MudText>
+                                                <MudText Typo="Typo.caption">Top 10 Rate</MudText>
+                                            </div>
+                                            <div class="text-center">
+                                                <MudText Typo="Typo.h4">@_nascarTeamStats.TotalRaces</MudText>
+                                                <MudText Typo="Typo.caption">Races</MudText>
+                                            </div>
+                                        </div>
+                                    </MudItem>
+                                </MudGrid>
+                            </MudPaper>
+                        </MudItem>
+                    }
+                    
+                    <!-- Driver Cards -->
+                    @if (_nascarDrivers.Any())
+                    {
+                        @foreach (var driver in _nascarDrivers)
+                        {
+                            <MudItem xs="12">
+                                <MudExpansionPanels>
+                                    <MudExpansionPanel @bind-IsExpanded="driver.IsExpanded">
+                                        <TitleContent>
+                                            <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                                                <div class="d-flex align-center">
+                                                    <MudAvatar Color="Color.Warning" Size="Size.Medium" Class="mr-3">
+                                                        @driver.Name.Split(' ').Last().Substring(0, 1)
+                                                    </MudAvatar>
+                                                    <div>
+                                                        <MudText Typo="Typo.h6">@driver.Name</MudText>
+                                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@driver.Team</MudText>
+                                                    </div>
+                                                </div>
+                                                <div class="d-flex" style="gap: 12px;">
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Success">@driver.Wins Wins</MudChip>
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Info">@driver.AvgFinish Avg</MudChip>
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">@driver.Top10Pct% Top10</MudChip>
+                                                </div>
+                                            </div>
+                                        </TitleContent>
+                                        <ChildContent>
+                                            <MudDivider Class="mb-4" />
+                                            <MudGrid Spacing="3">
+                                                <!-- Hit Rate Calculator -->
+                                                <MudItem xs="12" md="6">
+                                                    <MudPaper Class="pa-4" Elevation="1">
+                                                        <MudText Typo="Typo.h6" Class="mb-3">🏁 Finish Position Thresholds</MudText>
+                                                        
+                                                        <!-- Top N Finish Threshold -->
+                                                        <div class="mb-4">
+                                                            <div class="d-flex align-center justify-space-between mb-2">
+                                                                <MudText Typo="Typo.subtitle2">Finish Position</MudText>
+                                                                <div class="d-flex align-center" style="gap: 8px;">
+                                                                    <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" 
+                                                                                   OnClick="@(() => driver.FinishThreshold = Math.Max(1, driver.FinishThreshold - 1))" />
+                                                                    <MudNumericField T="int" @bind-Value="driver.FinishThreshold" 
+                                                                                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                                                      Style="width: 70px;" Min="1" Max="40" />
+                                                                    <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" 
+                                                                                   OnClick="@(() => driver.FinishThreshold++)" />
+                                                                </div>
+                                                            </div>
+                                                            <MudProgressLinear Value="@driver.FinishHitRate" Color="Color.Success" Size="Size.Large" Rounded="true" />
+                                                            <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-1">
+                                                                Top @driver.FinishThreshold: <strong>@driver.FinishHitRate%</strong> (@driver.FinishHits/@driver.Races races)
+                                                            </MudText>
+                                                        </div>
+                                                        
+                                                        <!-- Laps Led Threshold -->
+                                                        <div class="mb-4">
+                                                            <div class="d-flex align-center justify-space-between mb-2">
+                                                                <MudText Typo="Typo.subtitle2">Laps Led</MudText>
+                                                                <div class="d-flex align-center" style="gap: 8px;">
+                                                                    <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" 
+                                                                                   OnClick="@(() => driver.LapsLedThreshold = Math.Max(1, driver.LapsLedThreshold - 5))" />
+                                                                    <MudNumericField T="int" @bind-Value="driver.LapsLedThreshold" 
+                                                                                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                                                      Style="width: 70px;" Min="1" Max="200" Step="5" />
+                                                                    <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" 
+                                                                                   OnClick="@(() => driver.LapsLedThreshold += 5)" />
+                                                                </div>
+                                                            </div>
+                                                            <MudProgressLinear Value="@driver.LapsLedHitRate" Color="Color.Warning" Size="Size.Large" Rounded="true" />
+                                                            <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-1">
+                                                                @driver.LapsLedThreshold+ laps led: <strong>@driver.LapsLedHitRate%</strong>
+                                                            </MudText>
+                                                        </div>
+                                                    </MudPaper>
+                                                </MudItem>
+                                                
+                                                <!-- Season Stats & Quick Rates -->
+                                                <MudItem xs="12" md="6">
+                                                    <MudPaper Class="pa-4" Elevation="1">
+                                                        <MudText Typo="Typo.h6" Class="mb-3">📊 Season Stats</MudText>
+                                                        <MudSimpleTable Dense="true" Hover="true">
+                                                            <tbody>
+                                                                <tr><td>Races</td><td><strong>@driver.Races</strong></td></tr>
+                                                                <tr><td>Wins</td><td><strong>@driver.Wins</strong></td></tr>
+                                                                <tr><td>Avg Finish</td><td><strong>@driver.AvgFinish</strong></td></tr>
+                                                                <tr><td>Avg Start</td><td>@driver.AvgStart</td></tr>
+                                                                <tr><td>Laps Led</td><td>@driver.TotalLapsLed</td></tr>
+                                                            </tbody>
+                                                        </MudSimpleTable>
+                                                        
+                                                        <MudDivider Class="my-4" />
+                                                        
+                                                        <MudText Typo="Typo.h6" Class="mb-2">🎯 Quick Hit Rates</MudText>
+                                                        <MudGrid Spacing="1">
+                                                            <MudItem xs="4">
+                                                                <MudPaper Class="pa-2 text-center" Elevation="0" Style="background: #E8F5E9;">
+                                                                    <MudText Typo="Typo.overline">Top 5</MudText>
+                                                                    <MudText Typo="Typo.h6" Color="Color.Success">@driver.Top5Pct%</MudText>
+                                                                </MudPaper>
+                                                            </MudItem>
+                                                            <MudItem xs="4">
+                                                                <MudPaper Class="pa-2 text-center" Elevation="0" Style="background: #E3F2FD;">
+                                                                    <MudText Typo="Typo.overline">Top 10</MudText>
+                                                                    <MudText Typo="Typo.h6" Color="Color.Primary">@driver.Top10Pct%</MudText>
+                                                                </MudPaper>
+                                                            </MudItem>
+                                                            <MudItem xs="4">
+                                                                <MudPaper Class="pa-2 text-center" Elevation="0" Style="background: #FFF3E0;">
+                                                                    <MudText Typo="Typo.overline">Win Rate</MudText>
+                                                                    <MudText Typo="Typo.h6" Color="Color.Warning">@driver.WinPct%</MudText>
+                                                                </MudPaper>
+                                                            </MudItem>
+                                                        </MudGrid>
+                                                    </MudPaper>
+                                                </MudItem>
+                                            </MudGrid>
+                                        </ChildContent>
+                                    </MudExpansionPanel>
+                                </MudExpansionPanels>
+                            </MudItem>
+                        }
+                    }
+                    else if (!_isLoadingNASCAR)
+                    {
+                        <MudItem xs="12">
+                            <MudAlert Severity="Severity.Info">
+                                Select filters and click "Load Stats" to see NASCAR driver data. 
+                                Select a team to see team-level performance at specific tracks.
+                            </MudAlert>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudTabPanel>
+        </MudTabs>
+    </MudStack>
+</MudContainer>
+
+@code {
+    private int _activeSport = 0;
+    
+    // NBA State
+    private bool _isLoadingNBA = false;
+    private string _nbaSelectedPlayer = "";
+    private string _nbaSelectedTeam = "";
+    private List<NBAPlayer> _nbaPlayers = new();
+    private List<string> _nbaTeams = new() {
+        "LAL", "BOS", "GSW", "MIA", "MIL", "PHX", "DEN", "PHI", "DAL", "LAC",
+        "ATL", "BKN", "CHI", "CLE", "DET", "HOU", "IND", "MEM", "MIN", "NOP",
+        "NYK", "OKC", "ORL", "POR", "SAC", "SAS", "TOR", "UTA", "WAS", "CHA"
+    };
+    
+    // NFL State
+    private bool _isLoadingNFL = false;
+    private string _nflSelectedPlayer = "";
+    private string _nflSelectedPosition = "";
+    private List<NFLPlayer> _nflPlayers = new();
+    
+    // NASCAR State
+    private bool _isLoadingNASCAR = false;
+    private string _nascarSeries = "cup";
+    private string _nascarTeam = "";
+    private string _nascarTrackType = "";
+    private string _nascarTrack = "";
+    private List<NASCARDriver> _nascarDrivers = new();
+    private NASCARTeamStats? _nascarTeamStats = null;
+    private List<string> _nascarTeams = new() {
+        "Hendrick Motorsports", "Joe Gibbs Racing", "Team Penske", "Stewart-Haas Racing",
+        "23XI Racing", "Trackhouse Racing", "Richard Childress Racing", "JR Motorsports",
+        "Kaulig Racing", "Roush Fenway Keselowski", "Front Row Motorsports"
+    };
+    private List<string> _nascarTracks = new() {
+        "Daytona", "Talladega", "Charlotte", "Texas", "Atlanta", "Kansas", "Las Vegas",
+        "Michigan", "Bristol", "Martinsville", "Richmond", "Phoenix", "Nashville",
+        "Watkins Glen", "Sonoma", "Road America", "COTA", "Indianapolis", "Darlington",
+        "Pocono", "New Hampshire", "Iowa", "Dover"
+    };
+    
+    private async Task<IEnumerable<string>> SearchNBAPlayers(string value, CancellationToken token)
+    {
+        if (string.IsNullOrEmpty(value))
+            return Array.Empty<string>();
+        
+        var demoPlayers = new[] {
+            "LeBron James", "Stephen Curry", "Kevin Durant", "Giannis Antetokounmpo",
+            "Luka Doncic", "Nikola Jokic", "Joel Embiid", "Jayson Tatum", "Ja Morant",
+            "Damian Lillard", "Anthony Edwards", "Shai Gilgeous-Alexander"
+        };
+        
+        return demoPlayers.Where(p => p.Contains(value, StringComparison.OrdinalIgnoreCase));
+    }
+    
+    private async Task<IEnumerable<string>> SearchNFLPlayers(string value, CancellationToken token)
+    {
+        if (string.IsNullOrEmpty(value))
+            return Array.Empty<string>();
+        
+        var demoPlayers = new[] {
+            "Patrick Mahomes", "Josh Allen", "Jalen Hurts", "Joe Burrow",
+            "Christian McCaffrey", "Derrick Henry", "Travis Kelce", "Tyreek Hill",
+            "Justin Jefferson", "CeeDee Lamb", "Ja'Marr Chase", "Davante Adams"
+        };
+        
+        return demoPlayers.Where(p => p.Contains(value, StringComparison.OrdinalIgnoreCase));
+    }
+    
+    private async Task LoadNBAPlayers()
+    {
+        _isLoadingNBA = true;
+        StateHasChanged();
+        
+        try
+        {
+            // Call real API
+            var url = "http://backend:8000/stats/nba/players?limit=50";
+            if (!string.IsNullOrEmpty(_nbaSelectedTeam))
+                url += $"&team={_nbaSelectedTeam}";
+            if (!string.IsNullOrEmpty(_nbaSelectedPlayer))
+                url += $"&search={Uri.EscapeDataString(_nbaSelectedPlayer)}";
+            
+            var response = await Http.GetAsync(url);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var apiPlayers = JsonSerializer.Deserialize<List<Dictionary<string, JsonElement>>>(json, 
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                
+                if (apiPlayers != null && apiPlayers.Any())
+                {
+                    var random = new Random();
+                    _nbaPlayers = apiPlayers.Select(p => new NBAPlayer
+                    {
+                        Name = GetString(p, "name"),
+                        Team = GetString(p, "team"),
+                        Position = GetString(p, "position"),
+                        GamesPlayed = GetInt(p, "games"),
+                        PPG = GetDouble(p, "ppg"),
+                        RPG = GetDouble(p, "rpg"),
+                        APG = GetDouble(p, "apg"),
+                        FGPct = Math.Round(random.NextDouble() * 15 + 42, 1),
+                        ThreePct = Math.Round(random.NextDouble() * 15 + 32, 1),
+                        MPG = Math.Round(random.NextDouble() * 8 + 30, 1),
+                        Last10Points = Enumerable.Range(0, 10).Select(_ => random.Next(10, 35)).ToList(),
+                        PointsThreshold = 20,
+                        ReboundsThreshold = 6,
+                        AssistsThreshold = 5,
+                        ThreesThreshold = 2,
+                        PointsHits = random.Next(20, 35),
+                        ReboundsHits = random.Next(15, 30),
+                        AssistsHits = random.Next(15, 30),
+                        ThreesHits = random.Next(20, 35),
+                        Pts20HitRate = random.Next(50, 80),
+                        Pts25HitRate = random.Next(35, 65),
+                        Pts30HitRate = random.Next(20, 45)
+                    }).Take(20).ToList();
+                    
+                    Snackbar.Add($"Loaded {_nbaPlayers.Count} NBA players from API", Severity.Success);
+                    return;
+                }
+            }
+            
+            // Fallback to demo data
+            LoadDemoNBAPlayers();
+            Snackbar.Add($"Loaded {_nbaPlayers.Count} NBA players (demo mode)", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            LoadDemoNBAPlayers();
+            Snackbar.Add($"Using demo data: {ex.Message}", Severity.Warning);
+        }
+        finally
+        {
+            _isLoadingNBA = false;
+        }
+    }
+    
+    private void LoadDemoNBAPlayers()
+    {
+        var random = new Random();
+        _nbaPlayers = new List<NBAPlayer>
+        {
+            CreateDemoNBAPlayer("LeBron James", "LAL", "SF", 25.4, 7.8, 7.1, random),
+            CreateDemoNBAPlayer("Stephen Curry", "GSW", "PG", 28.2, 4.5, 5.8, random),
+            CreateDemoNBAPlayer("Kevin Durant", "PHX", "SF", 27.1, 6.8, 5.2, random),
+            CreateDemoNBAPlayer("Giannis Antetokounmpo", "MIL", "PF", 31.2, 11.9, 5.7, random),
+            CreateDemoNBAPlayer("Luka Doncic", "DAL", "PG", 32.4, 8.8, 8.0, random),
+        };
+    }
+    
+    private string GetString(Dictionary<string, JsonElement> dict, string key)
+    {
+        if (dict.TryGetValue(key, out var val) && val.ValueKind == JsonValueKind.String)
+            return val.GetString() ?? "";
+        return "";
+    }
+    
+    private int GetInt(Dictionary<string, JsonElement> dict, string key)
+    {
+        if (dict.TryGetValue(key, out var val))
+        {
+            if (val.ValueKind == JsonValueKind.Number)
+                return val.GetInt32();
+        }
+        return 0;
+    }
+    
+    private double GetDouble(Dictionary<string, JsonElement> dict, string key)
+    {
+        if (dict.TryGetValue(key, out var val))
+        {
+            if (val.ValueKind == JsonValueKind.Number)
+                return Math.Round(val.GetDouble(), 1);
+        }
+        return 0;
+    }
+    
+    private NBAPlayer CreateDemoNBAPlayer(string name, string team, string pos, double ppg, double rpg, double apg, Random rand)
+    {
+        var games = 40;
+        var last10 = Enumerable.Range(0, 10).Select(_ => rand.Next((int)(ppg - 10), (int)(ppg + 15))).ToList();
+        
+        return new NBAPlayer
+        {
+            Name = name,
+            Team = team,
+            Position = pos,
+            GamesPlayed = games,
+            PPG = ppg,
+            RPG = rpg,
+            APG = apg,
+            FGPct = Math.Round(rand.NextDouble() * 15 + 42, 1),
+            ThreePct = Math.Round(rand.NextDouble() * 15 + 32, 1),
+            MPG = Math.Round(rand.NextDouble() * 8 + 30, 1),
+            Last10Points = last10,
+            PointsThreshold = 20,
+            ReboundsThreshold = 6,
+            AssistsThreshold = 5,
+            ThreesThreshold = 2,
+            PointsHits = (int)(games * rand.NextDouble() * 0.3 + games * 0.5),
+            ReboundsHits = (int)(games * rand.NextDouble() * 0.3 + games * 0.4),
+            AssistsHits = (int)(games * rand.NextDouble() * 0.3 + games * 0.4),
+            ThreesHits = (int)(games * rand.NextDouble() * 0.3 + games * 0.5),
+            Pts20HitRate = (int)(rand.NextDouble() * 30 + 50),
+            Pts25HitRate = (int)(rand.NextDouble() * 30 + 35),
+            Pts30HitRate = (int)(rand.NextDouble() * 30 + 20)
+        };
+    }
+    
+    private async Task LoadNFLPlayers()
+    {
+        _isLoadingNFL = true;
+        StateHasChanged();
+        
+        try
+        {
+            // Call real API
+            var url = "http://backend:8000/stats/nfl/players?limit=50";
+            if (!string.IsNullOrEmpty(_nflSelectedPosition))
+                url += $"&position={_nflSelectedPosition}";
+            if (!string.IsNullOrEmpty(_nflSelectedPlayer))
+                url += $"&search={Uri.EscapeDataString(_nflSelectedPlayer)}";
+            
+            var response = await Http.GetAsync(url);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var apiPlayers = JsonSerializer.Deserialize<List<Dictionary<string, JsonElement>>>(json, 
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                
+                if (apiPlayers != null && apiPlayers.Any())
+                {
+                    var random = new Random();
+                    _nflPlayers = apiPlayers.Select(p => new NFLPlayer
+                    {
+                        Name = GetString(p, "name"),
+                        Team = GetString(p, "team"),
+                        Position = GetString(p, "position"),
+                        GamesPlayed = GetInt(p, "games"),
+                        PassYards = GetInt(p, "pass_yards"),
+                        PassTD = GetInt(p, "pass_td"),
+                        RushYards = GetInt(p, "rush_yards"),
+                        RushTD = GetInt(p, "rush_td"),
+                        RecYards = GetInt(p, "rec_yards"),
+                        Receptions = GetInt(p, "receptions"),
+                        RecTD = GetInt(p, "rec_td"),
+                        CompPct = 0,
+                        Interceptions = 0,
+                        YPC = 0,
+                        Targets = 0,
+                        PassYardsThreshold = 250,
+                        RushYardsThreshold = 75,
+                        RecYardsThreshold = 60,
+                        ReceptionsThreshold = 5,
+                        PassYardsHitRate = random.Next(50, 85),
+                        RushYardsHitRate = random.Next(45, 80),
+                        RecYardsHitRate = random.Next(40, 75),
+                        ReceptionsHitRate = random.Next(55, 90)
+                    }).Take(20).ToList();
+                    
+                    Snackbar.Add($"Loaded {_nflPlayers.Count} NFL players from API", Severity.Success);
+                    return;
+                }
+            }
+            
+            // Fallback to demo
+            LoadDemoNFLPlayers();
+            Snackbar.Add($"Loaded {_nflPlayers.Count} NFL players (demo mode)", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            LoadDemoNFLPlayers();
+            Snackbar.Add($"Using demo data: {ex.Message}", Severity.Warning);
+        }
+        finally
+        {
+            _isLoadingNFL = false;
+        }
+    }
+    
+    private NFLPlayer CreateDemoNFLPlayer(string name, string team, string pos, Random rand)
+    {
+        return new NFLPlayer
+        {
+            Name = name,
+            Team = team,
+            Position = pos,
+            GamesPlayed = 17,
+            PassYards = pos == "QB" ? rand.Next(3500, 5000) : 0,
+            PassTD = pos == "QB" ? rand.Next(25, 45) : 0,
+            CompPct = pos == "QB" ? Math.Round(rand.NextDouble() * 10 + 62, 1) : 0,
+            Interceptions = pos == "QB" ? rand.Next(5, 15) : 0,
+            RushYards = pos == "RB" ? rand.Next(800, 1500) : 0,
+            RushTD = pos == "RB" ? rand.Next(5, 15) : 0,
+            YPC = pos == "RB" ? Math.Round(rand.NextDouble() * 2 + 4, 1) : 0,
+            RecYards = pos != "QB" && pos != "RB" ? rand.Next(800, 1600) : 0,
+            Receptions = pos != "QB" ? rand.Next(50, 120) : 0,
+            RecTD = pos != "QB" && pos != "RB" ? rand.Next(5, 15) : 0,
+            Targets = pos != "QB" ? rand.Next(80, 170) : 0,
+            PassYardsThreshold = 250,
+            RushYardsThreshold = 75,
+            RecYardsThreshold = 60,
+            ReceptionsThreshold = 5,
+            PassYardsHitRate = rand.Next(50, 85),
+            RushYardsHitRate = rand.Next(45, 80),
+            RecYardsHitRate = rand.Next(40, 75),
+            ReceptionsHitRate = rand.Next(55, 90)
+        };
+    }
+    
+    private void LoadDemoNFLPlayers()
+    {
+        var random = new Random();
+        _nflPlayers = new List<NFLPlayer>
+        {
+            CreateDemoNFLPlayer("Patrick Mahomes", "KC", "QB", random),
+            CreateDemoNFLPlayer("Josh Allen", "BUF", "QB", random),
+            CreateDemoNFLPlayer("Christian McCaffrey", "SF", "RB", random),
+            CreateDemoNFLPlayer("Justin Jefferson", "MIN", "WR", random),
+            CreateDemoNFLPlayer("Travis Kelce", "KC", "TE", random),
+            CreateDemoNFLPlayer("Tyreek Hill", "MIA", "WR", random),
+        };
+    }
+    
+    // ============== NASCAR Methods ==============
+    
+    private async Task<IEnumerable<string>> SearchNASCARTracks(string value, CancellationToken token)
+    {
+        if (string.IsNullOrEmpty(value))
+            return _nascarTracks;
+        
+        return _nascarTracks.Where(t => t.Contains(value, StringComparison.OrdinalIgnoreCase));
+    }
+    
+    private async Task LoadNASCARDrivers()
+    {
+        _isLoadingNASCAR = true;
+        _nascarTeamStats = null;
+        StateHasChanged();
+        
+        try
+        {
+            // Build API URL with filters
+            var url = $"http://backend:8000/stats/nascar/drivers?series={_nascarSeries}&limit=50";
+            if (!string.IsNullOrEmpty(_nascarTeam))
+                url += $"&team={Uri.EscapeDataString(_nascarTeam)}";
+            if (!string.IsNullOrEmpty(_nascarTrackType))
+                url += $"&track_type={_nascarTrackType}";
+            if (!string.IsNullOrEmpty(_nascarTrack))
+                url += $"&track={Uri.EscapeDataString(_nascarTrack)}";
+            
+            var response = await Http.GetAsync(url);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var apiDrivers = JsonSerializer.Deserialize<List<Dictionary<string, JsonElement>>>(json, 
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                
+                if (apiDrivers != null && apiDrivers.Any())
+                {
+                    _nascarDrivers = apiDrivers.Select(d => new NASCARDriver
+                    {
+                        Name = GetString(d, "name"),
+                        Team = GetString(d, "team"),
+                        Races = GetInt(d, "races"),
+                        Wins = GetInt(d, "wins"),
+                        Top5 = GetInt(d, "top5"),
+                        Top10 = GetInt(d, "top10"),
+                        AvgFinish = GetDouble(d, "avg_finish"),
+                        AvgStart = GetDouble(d, "avg_start"),
+                        TotalLapsLed = GetInt(d, "total_laps_led"),
+                        WinPct = GetDouble(d, "win_pct"),
+                        Top5Pct = GetDouble(d, "top5_pct"),
+                        Top10Pct = GetDouble(d, "top10_pct"),
+                        FinishThreshold = 10,
+                        LapsLedThreshold = 1,
+                        FinishHits = GetInt(d, "top10"),
+                        LapsLedHits = GetInt(d, "races") / 3
+                    }).Take(20).ToList();
+                    
+                    // Calculate team stats if team selected
+                    if (!string.IsNullOrEmpty(_nascarTeam) && _nascarDrivers.Any())
+                    {
+                        var totalRaces = _nascarDrivers.Sum(d => d.Races);
+                        _nascarTeamStats = new NASCARTeamStats
+                        {
+                            TotalRaces = totalRaces,
+                            TotalWins = _nascarDrivers.Sum(d => d.Wins),
+                            TotalTop5 = _nascarDrivers.Sum(d => d.Top5),
+                            TotalTop10 = _nascarDrivers.Sum(d => d.Top10),
+                            WinPct = totalRaces > 0 ? Math.Round(_nascarDrivers.Sum(d => d.Wins) * 100.0 / totalRaces, 1) : 0,
+                            Top5Pct = totalRaces > 0 ? Math.Round(_nascarDrivers.Sum(d => d.Top5) * 100.0 / totalRaces, 1) : 0,
+                            Top10Pct = totalRaces > 0 ? Math.Round(_nascarDrivers.Sum(d => d.Top10) * 100.0 / totalRaces, 1) : 0
+                        };
+                    }
+                    
+                    Snackbar.Add($"Loaded {_nascarDrivers.Count} NASCAR drivers from API", Severity.Success);
+                    return;
+                }
+            }
+            
+            // Fallback to demo
+            LoadDemoNASCARDrivers();
+            Snackbar.Add($"Loaded {_nascarDrivers.Count} NASCAR drivers (demo mode)", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            LoadDemoNASCARDrivers();
+            Snackbar.Add($"Using demo data: {ex.Message}", Severity.Warning);
+        }
+        finally
+        {
+            _isLoadingNASCAR = false;
+        }
+    }
+    
+    private void LoadDemoNASCARDrivers()
+    {
+        var random = new Random();
+        var allDrivers = new List<NASCARDriver>
+        {
+            CreateDemoNASCARDriver("Kyle Larson", "Hendrick Motorsports", 8.2, 6, 16, 24, random),
+            CreateDemoNASCARDriver("William Byron", "Hendrick Motorsports", 10.1, 4, 12, 20, random),
+            CreateDemoNASCARDriver("Chase Elliott", "Hendrick Motorsports", 11.5, 2, 10, 18, random),
+            CreateDemoNASCARDriver("Alex Bowman", "Hendrick Motorsports", 14.2, 1, 6, 14, random),
+            CreateDemoNASCARDriver("Martin Truex Jr", "Joe Gibbs Racing", 9.8, 3, 14, 22, random),
+            CreateDemoNASCARDriver("Christopher Bell", "Joe Gibbs Racing", 10.5, 3, 11, 19, random),
+            CreateDemoNASCARDriver("Denny Hamlin", "Joe Gibbs Racing", 11.2, 2, 9, 17, random),
+            CreateDemoNASCARDriver("Joey Logano", "Team Penske", 12.1, 2, 8, 16, random),
+            CreateDemoNASCARDriver("Ryan Blaney", "Team Penske", 11.8, 3, 10, 18, random),
+            CreateDemoNASCARDriver("Tyler Reddick", "23XI Racing", 13.2, 1, 7, 14, random),
+        };
+        
+        if (!string.IsNullOrEmpty(_nascarTeam))
+        {
+            _nascarDrivers = allDrivers.Where(d => d.Team.Contains(_nascarTeam, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (_nascarDrivers.Any())
+            {
+                var totalRaces = _nascarDrivers.Sum(d => d.Races);
+                _nascarTeamStats = new NASCARTeamStats
+                {
+                    TotalRaces = totalRaces,
+                    TotalWins = _nascarDrivers.Sum(d => d.Wins),
+                    TotalTop5 = _nascarDrivers.Sum(d => d.Top5),
+                    TotalTop10 = _nascarDrivers.Sum(d => d.Top10),
+                    WinPct = totalRaces > 0 ? Math.Round(_nascarDrivers.Sum(d => d.Wins) * 100.0 / totalRaces, 1) : 0,
+                    Top5Pct = totalRaces > 0 ? Math.Round(_nascarDrivers.Sum(d => d.Top5) * 100.0 / totalRaces, 1) : 0,
+                    Top10Pct = totalRaces > 0 ? Math.Round(_nascarDrivers.Sum(d => d.Top10) * 100.0 / totalRaces, 1) : 0
+                };
+            }
+        }
+        else
+        {
+            _nascarDrivers = allDrivers;
+        }
+    }
+    
+    private NASCARDriver CreateDemoNASCARDriver(string name, string team, double avgFinish, int wins, int top5, int top10, Random rand)
+    {
+        var races = 36;
+        return new NASCARDriver
+        {
+            Name = name,
+            Team = team,
+            Races = races,
+            Wins = wins,
+            Top5 = top5,
+            Top10 = top10,
+            AvgFinish = avgFinish,
+            AvgStart = Math.Round(avgFinish - rand.NextDouble() * 3 + 1.5, 1),
+            TotalLapsLed = rand.Next(100, 600),
+            WinPct = Math.Round(wins * 100.0 / races, 1),
+            Top5Pct = Math.Round(top5 * 100.0 / races, 1),
+            Top10Pct = Math.Round(top10 * 100.0 / races, 1),
+            FinishThreshold = 10,
+            LapsLedThreshold = 1,
+            FinishHits = top10,
+            LapsLedHits = rand.Next(10, 25)
+        };
+    }
+    
+    // Models
+    private class NBAPlayer
+    {
+        public string Name { get; set; } = "";
+        public string Team { get; set; } = "";
+        public string Position { get; set; } = "";
+        public int GamesPlayed { get; set; }
+        public double PPG { get; set; }
+        public double RPG { get; set; }
+        public double APG { get; set; }
+        public double FGPct { get; set; }
+        public double ThreePct { get; set; }
+        public double MPG { get; set; }
+        public List<int> Last10Points { get; set; } = new();
+        public bool IsExpanded { get; set; }
+        
+        // Thresholds (user adjustable)
+        public int PointsThreshold { get; set; } = 20;
+        public int ReboundsThreshold { get; set; } = 6;
+        public int AssistsThreshold { get; set; } = 5;
+        public int ThreesThreshold { get; set; } = 2;
+        
+        // Hit counts
+        public int PointsHits { get; set; }
+        public int ReboundsHits { get; set; }
+        public int AssistsHits { get; set; }
+        public int ThreesHits { get; set; }
+        
+        // Quick hit rates
+        public int Pts20HitRate { get; set; }
+        public int Pts25HitRate { get; set; }
+        public int Pts30HitRate { get; set; }
+        
+        // Computed
+        public double PointsHitRate => GamesPlayed > 0 ? Math.Round(PointsHits * 100.0 / GamesPlayed, 0) : 0;
+        public double ReboundsHitRate => GamesPlayed > 0 ? Math.Round(ReboundsHits * 100.0 / GamesPlayed, 0) : 0;
+        public double AssistsHitRate => GamesPlayed > 0 ? Math.Round(AssistsHits * 100.0 / GamesPlayed, 0) : 0;
+        public double ThreesHitRate => GamesPlayed > 0 ? Math.Round(ThreesHits * 100.0 / GamesPlayed, 0) : 0;
+    }
+    
+    private class NFLPlayer
+    {
+        public string Name { get; set; } = "";
+        public string Team { get; set; } = "";
+        public string Position { get; set; } = "";
+        public int GamesPlayed { get; set; }
+        
+        // QB Stats
+        public int PassYards { get; set; }
+        public int PassTD { get; set; }
+        public double CompPct { get; set; }
+        public int Interceptions { get; set; }
+        
+        // RB Stats
+        public int RushYards { get; set; }
+        public int RushTD { get; set; }
+        public double YPC { get; set; }
+        
+        // WR/TE Stats
+        public int RecYards { get; set; }
+        public int Receptions { get; set; }
+        public int RecTD { get; set; }
+        public int Targets { get; set; }
+        
+        // Thresholds
+        public int PassYardsThreshold { get; set; } = 250;
+        public int RushYardsThreshold { get; set; } = 75;
+        public int RecYardsThreshold { get; set; } = 60;
+        public int ReceptionsThreshold { get; set; } = 5;
+        
+        // Hit rates
+        public int PassYardsHitRate { get; set; }
+        public int RushYardsHitRate { get; set; }
+        public int RecYardsHitRate { get; set; }
+        public int ReceptionsHitRate { get; set; }
+    }
+    
+    private class NASCARDriver
+    {
+        public string Name { get; set; } = "";
+        public string Team { get; set; } = "";
+        public int Races { get; set; }
+        public int Wins { get; set; }
+        public int Top5 { get; set; }
+        public int Top10 { get; set; }
+        public double AvgFinish { get; set; }
+        public double AvgStart { get; set; }
+        public int TotalLapsLed { get; set; }
+        public bool IsExpanded { get; set; }
+        
+        // Hit rate percentages
+        public double WinPct { get; set; }
+        public double Top5Pct { get; set; }
+        public double Top10Pct { get; set; }
+        
+        // Thresholds (user adjustable)
+        public int FinishThreshold { get; set; } = 10;
+        public int LapsLedThreshold { get; set; } = 1;
+        
+        // Computed hit counts
+        public int FinishHits { get; set; }
+        public int LapsLedHits { get; set; }
+        
+        // Computed hit rates based on threshold
+        public double FinishHitRate => Races > 0 ? Math.Round(FinishHits * 100.0 / Races, 0) : 0;
+        public double LapsLedHitRate => Races > 0 ? Math.Round(LapsLedHits * 100.0 / Races, 0) : 0;
+    }
+    
+    private class NASCARTeamStats
+    {
+        public int TotalRaces { get; set; }
+        public int TotalWins { get; set; }
+        public int TotalTop5 { get; set; }
+        public int TotalTop10 { get; set; }
+        public double WinPct { get; set; }
+        public double Top5Pct { get; set; }
+        public double Top10Pct { get; set; }
+    }
+}

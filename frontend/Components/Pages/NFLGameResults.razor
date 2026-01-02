@@ -30,9 +30,10 @@
                 <MudSelect T="int?" Label="Week" @bind-Value="_selectedWeek" 
                            Variant="Variant.Outlined" Dense="true" Clearable="true">
                     <MudSelectItem T="int?" Value="@((int?)null)">All Weeks</MudSelectItem>
-                    @for (int w = 1; w <= 18; w++)
+                    @for (int i = 1; i <= 18; i++)
                     {
-                        <MudSelectItem T="int?" Value="@w">Week @w</MudSelectItem>
+                        var week = i;  // Capture in local variable to fix closure
+                        <MudSelectItem T="int?" Value="@week">Week @week</MudSelectItem>
                     }
                 </MudSelect>
             </MudItem>

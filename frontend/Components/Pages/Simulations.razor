@@ -522,7 +522,7 @@
                                                 </td>
                                                 <td style="color: @(top5Pct >= 40 ? "green" : "inherit")">@top5Pct.ToString("F1")%</td>
                                                 <td style="color: @(top10Pct >= 60 ? "green" : "inherit")">@top10Pct.ToString("F1")%</td>
-                                                <td>P@GetDoubleRace(driver, "avg_finish").ToString("F1")</td>
+                                                <td>@GetDoubleRace(driver, "avg_finish").ToString("F1")</td>
                                             </tr>
                                             rank++;
                                         }
@@ -664,7 +664,7 @@
                                                 </td>
                                                 <td>@GetDoubleRace(driver, "top5_pct").ToString("F1")%</td>
                                                 <td>@GetDoubleRace(driver, "top10_pct").ToString("F1")%</td>
-                                                <td>P@GetDoubleRace(driver, "avg_finish").ToString("F1")</td>
+                                                <td>@GetDoubleRace(driver, "avg_finish").ToString("F1")</td>
                                             </tr>
                                             rank++;
                                         }
