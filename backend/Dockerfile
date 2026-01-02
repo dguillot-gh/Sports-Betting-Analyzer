@@ -3,10 +3,19 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including R
 RUN apt-get update && apt-get install -y \
     curl \
+    r-base \
+    r-base-dev \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    libxml2-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# Install R packages for NFL simulations
+RUN R -e "install.packages(c('jsonlite', 'dplyr'), repos='https://cloud.r-project.org')" && \
+    R -e "install.packages('nflseedR', repos='https://cloud.r-project.org')"
 
 # Copy requirements first for caching
 COPY requirements.txt .

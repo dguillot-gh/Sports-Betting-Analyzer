@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from api.log_capture import setup_log_capture, get_logs, LOG_BUFFER
 from api.db_endpoints import router as db_router
 from api.odds_endpoints import router as odds_router
+from api.results_endpoints import router as results_router
+from api.backtest_endpoints import router as backtest_router
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
@@ -38,6 +40,8 @@ app = FastAPI(title='Sports ML API', version='1.2')
 setup_log_capture()  # Enable log capture for /logs endpoint
 app.include_router(db_router)  # Database endpoints
 app.include_router(odds_router)  # Live odds endpoints
+app.include_router(results_router)  # Game results for syncing
+app.include_router(backtest_router)  # Backtesting endpoints
 
 # Dev CORS. Tighten for production.
 app.add_middleware(
@@ -637,6 +641,236 @@ def simulate_race(sport: str, payload: SimulationRequest, series: Optional[str] 
         return results
     except Exception as e:
         logger.error(f"Error running simulation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class NFLSeasonSimRequest(BaseModel):
+    simulations: int = 1000
+    force_refresh: bool = False
+
+
+@app.post('/simulation/nfl/season')
+async def simulate_nfl_season(payload: Optional[NFLSeasonSimRequest] = None):
+    """
+    Run NFL season simulation using nflseedR.
+    Returns playoff probabilities, Super Bowl odds, and draft order.
+    Results are cached for 6 hours.
+    """
+    try:
+        from scripts.nfl_season_simulator import run_nfl_simulation, get_cached_simulation
+        
+        if payload:
+            results = await run_nfl_simulation(
+                n_simulations=payload.simulations,
+                force_refresh=payload.force_refresh
+            )
+        else:
+            results = await run_nfl_simulation()
+        
+        return results
+    except ImportError as e:
+        logger.error(f"Import error: {e}")
+        return {
+            "error": True,
+            "message": "NFL season simulator module not available",
+            "detail": str(e)
+        }
+    except Exception as e:
+        logger.error(f"Error running NFL simulation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get('/simulation/nfl/season')
+async def get_nfl_simulation():
+    """
+    Get cached NFL season simulation results.
+    """
+    try:
+        from scripts.nfl_season_simulator import get_cached_simulation
+        
+        results = get_cached_simulation()
+        if results:
+            return results
+        else:
+            return {
+                "error": True,
+                "message": "No cached results. Run POST /simulation/nfl/season first."
+            }
+    except Exception as e:
+        logger.error(f"Error getting NFL simulation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class NASCARSeasonSimRequest(BaseModel):
+    series: str = "cup"  # cup, xfinity, trucks
+    simulations: int = 100
+    drivers: Optional[List[str]] = None
+
+
+@app.post('/simulation/nascar/season')
+async def simulate_nascar_season(payload: Optional[NASCARSeasonSimRequest] = None):
+    """
+    Run NASCAR season simulation.
+    Simulates full season with playoffs and championship.
+    Returns championship probabilities, playoff odds.
+    """
+    try:
+        from scripts.nascar_season_simulator import run_nascar_season_simulation
+        
+        series = payload.series if payload else "cup"
+        simulations = payload.simulations if payload else 100
+        drivers = payload.drivers if payload else None
+        
+        results = await run_nascar_season_simulation(
+            series=series,
+            num_simulations=simulations,
+            custom_drivers=drivers
+        )
+        
+        return results
+    except ImportError as e:
+        logger.error(f"Import error: {e}")
+        return {
+            "error": True,
+            "message": "NASCAR season simulator module not available",
+            "detail": str(e)
+        }
+    except Exception as e:
+        logger.error(f"Error running NASCAR simulation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get('/simulation/nascar/season/drivers')
+async def get_nascar_season_drivers(series: str = "cup"):
+    """
+    Get default driver list for NASCAR season simulation.
+    """
+    try:
+        from scripts.nascar_season_simulator import DEFAULT_DRIVERS
+        return {
+            "series": series,
+            "drivers": DEFAULT_DRIVERS.get(series.lower(), DEFAULT_DRIVERS["cup"])
+        }
+    except Exception as e:
+        logger.error(f"Error getting drivers: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class RacePredictionRequest(BaseModel):
+    series: str = "cup"
+    race_num: int = 1
+    track_type: str = "Intermediate"
+    simulations: int = 500
+
+
+@app.post('/simulation/nascar/race')
+async def simulate_nascar_race(payload: RacePredictionRequest):
+    """
+    Simulate a single NASCAR race.
+    Returns win/top5/top10 probabilities for each driver.
+    Great for betting predictions!
+    """
+    try:
+        from scripts.nascar_season_simulator import NASCARSeasonSimulator, get_drivers_from_data
+        
+        drivers = await get_drivers_from_data(payload.series)
+        simulator = NASCARSeasonSimulator(drivers, payload.series)
+        
+        result = simulator.simulate_single_race(
+            payload.race_num,
+            payload.track_type,
+            payload.simulations
+        )
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error simulating race: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get('/simulation/nascar/races')
+async def get_all_race_predictions(series: str = "cup", simulations: int = 200):
+    """
+    Get predictions for ALL races in the season.
+    Returns win/top5/top10 probabilities for each race.
+    """
+    try:
+        from scripts.nascar_season_simulator import NASCARSeasonSimulator, get_drivers_from_data
+        
+        drivers = await get_drivers_from_data(series)
+        simulator = NASCARSeasonSimulator(drivers, series)
+        
+        result = simulator.simulate_all_races(simulations)
+        return result
+    except Exception as e:
+        logger.error(f"Error getting race predictions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get('/simulation/nascar/schedule')
+async def get_nascar_schedule(series: str = "cup"):
+    """
+    Get NASCAR schedule for the current season.
+    """
+    try:
+        from scripts.nascar_schedule import get_schedule, get_next_race
+        
+        schedule = get_schedule(series)
+        next_race = get_next_race(series)
+        
+        return {
+            "series": series.upper(),
+            "total_races": len(schedule),
+            "next_race": next_race,
+            "schedule": schedule
+        }
+    except Exception as e:
+        logger.error(f"Error getting schedule: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get('/simulation/nascar/season/predictions')
+async def get_full_season_predictions(series: str = "cup", simulations: int = 300):
+    """
+    Get predictions for EVERY race in the season.
+    Returns winner, top 5, top 10 probabilities for each race.
+    Perfect for season-long betting analysis.
+    """
+    try:
+        from scripts.nascar_schedule import get_schedule
+        from scripts.nascar_season_simulator import NASCARSeasonSimulator, get_drivers_from_data
+        
+        schedule = get_schedule(series)
+        drivers = await get_drivers_from_data(series)
+        simulator = NASCARSeasonSimulator(drivers, series)
+        
+        all_race_predictions = []
+        
+        for race_info in schedule:
+            # Simulate this specific race
+            race_prediction = simulator.simulate_single_race(
+                race_info["race"],
+                race_info["track_type"],
+                simulations
+            )
+            
+            # Merge schedule info with predictions
+            race_prediction["race_name"] = race_info["name"]
+            race_prediction["track"] = race_info["track"]
+            race_prediction["date"] = race_info["date"]
+            race_prediction["is_playoff"] = race_info.get("is_playoff", False)
+            race_prediction["playoff_round"] = race_info.get("playoff_round", "")
+            
+            all_race_predictions.append(race_prediction)
+        
+        return {
+            "series": series.upper(),
+            "total_races": len(schedule),
+            "simulations_per_race": simulations,
+            "races": all_race_predictions
+        }
+    except Exception as e:
+        logger.error(f"Error getting season predictions: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

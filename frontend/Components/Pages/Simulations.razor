@@ -239,9 +239,467 @@
             </MudGrid>
         </MudTabPanel>
 
-        <!-- Tab 4: NFL Season Simulator (Placeholder) -->
-        <MudTabPanel Text="NFL Season" Icon="@Icons.Material.Filled.SportsFootball" Disabled="true">
-            <MudAlert Severity="Severity.Info">NFL Season Simulator (nflseedR) coming soon!</MudAlert>
+        <!-- Tab 4: NFL Season Simulator -->
+        <MudTabPanel Text="NFL Season" Icon="@Icons.Material.Filled.SportsFootball">
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6" Class="mb-3">NFL Season Simulation</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-4">
+                            Uses nflseedR to simulate 1000+ NFL seasons and calculate playoff probabilities.
+                        </MudText>
+                        <MudNumericField @bind-Value="_nflSimulations" Label="Simulations" 
+                                         Min="100" Max="10000" Step="100" Variant="Variant.Outlined" Class="mb-4" />
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" 
+                                   OnClick="RunNFLSimulation" Disabled="@_nflIsLoading">
+                            @if (_nflIsLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                            @(_nflIsLoading ? "Simulating..." : "Run Simulation")
+                        </MudButton>
+                        
+                        @if (_nflSimResults != null && _nflSimResults.ContainsKey("generated_at"))
+                        {
+                            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
+                                Last run: @_nflSimResults["generated_at"]
+                                @if (_nflSimResults.ContainsKey("cached") && (bool)_nflSimResults["cached"])
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">Cached</MudChip>
+                                }
+                            </MudAlert>
+                        }
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" md="8">
+                    @if (_nflSimResults != null && !_nflSimResults.ContainsKey("error"))
+                    {
+                        <MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-3">
+                            <MudTabPanel Text="Super Bowl Odds" Icon="@Icons.Material.Filled.EmojiEvents">
+                                <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                    <thead>
+                                        <tr>
+                                            <th>Rank</th>
+                                            <th>Team</th>
+                                            <th>Playoff %</th>
+                                            <th>Conf Champ %</th>
+                                            <th>Super Bowl %</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @if (_nflSimResults.ContainsKey("all_teams"))
+                                        {
+                                            var teams = GetNFLTeamsList();
+                                            var rank = 1;
+                                            @foreach (var team in teams.OrderByDescending(t => GetDouble(t, "super_bowl_pct")).Take(16))
+                                            {
+                                                <tr>
+                                                    <td>@rank</td>
+                                                    <td><strong>@team["team"]</strong></td>
+                                                    <td>@GetDouble(team, "playoff_pct").ToString("F1")%</td>
+                                                    <td>@GetDouble(team, "conf_pct").ToString("F1")%</td>
+                                                    <td><MudChip T="string" Size="Size.Small" Color="@GetSBColor(GetDouble(team, "super_bowl_pct"))">@GetDouble(team, "super_bowl_pct").ToString("F1")%</MudChip></td>
+                                                </tr>
+                                                rank++;
+                                            }
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            </MudTabPanel>
+                            <MudTabPanel Text="AFC" Icon="@Icons.Material.Filled.Stadium">
+                                @RenderConferenceTable("afc")
+                            </MudTabPanel>
+                            <MudTabPanel Text="NFC" Icon="@Icons.Material.Filled.Stadium">
+                                @RenderConferenceTable("nfc")
+                            </MudTabPanel>
+                        </MudTabs>
+                    }
+                    else if (_nflSimResults != null && _nflSimResults.ContainsKey("error"))
+                    {
+                        <MudAlert Severity="Severity.Error">
+                            @(_nflSimResults.ContainsKey("message") ? _nflSimResults["message"].ToString() : "Simulation failed")
+                        </MudAlert>
+                        @if (_nflSimResults.ContainsKey("install_instructions"))
+                        {
+                            <MudAlert Severity="Severity.Info" Class="mt-2">
+                                <MudText>@_nflSimResults["install_instructions"]</MudText>
+                            </MudAlert>
+                        }
+                    }
+                    else if (!_nflIsLoading)
+                    {
+                        <MudPaper Class="pa-16 d-flex flex-column justify-center align-center" Style="min-height: 300px;">
+                            <MudIcon Icon="@Icons.Material.Filled.SportsFootball" Size="Size.Large" Color="Color.Secondary" Class="mb-4" />
+                            <MudText Typo="Typo.h6" Color="Color.Secondary">Click "Run Simulation" to calculate NFL playoff odds</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Requires R and nflseedR package installed</MudText>
+                        </MudPaper>
+                    }
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+        
+        <!-- Tab 5: NASCAR Season Simulator -->
+        <MudTabPanel Text="NASCAR Season" Icon="@Icons.Material.Filled.DirectionsCar">
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6" Class="mb-3">NASCAR Season Simulation</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-4">
+                            Simulate full NASCAR seasons with playoffs, points, and championship.
+                        </MudText>
+                        <MudSelect T="string" @bind-Value="_nascarSeasonSeries" Label="Series" 
+                                   Variant="Variant.Outlined" Class="mb-4">
+                            <MudSelectItem Value="@("cup")">Cup Series</MudSelectItem>
+                            <MudSelectItem Value="@("xfinity")">Xfinity Series</MudSelectItem>
+                            <MudSelectItem Value="@("trucks")">Truck Series</MudSelectItem>
+                        </MudSelect>
+                        <MudNumericField @bind-Value="_nascarSeasonSims" Label="Simulations" 
+                                         Min="50" Max="1000" Step="50" Variant="Variant.Outlined" Class="mb-4" />
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" 
+                                   OnClick="RunNASCARSeasonSim" Disabled="@_nascarSeasonLoading">
+                            @if (_nascarSeasonLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                            @(_nascarSeasonLoading ? "Simulating Season..." : "Run Season Simulation")
+                        </MudButton>
+                        
+                        @if (_nascarSeasonResults != null && _nascarSeasonResults.ContainsKey("generated_at"))
+                        {
+                            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
+                                <strong>@_nascarSeasonResults.GetValueOrDefault("series", ""):</strong> 
+                                @_nascarSeasonResults.GetValueOrDefault("simulations", 0) simulations
+                            </MudAlert>
+                        }
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" md="8">
+                    @if (_nascarSeasonResults != null && _nascarSeasonResults.ContainsKey("results"))
+                    {
+                        <MudPaper Class="pa-4">
+                            <MudText Typo="Typo.h6" Class="mb-3">
+                                @_nascarSeasonResults.GetValueOrDefault("series", "NASCAR") Championship Probabilities
+                            </MudText>
+                            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                <thead>
+                                    <tr>
+                                        <th>Rank</th>
+                                        <th>Driver</th>
+                                        <th>Playoff %</th>
+                                        <th>Champ 4 %</th>
+                                        <th>Championship %</th>
+                                        <th>Avg Wins</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @{
+                                        var nascarResults = GetNASCARSeasonResults();
+                                        var rank = 1;
+                                        foreach (var driver in nascarResults.Take(20))
+                                        {
+                                            <tr>
+                                                <td>@rank</td>
+                                                <td><strong>@driver.GetValueOrDefault("driver", "")</strong></td>
+                                                <td>@GetDoubleNascar(driver, "playoff_pct").ToString("F1")%</td>
+                                                <td>@GetDoubleNascar(driver, "champ_4_pct").ToString("F1")%</td>
+                                                <td>
+                                                    <MudChip T="string" Size="Size.Small" 
+                                                             Color="@GetChampColor(GetDoubleNascar(driver, "championship_pct"))">
+                                                        @GetDoubleNascar(driver, "championship_pct").ToString("F1")%
+                                                    </MudChip>
+                                                </td>
+                                                <td>@GetDoubleNascar(driver, "avg_wins").ToString("F2")</td>
+                                            </tr>
+                                            rank++;
+                                        }
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudPaper>
+                    }
+                    else if (_nascarSeasonResults != null && _nascarSeasonResults.ContainsKey("error"))
+                    {
+                        <MudAlert Severity="Severity.Error">
+                            @(_nascarSeasonResults.GetValueOrDefault("message", "Simulation failed"))
+                        </MudAlert>
+                    }
+                    else if (!_nascarSeasonLoading)
+                    {
+                        <MudPaper Class="pa-16 d-flex flex-column justify-center align-center" Style="min-height: 300px;">
+                            <MudIcon Icon="@Icons.Material.Filled.DirectionsCar" Size="Size.Large" Color="Color.Secondary" Class="mb-4" />
+                            <MudText Typo="Typo.h6" Color="Color.Secondary">Select series and click "Run Season Simulation"</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Simulates full season with playoffs and championship</MudText>
+                        </MudPaper>
+                    }
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+        
+        <!-- Tab 6: Race Predictions (Betting) -->
+        <MudTabPanel Text="Race Picks" Icon="@Icons.Material.Filled.Casino">
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6" Class="mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Casino" Class="mr-2" />
+                            Race Predictions
+                        </MudText>
+                        <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">
+                            Simulate any race to get win, top 5, and top 10 probabilities for betting.
+                        </MudText>
+                        
+                        <MudSelect T="string" @bind-Value="_racePickSeries" Label="Series" 
+                                   Variant="Variant.Outlined" Class="mb-3">
+                            <MudSelectItem Value="@("cup")">Cup Series</MudSelectItem>
+                            <MudSelectItem Value="@("xfinity")">Xfinity Series</MudSelectItem>
+                            <MudSelectItem Value="@("trucks")">Truck Series</MudSelectItem>
+                        </MudSelect>
+                        
+                        <MudSelect T="string" @bind-Value="_racePickTrack" Label="Track Type" 
+                                   Variant="Variant.Outlined" Class="mb-3">
+                            <MudSelectItem Value="@("Superspeedway")">Superspeedway (Daytona, Talladega)</MudSelectItem>
+                            <MudSelectItem Value="@("Intermediate")">Intermediate (1.5 mile)</MudSelectItem>
+                            <MudSelectItem Value="@("Short Track")">Short Track (Bristol, Martinsville)</MudSelectItem>
+                            <MudSelectItem Value="@("Road Course")">Road Course (COTA, Sonoma)</MudSelectItem>
+                        </MudSelect>
+                        
+                        <MudNumericField @bind-Value="_racePickSims" Label="Simulations" 
+                                         Min="100" Max="2000" Step="100" Variant="Variant.Outlined" Class="mb-4" />
+                        
+                        <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true" 
+                                   OnClick="RunRacePrediction" Disabled="@_racePickLoading" Size="Size.Large">
+                            @if (_racePickLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                            @(_racePickLoading ? "Simulating..." : "🎰 Get Picks!")
+                        </MudButton>
+                    </MudPaper>
+                    
+                    @if (_racePickResults != null)
+                    {
+                        <MudPaper Class="pa-3 mt-3" Style="background: var(--mud-palette-success-lighten);">
+                            <MudText Typo="Typo.subtitle2">Quick Picks:</MudText>
+                            @{
+                                var picks = GetRacePickResults().Take(3).ToList();
+                                var i = 1;
+                                foreach (var p in picks)
+                                {
+                                    <MudText>@i. <strong>@p.GetValueOrDefault("driver", "")</strong> (@GetDoubleRace(p, "win_pct")% win)</MudText>
+                                    i++;
+                                }
+                            }
+                        </MudPaper>
+                    }
+                </MudItem>
+                <MudItem xs="12" md="8">
+                    @if (_racePickResults != null)
+                    {
+                        <MudPaper Class="pa-4">
+                            <div class="d-flex justify-space-between align-center mb-3">
+                                <MudText Typo="Typo.h6">@_racePickTrack Predictions</MudText>
+                                <MudChip T="string" Color="Color.Info" Size="Size.Small">@_racePickSims sims</MudChip>
+                            </div>
+                            <MudSimpleTable Dense="true" Hover="true" Striped="true" FixedHeader="true" Style="max-height: 500px;">
+                                <thead>
+                                    <tr style="background: var(--mud-palette-surface);">
+                                        <th>#</th>
+                                        <th>Driver</th>
+                                        <th>Win %</th>
+                                        <th>Top 5 %</th>
+                                        <th>Top 10 %</th>
+                                        <th>Avg Finish</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @{
+                                        var results = GetRacePickResults();
+                                        var rank = 1;
+                                        foreach (var driver in results)
+                                        {
+                                            var winPct = GetDoubleRace(driver, "win_pct");
+                                            var top5Pct = GetDoubleRace(driver, "top5_pct");
+                                            var top10Pct = GetDoubleRace(driver, "top10_pct");
+                                            <tr>
+                                                <td>@rank</td>
+                                                <td><strong>@driver.GetValueOrDefault("driver", "")</strong></td>
+                                                <td>
+                                                    <MudChip T="string" Size="Size.Small" 
+                                                             Color="@(winPct >= 10 ? Color.Success : winPct >= 5 ? Color.Info : Color.Default)">
+                                                        @winPct.ToString("F1")%
+                                                    </MudChip>
+                                                </td>
+                                                <td style="color: @(top5Pct >= 40 ? "green" : "inherit")">@top5Pct.ToString("F1")%</td>
+                                                <td style="color: @(top10Pct >= 60 ? "green" : "inherit")">@top10Pct.ToString("F1")%</td>
+                                                <td>P@GetDoubleRace(driver, "avg_finish").ToString("F1")</td>
+                                            </tr>
+                                            rank++;
+                                        }
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudPaper>
+                    }
+                    else if (!_racePickLoading)
+                    {
+                        <MudPaper Class="pa-16 d-flex flex-column justify-center align-center" Style="min-height: 400px;">
+                            <MudIcon Icon="@Icons.Material.Filled.Casino" Size="Size.Large" Color="Color.Success" Class="mb-4" />
+                            <MudText Typo="Typo.h5" Color="Color.Secondary">Race Day Predictions</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
+                                Select track type and hit "Get Picks!" to see who's favored
+                            </MudText>
+                            <MudDivider Class="my-4" Style="width: 200px;" />
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                💡 Higher simulations = more accurate but slower
+                            </MudText>
+                        </MudPaper>
+                    }
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+        
+        <!-- Tab 7: Full Season Schedule with Predictions -->
+        <MudTabPanel Text="Season Schedule" Icon="@Icons.Material.Filled.CalendarMonth">
+            <MudGrid>
+                <MudItem xs="12" md="3">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6" Class="mb-3">
+                            <MudIcon Icon="@Icons.Material.Filled.CalendarMonth" Class="mr-2" />
+                            2025 Season
+                        </MudText>
+                        
+                        <MudSelect T="string" @bind-Value="_schedSeries" Label="Series" 
+                                   Variant="Variant.Outlined" Class="mb-3">
+                            <MudSelectItem Value="@("cup")">Cup Series</MudSelectItem>
+                            <MudSelectItem Value="@("xfinity")">Xfinity Series</MudSelectItem>
+                            <MudSelectItem Value="@("trucks")">Truck Series</MudSelectItem>
+                        </MudSelect>
+                        
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" 
+                                   OnClick="LoadSeasonSchedule" Disabled="@_schedLoading" Class="mb-3">
+                            @if (_schedLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                            @(_schedLoading ? "Loading..." : "Load Season Predictions")
+                        </MudButton>
+                        
+                        @if (_schedRaces != null && _schedRaces.Any())
+                        {
+                            <MudText Typo="Typo.subtitle2" Class="mb-2">Select Race:</MudText>
+                            <div style="max-height: 400px; overflow-y: auto;">
+                                @foreach (var race in _schedRaces)
+                                {
+                                    var isSelected = _schedSelectedRace == GetInt(race, "race_num");
+                                    var isPlayoff = race.GetValueOrDefault("is_playoff", false)?.ToString() == "True";
+                                    <MudButton Variant="@(isSelected ? Variant.Filled : Variant.Text)" 
+                                               Color="@(isPlayoff ? Color.Warning : isSelected ? Color.Primary : Color.Default)"
+                                               FullWidth="true" Size="Size.Small" Class="mb-1 justify-start"
+                                               OnClick="@(() => SelectRace(GetInt(race, "race_num")))">
+                                        <span style="width: 25px;">@GetInt(race, "race_num").</span>
+                                        @race.GetValueOrDefault("race_name", "")
+                                    </MudButton>
+                                }
+                            </div>
+                        }
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" md="9">
+                    @if (_schedSelectedRaceData != null)
+                    {
+                        <MudPaper Class="pa-4">
+                            <div class="d-flex justify-space-between align-center mb-3">
+                                <div>
+                                    <MudText Typo="Typo.h5">@_schedSelectedRaceData.GetValueOrDefault("race_name", "")</MudText>
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                        @_schedSelectedRaceData.GetValueOrDefault("track", "") • @_schedSelectedRaceData.GetValueOrDefault("track_type", "")
+                                    </MudText>
+                                </div>
+                                <div class="text-right">
+                                    <MudChip T="string" Color="Color.Info">@_schedSelectedRaceData.GetValueOrDefault("date", "")</MudChip>
+                                    @if (_schedSelectedRaceData.GetValueOrDefault("is_playoff", false)?.ToString() == "True")
+                                    {
+                                        <MudChip T="string" Color="Color.Warning">@_schedSelectedRaceData.GetValueOrDefault("playoff_round", "Playoff")</MudChip>
+                                    }
+                                </div>
+                            </div>
+                            
+                            <MudDivider Class="mb-3" />
+                            
+                            <!-- Quick Summary -->
+                            <MudGrid Spacing="2" Class="mb-4">
+                                @{
+                                    var predictions = GetScheduleRacePredictions();
+                                    var top3 = predictions.Take(3).ToList();
+                                }
+                                @for (int i = 0; i < top3.Count; i++)
+                                {
+                                    var p = top3[i];
+                                    var medal = i == 0 ? "🥇" : i == 1 ? "🥈" : "🥉";
+                                    <MudItem xs="12" md="4">
+                                        <MudPaper Class="pa-3 text-center" Elevation="2" Style="@($"background: {(i == 0 ? "linear-gradient(135deg, #FFD700 0%, #FFA500 100%)" : i == 1 ? "linear-gradient(135deg, #C0C0C0 0%, #A9A9A9 100%)" : "linear-gradient(135deg, #CD7F32 0%, #8B4513 100%)")}; color: white;")">
+                                            <MudText Typo="Typo.h4">@medal</MudText>
+                                            <MudText Typo="Typo.h6"><strong>@p.GetValueOrDefault("driver", "")</strong></MudText>
+                                            <MudText Typo="Typo.body2">@GetDoubleRace(p, "win_pct").ToString("F1")% to win</MudText>
+                                        </MudPaper>
+                                    </MudItem>
+                                }
+                            </MudGrid>
+                            
+                            <MudSimpleTable Dense="true" Hover="true" Striped="true" FixedHeader="true" Style="max-height: 400px;">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Driver</th>
+                                        <th>Win %</th>
+                                        <th>Top 5 %</th>
+                                        <th>Top 10 %</th>
+                                        <th>Avg Finish</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @{
+                                        var schedPredictions = GetScheduleRacePredictions();
+                                        var rank = 1;
+                                        foreach (var driver in schedPredictions)
+                                        {
+                                            <tr style="@(rank <= 10 ? "font-weight: 500;" : "")">
+                                                <td>@rank</td>
+                                                <td>@driver.GetValueOrDefault("driver", "")</td>
+                                                <td>
+                                                    @{
+                                                        var winPct = GetDoubleRace(driver, "win_pct");
+                                                    }
+                                                    <MudChip T="string" Size="Size.Small" Color="@(winPct >= 10 ? Color.Success : winPct >= 5 ? Color.Info : Color.Default)">
+                                                        @winPct.ToString("F1")%
+                                                    </MudChip>
+                                                </td>
+                                                <td>@GetDoubleRace(driver, "top5_pct").ToString("F1")%</td>
+                                                <td>@GetDoubleRace(driver, "top10_pct").ToString("F1")%</td>
+                                                <td>P@GetDoubleRace(driver, "avg_finish").ToString("F1")</td>
+                                            </tr>
+                                            rank++;
+                                        }
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudPaper>
+                    }
+                    else if (_schedRaces != null && _schedRaces.Any())
+                    {
+                        <MudPaper Class="pa-8 d-flex flex-column justify-center align-center" Style="min-height: 400px;">
+                            <MudIcon Icon="@Icons.Material.Filled.TouchApp" Size="Size.Large" Color="Color.Secondary" Class="mb-4" />
+                            <MudText Typo="Typo.h6" Color="Color.Secondary">Select a race from the list</MudText>
+                        </MudPaper>
+                    }
+                    else if (!_schedLoading)
+                    {
+                        <MudPaper Class="pa-16 d-flex flex-column justify-center align-center" Style="min-height: 400px;">
+                            <MudIcon Icon="@Icons.Material.Filled.CalendarMonth" Size="Size.Large" Color="Color.Primary" Class="mb-4" />
+                            <MudText Typo="Typo.h5" Color="Color.Secondary">Full Season Predictions</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2 text-center">
+                                Load the season to see predictions for all 36 races<br/>
+                                Browse each race to see favorites, top 5, top 10 picks
+                            </MudText>
+                        </MudPaper>
+                    }
+                    else
+                    {
+                        <MudPaper Class="pa-16 d-flex flex-column justify-center align-center">
+                            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+                            <MudText Typo="Typo.body1" Class="mt-4">Simulating all 36 races... this may take a moment</MudText>
+                        </MudPaper>
+                    }
+                </MudItem>
+            </MudGrid>
         </MudTabPanel>
     </MudTabs>
 </MudContainer>
@@ -391,4 +849,445 @@
 
     private string FormatLabel(string name) => 
         System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(name.Replace("_", " "));
+
+    // NFL Season Simulation State
+    private int _nflSimulations = 1000;
+    private bool _nflIsLoading = false;
+    private Dictionary<string, object>? _nflSimResults;
+    
+    private async Task RunNFLSimulation()
+    {
+        _nflIsLoading = true;
+        _nflSimResults = null;
+        StateHasChanged();
+        
+        try
+        {
+            using var http = new HttpClient { BaseAddress = new Uri("http://backend:8000") };
+            var payload = new { simulations = _nflSimulations, force_refresh = true };
+            var response = await http.PostAsJsonAsync("/simulation/nfl/season", payload);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                _nflSimResults = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+                
+                if (_nflSimResults != null && !_nflSimResults.ContainsKey("error"))
+                {
+                    Snackbar.Add("NFL simulation complete!", Severity.Success);
+                }
+            }
+            else
+            {
+                Snackbar.Add($"Simulation failed: {response.StatusCode}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error running NFL simulation");
+            Snackbar.Add($"Simulation failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _nflIsLoading = false;
+        }
+    }
+    
+    private List<Dictionary<string, object>> GetNFLTeamsList()
+    {
+        if (_nflSimResults == null || !_nflSimResults.ContainsKey("all_teams"))
+            return new List<Dictionary<string, object>>();
+        
+        try
+        {
+            var element = (JsonElement)_nflSimResults["all_teams"];
+            var result = new List<Dictionary<string, object>>();
+            
+            // Handle different JSON structures
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                // nflseedR returns columns as arrays
+                var teamArray = element.GetProperty("team").EnumerateArray().ToList();
+                var playoffArray = element.TryGetProperty("playoff_pct", out var p) ? p.EnumerateArray().ToList() : null;
+                var confArray = element.TryGetProperty("conf_pct", out var c) ? c.EnumerateArray().ToList() : null;
+                var sbArray = element.TryGetProperty("super_bowl_pct", out var sb) ? sb.EnumerateArray().ToList() : null;
+                
+                for (int i = 0; i < teamArray.Count; i++)
+                {
+                    result.Add(new Dictionary<string, object>
+                    {
+                        ["team"] = teamArray[i].GetString() ?? "",
+                        ["playoff_pct"] = playoffArray?[i].GetDouble() ?? 0,
+                        ["conf_pct"] = confArray?[i].GetDouble() ?? 0,
+                        ["super_bowl_pct"] = sbArray?[i].GetDouble() ?? 0
+                    });
+                }
+            }
+            
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error parsing NFL teams list");
+            return new List<Dictionary<string, object>>();
+        }
+    }
+    
+    private double GetDouble(Dictionary<string, object> dict, string key)
+    {
+        if (!dict.ContainsKey(key)) return 0;
+        var val = dict[key];
+        if (val is double d) return d;
+        if (val is JsonElement je && je.ValueKind == JsonValueKind.Number) return je.GetDouble();
+        return 0;
+    }
+    
+    private Color GetSBColor(double pct) => pct >= 10 ? Color.Success : pct >= 5 ? Color.Info : pct >= 2 ? Color.Warning : Color.Default;
+    
+    private RenderFragment RenderConferenceTable(string conf) => __builder =>
+    {
+        <MudSimpleTable Dense="true" Hover="true" Striped="true">
+            <thead>
+                <tr>
+                    <th>Team</th>
+                    <th>Division</th>
+                    <th>W</th>
+                    <th>L</th>
+                    <th>Playoff %</th>
+                    <th>Div Win %</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{
+                    var teams = GetNFLTeamsList();
+                    foreach (var team in teams.Take(16))
+                    {
+                        <tr>
+                            <td><strong>@team.GetValueOrDefault("team", "")</strong></td>
+                            <td>@team.GetValueOrDefault("division", "")</td>
+                            <td>@team.GetValueOrDefault("wins", 0)</td>
+                            <td>@team.GetValueOrDefault("losses", 0)</td>
+                            <td>@GetDouble(team, "playoff_pct").ToString("F1")%</td>
+                            <td>@GetDouble(team, "division_pct").ToString("F1")%</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </MudSimpleTable>
+    };
+    
+    // NASCAR Season Simulation State
+    private string _nascarSeasonSeries = "cup";
+    private int _nascarSeasonSims = 100;
+    private bool _nascarSeasonLoading = false;
+    private Dictionary<string, object>? _nascarSeasonResults;
+    
+    private async Task RunNASCARSeasonSim()
+    {
+        _nascarSeasonLoading = true;
+        _nascarSeasonResults = null;
+        StateHasChanged();
+        
+        try
+        {
+            using var http = new HttpClient { BaseAddress = new Uri("http://backend:8000") };
+            var payload = new { series = _nascarSeasonSeries, simulations = _nascarSeasonSims };
+            var response = await http.PostAsJsonAsync("/simulation/nascar/season", payload);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                _nascarSeasonResults = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+                
+                if (_nascarSeasonResults != null && !_nascarSeasonResults.ContainsKey("error"))
+                {
+                    Snackbar.Add($"NASCAR {_nascarSeasonSeries.ToUpper()} season simulation complete!", Severity.Success);
+                }
+            }
+            else
+            {
+                Snackbar.Add($"Simulation failed: {response.StatusCode}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error running NASCAR season simulation");
+            Snackbar.Add($"Simulation failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _nascarSeasonLoading = false;
+        }
+    }
+    
+    private List<Dictionary<string, object>> GetNASCARSeasonResults()
+    {
+        if (_nascarSeasonResults == null || !_nascarSeasonResults.ContainsKey("results"))
+            return new List<Dictionary<string, object>>();
+        
+        try
+        {
+            var element = (JsonElement)_nascarSeasonResults["results"];
+            var result = new List<Dictionary<string, object>>();
+            
+            if (element.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in element.EnumerateArray())
+                {
+                    var dict = new Dictionary<string, object>();
+                    foreach (var prop in item.EnumerateObject())
+                    {
+                        if (prop.Value.ValueKind == JsonValueKind.String)
+                            dict[prop.Name] = prop.Value.GetString() ?? "";
+                        else if (prop.Value.ValueKind == JsonValueKind.Number)
+                            dict[prop.Name] = prop.Value.GetDouble();
+                        else
+                            dict[prop.Name] = prop.Value.ToString();
+                    }
+                    result.Add(dict);
+                }
+            }
+            
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error parsing NASCAR season results");
+            return new List<Dictionary<string, object>>();
+        }
+    }
+    
+    private double GetDoubleNascar(Dictionary<string, object> dict, string key)
+    {
+        if (!dict.ContainsKey(key)) return 0;
+        var val = dict[key];
+        if (val is double d) return d;
+        if (val is JsonElement je && je.ValueKind == JsonValueKind.Number) return je.GetDouble();
+        return 0;
+    }
+    
+    private Color GetChampColor(double pct) => pct >= 15 ? Color.Success : pct >= 8 ? Color.Info : pct >= 3 ? Color.Warning : Color.Default;
+    
+    // Race Picks State
+    private string _racePickSeries = "cup";
+    private string _racePickTrack = "Intermediate";
+    private int _racePickSims = 500;
+    private bool _racePickLoading = false;
+    private Dictionary<string, object>? _racePickResults;
+    
+    private async Task RunRacePrediction()
+    {
+        _racePickLoading = true;
+        _racePickResults = null;
+        StateHasChanged();
+        
+        try
+        {
+            using var http = new HttpClient { BaseAddress = new Uri("http://backend:8000") };
+            var payload = new { 
+                series = _racePickSeries, 
+                track_type = _racePickTrack, 
+                simulations = _racePickSims,
+                race_num = 1
+            };
+            var response = await http.PostAsJsonAsync("/simulation/nascar/race", payload);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                _racePickResults = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+                Snackbar.Add("🎰 Race predictions ready!", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add($"Prediction failed: {response.StatusCode}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error getting race predictions");
+            Snackbar.Add($"Prediction failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _racePickLoading = false;
+        }
+    }
+    
+    private List<Dictionary<string, object>> GetRacePickResults()
+    {
+        if (_racePickResults == null || !_racePickResults.ContainsKey("predictions"))
+            return new List<Dictionary<string, object>>();
+        
+        try
+        {
+            var element = (JsonElement)_racePickResults["predictions"];
+            var result = new List<Dictionary<string, object>>();
+            
+            if (element.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in element.EnumerateArray())
+                {
+                    var dict = new Dictionary<string, object>();
+                    foreach (var prop in item.EnumerateObject())
+                    {
+                        if (prop.Value.ValueKind == JsonValueKind.String)
+                            dict[prop.Name] = prop.Value.GetString() ?? "";
+                        else if (prop.Value.ValueKind == JsonValueKind.Number)
+                            dict[prop.Name] = prop.Value.GetDouble();
+                        else
+                            dict[prop.Name] = prop.Value.ToString();
+                    }
+                    result.Add(dict);
+                }
+            }
+            
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error parsing race picks");
+            return new List<Dictionary<string, object>>();
+        }
+    }
+    
+    private double GetDoubleRace(Dictionary<string, object> dict, string key)
+    {
+        if (!dict.ContainsKey(key)) return 0;
+        var val = dict[key];
+        if (val is double d) return d;
+        if (val is JsonElement je && je.ValueKind == JsonValueKind.Number) return je.GetDouble();
+        return 0;
+    }
+    
+    // Season Schedule State
+    private string _schedSeries = "cup";
+    private bool _schedLoading = false;
+    private List<Dictionary<string, object>>? _schedRaces;
+    private int _schedSelectedRace = 0;
+    private Dictionary<string, object>? _schedSelectedRaceData;
+    
+    private async Task LoadSeasonSchedule()
+    {
+        _schedLoading = true;
+        _schedRaces = null;
+        _schedSelectedRace = 0;
+        _schedSelectedRaceData = null;
+        StateHasChanged();
+        
+        try
+        {
+            using var http = new HttpClient { BaseAddress = new Uri("http://backend:8000") };
+            var response = await http.GetAsync($"/simulation/nascar/season/predictions?series={_schedSeries}&simulations=300");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+                
+                if (result != null && result.ContainsKey("races"))
+                {
+                    var racesElement = (JsonElement)result["races"];
+                    _schedRaces = new List<Dictionary<string, object>>();
+                    
+                    foreach (var race in racesElement.EnumerateArray())
+                    {
+                        var raceDict = new Dictionary<string, object>();
+                        foreach (var prop in race.EnumerateObject())
+                        {
+                            if (prop.Value.ValueKind == JsonValueKind.String)
+                                raceDict[prop.Name] = prop.Value.GetString() ?? "";
+                            else if (prop.Value.ValueKind == JsonValueKind.Number)
+                                raceDict[prop.Name] = prop.Value.GetDouble();
+                            else if (prop.Value.ValueKind == JsonValueKind.True || prop.Value.ValueKind == JsonValueKind.False)
+                                raceDict[prop.Name] = prop.Value.GetBoolean();
+                            else if (prop.Value.ValueKind == JsonValueKind.Array)
+                                raceDict[prop.Name] = prop.Value.Clone(); // Keep predictions as JsonElement
+                            else
+                                raceDict[prop.Name] = prop.Value.ToString();
+                        }
+                        _schedRaces.Add(raceDict);
+                    }
+                    
+                    Snackbar.Add($"Loaded {_schedRaces.Count} race predictions!", Severity.Success);
+                    
+                    // Auto-select first race
+                    if (_schedRaces.Any())
+                    {
+                        SelectRace(1);
+                    }
+                }
+            }
+            else
+            {
+                Snackbar.Add($"Failed to load schedule: {response.StatusCode}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading season schedule");
+            Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _schedLoading = false;
+        }
+    }
+    
+    private void SelectRace(int raceNum)
+    {
+        _schedSelectedRace = raceNum;
+        _schedSelectedRaceData = _schedRaces?.FirstOrDefault(r => GetInt(r, "race_num") == raceNum);
+    }
+    
+    private int GetInt(Dictionary<string, object> dict, string key)
+    {
+        if (!dict.ContainsKey(key)) return 0;
+        var val = dict[key];
+        if (val is double d) return (int)d;
+        if (val is int i) return i;
+        if (val is JsonElement je && je.ValueKind == JsonValueKind.Number) return je.GetInt32();
+        return 0;
+    }
+    
+    private List<Dictionary<string, object>> GetScheduleRacePredictions()
+    {
+        if (_schedSelectedRaceData == null || !_schedSelectedRaceData.ContainsKey("predictions"))
+            return new List<Dictionary<string, object>>();
+        
+        try
+        {
+            var element = _schedSelectedRaceData["predictions"];
+            JsonElement jsonElement;
+            
+            if (element is JsonElement je)
+                jsonElement = je;
+            else
+                return new List<Dictionary<string, object>>();
+            
+            var result = new List<Dictionary<string, object>>();
+            
+            foreach (var item in jsonElement.EnumerateArray())
+            {
+                var dict = new Dictionary<string, object>();
+                foreach (var prop in item.EnumerateObject())
+                {
+                    if (prop.Value.ValueKind == JsonValueKind.String)
+                        dict[prop.Name] = prop.Value.GetString() ?? "";
+                    else if (prop.Value.ValueKind == JsonValueKind.Number)
+                        dict[prop.Name] = prop.Value.GetDouble();
+                    else
+                        dict[prop.Name] = prop.Value.ToString();
+                }
+                result.Add(dict);
+            }
+            
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error parsing schedule predictions");
+            return new List<Dictionary<string, object>>();
+        }
+    }
 }

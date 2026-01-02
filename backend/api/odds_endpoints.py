@@ -34,6 +34,79 @@ async def compare_nba_odds():
     return await get_all_sportsbook_odds()
 
 
+@router.get("/nba/compare/fd-dk")
+async def compare_fanduel_draftkings():
+    """
+    Compare odds between FanDuel and DraftKings only.
+    Returns games with both books' odds and highlights the better line.
+    """
+    from scripts.nba_odds import get_todays_nba_odds
+    
+    # Fetch from both books
+    fd_odds = await get_todays_nba_odds("fanduel")
+    dk_odds = await get_todays_nba_odds("draftkings")
+    
+    if fd_odds.get("error") or dk_odds.get("error"):
+        return {"error": "Could not fetch odds from one or both sportsbooks"}
+    
+    # Combine odds by game
+    fd_games = {f"{g['away_team']} @ {g['home_team']}": g for g in fd_odds.get("games", [])}
+    dk_games = {f"{g['away_team']} @ {g['home_team']}": g for g in dk_odds.get("games", [])}
+    
+    combined_games = []
+    for game_key in set(fd_games.keys()) | set(dk_games.keys()):
+        fd_game = fd_games.get(game_key, {})
+        dk_game = dk_games.get(game_key, {})
+        
+        game_data = {
+            "game": game_key,
+            "home_team": fd_game.get("home_team") or dk_game.get("home_team"),
+            "away_team": fd_game.get("away_team") or dk_game.get("away_team"),
+            "game_time": fd_game.get("game_time") or dk_game.get("game_time"),
+            "fanduel": {
+                "home_ml": fd_game.get("home_moneyline"),
+                "away_ml": fd_game.get("away_moneyline"),
+                "spread": fd_game.get("spread"),
+                "over_under": fd_game.get("over_under"),
+            },
+            "draftkings": {
+                "home_ml": dk_game.get("home_moneyline"),
+                "away_ml": dk_game.get("away_moneyline"),
+                "spread": dk_game.get("spread"),
+                "over_under": dk_game.get("over_under"),
+            },
+            "best": {}
+        }
+        
+        # Determine best lines (higher odds = better for bettor)
+        # Home ML
+        fd_home = fd_game.get("home_moneyline")
+        dk_home = dk_game.get("home_moneyline")
+        if fd_home and dk_home:
+            game_data["best"]["home_ml"] = "fanduel" if fd_home > dk_home else "draftkings" if dk_home > fd_home else "same"
+        
+        # Away ML
+        fd_away = fd_game.get("away_moneyline")
+        dk_away = dk_game.get("away_moneyline")
+        if fd_away and dk_away:
+            game_data["best"]["away_ml"] = "fanduel" if fd_away > dk_away else "draftkings" if dk_away > fd_away else "same"
+        
+        # Over/Under (same number is better, we just note if different)
+        fd_ou = fd_game.get("over_under")
+        dk_ou = dk_game.get("over_under")
+        if fd_ou and dk_ou:
+            game_data["best"]["over_under"] = "same" if fd_ou == dk_ou else "different"
+            game_data["ou_diff"] = abs(fd_ou - dk_ou) if fd_ou != dk_ou else 0
+        
+        combined_games.append(game_data)
+    
+    return {
+        "date": fd_odds.get("date"),
+        "games": combined_games,
+        "count": len(combined_games)
+    }
+
+
 @router.get("/nba/sportsbooks")
 async def list_sportsbooks():
     """List all supported sportsbooks."""
@@ -169,6 +242,67 @@ async def get_nfl_odds(
     """
     from scripts.nfl_predictor import get_todays_nfl_odds
     return await get_todays_nfl_odds(sportsbook)
+
+
+@router.get("/nfl/compare/fd-dk")
+async def compare_nfl_fanduel_draftkings():
+    """
+    Compare NFL odds between FanDuel and DraftKings.
+    """
+    from scripts.nfl_predictor import get_todays_nfl_odds
+    
+    fd_odds = await get_todays_nfl_odds("fanduel")
+    dk_odds = await get_todays_nfl_odds("draftkings")
+    
+    if fd_odds.get("error") or dk_odds.get("error"):
+        return {"error": "Could not fetch odds from one or both sportsbooks"}
+    
+    fd_games = {f"{g.get('away_team', '')} @ {g.get('home_team', '')}": g for g in fd_odds.get("games", [])}
+    dk_games = {f"{g.get('away_team', '')} @ {g.get('home_team', '')}": g for g in dk_odds.get("games", [])}
+    
+    combined_games = []
+    for game_key in set(fd_games.keys()) | set(dk_games.keys()):
+        fd_game = fd_games.get(game_key, {})
+        dk_game = dk_games.get(game_key, {})
+        
+        game_data = {
+            "game": game_key,
+            "home_team": fd_game.get("home_team") or dk_game.get("home_team"),
+            "away_team": fd_game.get("away_team") or dk_game.get("away_team"),
+            "game_time": fd_game.get("game_time") or dk_game.get("game_time"),
+            "fanduel": {
+                "home_ml": fd_game.get("home_moneyline"),
+                "away_ml": fd_game.get("away_moneyline"),
+                "spread": fd_game.get("spread"),
+                "over_under": fd_game.get("over_under"),
+            },
+            "draftkings": {
+                "home_ml": dk_game.get("home_moneyline"),
+                "away_ml": dk_game.get("away_moneyline"),
+                "spread": dk_game.get("spread"),
+                "over_under": dk_game.get("over_under"),
+            },
+            "best": {}
+        }
+        
+        # Determine best lines
+        fd_home = fd_game.get("home_moneyline")
+        dk_home = dk_game.get("home_moneyline")
+        if fd_home and dk_home:
+            game_data["best"]["home_ml"] = "fanduel" if fd_home > dk_home else "draftkings" if dk_home > fd_home else "same"
+        
+        fd_away = fd_game.get("away_moneyline")
+        dk_away = dk_game.get("away_moneyline")
+        if fd_away and dk_away:
+            game_data["best"]["away_ml"] = "fanduel" if fd_away > dk_away else "draftkings" if dk_away > fd_away else "same"
+        
+        combined_games.append(game_data)
+    
+    return {
+        "date": fd_odds.get("date"),
+        "games": combined_games,
+        "count": len(combined_games)
+    }
 
 
 @router.post("/nfl/predict")

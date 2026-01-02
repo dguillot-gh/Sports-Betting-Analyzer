@@ -441,6 +441,63 @@
                     </MudGrid>
                 }
             </MudExpansionPanel>
+            
+            <!-- Compare Books Section (NEW) -->
+            <MudExpansionPanel Text="📊 Compare FanDuel vs DraftKings" Icon="@Icons.Material.Filled.CompareArrows">
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
+                    Find the best line for maximum value! Highlighted cells show better odds.
+                </MudText>
+                
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadNFLOddsComparison" 
+                           Disabled="@_isLoadingComparison" Class="mb-3">
+                    @if (_isLoadingComparison) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                    Load FD vs DK Comparison
+                </MudButton>
+                
+                @if (_comparisonGames.Any())
+                {
+                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                        <thead>
+                            <tr>
+                                <th>Game</th>
+                                <th style="background: #1976D2; color: white;">FD Home</th>
+                                <th style="background: #1976D2; color: white;">FD Away</th>
+                                <th style="background: #388E3C; color: white;">DK Home</th>
+                                <th style="background: #388E3C; color: white;">DK Away</th>
+                                <th>Best</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var game in _comparisonGames)
+                            {
+                                <tr>
+                                    <td><strong>@game.Game</strong></td>
+                                    <td style="@(game.BestHomeML == "fanduel" ? "background: #E3F2FD; font-weight: bold;" : "")">
+                                        @FormatOdds(game.FanDuelHomeML)
+                                    </td>
+                                    <td style="@(game.BestAwayML == "fanduel" ? "background: #E3F2FD; font-weight: bold;" : "")">
+                                        @FormatOdds(game.FanDuelAwayML)
+                                    </td>
+                                    <td style="@(game.BestHomeML == "draftkings" ? "background: #E8F5E9; font-weight: bold;" : "")">
+                                        @FormatOdds(game.DraftKingsHomeML)
+                                    </td>
+                                    <td style="@(game.BestAwayML == "draftkings" ? "background: #E8F5E9; font-weight: bold;" : "")">
+                                        @FormatOdds(game.DraftKingsAwayML)
+                                    </td>
+                                    <td>
+                                        @if (game.BestHomeML != "same" || game.BestAwayML != "same")
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Success">
+                                                ★ @(game.BestHomeML == "fanduel" || game.BestAwayML == "fanduel" ? "FD" : "DK")
+                                            </MudChip>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+            </MudExpansionPanel>
         </MudExpansionPanels>
     </MudStack>
 </MudContainer>
@@ -781,5 +838,79 @@
         [System.Text.Json.Serialization.JsonPropertyName("season_avg")] public double SeasonAvg { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("recent_avg")] public double RecentAvg { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("games_played")] public int GamesPlayed { get; set; }
+    }
+    
+    // ===== Compare Books =====
+    private bool _isLoadingComparison = false;
+    private List<OddsComparisonGame> _comparisonGames = new();
+    
+    private async Task LoadNFLOddsComparison()
+    {
+        _isLoadingComparison = true;
+        _comparisonGames.Clear();
+        StateHasChanged();
+        
+        try
+        {
+            var response = await Http.GetAsync("http://backend:8000/odds/nfl/compare/fd-dk");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                
+                if (root.TryGetProperty("games", out var games))
+                {
+                    foreach (var game in games.EnumerateArray())
+                    {
+                        var compGame = new OddsComparisonGame
+                        {
+                            Game = game.TryGetProperty("game", out var g) ? g.GetString() ?? "" : ""
+                        };
+                        
+                        if (game.TryGetProperty("fanduel", out var fd))
+                        {
+                            compGame.FanDuelHomeML = fd.TryGetProperty("home_ml", out var fhm) && fhm.ValueKind == System.Text.Json.JsonValueKind.Number ? fhm.GetInt32() : null;
+                            compGame.FanDuelAwayML = fd.TryGetProperty("away_ml", out var fam) && fam.ValueKind == System.Text.Json.JsonValueKind.Number ? fam.GetInt32() : null;
+                        }
+                        
+                        if (game.TryGetProperty("draftkings", out var dk))
+                        {
+                            compGame.DraftKingsHomeML = dk.TryGetProperty("home_ml", out var dhm) && dhm.ValueKind == System.Text.Json.JsonValueKind.Number ? dhm.GetInt32() : null;
+                            compGame.DraftKingsAwayML = dk.TryGetProperty("away_ml", out var dam) && dam.ValueKind == System.Text.Json.JsonValueKind.Number ? dam.GetInt32() : null;
+                        }
+                        
+                        if (game.TryGetProperty("best", out var best))
+                        {
+                            compGame.BestHomeML = best.TryGetProperty("home_ml", out var bhm) ? bhm.GetString() ?? "same" : "same";
+                            compGame.BestAwayML = best.TryGetProperty("away_ml", out var bam) ? bam.GetString() ?? "same" : "same";
+                        }
+                        
+                        _comparisonGames.Add(compGame);
+                    }
+                }
+                
+                Snackbar.Add($"Loaded {_comparisonGames.Count} NFL games", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoadingComparison = false;
+        }
+    }
+    
+    private class OddsComparisonGame
+    {
+        public string Game { get; set; } = "";
+        public int? FanDuelHomeML { get; set; }
+        public int? FanDuelAwayML { get; set; }
+        public int? DraftKingsHomeML { get; set; }
+        public int? DraftKingsAwayML { get; set; }
+        public string BestHomeML { get; set; } = "same";
+        public string BestAwayML { get; set; } = "same";
     }
 }

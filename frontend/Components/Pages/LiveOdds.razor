@@ -409,23 +409,36 @@
             <MudPaper Class="pa-4" Elevation="2">
                 <div class="d-flex justify-space-between align-center mb-3">
                     <MudText Typo="Typo.h6">Analysis History - @DateTime.Today.ToString("MMM dd, yyyy")</MudText>
-                    <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="ClearHistory" 
-                               Disabled="@(!_analysisHistory.Any())" StartIcon="@Icons.Material.Filled.Delete">
-                        Clear
-                    </MudButton>
+                    <div class="d-flex" style="gap: 8px;">
+                        <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Success" OnClick="SyncGameResults" 
+                                   Disabled="@(_isSyncingResults || !_analysisHistory.Any(h => string.IsNullOrEmpty(h.Result)))" 
+                                   StartIcon="@Icons.Material.Filled.Sync">
+                            @if (_isSyncingResults) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                            Sync Results
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="RefreshClosingLines" 
+                                   Disabled="@_isRefreshingLines" StartIcon="@Icons.Material.Filled.Update">
+                            @if (_isRefreshingLines) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                            Update Lines
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="ClearHistory" 
+                                   Disabled="@(!_analysisHistory.Any())" StartIcon="@Icons.Material.Filled.Delete">
+                            Clear
+                        </MudButton>
+                    </div>
                 </div>
                 
                 @if (_analysisHistory.Any())
                 {
-                    <MudSimpleTable Dense="true" Hover="true">
+                    <MudSimpleTable Dense="true" Hover="true" Style="font-size: 0.85rem;">
                         <thead>
-                            <tr>
+                            <tr style="background: var(--mud-palette-surface);">
                                 <th>Time</th>
                                 <th>Matchup</th>
                                 <th>Pick</th>
                                 <th>Win%</th>
+                                <th>O/U (Open→Close)</th>
                                 <th>Spread</th>
-                                <th>O/U</th>
                                 <th>Value?</th>
                                 <th>Stake</th>
                                 <th>Result</th>
@@ -439,8 +452,19 @@
                                     <td><strong>@entry.AwayTeam</strong> @@ <strong>@entry.HomeTeam</strong></td>
                                     <td><MudChip T="string" Color="Color.Primary" Size="Size.Small">@entry.Pick</MudChip></td>
                                     <td>@entry.WinProbability%</td>
+                                    <td>
+                                        @if (entry.OpeningOU.HasValue && entry.ClosingOU.HasValue && entry.OpeningOU != entry.ClosingOU)
+                                        {
+                                            var movement = entry.ClosingOU.Value - entry.OpeningOU.Value;
+                                            var color = movement > 0 ? "green" : "red";
+                                            <span>@entry.OpeningOU → <span style="color: @color; font-weight: bold;">@entry.ClosingOU</span></span>
+                                        }
+                                        else
+                                        {
+                                            <span>@entry.OuPick</span>
+                                        }
+                                    </td>
                                     <td>@entry.SpreadPick</td>
-                                    <td>@entry.OuPick</td>
                                     <td>
                                         @if (entry.HasValue)
                                         {
@@ -499,6 +523,87 @@
                 else
                 {
                     <MudAlert Severity="Severity.Info">No analyses yet today. Run analysis on the Live Analysis tab!</MudAlert>
+                }
+            </MudPaper>
+        </MudTabPanel>
+        
+        <!-- Compare Books Tab (NEW) -->
+        <MudTabPanel Text="Compare Books" Icon="@Icons.Material.Filled.CompareArrows">
+            <MudPaper Class="pa-4" Elevation="2">
+                <div class="d-flex justify-space-between align-center mb-4">
+                    <div>
+                        <MudText Typo="Typo.h6">FanDuel vs DraftKings</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Find the best line for maximum value</MudText>
+                    </div>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadOddsComparison" 
+                               Disabled="@_isLoadingComparison" StartIcon="@Icons.Material.Filled.Refresh">
+                        @if (_isLoadingComparison) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                        Load Comparison
+                    </MudButton>
+                </div>
+                
+                @if (_comparisonGames.Any())
+                {
+                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                        <thead>
+                            <tr style="background: var(--mud-palette-surface);">
+                                <th>Game</th>
+                                <th colspan="2" style="text-align: center; background: #1976D2; color: white;">FanDuel</th>
+                                <th colspan="2" style="text-align: center; background: #388E3C; color: white;">DraftKings</th>
+                                <th>Best Line</th>
+                            </tr>
+                            <tr>
+                                <th></th>
+                                <th>Home ML</th>
+                                <th>Away ML</th>
+                                <th>Home ML</th>
+                                <th>Away ML</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var game in _comparisonGames)
+                            {
+                                <tr>
+                                    <td><strong>@game.Game</strong></td>
+                                    <td style="@(game.BestHomeML == "fanduel" ? "background: #E3F2FD; font-weight: bold;" : "")">
+                                        @FormatOdds(game.FanDuelHomeML)
+                                    </td>
+                                    <td style="@(game.BestAwayML == "fanduel" ? "background: #E3F2FD; font-weight: bold;" : "")">
+                                        @FormatOdds(game.FanDuelAwayML)
+                                    </td>
+                                    <td style="@(game.BestHomeML == "draftkings" ? "background: #E8F5E9; font-weight: bold;" : "")">
+                                        @FormatOdds(game.DraftKingsHomeML)
+                                    </td>
+                                    <td style="@(game.BestAwayML == "draftkings" ? "background: #E8F5E9; font-weight: bold;" : "")">
+                                        @FormatOdds(game.DraftKingsAwayML)
+                                    </td>
+                                    <td>
+                                        @if (game.BestHomeML != "same" || game.BestAwayML != "same")
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Success">
+                                                ★ @(game.BestHomeML == "fanduel" || game.BestAwayML == "fanduel" ? "FD" : "DK") better
+                                            </MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">Same</MudText>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                    
+                    <MudAlert Severity="Severity.Info" Class="mt-4">
+                        <strong>Tip:</strong> Highlighted cells show the better odds. Always bet at the book with the best line!
+                    </MudAlert>
+                }
+                else if (!_isLoadingComparison)
+                {
+                    <MudAlert Severity="Severity.Normal">
+                        Click "Load Comparison" to see FanDuel vs DraftKings odds side-by-side.
+                    </MudAlert>
                 }
             </MudPaper>
         </MudTabPanel>
@@ -895,6 +1000,23 @@
         public bool HasValue { get; set; }
         public double Stake { get; set; } = 0;
         public string Result { get; set; } = ""; // W, L, P (Push)
+        
+        // Opening/Closing line tracking (NEW)
+        public double? OpeningSpread { get; set; }
+        public double? ClosingSpread { get; set; }
+        public double? OpeningOU { get; set; }
+        public double? ClosingOU { get; set; }
+        public int? OpeningHomeML { get; set; }
+        public int? ClosingHomeML { get; set; }
+        public int? OpeningAwayML { get; set; }
+        public int? ClosingAwayML { get; set; }
+        
+        // For result syncing
+        public string? GameId { get; set; }
+        public DateTime? GameTime { get; set; }
+        public int? FinalHomeScore { get; set; }
+        public int? FinalAwayScore { get; set; }
+        public bool ResultSynced { get; set; } = false;
     }
     
     private async Task MarkResult(AnalysisHistoryEntry entry, string result)
@@ -950,5 +1072,249 @@
     {
         var roi = GetRoi();
         return roi > 0 ? Color.Success : roi < 0 ? Color.Error : Color.Default;
+    }
+    
+    // ===== Compare Books Tab =====
+    private bool _isLoadingComparison = false;
+    private List<OddsComparisonGame> _comparisonGames = new();
+    
+    private async Task LoadOddsComparison()
+    {
+        _isLoadingComparison = true;
+        _comparisonGames.Clear();
+        StateHasChanged();
+        
+        try
+        {
+            var response = await Http.GetAsync("http://backend:8000/odds/nba/compare/fd-dk");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var data = JsonSerializer.Deserialize<JsonElement>(json);
+                
+                if (data.TryGetProperty("games", out var games))
+                {
+                    foreach (var game in games.EnumerateArray())
+                    {
+                        var compGame = new OddsComparisonGame
+                        {
+                            Game = game.GetProperty("game").GetString() ?? "",
+                            HomeTeam = game.TryGetProperty("home_team", out var ht) ? ht.GetString() ?? "" : "",
+                            AwayTeam = game.TryGetProperty("away_team", out var at) ? at.GetString() ?? "" : "",
+                        };
+                        
+                        if (game.TryGetProperty("fanduel", out var fd))
+                        {
+                            compGame.FanDuelHomeML = fd.TryGetProperty("home_ml", out var fhm) && fhm.ValueKind == JsonValueKind.Number ? fhm.GetInt32() : (int?)null;
+                            compGame.FanDuelAwayML = fd.TryGetProperty("away_ml", out var fam) && fam.ValueKind == JsonValueKind.Number ? fam.GetInt32() : (int?)null;
+                        }
+                        
+                        if (game.TryGetProperty("draftkings", out var dk))
+                        {
+                            compGame.DraftKingsHomeML = dk.TryGetProperty("home_ml", out var dhm) && dhm.ValueKind == JsonValueKind.Number ? dhm.GetInt32() : (int?)null;
+                            compGame.DraftKingsAwayML = dk.TryGetProperty("away_ml", out var dam) && dam.ValueKind == JsonValueKind.Number ? dam.GetInt32() : (int?)null;
+                        }
+                        
+                        if (game.TryGetProperty("best", out var best))
+                        {
+                            compGame.BestHomeML = best.TryGetProperty("home_ml", out var bhm) ? bhm.GetString() ?? "same" : "same";
+                            compGame.BestAwayML = best.TryGetProperty("away_ml", out var bam) ? bam.GetString() ?? "same" : "same";
+                        }
+                        
+                        _comparisonGames.Add(compGame);
+                    }
+                }
+                
+                Snackbar.Add($"Loaded {_comparisonGames.Count} games for comparison", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to load comparison", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoadingComparison = false;
+        }
+    }
+    private class OddsComparisonGame
+    {
+        public string Game { get; set; } = "";
+        public string HomeTeam { get; set; } = "";
+        public string AwayTeam { get; set; } = "";
+        public int? FanDuelHomeML { get; set; }
+        public int? FanDuelAwayML { get; set; }
+        public int? DraftKingsHomeML { get; set; }
+        public int? DraftKingsAwayML { get; set; }
+        public string BestHomeML { get; set; } = "same";
+        public string BestAwayML { get; set; } = "same";
+    }
+    
+    // ===== Result Syncing =====
+    private bool _isSyncingResults = false;
+    private bool _isRefreshingLines = false;
+    
+    private async Task SyncGameResults()
+    {
+        _isSyncingResults = true;
+        StateHasChanged();
+        
+        try
+        {
+            // Get games that need results synced (no result yet)
+            var pendingGames = _analysisHistory.Where(h => string.IsNullOrEmpty(h.Result)).ToList();
+            
+            if (!pendingGames.Any())
+            {
+                Snackbar.Add("No games need syncing", Severity.Info);
+                return;
+            }
+            
+            // Fetch today's completed games from the API
+            var response = await Http.GetAsync("http://backend:8000/results/nba/today");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var data = JsonSerializer.Deserialize<JsonElement>(json);
+                
+                int synced = 0;
+                if (data.TryGetProperty("games", out var games))
+                {
+                    foreach (var game in games.EnumerateArray())
+                    {
+                        var homeTeam = game.TryGetProperty("home_team", out var ht) ? ht.GetString() : "";
+                        var awayTeam = game.TryGetProperty("away_team", out var at) ? at.GetString() : "";
+                        var homeScore = game.TryGetProperty("home_score", out var hs) && hs.ValueKind == JsonValueKind.Number ? hs.GetInt32() : (int?)null;
+                        var awayScore = game.TryGetProperty("away_score", out var @as) && @as.ValueKind == JsonValueKind.Number ? @as.GetInt32() : (int?)null;
+                        var status = game.TryGetProperty("status", out var st) ? st.GetString() : "";
+                        
+                        if (status?.ToLower() != "final") continue;
+                        if (!homeScore.HasValue || !awayScore.HasValue) continue;
+                        
+                        // Find matching entry in history
+                        var entry = pendingGames.FirstOrDefault(h => 
+                            h.HomeTeam.Contains(homeTeam ?? "", StringComparison.OrdinalIgnoreCase) ||
+                            h.AwayTeam.Contains(awayTeam ?? "", StringComparison.OrdinalIgnoreCase) ||
+                            (homeTeam ?? "").Contains(h.HomeTeam, StringComparison.OrdinalIgnoreCase));
+                        
+                        if (entry != null)
+                        {
+                            entry.FinalHomeScore = homeScore;
+                            entry.FinalAwayScore = awayScore;
+                            entry.ResultSynced = true;
+                            
+                            // Auto-determine result based on pick and scores
+                            var totalPoints = homeScore.Value + awayScore.Value;
+                            var homeWon = homeScore > awayScore;
+                            
+                            // Try to determine result based on pick type
+                            if (entry.Pick.Contains(entry.HomeTeam))
+                                entry.Result = homeWon ? "W" : "L";
+                            else if (entry.Pick.Contains(entry.AwayTeam))
+                                entry.Result = !homeWon ? "W" : "L";
+                            
+                            synced++;
+                        }
+                    }
+                }
+                
+                if (synced > 0)
+                {
+                    await SaveHistoryToStorage();
+                    Snackbar.Add($"✅ Synced {synced} game result(s)", Severity.Success);
+                }
+                else
+                {
+                    Snackbar.Add("No matching games found in results", Severity.Info);
+                }
+            }
+            else
+            {
+                // Fallback: Fetch from odds endpoint
+                Snackbar.Add("Results endpoint not available yet. Mark results manually.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Sync error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSyncingResults = false;
+        }
+    }
+    
+    private async Task RefreshClosingLines()
+    {
+        _isRefreshingLines = true;
+        StateHasChanged();
+        
+        try
+        {
+            // Fetch current odds to update closing lines
+            var response = await Http.GetAsync($"http://backend:8000/odds/nba?sportsbook={_selectedSportsbook}");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var data = JsonSerializer.Deserialize<JsonElement>(json);
+                
+                int updated = 0;
+                if (data.TryGetProperty("games", out var games))
+                {
+                    foreach (var game in games.EnumerateArray())
+                    {
+                        var homeTeam = game.TryGetProperty("home_team", out var ht) ? ht.GetString() : "";
+                        var awayTeam = game.TryGetProperty("away_team", out var at) ? at.GetString() : "";
+                        var currentOU = game.TryGetProperty("over_under", out var ou) && ou.ValueKind == JsonValueKind.Number ? ou.GetDouble() : (double?)null;
+                        var currentSpread = game.TryGetProperty("spread", out var sp) && sp.ValueKind == JsonValueKind.Number ? sp.GetDouble() : (double?)null;
+                        var currentHomeML = game.TryGetProperty("home_moneyline", out var hm) && hm.ValueKind == JsonValueKind.Number ? hm.GetInt32() : (int?)null;
+                        var currentAwayML = game.TryGetProperty("away_moneyline", out var am) && am.ValueKind == JsonValueKind.Number ? am.GetInt32() : (int?)null;
+                        
+                        // Find matching entry in history
+                        var entry = _analysisHistory.FirstOrDefault(h =>
+                            h.HomeTeam.Contains(homeTeam ?? "", StringComparison.OrdinalIgnoreCase) ||
+                            (homeTeam ?? "").Contains(h.HomeTeam, StringComparison.OrdinalIgnoreCase));
+                        
+                        if (entry != null)
+                        {
+                            // Set opening lines if not set yet
+                            if (!entry.OpeningOU.HasValue && currentOU.HasValue)
+                            {
+                                entry.OpeningOU = currentOU;
+                            }
+                            
+                            // Always update closing lines
+                            entry.ClosingOU = currentOU;
+                            entry.ClosingSpread = currentSpread;
+                            entry.ClosingHomeML = currentHomeML;
+                            entry.ClosingAwayML = currentAwayML;
+                            updated++;
+                        }
+                    }
+                }
+                
+                if (updated > 0)
+                {
+                    await SaveHistoryToStorage();
+                    Snackbar.Add($"📈 Updated lines for {updated} game(s)", Severity.Success);
+                }
+                else
+                {
+                    Snackbar.Add("No matching games to update", Severity.Info);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error updating lines: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isRefreshingLines = false;
+        }
     }
 }
