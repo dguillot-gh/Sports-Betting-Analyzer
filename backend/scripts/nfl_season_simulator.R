@@ -12,6 +12,10 @@ suppressPackageStartupMessages({
     install.packages("jsonlite", repos = "https://cloud.r-project.org", quiet = TRUE)
     library(jsonlite)
   }
+  if (!require("readr", quietly = TRUE)) {
+    install.packages("readr", repos = "https://cloud.r-project.org", quiet = TRUE)
+    library(readr)
+  }
   if (!require("dplyr", quietly = TRUE)) {
     install.packages("dplyr", repos = "https://cloud.r-project.org", quiet = TRUE)
     library(dplyr, warn.conflicts = FALSE)
