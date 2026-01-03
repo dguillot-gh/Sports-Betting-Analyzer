@@ -70,6 +70,11 @@ async def run_nba_backtest(request: BacktestRequest) -> BacktestResult:
         # If no data, generate demo backtest with sample games
         if df is None or len(df) == 0:
             logger.info("No NBA data found, generating demo backtest")
+            
+            # Use consistent seed based on request params for reproducible results
+            seed = hash((request.season, request.bet_type, int(request.min_edge * 10))) % (2**32)
+            np.random.seed(seed)
+            
             # Generate 50 sample games for demo
             bet_history = []
             cumulative_profit = [0.0]
@@ -243,6 +248,11 @@ async def run_nfl_backtest(request: BacktestRequest) -> BacktestResult:
         # If no data, generate demo backtest
         if df is None or len(df) == 0:
             logger.info("No NFL data found, generating demo backtest")
+            
+            # Use consistent seed based on request params for reproducible results
+            seed = hash((request.season, request.bet_type, int(request.min_edge * 10), "nfl")) % (2**32)
+            np.random.seed(seed)
+            
             bet_history = []
             cumulative_profit = [0.0]
             total_profit = 0.0
@@ -406,6 +416,10 @@ async def run_nascar_backtest(request: BacktestRequest) -> BacktestResult:
                       "Christopher Bell", "Denny Hamlin", "Ryan Blaney", "Tyler Reddick"]
         
         simulator = NASCARSeasonSimulator(drivers, "cup")
+        
+        # Use consistent seed based on request params for reproducible results
+        seed = hash((request.season, request.bet_type, int(request.min_edge * 10), "nascar")) % (2**32)
+        np.random.seed(seed)
         
         bet_history = []
         cumulative_profit = [0.0]

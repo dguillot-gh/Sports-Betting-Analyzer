@@ -52,6 +52,16 @@
                                     @if (_isPredicting) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
                                     Get Prediction
                                 </MudButton>
+                                
+                                @if (_isPredicting && !string.IsNullOrEmpty(_predictStatus))
+                                {
+                                    <MudPaper Class="pa-3 mt-2" Elevation="0" Style="background: rgba(0,0,0,0.05);">
+                                        <div class="d-flex align-center">
+                                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" Class="mr-2" />
+                                            <MudText Typo="Typo.body2" Color="Color.Primary">@_predictStatus</MudText>
+                                        </div>
+                                    </MudPaper>
+                                }
                             </MudStack>
                         </MudCardContent>
                     </MudCard>
@@ -150,6 +160,16 @@
                                        Disabled="@_isSimPredicting" FullWidth="true" Size="Size.Large">
                                 @(_isSimPredicting ? "Predicting..." : "Run Prediction")
                             </MudButton>
+                            
+                            @if (_isSimPredicting && !string.IsNullOrEmpty(_simStatus))
+                            {
+                                <MudPaper Class="pa-3 mt-3" Elevation="0" Style="background: rgba(0,0,0,0.05);">
+                                    <div class="d-flex align-center">
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" Class="mr-2" />
+                                        <MudText Typo="Typo.body2" Color="Color.Primary">@_simStatus</MudText>
+                                    </div>
+                                </MudPaper>
+                            }
                         }
                         else
                         {
@@ -204,6 +224,19 @@
                             @if (_mcIsLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
                             Run Simulation
                         </MudButton>
+                        
+                        @if (_mcIsLoading && !string.IsNullOrEmpty(_mcStatus))
+                        {
+                            <MudPaper Class="pa-4 mt-3" Elevation="0" Style="background: rgba(0,0,0,0.05);">
+                                <div class="d-flex align-center">
+                                    <MudProgressCircular Size="Size.Medium" Indeterminate="true" Color="Color.Primary" Class="mr-3" />
+                                    <div>
+                                        <MudText Typo="Typo.body2" Color="Color.Primary">@_mcStatus</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Processing...</MudText>
+                                    </div>
+                                </div>
+                            </MudPaper>
+                        }
                     </MudPaper>
                 </MudItem>
                 <MudItem xs="12" md="8">
@@ -256,11 +289,24 @@
                             @(_nflIsLoading ? "Simulating..." : "Run Simulation")
                         </MudButton>
                         
+                        @if (_nflIsLoading && !string.IsNullOrEmpty(_nflSimStatus))
+                        {
+                            <MudPaper Class="pa-4 mt-3" Elevation="0" Style="background: rgba(0,0,0,0.05);">
+                                <div class="d-flex align-center">
+                                    <MudProgressCircular Size="Size.Medium" Indeterminate="true" Color="Color.Primary" Class="mr-3" />
+                                    <div>
+                                        <MudText Typo="Typo.body2" Color="Color.Primary">@_nflSimStatus</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">This may take a minute...</MudText>
+                                    </div>
+                                </div>
+                            </MudPaper>
+                        }
+                        
                         @if (_nflSimResults != null && _nflSimResults.ContainsKey("generated_at"))
                         {
                             <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
                                 Last run: @_nflSimResults["generated_at"]
-                                @if (_nflSimResults.ContainsKey("cached") && (bool)_nflSimResults["cached"])
+                                @if (_nflSimResults.ContainsKey("cached") && GetBool(_nflSimResults, "cached"))
                                 {
                                     <MudChip T="string" Size="Size.Small" Color="Color.Warning">Cached</MudChip>
                                 }
@@ -712,6 +758,7 @@
     private string _nascarSeries = "cup";
     private string _predictionTask = "classification";
     private bool _isPredicting = false;
+    private string _predictStatus = "";
     private PredictResponse? _predictionResult;
     private string _driver = "";
     private string _track = "";
@@ -725,6 +772,7 @@
     private bool _isLoadingSimFeatures = false;
     private bool _simFeaturesLoaded = false;
     private bool _isSimPredicting = false;
+    private string _simStatus = "";
     private List<string> _simCategoricalFeatures = new();
     private List<string> _simNumericFeatures = new();
     private Dictionary<string, List<object>> _simFeatureValues = new();
@@ -740,6 +788,7 @@
     private List<string> _mcAllDrivers = new();
     private IEnumerable<string> _mcSelectedDrivers = new HashSet<string>();
     private bool _mcIsLoading = false;
+    private string _mcStatus = "";
     private SimulationResponse? _mcResponse;
 
     protected override async Task OnInitializedAsync()
@@ -762,8 +811,15 @@
     {
         _isPredicting = true;
         _predictionResult = null;
+        _predictStatus = "Initializing prediction model...";
+        StateHasChanged();
+        
         try
         {
+            _predictStatus = $"Running prediction for {_driver}...";
+            StateHasChanged();
+            await Task.Delay(50);
+            
             var features = new Dictionary<string, object>
             {
                 ["driver"] = _driver, ["track"] = _track, ["track_type"] = _trackType,
@@ -771,9 +827,15 @@
             };
             var request = new PredictRequest { Features = features };
             _predictionResult = await MLClient.PredictAsync("nascar", _predictionTask, request, _nascarSeries);
+            
+            _predictStatus = "";
             Snackbar.Add("Prediction completed!", Severity.Success);
         }
-        catch (Exception ex) { Snackbar.Add($"Prediction failed: {ex.Message}", Severity.Error); }
+        catch (Exception ex) 
+        { 
+            _predictStatus = $"Error: {ex.Message}";
+            Snackbar.Add($"Prediction failed: {ex.Message}", Severity.Error); 
+        }
         finally { _isPredicting = false; }
     }
 
@@ -805,15 +867,29 @@
     {
         _isSimPredicting = true;
         _simPredictionResult = null;
+        _simStatus = "Preparing features...";
+        StateHasChanged();
+        
         try
         {
+            _simStatus = "Running model prediction...";
+            StateHasChanged();
+            await Task.Delay(50);
+            
             var features = new Dictionary<string, object>();
             foreach (var kvp in _simCategoricalInputs) if (!string.IsNullOrEmpty(kvp.Value)) features[kvp.Key] = kvp.Value;
             foreach (var kvp in _simNumericInputs) if (kvp.Value.HasValue) features[kvp.Key] = kvp.Value.Value;
             var request = new PredictRequest { Features = features };
             _simPredictionResult = await MLClient.PredictAsync("nascar", _simTask, request, _simSeries);
+            
+            _simStatus = "";
+            Snackbar.Add("Prediction completed!", Severity.Success);
         }
-        catch (Exception ex) { Snackbar.Add($"Prediction failed: {ex.Message}", Severity.Error); }
+        catch (Exception ex) 
+        { 
+            _simStatus = $"Error: {ex.Message}";
+            Snackbar.Add($"Prediction failed: {ex.Message}", Severity.Error); 
+        }
         finally { _isSimPredicting = false; }
     }
 
@@ -826,17 +902,34 @@
     {
         _mcIsLoading = true;
         _mcResponse = null;
+        _mcStatus = "Initializing Monte Carlo simulation...";
+        StateHasChanged();
+        
         try
         {
+            _mcStatus = $"Running {_mcNumSimulations} race simulations with {_mcSelectedDrivers.Count()} drivers...";
+            StateHasChanged();
+            await Task.Delay(50);
+            
             var request = new SimulationRequest
             {
                 Drivers = _mcSelectedDrivers.ToList(), Year = _mcYear,
                 TrackType = _mcTrackType, NumSimulations = _mcNumSimulations
             };
+            
+            _mcStatus = "Calculating probabilities...";
+            StateHasChanged();
+            
             _mcResponse = await MLClient.SimulateRaceAsync("nascar", request, "cup");
+            
+            _mcStatus = "";
             Snackbar.Add("Simulation complete!", Severity.Success);
         }
-        catch (Exception ex) { Snackbar.Add($"Simulation failed: {ex.Message}", Severity.Error); }
+        catch (Exception ex) 
+        { 
+            _mcStatus = $"Error: {ex.Message}";
+            Snackbar.Add($"Simulation failed: {ex.Message}", Severity.Error); 
+        }
         finally { _mcIsLoading = false; }
     }
 
@@ -853,19 +946,28 @@
     // NFL Season Simulation State
     private int _nflSimulations = 1000;
     private bool _nflIsLoading = false;
+    private string _nflSimStatus = "";
     private Dictionary<string, object>? _nflSimResults;
     
     private async Task RunNFLSimulation()
     {
         _nflIsLoading = true;
         _nflSimResults = null;
+        _nflSimStatus = "Initializing NFL season simulation...";
         StateHasChanged();
         
         try
         {
-            using var http = new HttpClient { BaseAddress = new Uri("http://backend:8000") };
+            _nflSimStatus = $"Running {_nflSimulations} season simulations...";
+            StateHasChanged();
+            await Task.Delay(100); // Allow UI to update
+            
+            using var http = new HttpClient { BaseAddress = new Uri("http://backend:8000"), Timeout = TimeSpan.FromMinutes(5) };
             var payload = new { simulations = _nflSimulations, force_refresh = true };
             var response = await http.PostAsJsonAsync("/simulation/nfl/season", payload);
+            
+            _nflSimStatus = "Processing results...";
+            StateHasChanged();
             
             if (response.IsSuccessStatusCode)
             {
@@ -875,17 +977,31 @@
                 if (_nflSimResults != null && !_nflSimResults.ContainsKey("error"))
                 {
                     Snackbar.Add("NFL simulation complete!", Severity.Success);
+                    _nflSimStatus = "";
+                }
+                else
+                {
+                    _nflSimStatus = "Simulation returned an error";
                 }
             }
             else
             {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                Logger.LogError("NFL simulation failed: {Status} - {Body}", response.StatusCode, errorBody);
                 Snackbar.Add($"Simulation failed: {response.StatusCode}", Severity.Error);
+                _nflSimStatus = $"Failed: {response.StatusCode}";
             }
+        }
+        catch (TaskCanceledException)
+        {
+            Snackbar.Add("Simulation timed out - try fewer simulations", Severity.Warning);
+            _nflSimStatus = "Timed out";
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error running NFL simulation");
             Snackbar.Add($"Simulation failed: {ex.Message}", Severity.Error);
+            _nflSimStatus = $"Error: {ex.Message}";
         }
         finally
         {
@@ -1289,5 +1405,24 @@
             Logger.LogError(ex, "Error parsing schedule predictions");
             return new List<Dictionary<string, object>>();
         }
+    }
+    
+    private bool GetBool(Dictionary<string, object> dict, string key)
+    {
+        if (!dict.ContainsKey(key))
+            return false;
+        
+        var val = dict[key];
+        
+        if (val is bool b)
+            return b;
+        if (val is JsonElement je && je.ValueKind == JsonValueKind.True)
+            return true;
+        if (val is JsonElement je2 && je2.ValueKind == JsonValueKind.False)
+            return false;
+        if (val is string s && bool.TryParse(s, out var parsed))
+            return parsed;
+        
+        return false;
     }
 }

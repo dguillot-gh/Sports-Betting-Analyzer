@@ -331,10 +331,22 @@ class NASCARSport(BaseSport):
         return {'classification': classification, 'regression': regression}
 
     def get_entities(self) -> List[str]:
-        """Return list of all drivers."""
+        """Return list of all drivers, filtered by series if configured."""
         # Ensure data is loaded to populate _active_drivers
         if not hasattr(self, '_active_drivers') or not self._active_drivers:
             self.load_data()
+        
+        # Check if a specific series is configured
+        series = self.config.get('series')
+        
+        if series and hasattr(self, '_active_drivers_by_series') and self._active_drivers_by_series:
+            # Return drivers for this specific series
+            series_drivers = self._active_drivers_by_series.get(series.lower(), [])
+            if series_drivers:
+                # _active_drivers_by_series stores dicts with 'name' key
+                if isinstance(series_drivers[0], dict):
+                    return [d['name'] for d in series_drivers]
+                return series_drivers
             
         if hasattr(self, '_active_drivers') and self._active_drivers:
             return self._active_drivers
@@ -343,11 +355,16 @@ class NASCARSport(BaseSport):
         df = self.load_data()
         if 'driver' not in df.columns:
             return []
+        
+        # Apply series filter if available
+        if series and 'series' in df.columns:
+            df = df[df['series'] == series.lower()]
+        
         return sorted(df['driver'].dropna().unique().tolist())
 
     def get_drivers(self, team_id: Optional[str] = None) -> List[str]:
-        """Return list of drivers, optionally filtered by team."""
-        # If no team filter, return all active drivers
+        """Return list of drivers, optionally filtered by team and series."""
+        # If no team filter, return all active drivers (filtered by series via get_entities)
         if not team_id:
             return self.get_entities()
 
@@ -355,6 +372,11 @@ class NASCARSport(BaseSport):
         
         if 'driver' not in df.columns:
             return []
+        
+        # Apply series filter if configured
+        series = self.config.get('series')
+        if series and 'series' in df.columns:
+            df = df[df['series'] == series.lower()]
         
         if team_id:
             if 'team_name' in df.columns:

@@ -484,6 +484,11 @@
                                     </MudSelect>
                                 </MudItem>
                                 <MudItem xs="12" md="3">
+                                    <MudAutocomplete T="string" @bind-Value="_nascarDriverSearch" Label="Search Driver" 
+                                                     SearchFunc="@SearchNASCARDrivers" Variant="Variant.Outlined" Dense="true"
+                                                     AdornmentIcon="@Icons.Material.Filled.Search" Clearable="true" />
+                                </MudItem>
+                                <MudItem xs="12" md="3">
                                     <MudSelect T="string" @bind-Value="_nascarTeam" Label="Team Filter" 
                                                Variant="Variant.Outlined" Dense="true" Clearable="true">
                                         <MudSelectItem Value="@((string)null)">All Teams</MudSelectItem>
@@ -502,11 +507,6 @@
                                         <MudSelectItem Value="@("short")">Short Track</MudSelectItem>
                                         <MudSelectItem Value="@("road")">Road Course</MudSelectItem>
                                     </MudSelect>
-                                </MudItem>
-                                <MudItem xs="12" md="3">
-                                    <MudAutocomplete T="string" @bind-Value="_nascarTrack" Label="Track" 
-                                                     SearchFunc="@SearchNASCARTracks" Variant="Variant.Outlined" Dense="true"
-                                                     AdornmentIcon="@Icons.Material.Filled.LocationOn" Clearable="true" />
                                 </MudItem>
                                 <MudItem xs="12" md="2">
                                     <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadNASCARDrivers"
@@ -718,6 +718,7 @@
     private bool _isLoadingNASCAR = false;
     private string _nascarSeries = "cup";
     private string _nascarTeam = "";
+    private string _nascarDriverSearch = "";
     private string _nascarTrackType = "";
     private string _nascarTrack = "";
     private List<NASCARDriver> _nascarDrivers = new();
@@ -726,6 +727,11 @@
         "Hendrick Motorsports", "Joe Gibbs Racing", "Team Penske", "Stewart-Haas Racing",
         "23XI Racing", "Trackhouse Racing", "Richard Childress Racing", "JR Motorsports",
         "Kaulig Racing", "Roush Fenway Keselowski", "Front Row Motorsports"
+    };
+    private List<string> _nascarDriverNames = new() {
+        "Kyle Larson", "William Byron", "Chase Elliott", "Alex Bowman",
+        "Martin Truex Jr", "Christopher Bell", "Denny Hamlin", "Ty Gibbs",
+        "Joey Logano", "Ryan Blaney", "Austin Cindric", "Tyler Reddick", "Bubba Wallace"
     };
     private List<string> _nascarTracks = new() {
         "Daytona", "Talladega", "Charlotte", "Texas", "Atlanta", "Kansas", "Las Vegas",
@@ -787,30 +793,47 @@
                 if (apiPlayers != null && apiPlayers.Any())
                 {
                     var random = new Random();
-                    _nbaPlayers = apiPlayers.Select(p => new NBAPlayer
-                    {
-                        Name = GetString(p, "name"),
-                        Team = GetString(p, "team"),
-                        Position = GetString(p, "position"),
-                        GamesPlayed = GetInt(p, "games"),
-                        PPG = GetDouble(p, "ppg"),
-                        RPG = GetDouble(p, "rpg"),
-                        APG = GetDouble(p, "apg"),
-                        FGPct = Math.Round(random.NextDouble() * 15 + 42, 1),
-                        ThreePct = Math.Round(random.NextDouble() * 15 + 32, 1),
-                        MPG = Math.Round(random.NextDouble() * 8 + 30, 1),
-                        Last10Points = Enumerable.Range(0, 10).Select(_ => random.Next(10, 35)).ToList(),
-                        PointsThreshold = 20,
-                        ReboundsThreshold = 6,
-                        AssistsThreshold = 5,
-                        ThreesThreshold = 2,
-                        PointsHits = random.Next(20, 35),
-                        ReboundsHits = random.Next(15, 30),
-                        AssistsHits = random.Next(15, 30),
-                        ThreesHits = random.Next(20, 35),
-                        Pts20HitRate = random.Next(50, 80),
-                        Pts25HitRate = random.Next(35, 65),
-                        Pts30HitRate = random.Next(20, 45)
+                    _nbaPlayers = apiPlayers.Select(p => {
+                        var ppg = GetDouble(p, "ppg");
+                        var rpg = GetDouble(p, "rpg");
+                        var apg = GetDouble(p, "apg");
+                        var games = Math.Max(1, GetInt(p, "games"));
+                        
+                        // Generate game logs for dynamic hit rate calculation
+                        var gamePoints = Enumerable.Range(0, games).Select(_ => 
+                            (int)Math.Max(0, ppg + random.Next(-12, 16))).ToList();
+                        var gameRebounds = Enumerable.Range(0, games).Select(_ => 
+                            (int)Math.Max(0, rpg + random.Next(-4, 6))).ToList();
+                        var gameAssists = Enumerable.Range(0, games).Select(_ => 
+                            (int)Math.Max(0, apg + random.Next(-4, 6))).ToList();
+                        var gameThrees = Enumerable.Range(0, games).Select(_ => 
+                            random.Next(0, 6)).ToList();
+                        
+                        return new NBAPlayer
+                        {
+                            Name = GetString(p, "name"),
+                            Team = GetString(p, "team"),
+                            Position = GetString(p, "position"),
+                            GamesPlayed = games,
+                            PPG = ppg,
+                            RPG = rpg,
+                            APG = apg,
+                            FGPct = Math.Round(random.NextDouble() * 15 + 42, 1),
+                            ThreePct = Math.Round(random.NextDouble() * 15 + 32, 1),
+                            MPG = Math.Round(random.NextDouble() * 8 + 30, 1),
+                            Last10Points = gamePoints.TakeLast(10).ToList(),
+                            GamePoints = gamePoints,
+                            GameRebounds = gameRebounds,
+                            GameAssists = gameAssists,
+                            GameThrees = gameThrees,
+                            PointsThreshold = 20,
+                            ReboundsThreshold = 6,
+                            AssistsThreshold = 5,
+                            ThreesThreshold = 2,
+                            Pts20HitRate = gamePoints.Count(pt => pt >= 20) * 100 / games,
+                            Pts25HitRate = gamePoints.Count(pt => pt >= 25) * 100 / games,
+                            Pts30HitRate = gamePoints.Count(pt => pt >= 30) * 100 / games
+                        };
                     }).Take(20).ToList();
                     
                     Snackbar.Add($"Loaded {_nbaPlayers.Count} NBA players from API", Severity.Success);
@@ -836,14 +859,34 @@
     private void LoadDemoNBAPlayers()
     {
         var random = new Random();
-        _nbaPlayers = new List<NBAPlayer>
+        var allPlayers = new List<NBAPlayer>
         {
             CreateDemoNBAPlayer("LeBron James", "LAL", "SF", 25.4, 7.8, 7.1, random),
             CreateDemoNBAPlayer("Stephen Curry", "GSW", "PG", 28.2, 4.5, 5.8, random),
             CreateDemoNBAPlayer("Kevin Durant", "PHX", "SF", 27.1, 6.8, 5.2, random),
             CreateDemoNBAPlayer("Giannis Antetokounmpo", "MIL", "PF", 31.2, 11.9, 5.7, random),
             CreateDemoNBAPlayer("Luka Doncic", "DAL", "PG", 32.4, 8.8, 8.0, random),
+            CreateDemoNBAPlayer("Shai Gilgeous-Alexander", "OKC", "PG", 31.1, 5.5, 6.2, random),
+            CreateDemoNBAPlayer("Jayson Tatum", "BOS", "SF", 26.9, 8.1, 4.4, random),
+            CreateDemoNBAPlayer("Joel Embiid", "PHI", "C", 33.1, 10.2, 4.2, random),
+            CreateDemoNBAPlayer("Nikola Jokic", "DEN", "C", 26.4, 12.4, 9.0, random),
+            CreateDemoNBAPlayer("Anthony Edwards", "MIN", "SG", 25.9, 5.4, 5.1, random),
         };
+        
+        // Apply search filter
+        if (!string.IsNullOrEmpty(_nbaSelectedPlayer))
+        {
+            allPlayers = allPlayers.Where(p => 
+                p.Name.Contains(_nbaSelectedPlayer, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+        
+        // Apply team filter
+        if (!string.IsNullOrEmpty(_nbaSelectedTeam))
+        {
+            allPlayers = allPlayers.Where(p => p.Team == _nbaSelectedTeam).ToList();
+        }
+        
+        _nbaPlayers = allPlayers;
     }
     
     private string GetString(Dictionary<string, JsonElement> dict, string key)
@@ -876,7 +919,18 @@
     private NBAPlayer CreateDemoNBAPlayer(string name, string team, string pos, double ppg, double rpg, double apg, Random rand)
     {
         var games = 40;
-        var last10 = Enumerable.Range(0, 10).Select(_ => rand.Next((int)(ppg - 10), (int)(ppg + 15))).ToList();
+        
+        // Generate realistic game-by-game stats for dynamic hit rate calculation
+        var gamePoints = Enumerable.Range(0, games).Select(_ => 
+            (int)Math.Max(0, ppg + rand.Next(-12, 16))).ToList();
+        var gameRebounds = Enumerable.Range(0, games).Select(_ => 
+            (int)Math.Max(0, rpg + rand.Next(-4, 6))).ToList();
+        var gameAssists = Enumerable.Range(0, games).Select(_ => 
+            (int)Math.Max(0, apg + rand.Next(-4, 6))).ToList();
+        var gameThrees = Enumerable.Range(0, games).Select(_ => 
+            rand.Next(0, 6)).ToList();
+        
+        var last10 = gamePoints.TakeLast(10).ToList();
         
         return new NBAPlayer
         {
@@ -891,17 +945,17 @@
             ThreePct = Math.Round(rand.NextDouble() * 15 + 32, 1),
             MPG = Math.Round(rand.NextDouble() * 8 + 30, 1),
             Last10Points = last10,
+            GamePoints = gamePoints,
+            GameRebounds = gameRebounds,
+            GameAssists = gameAssists,
+            GameThrees = gameThrees,
             PointsThreshold = 20,
             ReboundsThreshold = 6,
             AssistsThreshold = 5,
             ThreesThreshold = 2,
-            PointsHits = (int)(games * rand.NextDouble() * 0.3 + games * 0.5),
-            ReboundsHits = (int)(games * rand.NextDouble() * 0.3 + games * 0.4),
-            AssistsHits = (int)(games * rand.NextDouble() * 0.3 + games * 0.4),
-            ThreesHits = (int)(games * rand.NextDouble() * 0.3 + games * 0.5),
-            Pts20HitRate = (int)(rand.NextDouble() * 30 + 50),
-            Pts25HitRate = (int)(rand.NextDouble() * 30 + 35),
-            Pts30HitRate = (int)(rand.NextDouble() * 30 + 20)
+            Pts20HitRate = gamePoints.Count(p => p >= 20) * 100 / games,
+            Pts25HitRate = gamePoints.Count(p => p >= 25) * 100 / games,
+            Pts30HitRate = gamePoints.Count(p => p >= 30) * 100 / games
         };
     }
     
@@ -1010,15 +1064,34 @@
     private void LoadDemoNFLPlayers()
     {
         var random = new Random();
-        _nflPlayers = new List<NFLPlayer>
+        var allPlayers = new List<NFLPlayer>
         {
             CreateDemoNFLPlayer("Patrick Mahomes", "KC", "QB", random),
             CreateDemoNFLPlayer("Josh Allen", "BUF", "QB", random),
+            CreateDemoNFLPlayer("Jalen Hurts", "PHI", "QB", random),
+            CreateDemoNFLPlayer("Lamar Jackson", "BAL", "QB", random),
             CreateDemoNFLPlayer("Christian McCaffrey", "SF", "RB", random),
+            CreateDemoNFLPlayer("Derrick Henry", "BAL", "RB", random),
             CreateDemoNFLPlayer("Justin Jefferson", "MIN", "WR", random),
-            CreateDemoNFLPlayer("Travis Kelce", "KC", "TE", random),
             CreateDemoNFLPlayer("Tyreek Hill", "MIA", "WR", random),
+            CreateDemoNFLPlayer("CeeDee Lamb", "DAL", "WR", random),
+            CreateDemoNFLPlayer("Travis Kelce", "KC", "TE", random),
         };
+        
+        // Apply search filter
+        if (!string.IsNullOrEmpty(_nflSelectedPlayer))
+        {
+            allPlayers = allPlayers.Where(p => 
+                p.Name.Contains(_nflSelectedPlayer, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+        
+        // Apply position filter
+        if (!string.IsNullOrEmpty(_nflSelectedPosition))
+        {
+            allPlayers = allPlayers.Where(p => p.Position == _nflSelectedPosition).ToList();
+        }
+        
+        _nflPlayers = allPlayers;
     }
     
     // ============== NASCAR Methods ==============
@@ -1029,6 +1102,14 @@
             return _nascarTracks;
         
         return _nascarTracks.Where(t => t.Contains(value, StringComparison.OrdinalIgnoreCase));
+    }
+    
+    private async Task<IEnumerable<string>> SearchNASCARDrivers(string value, CancellationToken token)
+    {
+        if (string.IsNullOrEmpty(value))
+            return _nascarDriverNames;
+        
+        return _nascarDriverNames.Where(d => d.Contains(value, StringComparison.OrdinalIgnoreCase));
     }
     
     private async Task LoadNASCARDrivers()
@@ -1043,10 +1124,10 @@
             var url = $"http://backend:8000/stats/nascar/drivers?series={_nascarSeries}&limit=50";
             if (!string.IsNullOrEmpty(_nascarTeam))
                 url += $"&team={Uri.EscapeDataString(_nascarTeam)}";
+            if (!string.IsNullOrEmpty(_nascarDriverSearch))
+                url += $"&search={Uri.EscapeDataString(_nascarDriverSearch)}";
             if (!string.IsNullOrEmpty(_nascarTrackType))
                 url += $"&track_type={_nascarTrackType}";
-            if (!string.IsNullOrEmpty(_nascarTrack))
-                url += $"&track={Uri.EscapeDataString(_nascarTrack)}";
             
             var response = await Http.GetAsync(url);
             
@@ -1130,28 +1211,35 @@
             CreateDemoNASCARDriver("Ryan Blaney", "Team Penske", 11.8, 3, 10, 18, random),
             CreateDemoNASCARDriver("Tyler Reddick", "23XI Racing", 13.2, 1, 7, 14, random),
         };
+        // Apply driver search filter first
+        if (!string.IsNullOrEmpty(_nascarDriverSearch))
+        {
+            allDrivers = allDrivers.Where(d => 
+                d.Name.Contains(_nascarDriverSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
         
+        // Apply team filter
         if (!string.IsNullOrEmpty(_nascarTeam))
         {
-            _nascarDrivers = allDrivers.Where(d => d.Team.Contains(_nascarTeam, StringComparison.OrdinalIgnoreCase)).ToList();
-            if (_nascarDrivers.Any())
-            {
-                var totalRaces = _nascarDrivers.Sum(d => d.Races);
-                _nascarTeamStats = new NASCARTeamStats
-                {
-                    TotalRaces = totalRaces,
-                    TotalWins = _nascarDrivers.Sum(d => d.Wins),
-                    TotalTop5 = _nascarDrivers.Sum(d => d.Top5),
-                    TotalTop10 = _nascarDrivers.Sum(d => d.Top10),
-                    WinPct = totalRaces > 0 ? Math.Round(_nascarDrivers.Sum(d => d.Wins) * 100.0 / totalRaces, 1) : 0,
-                    Top5Pct = totalRaces > 0 ? Math.Round(_nascarDrivers.Sum(d => d.Top5) * 100.0 / totalRaces, 1) : 0,
-                    Top10Pct = totalRaces > 0 ? Math.Round(_nascarDrivers.Sum(d => d.Top10) * 100.0 / totalRaces, 1) : 0
-                };
-            }
+            allDrivers = allDrivers.Where(d => d.Team.Contains(_nascarTeam, StringComparison.OrdinalIgnoreCase)).ToList();
         }
-        else
+        
+        _nascarDrivers = allDrivers;
+        
+        // Calculate team stats if team is selected
+        if (!string.IsNullOrEmpty(_nascarTeam) && _nascarDrivers.Any())
         {
-            _nascarDrivers = allDrivers;
+            var totalRaces = _nascarDrivers.Sum(d => d.Races);
+            _nascarTeamStats = new NASCARTeamStats
+            {
+                TotalRaces = totalRaces,
+                TotalWins = _nascarDrivers.Sum(d => d.Wins),
+                TotalTop5 = _nascarDrivers.Sum(d => d.Top5),
+                TotalTop10 = _nascarDrivers.Sum(d => d.Top10),
+                WinPct = totalRaces > 0 ? Math.Round(_nascarDrivers.Sum(d => d.Wins) * 100.0 / totalRaces, 1) : 0,
+                Top5Pct = totalRaces > 0 ? Math.Round(_nascarDrivers.Sum(d => d.Top5) * 100.0 / totalRaces, 1) : 0,
+                Top10Pct = totalRaces > 0 ? Math.Round(_nascarDrivers.Sum(d => d.Top10) * 100.0 / totalRaces, 1) : 0
+            };
         }
     }
     
@@ -1195,28 +1283,34 @@
         public List<int> Last10Points { get; set; } = new();
         public bool IsExpanded { get; set; }
         
+        // Game logs for real-time recalculation
+        public List<int> GamePoints { get; set; } = new();
+        public List<int> GameRebounds { get; set; } = new();
+        public List<int> GameAssists { get; set; } = new();
+        public List<int> GameThrees { get; set; } = new();
+        
         // Thresholds (user adjustable)
         public int PointsThreshold { get; set; } = 20;
         public int ReboundsThreshold { get; set; } = 6;
         public int AssistsThreshold { get; set; } = 5;
         public int ThreesThreshold { get; set; } = 2;
         
-        // Hit counts
-        public int PointsHits { get; set; }
-        public int ReboundsHits { get; set; }
-        public int AssistsHits { get; set; }
-        public int ThreesHits { get; set; }
-        
-        // Quick hit rates
+        // Quick hit rates (static for display)
         public int Pts20HitRate { get; set; }
         public int Pts25HitRate { get; set; }
         public int Pts30HitRate { get; set; }
         
-        // Computed
-        public double PointsHitRate => GamesPlayed > 0 ? Math.Round(PointsHits * 100.0 / GamesPlayed, 0) : 0;
-        public double ReboundsHitRate => GamesPlayed > 0 ? Math.Round(ReboundsHits * 100.0 / GamesPlayed, 0) : 0;
-        public double AssistsHitRate => GamesPlayed > 0 ? Math.Round(AssistsHits * 100.0 / GamesPlayed, 0) : 0;
-        public double ThreesHitRate => GamesPlayed > 0 ? Math.Round(ThreesHits * 100.0 / GamesPlayed, 0) : 0;
+        // Dynamic hit counts based on threshold and game logs
+        public int PointsHits => GamePoints.Count(p => p >= PointsThreshold);
+        public int ReboundsHits => GameRebounds.Count(r => r >= ReboundsThreshold);
+        public int AssistsHits => GameAssists.Count(a => a >= AssistsThreshold);
+        public int ThreesHits => GameThrees.Count(t => t >= ThreesThreshold);
+        
+        // Computed hit rates - recalculate dynamically!
+        public double PointsHitRate => GamePoints.Count > 0 ? Math.Round(PointsHits * 100.0 / GamePoints.Count, 0) : 0;
+        public double ReboundsHitRate => GameRebounds.Count > 0 ? Math.Round(ReboundsHits * 100.0 / GameRebounds.Count, 0) : 0;
+        public double AssistsHitRate => GameAssists.Count > 0 ? Math.Round(AssistsHits * 100.0 / GameAssists.Count, 0) : 0;
+        public double ThreesHitRate => GameThrees.Count > 0 ? Math.Round(ThreesHits * 100.0 / GameThrees.Count, 0) : 0;
     }
     
     private class NFLPlayer
