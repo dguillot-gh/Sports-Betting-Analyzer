@@ -99,7 +99,7 @@
                                                                 <div class="d-flex align-center" style="gap: 8px;">
                                                                     <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" 
                                                                                    OnClick="@(() => { player.PointsThreshold = Math.Max(1, player.PointsThreshold - 1); StateHasChanged(); })" />
-                                                                    <MudNumericField T="int" @bind-Value="player.PointsThreshold" 
+                                                                    <MudNumericField T="int" Value="player.PointsThreshold" 
                                                                                       Variant="Variant.Outlined" Margin="Margin.Dense"
                                                                                       Style="width: 70px;" Min="1" Max="60" 
                                                                                       ValueChanged="@((int v) => { player.PointsThreshold = v; StateHasChanged(); })" />
@@ -120,7 +120,7 @@
                                                                 <div class="d-flex align-center" style="gap: 8px;">
                                                                     <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" 
                                                                                    OnClick="@(() => { player.ReboundsThreshold = Math.Max(1, player.ReboundsThreshold - 1); StateHasChanged(); })" />
-                                                                    <MudNumericField T="int" @bind-Value="player.ReboundsThreshold" 
+                                                                    <MudNumericField T="int" Value="player.ReboundsThreshold" 
                                                                                       Variant="Variant.Outlined" Margin="Margin.Dense"
                                                                                       Style="width: 70px;" Min="1" Max="30"
                                                                                       ValueChanged="@((int v) => { player.ReboundsThreshold = v; StateHasChanged(); })" />
@@ -141,7 +141,7 @@
                                                                 <div class="d-flex align-center" style="gap: 8px;">
                                                                     <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" 
                                                                                    OnClick="@(() => { player.AssistsThreshold = Math.Max(1, player.AssistsThreshold - 1); StateHasChanged(); })" />
-                                                                    <MudNumericField T="int" @bind-Value="player.AssistsThreshold" 
+                                                                    <MudNumericField T="int" Value="player.AssistsThreshold" 
                                                                                       Variant="Variant.Outlined" Margin="Margin.Dense"
                                                                                       Style="width: 70px;" Min="1" Max="20"
                                                                                       ValueChanged="@((int v) => { player.AssistsThreshold = v; StateHasChanged(); })" />
@@ -162,7 +162,7 @@
                                                                 <div class="d-flex align-center" style="gap: 8px;">
                                                                     <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" 
                                                                                    OnClick="@(() => { player.ThreesThreshold = Math.Max(1, player.ThreesThreshold - 1); StateHasChanged(); })" />
-                                                                    <MudNumericField T="int" @bind-Value="player.ThreesThreshold" 
+                                                                    <MudNumericField T="int" Value="player.ThreesThreshold" 
                                                                                       Variant="Variant.Outlined" Margin="Margin.Dense"
                                                                                       Style="width: 70px;" Min="1" Max="15"
                                                                                       ValueChanged="@((int v) => { player.ThreesThreshold = v; StateHasChanged(); })" />
@@ -855,7 +855,7 @@
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error loading NBA players");
+            Console.WriteLine($"Error loading NBA players: {ex.Message}");
             Snackbar.Add($"Failed to load NBA data: {ex.Message}", Severity.Error);
         }
         finally
@@ -958,7 +958,7 @@
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error loading NFL players");
+            Console.WriteLine($"Error loading NFL players: {ex.Message}");
             Snackbar.Add($"Failed to load NFL data: {ex.Message}", Severity.Error);
         }
         finally
@@ -1126,7 +1126,7 @@
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error loading NASCAR drivers");
+            Console.WriteLine($"Error loading NASCAR drivers: {ex.Message}");
             Snackbar.Add($"Failed to load NASCAR data: {ex.Message}", Severity.Error);
         }
         finally
