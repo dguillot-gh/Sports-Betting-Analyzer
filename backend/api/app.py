@@ -778,6 +778,12 @@ async def simulate_nfl_season(payload: Optional[NFLSeasonSimRequest] = None):
     try:
         from scripts.nfl_season_simulator import run_nfl_simulation, get_cached_simulation
         
+        # Check cache if not forcing refresh
+        if payload and not payload.force_refresh:
+            cached = get_cached_simulation()
+            if cached and cached.get("cached"):
+                return cached
+
         if payload:
             results = await run_nfl_simulation(
                 n_simulations=payload.simulations,
