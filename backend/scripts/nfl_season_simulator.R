@@ -12,10 +12,6 @@ suppressPackageStartupMessages({
     install.packages("jsonlite", repos = "https://cloud.r-project.org", quiet = TRUE)
     library(jsonlite)
   }
-  if (!require("readr", quietly = TRUE)) {
-    install.packages("readr", repos = "https://cloud.r-project.org", quiet = TRUE)
-    library(readr)
-  }
   if (!require("dplyr", quietly = TRUE)) {
     install.packages("dplyr", repos = "https://cloud.r-project.org", quiet = TRUE)
     library(dplyr, warn.conflicts = FALSE)
@@ -40,7 +36,7 @@ if (!file.exists(schedules_path)) {
 
 if (file.exists(schedules_path)) {
   cat("Loading local schedules.csv...\n")
-  games_df <- readr::read_csv(schedules_path, show_col_types = FALSE)
+  games_df <- read.csv(schedules_path, stringsAsFactors = FALSE)
   
   # Filter for current season(s) required by nflseedR
   # nflseedR expects a 'sims_games' compatible dataframe
