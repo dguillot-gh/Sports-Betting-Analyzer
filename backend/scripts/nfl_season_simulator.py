@@ -238,6 +238,18 @@ def _run_r_simulation_process(n_simulations: int) -> Dict:
         return {"error": True, "message": str(e)}
 
 
+
+def get_cached_simulation() -> Optional[Dict]:
+    """Get cached simulation results without running new simulation."""
+    if RESULTS_FILE.exists():
+        try:
+            with open(RESULTS_FILE) as f:
+                return json.load(f)
+        except Exception:
+            return None
+    return None
+
+
 async def run_nfl_simulation(
     n_simulations: int = 1000,
     force_refresh: bool = False
