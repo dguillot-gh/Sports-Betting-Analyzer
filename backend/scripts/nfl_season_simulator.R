@@ -48,9 +48,13 @@ cat(sprintf("Simulating %d NFL season...\n", nfl_season))
 tryCatch({
   cat("Loading schedule data...\n")
   
-  # Load current season games using nflseedR's built-in function
-  games <- nflseedR::load_sharpe_games() |>
-    dplyr::filter(season == nfl_season)
+  # Load current season games using nflreadr (nflseedR 2.0 recommended)
+  if (!require("nflreadr", quietly = TRUE)) {
+    cat("Installing nflreadr...\n")
+    install.packages("nflreadr", repos = "https://cloud.r-project.org", quiet = TRUE)
+  }
+  
+  games <- nflreadr::load_schedules(seasons = nfl_season)
   
   cat(sprintf("Loaded %d games for %d season\n", nrow(games), nfl_season))
   

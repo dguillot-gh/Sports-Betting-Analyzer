@@ -979,7 +979,11 @@
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
+                Logger.LogInformation("NFL simulation response: {Json}", json.Substring(0, Math.Min(500, json.Length)));
+                
                 _nflSimResults = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+                
+                Logger.LogInformation("Parsed keys: {Keys}", _nflSimResults != null ? string.Join(", ", _nflSimResults.Keys) : "null");
                 
                 if (_nflSimResults != null && !_nflSimResults.ContainsKey("error"))
                 {
@@ -988,7 +992,9 @@
                 }
                 else
                 {
-                    _nflSimStatus = "Simulation returned an error";
+                    var errorMsg = _nflSimResults?.ContainsKey("message") == true ? _nflSimResults["message"]?.ToString() : "Unknown error";
+                    _nflSimStatus = $"Simulation returned an error: {errorMsg}";
+                    Logger.LogError("Simulation error: {Error}", errorMsg);
                 }
             }
             else

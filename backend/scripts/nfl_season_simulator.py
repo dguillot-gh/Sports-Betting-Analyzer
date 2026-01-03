@@ -206,6 +206,7 @@ def _ensure_schedules_exist() -> bool:
 def _run_r_simulation_process(n_simulations: int) -> Dict:
     """Run R script via Popen and monitor output for progress."""
     import re
+    import time
     
     # Ensure data exists before starting
     if not _ensure_schedules_exist():
@@ -229,26 +230,35 @@ def _run_r_simulation_process(n_simulations: int) -> Dict:
         )
         
         stdout_lines = []
-        stderr_lines = []
+        start_time = time.time()
+        max_runtime = 600  # 10 minute timeout
         
         # Read stdout line by line
         while True:
+            # Check timeout
+            if time.time() - start_time > max_runtime:
+                process.kill()
+                return {"error": True, "message": "Simulation timed out after 10 minutes"}
+            
             line = process.stdout.readline()
             if not line and process.poll() is not None:
                 break
                 
             if line:
                 stdout_lines.append(line)
-                # Parse progress
-                # "Simulating Week 5 (14 games)..."
-                match = re.search(r"Simulating Week (\d+)", line)
-                if match:
-                    week = int(match.group(1))
-                    # Rough progress estimation (Weeks 1-18 + Playoffs ~22 weeks)
-                    progress = int(10 + (week / 22 * 80))
-                    _update_status(f"Simulating Week {week} logic...", progress)
-                elif "Running" in line:
-                    _update_status("Initializing nflseedR...", 10)
+                logger.info(f"R stdout: {line.strip()}")
+                
+                # Parse progress for nflseedR 2.0 (CHUNK messages)
+                chunk_match = re.search(r"CHUNK #(\d+)", line)
+                if chunk_match:
+                    chunk = int(chunk_match.group(1))
+                    # Assume ~10 chunks for n_simulations
+                    progress = int(10 + (chunk / 10 * 80))
+                    _update_status(f"Processing chunk {chunk}...", progress)
+                elif "Start simulation" in line:
+                    _update_status("Simulation started...", 10)
+                elif "DONE" in line:
+                    _update_status("Simulation complete, processing...", 90)
                 elif "Writing" in line or "Success" in line:
                     _update_status("Finalizing results...", 95)
         
