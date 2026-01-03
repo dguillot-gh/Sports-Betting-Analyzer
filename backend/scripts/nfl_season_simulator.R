@@ -65,31 +65,43 @@ tryCatch({
   # Extract overall standings
   standings <- sim_results$overall
   
-  # Build output structure
-  afc_teams <- standings %>% 
-    filter(conf == "AFC") %>%
-    arrange(desc(playoff)) %>%
-    mutate(
-      playoff_pct = round(playoff * 100, 1),
-      division_pct = round(div1 * 100, 1),
-      conf_pct = round(conf * 100, 1),
-      super_bowl_pct = round(sb_win * 100, 1)
-    ) %>%
-    select(team, conf, division, wins, playoff_pct, division_pct, conf_pct, super_bowl_pct)
+  # Debug: print available columns
+  cat(sprintf("Available columns: %s\n", paste(names(standings), collapse = ", ")))
   
-  nfc_teams <- standings %>%
-    filter(conf == "NFC") %>%
-    arrange(desc(playoff)) %>%
-    mutate(
-      playoff_pct = round(playoff * 100, 1),
-      division_pct = round(div1 * 100, 1),
-      conf_pct = round(conf * 100, 1),
-      super_bowl_pct = round(sb_win * 100, 1)
-    ) %>%
-    select(team, conf, division, wins, playoff_pct, division_pct, conf_pct, super_bowl_pct)
+  # Convert to data frame for simpler processing
+  standings <- as.data.frame(standings)
   
-  all_teams <- bind_rows(afc_teams, nfc_teams) %>%
-    arrange(desc(super_bowl_pct))
+  # Safely get column values with fallbacks
+  get_col <- function(df, col, default = 0) {
+    if (col %in% names(df)) df[[col]] else rep(default, nrow(df))
+  }
+  
+  # Build simplified output for each team
+  process_teams <- function(df, conference) {
+    conf_teams <- df[df$conf == conference, ]
+    conf_teams <- conf_teams[order(-get_col(conf_teams, "playoff", 0)), ]
+    
+    lapply(1:nrow(conf_teams), function(i) {
+      list(
+        team = conf_teams$team[i],
+        conf = conference,
+        division = conf_teams$division[i],
+        wins = round(get_col(conf_teams, "wins", 0)[i], 1),
+        playoff_pct = round(get_col(conf_teams, "playoff", 0)[i] * 100, 1),
+        division_pct = round(get_col(conf_teams, "div1", get_col(conf_teams, "div_pct", 0))[i] * 100, 1),
+        conf_pct = round(get_col(conf_teams, "conf", 0)[i] * 100, 1),
+        super_bowl_pct = round(get_col(conf_teams, "sb_win", get_col(conf_teams, "won_sb", 0))[i] * 100, 1)
+      )
+    })
+  }
+  
+  afc_teams <- process_teams(standings, "AFC")
+  nfc_teams <- process_teams(standings, "NFC")
+  all_teams <- c(afc_teams, nfc_teams)
+  
+  # Sort all_teams by super bowl pct
+  sb_pcts <- sapply(all_teams, function(x) x$super_bowl_pct)
+  all_teams <- all_teams[order(-sb_pcts)]
   
   output <- list(
     simulations = n_simulations,
