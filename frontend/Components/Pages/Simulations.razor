@@ -1061,7 +1061,46 @@
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error parsing NFL teams list");
+            Console.WriteLine($"Error parsing NFL teams list: {ex.Message}");
+            return new List<Dictionary<string, object>>();
+        }
+    }
+    
+    // Get teams for a specific conference (afc or nfc)
+    private List<Dictionary<string, object>> GetConferenceTeams(string conf)
+    {
+        if (_nflSimResults == null || !_nflSimResults.ContainsKey(conf))
+            return new List<Dictionary<string, object>>();
+        
+        try
+        {
+            var element = (JsonElement)_nflSimResults[conf];
+            var result = new List<Dictionary<string, object>>();
+            
+            // Python fallback returns array of team objects
+            if (element.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var team in element.EnumerateArray())
+                {
+                    var dict = new Dictionary<string, object>();
+                    foreach (var prop in team.EnumerateObject())
+                    {
+                        if (prop.Value.ValueKind == JsonValueKind.String)
+                            dict[prop.Name] = prop.Value.GetString() ?? "";
+                        else if (prop.Value.ValueKind == JsonValueKind.Number)
+                            dict[prop.Name] = prop.Value.GetDouble();
+                        else
+                            dict[prop.Name] = prop.Value.ToString();
+                    }
+                    result.Add(dict);
+                }
+            }
+            
+            return result.OrderByDescending(t => GetDouble(t, "playoff_pct")).ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error parsing {conf} teams: {ex.Message}");
             return new List<Dictionary<string, object>>();
         }
     }
@@ -1092,8 +1131,8 @@
             </thead>
             <tbody>
                 @{
-                    var teams = GetNFLTeamsList();
-                    foreach (var team in teams.Take(16))
+                    var teams = GetConferenceTeams(conf);
+                    foreach (var team in teams)
                     {
                         <tr>
                             <td><strong>@team.GetValueOrDefault("team", "")</strong></td>

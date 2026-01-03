@@ -779,53 +779,54 @@
         
         try
         {
-            // Call real API
-            var url = "http://backend:8000/stats/nba/players?limit=50";
-            if (!string.IsNullOrEmpty(_nbaSelectedTeam))
-                url += $"&team={_nbaSelectedTeam}";
+            // Use same endpoint as NBAHitRates page for working search
+            var url = "http://backend:8000/db/games/nba/list?limit=1000&season=2025";
             if (!string.IsNullOrEmpty(_nbaSelectedPlayer))
-                url += $"&search={Uri.EscapeDataString(_nbaSelectedPlayer)}";
+                url += $"&player={Uri.EscapeDataString(_nbaSelectedPlayer)}";
             
             var response = await Http.GetAsync(url);
             
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
-                var apiPlayers = JsonSerializer.Deserialize<List<Dictionary<string, JsonElement>>>(json, 
+                var gamesResponse = JsonSerializer.Deserialize<GamesResponse>(json, 
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                 
-                if (apiPlayers != null && apiPlayers.Any())
+                if (gamesResponse?.Results != null && gamesResponse.Results.Any())
                 {
-                    var random = new Random();
-                    _nbaPlayers = apiPlayers.Select(p => {
-                        var ppg = GetDouble(p, "ppg");
-                        var rpg = GetDouble(p, "rpg");
-                        var apg = GetDouble(p, "apg");
-                        var games = Math.Max(1, GetInt(p, "games"));
+                    // Group by player name (same logic as NBAHitRates)
+                    var playerGroups = gamesResponse.Results
+                        .Where(g => !string.IsNullOrEmpty(g.PlayerName))
+                        .GroupBy(g => g.PlayerName)
+                        .ToList();
+                    
+                    _nbaPlayers = playerGroups.Select(pg => {
+                        var games = pg.OrderByDescending(g => g.GameDate ?? "").ToList();
+                        var gamesPlayed = games.Count;
                         
-                        // Generate game logs for dynamic hit rate calculation
-                        var gamePoints = Enumerable.Range(0, games).Select(_ => 
-                            (int)Math.Max(0, ppg + random.Next(-12, 16))).ToList();
-                        var gameRebounds = Enumerable.Range(0, games).Select(_ => 
-                            (int)Math.Max(0, rpg + random.Next(-4, 6))).ToList();
-                        var gameAssists = Enumerable.Range(0, games).Select(_ => 
-                            (int)Math.Max(0, apg + random.Next(-4, 6))).ToList();
-                        var gameThrees = Enumerable.Range(0, games).Select(_ => 
-                            random.Next(0, 6)).ToList();
+                        // Extract real game-by-game stats
+                        var gamePoints = games.Select(g => g.Pts ?? 0).ToList();
+                        var gameRebounds = games.Select(g => g.Reb ?? 0).ToList();
+                        var gameAssists = games.Select(g => g.Ast ?? 0).ToList();
+                        var gameThrees = games.Select(g => g.Fg3 ?? 0).ToList();
+                        
+                        var ppg = gamesPlayed > 0 ? gamePoints.Average() : 0;
+                        var rpg = gamesPlayed > 0 ? gameRebounds.Average() : 0;
+                        var apg = gamesPlayed > 0 ? gameAssists.Average() : 0;
                         
                         return new NBAPlayer
                         {
-                            Name = GetString(p, "name"),
-                            Team = GetString(p, "team"),
-                            Position = GetString(p, "position"),
-                            GamesPlayed = games,
-                            PPG = ppg,
-                            RPG = rpg,
-                            APG = apg,
-                            FGPct = Math.Round(random.NextDouble() * 15 + 42, 1),
-                            ThreePct = Math.Round(random.NextDouble() * 15 + 32, 1),
-                            MPG = Math.Round(random.NextDouble() * 8 + 30, 1),
-                            Last10Points = gamePoints.TakeLast(10).ToList(),
+                            Name = pg.Key!,
+                            Team = games.FirstOrDefault()?.Team ?? "",
+                            Position = "", // Not in game data
+                            GamesPlayed = gamesPlayed,
+                            PPG = Math.Round(ppg, 1),
+                            RPG = Math.Round(rpg, 1),
+                            APG = Math.Round(apg, 1),
+                            FGPct = 0, // Not in game data
+                            ThreePct = 0, // Not in game data
+                            MPG = 0, // Not in game data
+                            Last10Points = gamePoints.Take(10).ToList(),
                             GamePoints = gamePoints,
                             GameRebounds = gameRebounds,
                             GameAssists = gameAssists,
@@ -833,19 +834,20 @@
                             PointsThreshold = 20,
                             ReboundsThreshold = 6,
                             AssistsThreshold = 5,
-                            ThreesThreshold = 2,
-                            Pts20HitRate = gamePoints.Count(pt => pt >= 20) * 100 / games,
-                            Pts25HitRate = gamePoints.Count(pt => pt >= 25) * 100 / games,
-                            Pts30HitRate = gamePoints.Count(pt => pt >= 30) * 100 / games
+                            ThreesThreshold = 2
                         };
-                    }).Take(20).ToList();
+                    })
+                    .Where(p => p.GamesPlayed > 0)
+                    .OrderByDescending(p => p.PPG)
+                    .Take(20)
+                    .ToList();
                     
-                    Snackbar.Add($"Loaded {_nbaPlayers.Count} NBA players from API", Severity.Success);
+                    Snackbar.Add($"Loaded {_nbaPlayers.Count} NBA players from game data", Severity.Success);
                     return;
                 }
                 else
                 {
-                    Snackbar.Add("No NBA players found in API response", Severity.Warning);
+                    Snackbar.Add("No NBA game data found", Severity.Warning);
                 }
             }
             else
@@ -862,6 +864,36 @@
         {
             _isLoadingNBA = false;
         }
+    }
+    
+    // Model class for game data response
+    private class GamesResponse
+    {
+        public List<GameRecord> Results { get; set; } = new();
+    }
+    
+    private class GameRecord
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("player_name")]
+        public string? PlayerName { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("team")]
+        public string? Team { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("game_date")]
+        public string? GameDate { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("pts")]
+        public int? Pts { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("reb")]
+        public int? Reb { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("ast")]
+        public int? Ast { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("fg3")]
+        public int? Fg3 { get; set; }
     }
     
     private string GetString(Dictionary<string, JsonElement> dict, string key)
@@ -898,57 +930,88 @@
         
         try
         {
-            // Call real API
-            var url = "http://backend:8000/stats/nfl/players?limit=50";
-            if (!string.IsNullOrEmpty(_nflSelectedPosition))
-                url += $"&position={_nflSelectedPosition}";
+            // Use same endpoint as NFLHitRates page for working search
+            var url = "http://backend:8000/db/games/nfl/list?limit=1000&season=2025";
             if (!string.IsNullOrEmpty(_nflSelectedPlayer))
-                url += $"&search={Uri.EscapeDataString(_nflSelectedPlayer)}";
+                url += $"&player={Uri.EscapeDataString(_nflSelectedPlayer)}";
             
             var response = await Http.GetAsync(url);
             
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
-                var apiPlayers = JsonSerializer.Deserialize<List<Dictionary<string, JsonElement>>>(json, 
+                var gamesResponse = JsonSerializer.Deserialize<NFLGamesResponse>(json, 
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                 
-                if (apiPlayers != null && apiPlayers.Any())
+                if (gamesResponse?.Results != null && gamesResponse.Results.Any())
                 {
-                    var random = new Random();
-                    _nflPlayers = apiPlayers.Select(p => new NFLPlayer
-                    {
-                        Name = GetString(p, "name"),
-                        Team = GetString(p, "team"),
-                        Position = GetString(p, "position"),
-                        GamesPlayed = GetInt(p, "games"),
-                        PassYards = GetInt(p, "pass_yards"),
-                        PassTD = GetInt(p, "pass_td"),
-                        RushYards = GetInt(p, "rush_yards"),
-                        RushTD = GetInt(p, "rush_td"),
-                        RecYards = GetInt(p, "rec_yards"),
-                        Receptions = GetInt(p, "receptions"),
-                        RecTD = GetInt(p, "rec_td"),
-                        CompPct = 0,
-                        Interceptions = 0,
-                        YPC = 0,
-                        Targets = 0,
-                        PassYardsThreshold = 250,
-                        RushYardsThreshold = 75,
-                        RecYardsThreshold = 60,
-                        ReceptionsThreshold = 5,
-                        PassYardsHitRate = random.Next(50, 85),
-                        RushYardsHitRate = random.Next(45, 80),
-                        RecYardsHitRate = random.Next(40, 75),
-                        ReceptionsHitRate = random.Next(55, 90)
-                    }).Take(20).ToList();
+                    // Filter by position if selected
+                    var filteredGames = gamesResponse.Results
+                        .Where(g => !string.IsNullOrEmpty(g.PlayerName));
                     
-                    Snackbar.Add($"Loaded {_nflPlayers.Count} NFL players from API", Severity.Success);
+                    if (!string.IsNullOrEmpty(_nflSelectedPosition))
+                    {
+                        filteredGames = filteredGames.Where(g => 
+                            g.Position?.Equals(_nflSelectedPosition, StringComparison.OrdinalIgnoreCase) == true);
+                    }
+                    
+                    // Group by player name (same logic as NFLHitRates)
+                    var playerGroups = filteredGames
+                        .GroupBy(g => g.PlayerName)
+                        .ToList();
+                    
+                    _nflPlayers = playerGroups.Select(pg => {
+                        var games = pg.OrderByDescending(g => g.Week ?? 0).ToList();
+                        var gamesPlayed = games.Count;
+                        
+                        // Extract real game-by-game stats
+                        var passYards = games.Sum(g => g.PassYds ?? 0);
+                        var rushYards = games.Sum(g => g.RushYds ?? 0);
+                        var recYards = games.Sum(g => g.RecYds ?? 0);
+                        var receptions = games.Sum(g => g.Rec ?? 0);
+                        var passTD = games.Sum(g => g.PassTd ?? 0);
+                        var rushTD = games.Sum(g => g.RushTd ?? 0);
+                        var recTD = games.Sum(g => g.RecTd ?? 0);
+                        
+                        return new NFLPlayer
+                        {
+                            Name = pg.Key!,
+                            Team = games.FirstOrDefault()?.Team ?? "",
+                            Position = games.FirstOrDefault()?.Position ?? "",
+                            GamesPlayed = gamesPlayed,
+                            PassYards = passYards,
+                            PassTD = passTD,
+                            RushYards = rushYards,
+                            RushTD = rushTD,
+                            RecYards = recYards,
+                            Receptions = receptions,
+                            RecTD = recTD,
+                            CompPct = 0,
+                            Interceptions = 0,
+                            YPC = gamesPlayed > 0 && rushYards > 0 ? Math.Round((double)rushYards / Math.Max(1, games.Sum(g => g.RushAtt ?? 0)), 1) : 0,
+                            Targets = games.Sum(g => g.Targets ?? 0),
+                            PassYardsThreshold = 250,
+                            RushYardsThreshold = 75,
+                            RecYardsThreshold = 60,
+                            ReceptionsThreshold = 5,
+                            // Calculate hit rates from real games
+                            PassYardsHitRate = gamesPlayed > 0 ? games.Count(g => (g.PassYds ?? 0) >= 250) * 100 / gamesPlayed : 0,
+                            RushYardsHitRate = gamesPlayed > 0 ? games.Count(g => (g.RushYds ?? 0) >= 75) * 100 / gamesPlayed : 0,
+                            RecYardsHitRate = gamesPlayed > 0 ? games.Count(g => (g.RecYds ?? 0) >= 60) * 100 / gamesPlayed : 0,
+                            ReceptionsHitRate = gamesPlayed > 0 ? games.Count(g => (g.Rec ?? 0) >= 5) * 100 / gamesPlayed : 0
+                        };
+                    })
+                    .Where(p => p.GamesPlayed > 0)
+                    .OrderByDescending(p => p.PassYards + p.RushYards + p.RecYards)
+                    .Take(20)
+                    .ToList();
+                    
+                    Snackbar.Add($"Loaded {_nflPlayers.Count} NFL players from game data", Severity.Success);
                     return;
                 }
                 else
                 {
-                    Snackbar.Add("No NFL players found in API response", Severity.Warning);
+                    Snackbar.Add("No NFL game data found", Severity.Warning);
                 }
             }
             else
@@ -965,6 +1028,54 @@
         {
             _isLoadingNFL = false;
         }
+    }
+    
+    // NFL game data response model
+    private class NFLGamesResponse
+    {
+        public List<NFLGameRecord> Results { get; set; } = new();
+    }
+    
+    private class NFLGameRecord
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("player_name")]
+        public string? PlayerName { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("team")]
+        public string? Team { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("position")]
+        public string? Position { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("week")]
+        public int? Week { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("pass_yds")]
+        public int? PassYds { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rush_yds")]
+        public int? RushYds { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rec_yds")]
+        public int? RecYds { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rec")]
+        public int? Rec { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("pass_td")]
+        public int? PassTd { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rush_td")]
+        public int? RushTd { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rec_td")]
+        public int? RecTd { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("targets")]
+        public int? Targets { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rush_att")]
+        public int? RushAtt { get; set; }
     }
     
     private NFLPlayer CreateDemoNFLPlayer(string name, string team, string pos, Random rand)
