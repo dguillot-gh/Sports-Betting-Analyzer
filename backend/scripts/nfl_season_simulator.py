@@ -183,14 +183,17 @@ def _ensure_schedules_exist() -> bool:
         current_year = now.year if now.month > 2 else now.year - 1
         years = list(range(2020, current_year + 1))
         
-        # Download schedules using nflreadpy
+        # Download schedules using nflreadpy (returns Polars DataFrame)
         df = nfl.load_schedules(years)
         
         # Ensure directory exists
         schedules_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Save to CSV
-        df.to_csv(schedules_path, index=False)
+        # Save to CSV (Polars uses write_csv, Pandas uses to_csv)
+        if hasattr(df, 'write_csv'):
+            df.write_csv(schedules_path)
+        else:
+            df.to_csv(schedules_path, index=False)
         logger.info(f"Downloaded {len(df)} games to {schedules_path}")
         return True
         
