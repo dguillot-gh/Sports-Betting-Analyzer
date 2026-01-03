@@ -145,114 +145,159 @@ async def _run_python_fallback_simulation(n_simulations: int) -> Dict:
     }
 
 
-async def run_nfl_simulation(
-    n_simulations: int = 1000,
-    force_refresh: bool = False
-) -> Dict:
-    """
-    Run NFL season simulation using nflseedR.
+STATUS_FILE = RESULTS_DIR / "simulation_status.json"
+
+
+def _update_status(message: str, progress: int = 0, is_error: bool = False):
+    """Write status to JSON file for UI polling."""
+    try:
+        status_data = {
+            "status": "error" if is_error else "running",
+            "message": message,
+            "progress": progress,
+            "timestamp": datetime.now().isoformat()
+        }
+        with open(STATUS_FILE, 'w') as f:
+            json.dump(status_data, f)
+    except Exception as e:
+        logger.error(f"Failed to update status: {e}")
+
+
+def _run_r_simulation_process(n_simulations: int) -> Dict:
+    """Run R script via Popen and monitor output for progress."""
+    import re
     
-    Args:
-        n_simulations: Number of simulations to run (default 1000)
-        force_refresh: Force re-run even if recent results exist
-        
-    Returns:
-        Dictionary with simulation results or cached results
-    """
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    
-    # Check if we have recent results (less than 6 hours old)
-    if not force_refresh and RESULTS_FILE.exists():
-        try:
-            with open(RESULTS_FILE) as f:
-                cached = json.load(f)
-            
-            generated_at = datetime.fromisoformat(cached.get("generated_at", "2000-01-01"))
-            age_hours = (datetime.now() - generated_at).total_seconds() / 3600
-            
-            if age_hours < 6:
-                logger.info(f"Using cached simulation results ({age_hours:.1f} hours old)")
-                cached["cached"] = True
-                return cached
-        except Exception as e:
-            logger.warning(f"Error reading cached results: {e}")
-    
-    # Check R is installed
-    if not check_r_installed():
-        logger.warning("R is not installed, using Python fallback simulation")
-        return await _run_python_fallback_simulation(n_simulations)
-    
-    # Run R script
-    logger.info(f"Running NFL simulation with {n_simulations} iterations...")
+    _update_status("Starting R process...", 5)
     
     try:
-        result = subprocess.run(
+        process = subprocess.Popen(
             [
                 "Rscript",
                 str(R_SCRIPT_PATH),
                 str(n_simulations),
                 str(RESULTS_FILE)
             ],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=300,  # 5 minute timeout
-            cwd=str(SCRIPT_DIR)
+            cwd=str(SCRIPT_DIR),
+            bufsize=1
         )
         
-        if result.returncode != 0:
-            logger.error(f"R script error: {result.stderr}")
-            return {
-                "error": True,
-                "message": f"R script failed: {result.stderr}"
-            }
+        stdout_lines = []
+        stderr_lines = []
         
-        # Read results
+        # Read stdout line by line
+        while True:
+            line = process.stdout.readline()
+            if not line and process.poll() is not None:
+                break
+                
+            if line:
+                stdout_lines.append(line)
+                # Parse progress
+                # "Simulating Week 5 (14 games)..."
+                match = re.search(r"Simulating Week (\d+)", line)
+                if match:
+                    week = int(match.group(1))
+                    # Rough progress estimation (Weeks 1-18 + Playoffs ~22 weeks)
+                    progress = int(10 + (week / 22 * 80))
+                    _update_status(f"Simulating Week {week} logic...", progress)
+                elif "Running" in line:
+                    _update_status("Initializing nflseedR...", 10)
+                elif "Writing" in line or "Success" in line:
+                    _update_status("Finalizing results...", 95)
+        
+        # Capture remaining stderr
+        stderr_output = process.stderr.read()
+        if stderr_output:
+            logger.warning(f"R Stderr: {stderr_output}")
+            
+        return_code = process.wait()
+        
+        if return_code != 0:
+            error_msg = f"R script failed with code {return_code}"
+            logger.error(f"{error_msg}\nStderr: {stderr_output}")
+            _update_status(error_msg, 0, True)
+            return {"error": True, "message": f"{error_msg}: {stderr_output}"}
+            
+        # Success
+        _update_status("Simulation complete!", 100)
+        
         if RESULTS_FILE.exists():
             with open(RESULTS_FILE) as f:
                 results = json.load(f)
-            
-            if results.get("error"):
-                return results
-            
-            results["cached"] = False
-            logger.info(f"Simulation complete: {len(results.get('all_teams', []))} teams")
+            logger.info("Simulation success, results loaded.")
             return results
         else:
-            return {
-                "error": True,
-                "message": "Results file not generated"
-            }
+            return {"error": True, "message": "Results file missing after success"}
             
-    except subprocess.TimeoutExpired:
-        return {
-            "error": True,
-            "message": "Simulation timed out after 5 minutes"
-        }
     except Exception as e:
-        logger.error(f"Error running simulation: {e}")
-        return {
-            "error": True,
-            "message": str(e)
-        }
+        logger.error(f"Exception running R script: {e}")
+        _update_status(f"Error: {str(e)}", 0, True)
+        return {"error": True, "message": str(e)}
 
 
-def get_cached_simulation() -> Optional[Dict]:
-    """Get cached simulation results without running new simulation."""
-    if RESULTS_FILE.exists():
+async def run_nfl_simulation(
+    n_simulations: int = 1000,
+    force_refresh: bool = False
+) -> Dict:
+    """
+    Run NFL season simulation using nflseedR.
+    """
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # Check cache
+    if not force_refresh and RESULTS_FILE.exists():
         try:
             with open(RESULTS_FILE) as f:
+                cached = json.load(f)
+            generated = datetime.fromisoformat(cached.get("generated_at", "2000-01-01"))
+            if (datetime.now() - generated).total_seconds() / 3600 < 6:
+                logger.info("Using cached results")
+                cached["cached"] = True
+                return cached
+        except:
+            pass
+    
+    if not check_r_installed():
+        _update_status("R not found, using fallback...", 0)
+        return await _run_python_fallback_simulation(n_simulations)
+    
+    # Run in thread executor to allow event loop to serve status updates
+    import asyncio
+    logger.info("Starting simulation thread...")
+    return await asyncio.to_thread(_run_r_simulation_process, n_simulations)
+
+
+def get_simulation_status() -> Dict:
+    """Get current status from file."""
+    if STATUS_FILE.exists():
+        try:
+            with open(STATUS_FILE) as f:
                 return json.load(f)
-        except Exception:
-            return None
-    return None
+        except:
+            pass
+    return {"status": "idle", "message": "Ready to simulate", "progress": 0}
 
 
 # For testing
 if __name__ == "__main__":
     import asyncio
-    
     async def test():
-        result = await run_nfl_simulation(n_simulations=100)
-        print(json.dumps(result, indent=2))
+        # Start status watcher
+        async def watch():
+            while True:
+                print(get_simulation_status())
+                await asyncio.sleep(1)
+                
+        task = asyncio.create_task(watch())
+        res = await run_nfl_simulation(10, force_refresh=True)
+        print("Done")
+        task.cancel()
     
-    asyncio.run(test())
+    try:
+        asyncio.run(test())
+    except KeyboardInterrupt:
+        pass
+

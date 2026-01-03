@@ -58,8 +58,7 @@ PLAYER_STATS_SEASON = {
 # Supporting data files
 NFLVERSE_FILES = {
     "players": f"{NFLVERSE_BASE}/players/players.csv",
-    "schedules": f"{NFLVERSE_BASE}/schedules/schedules.csv",
-    "rosters": f"{NFLVERSE_BASE}/rosters/roster.csv",
+    # Schedules and rosters fetched via library now
 }
 
 # 2025 season data (play-by-play files, per game)
@@ -99,7 +98,7 @@ async def download_nflverse(progress_callback=None):
         except Exception as e:
             logger.error(f"Error downloading stats for {year}: {e}")
     
-    # Download supporting files (players, schedules, rosters)
+    # Download supporting files (players)
     for name, url in NFLVERSE_FILES.items():
         try:
             if progress_callback:
@@ -115,6 +114,40 @@ async def download_nflverse(progress_callback=None):
                 logger.warning(f"Failed to download {name}: {response.status_code}")
         except Exception as e:
             logger.error(f"Error downloading {name}: {e}")
+
+    # Fetch Schedules and Rosters via nfl_data_py / nflreadpy (URL independent)
+    try:
+        if progress_callback:
+            progress_callback("Fetching schedules and rosters via nfl_data_py...")
+        
+        # Try importing either package
+        try:
+            import nfl_data_py as nfl
+        except ImportError:
+            import nflreadpy as nfl
+            
+        # Schedules
+        try:
+            # Fetch for all import years + next year
+            schedule_years = IMPORT_YEARS + [max(IMPORT_YEARS) + 1] 
+            sched = nfl.import_schedules(schedule_years)
+            sched.to_csv(NFLVERSE_DIR / "schedules.csv", index=False)
+            downloaded.append("schedules")
+            logger.info(f"Downloaded schedules via library ({len(sched)} games)")
+        except Exception as e:
+            logger.error(f"Error fetching schedules via lib: {e}")
+
+        # Rosters
+        try:
+            rosters = nfl.import_weekly_rosters(IMPORT_YEARS)
+            rosters.to_csv(NFLVERSE_DIR / "roster.csv", index=False)
+            downloaded.append("rosters")
+            logger.info("Downloaded rosters via library")
+        except Exception as e:
+            logger.error(f"Error fetching rosters via lib: {e}")
+            
+    except Exception as e:
+        logger.error(f"Library import failed: {e}")
     
     return downloaded
 

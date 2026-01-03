@@ -472,7 +472,7 @@
                             OverUnder = game.TryGetProperty("over_under", out var ou) && ou.ValueKind == JsonValueKind.Number ? (double?)ou.GetDouble() : null,
                             PredictedWinner = game.TryGetProperty("predicted_winner", out var pw) ? pw.GetString() ?? "" : "",
                             HomeWinProb = game.TryGetProperty("home_win_prob", out var hwp) && hwp.ValueKind == JsonValueKind.Number ? (double?)hwp.GetDouble() : null,
-                            ConfidenceLevel = game.TryGetProperty("confidence", out var conf) ? conf.GetString() ?? "Medium" : "Medium",
+                            ConfidenceLevel = GetSafeString(game, "confidence", "Medium"),
                             HasValue = game.TryGetProperty("has_value", out var hv) && hv.ValueKind == JsonValueKind.True,
                         };
                         
@@ -633,6 +633,20 @@
         "caesars" => "Caesars",
         _ => book
     };
+    
+    // Helper to safely get a string from JSON that might be a number
+    private string GetSafeString(JsonElement element, string property, string defaultValue)
+    {
+        if (!element.TryGetProperty(property, out var prop))
+            return defaultValue;
+        
+        return prop.ValueKind switch
+        {
+            JsonValueKind.String => prop.GetString() ?? defaultValue,
+            JsonValueKind.Number => prop.GetDouble().ToString("F0"),
+            _ => defaultValue
+        };
+    }
 
     private string FormatOdds(int? odds)
     {

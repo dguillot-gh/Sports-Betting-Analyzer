@@ -57,9 +57,22 @@ class NFLXGBTrainer:
         try:
             import nfl_data_py as nfl
             
-            # Fetch game schedules 2018-2025 (includes current season)
-            logger.info("Fetching NFL schedules...")
-            schedules_df = nfl.import_schedules([2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025])
+            # Fetch game schedules 2018-2025
+            # Try to load from local CSV first (Phase 1 artifact)
+            local_schedule_path = "/app/data/nflverse/schedules.csv"
+            if not os.path.exists(local_schedule_path):
+                # Fallback for local testing on Windows
+                local_schedule_path = "data/nflverse/schedules.csv"
+            
+            if os.path.exists(local_schedule_path):
+                import pandas as pd
+                logger.info(f"Loading schedules from local file: {local_schedule_path}")
+                schedules_df = pd.read_csv(local_schedule_path)
+                # Ensure filter is appropriate
+                schedules_df = schedules_df[schedules_df['season'].isin(range(2018, 2026))]
+            else:
+                logger.info("Local schedules.csv not found, fetching from nflreadpy...")
+                schedules_df = nfl.import_schedules([2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025])
             
             # Filter to completed games only
             games = schedules_df[schedules_df['home_score'].notna()].copy()
@@ -380,3 +393,17 @@ async def predict_nfl_xgb(home_team: str, away_team: str,
         result["away_team"] = away_team
     
     return result
+
+
+if __name__ == "__main__":
+    # Allow running this script directly to train models
+    logging.basicConfig(level=logging.INFO)
+    import asyncio
+    
+    print("Starting manual training run...")
+    try:
+        results = asyncio.run(train_nfl_model(epochs=500))
+        print(f"Training success! metrics: {json.dumps(results, indent=2)}")
+    except Exception as e:
+        print(f"Training failed: {e}")
+

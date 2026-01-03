@@ -798,6 +798,13 @@ async def simulate_nfl_season(payload: Optional[NFLSeasonSimRequest] = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get('/simulation/nfl/status')
+def get_nfl_simulation_status():
+    """Get current status of running NFL simulation."""
+    from scripts.nfl_season_simulator import get_simulation_status
+    return get_simulation_status()
+
+
 @app.get('/simulation/nfl/season')
 async def get_nfl_simulation():
     """

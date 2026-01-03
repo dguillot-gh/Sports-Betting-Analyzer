@@ -956,15 +956,22 @@
         _nflSimStatus = "Initializing NFL season simulation...";
         StateHasChanged();
         
+        var cts = new CancellationTokenSource();
+        
         try
         {
-            _nflSimStatus = $"Running {_nflSimulations} season simulations...";
-            StateHasChanged();
-            await Task.Delay(100); // Allow UI to update
+            // Start polling task
+            var pollingTask = PollNFLStatus(cts.Token);
             
             using var http = new HttpClient { BaseAddress = new Uri("http://backend:8000"), Timeout = TimeSpan.FromMinutes(5) };
             var payload = new { simulations = _nflSimulations, force_refresh = true };
+            
+            // Await the long-running simulation
             var response = await http.PostAsJsonAsync("/simulation/nfl/season", payload);
+            
+            // Stop polling
+            cts.Cancel();
+            try { await pollingTask; } catch (OperationCanceledException) {}
             
             _nflSimStatus = "Processing results...";
             StateHasChanged();
@@ -1005,7 +1012,38 @@
         }
         finally
         {
+            cts.Cancel();
+            cts.Dispose();
             _nflIsLoading = false;
+        }
+    }
+
+    private async Task PollNFLStatus(CancellationToken token)
+    {
+        using var http = new HttpClient { BaseAddress = new Uri("http://backend:8000"), Timeout = TimeSpan.FromSeconds(5) };
+        
+        while (!token.IsCancellationRequested)
+        {
+            try
+            {
+                var status = await http.GetFromJsonAsync<Dictionary<string, object>>("/simulation/nfl/status", token);
+                if (status != null && status.ContainsKey("message"))
+                {
+                    var msg = status["message"].ToString();
+                    if (!string.IsNullOrEmpty(msg) && _nflSimStatus != msg)
+                    {
+                        _nflSimStatus = msg;
+                        await InvokeAsync(StateHasChanged);
+                    }
+                }
+                
+                await Task.Delay(1000, token);
+            }
+            catch (Exception)
+            {
+                // Ignore polling errors to not interrupt main flow
+                await Task.Delay(2000, token);
+            }
         }
     }
     
