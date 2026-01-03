@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
-# NFL Season Simulator using nflseedR (Simplified Version)
-# Uses nflseedR's built-in Elo engine for reliable simulations
+# NFL Season Simulator using nflseedR 2.0
+# Uses nfl_simulations() - the new recommended API
 
 # Parse arguments first
 args <- commandArgs(trailingOnly = TRUE)
@@ -36,70 +36,72 @@ tryCatch({
 
 cat("Packages loaded successfully\n")
 
-# Run simulation using nflseedR's built-in function
+# Determine current NFL season dynamically
+current_date <- Sys.Date()
+current_year <- as.integer(format(current_date, "%Y"))
+current_month <- as.integer(format(current_date, "%m"))
+nfl_season <- ifelse(current_month < 9, current_year - 1, current_year)
+
+cat(sprintf("Simulating %d NFL season...\n", nfl_season))
+
+# Run simulation using nflseedR 2.0 API
 tryCatch({
-  cat("Running nflseedR simulation...\n")
+  cat("Loading schedule data...\n")
   
-  # Determine current NFL season dynamically
-  # NFL season starts in September, so if we're before September, use previous year
-  current_date <- Sys.Date()
-  current_year <- as.integer(format(current_date, "%Y"))
-  current_month <- as.integer(format(current_date, "%m"))
+  # Load current season games using nflseedR's built-in function
+  games <- nflseedR::load_sharpe_games() |>
+    dplyr::filter(season == nfl_season)
   
-  # If before September, the current season is previous year
-  # Otherwise, the current season is this year
-  nfl_season <- ifelse(current_month < 9, current_year - 1, current_year)
+  cat(sprintf("Loaded %d games for %d season\n", nrow(games), nfl_season))
   
-  cat(sprintf("Simulating %d NFL season...\n", nfl_season))
+  # Determine chunks based on simulation count
+  chunks <- max(2, min(10, n_simulations %/% 100))
   
-  # Use nflseedR's simulate_nfl which fetches its own data
-  sim_results <- simulate_nfl(
-    nfl_season = nfl_season,
-    fresh_season = TRUE,
+  cat(sprintf("Running %d simulations in %d chunks...\n", n_simulations, chunks))
+  
+  # Use new nfl_simulations() API
+  sim_results <- nflseedR::nfl_simulations(
+    games = games,
     simulations = n_simulations,
-    print_summary = FALSE
+    chunks = chunks
   )
   
   cat("Simulation complete, processing results...\n")
   
-  # Extract overall standings
-  standings <- sim_results$overall
+  # Extract overall standings (aggregated across all simulations)
+  overall <- as.data.frame(sim_results$overall)
   
-  # Debug: print available columns
-  cat(sprintf("Available columns: %s\n", paste(names(standings), collapse = ", ")))
+  cat(sprintf("Available columns: %s\n", paste(names(overall), collapse = ", ")))
   
-  # Convert to data frame for simpler processing
-  standings <- as.data.frame(standings)
-  
-  # Safely get column values with fallbacks
+  # Helper function to safely get column
   get_col <- function(df, col, default = 0) {
     if (col %in% names(df)) df[[col]] else rep(default, nrow(df))
   }
   
-  # Build simplified output for each team
-  process_teams <- function(df, conference) {
-    conf_teams <- df[df$conf == conference, ]
-    conf_teams <- conf_teams[order(-get_col(conf_teams, "playoff", 0)), ]
+  # Build output for each conference
+  build_team_list <- function(df, conf_name) {
+    conf_df <- df[df$conf == conf_name, ]
+    conf_df <- conf_df[order(-get_col(conf_df, "playoff", 0)), ]
     
-    lapply(1:nrow(conf_teams), function(i) {
+    lapply(1:nrow(conf_df), function(i) {
       list(
-        team = conf_teams$team[i],
-        conf = conference,
-        division = conf_teams$division[i],
-        wins = round(get_col(conf_teams, "wins", 0)[i], 1),
-        playoff_pct = round(get_col(conf_teams, "playoff", 0)[i] * 100, 1),
-        division_pct = round(get_col(conf_teams, "div1", get_col(conf_teams, "div_pct", 0))[i] * 100, 1),
-        conf_pct = round(get_col(conf_teams, "conf", 0)[i] * 100, 1),
-        super_bowl_pct = round(get_col(conf_teams, "sb_win", get_col(conf_teams, "won_sb", 0))[i] * 100, 1)
+        team = conf_df$team[i],
+        conf = conf_name,
+        division = conf_df$division[i],
+        wins = round(get_col(conf_df, "wins", 0)[i], 1),
+        playoff_pct = round(get_col(conf_df, "playoff", 0)[i] * 100, 1),
+        division_pct = round(get_col(conf_df, "div1", 0)[i] * 100, 1),
+        conf_pct = round(get_col(conf_df, "won_conf", 0)[i] * 100, 1),
+        super_bowl_pct = round(get_col(conf_df, "won_sb", 0)[i] * 100, 1)
       )
     })
   }
   
-  afc_teams <- process_teams(standings, "AFC")
-  nfc_teams <- process_teams(standings, "NFC")
+  afc_teams <- build_team_list(overall, "AFC")
+  nfc_teams <- build_team_list(overall, "NFC")
   all_teams <- c(afc_teams, nfc_teams)
   
-  # Sort all_teams by super bowl pct
+  # Sort by Super Bowl probability
   sb_pcts <- sapply(all_teams, function(x) x$super_bowl_pct)
   all_teams <- all_teams[order(-sb_pcts)]
   
