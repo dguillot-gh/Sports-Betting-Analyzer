@@ -175,7 +175,7 @@ def _ensure_schedules_exist() -> bool:
     _update_status("Downloading NFL schedule data...", 2)
     
     try:
-        import nfl_data_py as nfl
+        import nflreadpy as nfl
         from datetime import datetime
         
         # Determine current season
@@ -183,8 +183,8 @@ def _ensure_schedules_exist() -> bool:
         current_year = now.year if now.month > 2 else now.year - 1
         years = list(range(2020, current_year + 1))
         
-        # Download schedules
-        df = nfl.import_schedules(years)
+        # Download schedules using nflreadpy
+        df = nfl.load_schedules(years)
         
         # Ensure directory exists
         schedules_path.parent.mkdir(parents=True, exist_ok=True)
