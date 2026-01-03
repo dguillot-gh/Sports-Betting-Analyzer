@@ -163,9 +163,50 @@ def _update_status(message: str, progress: int = 0, is_error: bool = False):
         logger.error(f"Failed to update status: {e}")
 
 
+def _ensure_schedules_exist() -> bool:
+    """Download schedules.csv if it doesn't exist."""
+    schedules_path = Path("/app/data/nflverse/schedules.csv")
+    
+    if schedules_path.exists():
+        logger.info("schedules.csv already exists")
+        return True
+    
+    logger.info("schedules.csv not found, downloading...")
+    _update_status("Downloading NFL schedule data...", 2)
+    
+    try:
+        import nfl_data_py as nfl
+        from datetime import datetime
+        
+        # Determine current season
+        now = datetime.now()
+        current_year = now.year if now.month > 2 else now.year - 1
+        years = list(range(2020, current_year + 1))
+        
+        # Download schedules
+        df = nfl.import_schedules(years)
+        
+        # Ensure directory exists
+        schedules_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Save to CSV
+        df.to_csv(schedules_path, index=False)
+        logger.info(f"Downloaded {len(df)} games to {schedules_path}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to download schedules: {e}")
+        _update_status(f"Failed to download schedules: {e}", 0, True)
+        return False
+
+
 def _run_r_simulation_process(n_simulations: int) -> Dict:
     """Run R script via Popen and monitor output for progress."""
     import re
+    
+    # Ensure data exists before starting
+    if not _ensure_schedules_exist():
+        return {"error": True, "message": "Could not download NFL schedule data"}
     
     _update_status("Starting R process...", 5)
     
