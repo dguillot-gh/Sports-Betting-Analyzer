@@ -98,12 +98,13 @@
                                                                 <MudText Typo="Typo.subtitle2">Points</MudText>
                                                                 <div class="d-flex align-center" style="gap: 8px;">
                                                                     <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" 
-                                                                                   OnClick="@(() => player.PointsThreshold = Math.Max(1, player.PointsThreshold - 1))" />
+                                                                                   OnClick="@(() => { player.PointsThreshold = Math.Max(1, player.PointsThreshold - 1); StateHasChanged(); })" />
                                                                     <MudNumericField T="int" @bind-Value="player.PointsThreshold" 
                                                                                       Variant="Variant.Outlined" Margin="Margin.Dense"
-                                                                                      Style="width: 70px;" Min="1" Max="60" />
+                                                                                      Style="width: 70px;" Min="1" Max="60" 
+                                                                                      ValueChanged="@((int v) => { player.PointsThreshold = v; StateHasChanged(); })" />
                                                                     <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" 
-                                                                                   OnClick="@(() => player.PointsThreshold++)" />
+                                                                                   OnClick="@(() => { player.PointsThreshold++; StateHasChanged(); })" />
                                                                 </div>
                                                             </div>
                                                             <MudProgressLinear Value="@player.PointsHitRate" Color="Color.Primary" Size="Size.Large" Rounded="true" />
@@ -118,12 +119,13 @@
                                                                 <MudText Typo="Typo.subtitle2">Rebounds</MudText>
                                                                 <div class="d-flex align-center" style="gap: 8px;">
                                                                     <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" 
-                                                                                   OnClick="@(() => player.ReboundsThreshold = Math.Max(1, player.ReboundsThreshold - 1))" />
+                                                                                   OnClick="@(() => { player.ReboundsThreshold = Math.Max(1, player.ReboundsThreshold - 1); StateHasChanged(); })" />
                                                                     <MudNumericField T="int" @bind-Value="player.ReboundsThreshold" 
                                                                                       Variant="Variant.Outlined" Margin="Margin.Dense"
-                                                                                      Style="width: 70px;" Min="1" Max="30" />
+                                                                                      Style="width: 70px;" Min="1" Max="30"
+                                                                                      ValueChanged="@((int v) => { player.ReboundsThreshold = v; StateHasChanged(); })" />
                                                                     <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" 
-                                                                                   OnClick="@(() => player.ReboundsThreshold++)" />
+                                                                                   OnClick="@(() => { player.ReboundsThreshold++; StateHasChanged(); })" />
                                                                 </div>
                                                             </div>
                                                             <MudProgressLinear Value="@player.ReboundsHitRate" Color="Color.Success" Size="Size.Large" Rounded="true" />
@@ -138,12 +140,13 @@
                                                                 <MudText Typo="Typo.subtitle2">Assists</MudText>
                                                                 <div class="d-flex align-center" style="gap: 8px;">
                                                                     <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" 
-                                                                                   OnClick="@(() => player.AssistsThreshold = Math.Max(1, player.AssistsThreshold - 1))" />
+                                                                                   OnClick="@(() => { player.AssistsThreshold = Math.Max(1, player.AssistsThreshold - 1); StateHasChanged(); })" />
                                                                     <MudNumericField T="int" @bind-Value="player.AssistsThreshold" 
                                                                                       Variant="Variant.Outlined" Margin="Margin.Dense"
-                                                                                      Style="width: 70px;" Min="1" Max="20" />
+                                                                                      Style="width: 70px;" Min="1" Max="20"
+                                                                                      ValueChanged="@((int v) => { player.AssistsThreshold = v; StateHasChanged(); })" />
                                                                     <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" 
-                                                                                   OnClick="@(() => player.AssistsThreshold++)" />
+                                                                                   OnClick="@(() => { player.AssistsThreshold++; StateHasChanged(); })" />
                                                                 </div>
                                                             </div>
                                                             <MudProgressLinear Value="@player.AssistsHitRate" Color="Color.Warning" Size="Size.Large" Rounded="true" />
@@ -158,12 +161,13 @@
                                                                 <MudText Typo="Typo.subtitle2">3-Pointers Made</MudText>
                                                                 <div class="d-flex align-center" style="gap: 8px;">
                                                                     <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" 
-                                                                                   OnClick="@(() => player.ThreesThreshold = Math.Max(1, player.ThreesThreshold - 1))" />
+                                                                                   OnClick="@(() => { player.ThreesThreshold = Math.Max(1, player.ThreesThreshold - 1); StateHasChanged(); })" />
                                                                     <MudNumericField T="int" @bind-Value="player.ThreesThreshold" 
                                                                                       Variant="Variant.Outlined" Margin="Margin.Dense"
-                                                                                      Style="width: 70px;" Min="1" Max="15" />
+                                                                                      Style="width: 70px;" Min="1" Max="15"
+                                                                                      ValueChanged="@((int v) => { player.ThreesThreshold = v; StateHasChanged(); })" />
                                                                     <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" 
-                                                                                   OnClick="@(() => player.ThreesThreshold++)" />
+                                                                                   OnClick="@(() => { player.ThreesThreshold++; StateHasChanged(); })" />
                                                                 </div>
                                                             </div>
                                                             <MudProgressLinear Value="@player.ThreesHitRate" Color="Color.Secondary" Size="Size.Large" Rounded="true" />
@@ -839,54 +843,25 @@
                     Snackbar.Add($"Loaded {_nbaPlayers.Count} NBA players from API", Severity.Success);
                     return;
                 }
+                else
+                {
+                    Snackbar.Add("No NBA players found in API response", Severity.Warning);
+                }
             }
-            
-            // Fallback to demo data
-            LoadDemoNBAPlayers();
-            Snackbar.Add($"Loaded {_nbaPlayers.Count} NBA players (demo mode)", Severity.Info);
+            else
+            {
+                Snackbar.Add($"NBA API returned status {response.StatusCode}", Severity.Error);
+            }
         }
         catch (Exception ex)
         {
-            LoadDemoNBAPlayers();
-            Snackbar.Add($"Using demo data: {ex.Message}", Severity.Warning);
+            Logger.LogError(ex, "Error loading NBA players");
+            Snackbar.Add($"Failed to load NBA data: {ex.Message}", Severity.Error);
         }
         finally
         {
             _isLoadingNBA = false;
         }
-    }
-    
-    private void LoadDemoNBAPlayers()
-    {
-        var random = new Random();
-        var allPlayers = new List<NBAPlayer>
-        {
-            CreateDemoNBAPlayer("LeBron James", "LAL", "SF", 25.4, 7.8, 7.1, random),
-            CreateDemoNBAPlayer("Stephen Curry", "GSW", "PG", 28.2, 4.5, 5.8, random),
-            CreateDemoNBAPlayer("Kevin Durant", "PHX", "SF", 27.1, 6.8, 5.2, random),
-            CreateDemoNBAPlayer("Giannis Antetokounmpo", "MIL", "PF", 31.2, 11.9, 5.7, random),
-            CreateDemoNBAPlayer("Luka Doncic", "DAL", "PG", 32.4, 8.8, 8.0, random),
-            CreateDemoNBAPlayer("Shai Gilgeous-Alexander", "OKC", "PG", 31.1, 5.5, 6.2, random),
-            CreateDemoNBAPlayer("Jayson Tatum", "BOS", "SF", 26.9, 8.1, 4.4, random),
-            CreateDemoNBAPlayer("Joel Embiid", "PHI", "C", 33.1, 10.2, 4.2, random),
-            CreateDemoNBAPlayer("Nikola Jokic", "DEN", "C", 26.4, 12.4, 9.0, random),
-            CreateDemoNBAPlayer("Anthony Edwards", "MIN", "SG", 25.9, 5.4, 5.1, random),
-        };
-        
-        // Apply search filter
-        if (!string.IsNullOrEmpty(_nbaSelectedPlayer))
-        {
-            allPlayers = allPlayers.Where(p => 
-                p.Name.Contains(_nbaSelectedPlayer, StringComparison.OrdinalIgnoreCase)).ToList();
-        }
-        
-        // Apply team filter
-        if (!string.IsNullOrEmpty(_nbaSelectedTeam))
-        {
-            allPlayers = allPlayers.Where(p => p.Team == _nbaSelectedTeam).ToList();
-        }
-        
-        _nbaPlayers = allPlayers;
     }
     
     private string GetString(Dictionary<string, JsonElement> dict, string key)
@@ -914,49 +889,6 @@
                 return Math.Round(val.GetDouble(), 1);
         }
         return 0;
-    }
-    
-    private NBAPlayer CreateDemoNBAPlayer(string name, string team, string pos, double ppg, double rpg, double apg, Random rand)
-    {
-        var games = 40;
-        
-        // Generate realistic game-by-game stats for dynamic hit rate calculation
-        var gamePoints = Enumerable.Range(0, games).Select(_ => 
-            (int)Math.Max(0, ppg + rand.Next(-12, 16))).ToList();
-        var gameRebounds = Enumerable.Range(0, games).Select(_ => 
-            (int)Math.Max(0, rpg + rand.Next(-4, 6))).ToList();
-        var gameAssists = Enumerable.Range(0, games).Select(_ => 
-            (int)Math.Max(0, apg + rand.Next(-4, 6))).ToList();
-        var gameThrees = Enumerable.Range(0, games).Select(_ => 
-            rand.Next(0, 6)).ToList();
-        
-        var last10 = gamePoints.TakeLast(10).ToList();
-        
-        return new NBAPlayer
-        {
-            Name = name,
-            Team = team,
-            Position = pos,
-            GamesPlayed = games,
-            PPG = ppg,
-            RPG = rpg,
-            APG = apg,
-            FGPct = Math.Round(rand.NextDouble() * 15 + 42, 1),
-            ThreePct = Math.Round(rand.NextDouble() * 15 + 32, 1),
-            MPG = Math.Round(rand.NextDouble() * 8 + 30, 1),
-            Last10Points = last10,
-            GamePoints = gamePoints,
-            GameRebounds = gameRebounds,
-            GameAssists = gameAssists,
-            GameThrees = gameThrees,
-            PointsThreshold = 20,
-            ReboundsThreshold = 6,
-            AssistsThreshold = 5,
-            ThreesThreshold = 2,
-            Pts20HitRate = gamePoints.Count(p => p >= 20) * 100 / games,
-            Pts25HitRate = gamePoints.Count(p => p >= 25) * 100 / games,
-            Pts30HitRate = gamePoints.Count(p => p >= 30) * 100 / games
-        };
     }
     
     private async Task LoadNFLPlayers()
@@ -1014,16 +946,20 @@
                     Snackbar.Add($"Loaded {_nflPlayers.Count} NFL players from API", Severity.Success);
                     return;
                 }
+                else
+                {
+                    Snackbar.Add("No NFL players found in API response", Severity.Warning);
+                }
             }
-            
-            // Fallback to demo
-            LoadDemoNFLPlayers();
-            Snackbar.Add($"Loaded {_nflPlayers.Count} NFL players (demo mode)", Severity.Info);
+            else
+            {
+                Snackbar.Add($"NFL API returned status {response.StatusCode}", Severity.Error);
+            }
         }
         catch (Exception ex)
         {
-            LoadDemoNFLPlayers();
-            Snackbar.Add($"Using demo data: {ex.Message}", Severity.Warning);
+            Logger.LogError(ex, "Error loading NFL players");
+            Snackbar.Add($"Failed to load NFL data: {ex.Message}", Severity.Error);
         }
         finally
         {
@@ -1178,16 +1114,20 @@
                     Snackbar.Add($"Loaded {_nascarDrivers.Count} NASCAR drivers from API", Severity.Success);
                     return;
                 }
+                else
+                {
+                    Snackbar.Add("No NASCAR drivers found in API response", Severity.Warning);
+                }
             }
-            
-            // Fallback to demo
-            LoadDemoNASCARDrivers();
-            Snackbar.Add($"Loaded {_nascarDrivers.Count} NASCAR drivers (demo mode)", Severity.Info);
+            else
+            {
+                Snackbar.Add($"NASCAR API returned status {response.StatusCode}", Severity.Error);
+            }
         }
         catch (Exception ex)
         {
-            LoadDemoNASCARDrivers();
-            Snackbar.Add($"Using demo data: {ex.Message}", Severity.Warning);
+            Logger.LogError(ex, "Error loading NASCAR drivers");
+            Snackbar.Add($"Failed to load NASCAR data: {ex.Message}", Severity.Error);
         }
         finally
         {

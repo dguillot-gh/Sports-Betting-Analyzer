@@ -1019,10 +1019,27 @@
             var element = (JsonElement)_nflSimResults["all_teams"];
             var result = new List<Dictionary<string, object>>();
             
-            // Handle different JSON structures
-            if (element.ValueKind == JsonValueKind.Object)
+            // Python fallback returns array of team objects
+            if (element.ValueKind == JsonValueKind.Array)
             {
-                // nflseedR returns columns as arrays
+                foreach (var team in element.EnumerateArray())
+                {
+                    var dict = new Dictionary<string, object>();
+                    foreach (var prop in team.EnumerateObject())
+                    {
+                        if (prop.Value.ValueKind == JsonValueKind.String)
+                            dict[prop.Name] = prop.Value.GetString() ?? "";
+                        else if (prop.Value.ValueKind == JsonValueKind.Number)
+                            dict[prop.Name] = prop.Value.GetDouble();
+                        else
+                            dict[prop.Name] = prop.Value.ToString();
+                    }
+                    result.Add(dict);
+                }
+            }
+            // nflseedR returns columns as arrays (object format)
+            else if (element.ValueKind == JsonValueKind.Object)
+            {
                 var teamArray = element.GetProperty("team").EnumerateArray().ToList();
                 var playoffArray = element.TryGetProperty("playoff_pct", out var p) ? p.EnumerateArray().ToList() : null;
                 var confArray = element.TryGetProperty("conf_pct", out var c) ? c.EnumerateArray().ToList() : null;
