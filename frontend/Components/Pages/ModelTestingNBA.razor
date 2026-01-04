@@ -1,4 +1,5 @@
 @page "/model-testing-nba"
+@page "/live-nba-odds"
 @using System.Text.Json
 @inject HttpClient Http
 @inject ISnackbar Snackbar
@@ -46,6 +47,42 @@
                         @(_isTraining ? "Training..." : "Train XGBoost")
                     </MudButton>
                 </MudStack>
+            </MudStack>
+        </MudPaper>
+        
+        <!-- Quick Reference Card -->
+        <MudPaper Class="pa-3" Elevation="1" Style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="flex-wrap" Style="gap: 12px;">
+                <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+                    <MudTooltip Text="Expected Value: (Win% × Profit) - (Loss% × Stake). Positive = value bet, Negative = sportsbook has edge.">
+                        <MudChip T="string" Color="Color.Info" Size="Size.Small" Variant="Variant.Outlined">
+                            <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="Size.Small" Class="mr-1" />
+                            EV = Edge
+                        </MudChip>
+                    </MudTooltip>
+                    <MudTooltip Text="Kelly %: Optimal bet size based on your edge. Higher = more confident. 0% = don't bet.">
+                        <MudChip T="string" Color="Color.Secondary" Size="Size.Small" Variant="Variant.Outlined">
+                            <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Size="Size.Small" Class="mr-1" />
+                            Kelly = Bet Size
+                        </MudChip>
+                    </MudTooltip>
+                    <MudTooltip Text="Models Agree: Strongest signal - bet with confidence. Models Disagree: Proceed with caution or skip.">
+                        <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Outlined">
+                            <MudIcon Icon="@Icons.Material.Filled.Handshake" Size="Size.Small" Class="mr-1" />
+                            Agree = Strong
+                        </MudChip>
+                    </MudTooltip>
+                    <MudTooltip Text="Simple model uses current season stats. XGBoost (68.9%) is ML-trained on historical data.">
+                        <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Outlined">
+                            <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Small" Class="mr-1" />
+                            XGB = 68.9% ML
+                        </MudChip>
+                    </MudTooltip>
+                </MudStack>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="mr-1" />
+                    Hover chips for details
+                </MudText>
             </MudStack>
         </MudPaper>
 
