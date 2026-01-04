@@ -11,7 +11,7 @@ from api.odds_endpoints import router as odds_router
 from api.results_endpoints import router as results_router
 from api.backtest_endpoints import router as backtest_router
 from api.player_stats_endpoints import router as player_stats_router
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 import joblib
