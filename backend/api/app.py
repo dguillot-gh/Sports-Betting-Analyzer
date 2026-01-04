@@ -3093,15 +3093,13 @@ async def get_nfl_model_testing_predictions(
     sportsbook: str = Query("fanduel", description="Sportsbook for odds")
 ):
     """
-    Get today's NFL games with BOTH simple and XGBoost predictions.
-    Uses full feature engineering (no hardcoded values).
+    Get today's NFL games with BOTH simple and nflverse XGBoost predictions.
+    Uses nflverse data (EPA, success rate, etc.) with no hardcoded values.
     """
     try:
         from scripts.nfl_predictor import get_todays_nfl_odds
-        from scripts.model_testing_predictor import (
-            predict_nfl_simple, predict_nfl_xgb_full,
-            get_nfl_team_stats
-        )
+        from scripts.nflverse_adapter import predict_with_nflverse, get_nflverse_predictor
+        from scripts.model_testing_predictor import predict_nfl_simple
         
         # Get today's games with odds
         odds_data = await get_todays_nfl_odds(sportsbook)
@@ -3109,8 +3107,9 @@ async def get_nfl_model_testing_predictions(
         if odds_data.get("error") or not odds_data.get("games"):
             return odds_data
         
-        # Get all team stats
-        all_team_stats = await get_nfl_team_stats()
+        # Pre-fetch nflverse stats
+        predictor = get_nflverse_predictor()
+        await predictor.fetch_team_stats_from_nflverse()
         
         analyzed_games = []
         for game in odds_data["games"]:
@@ -3118,22 +3117,26 @@ async def get_nfl_model_testing_predictions(
             away_team = game.get("away_team", "")
             home_ml = game.get("home_moneyline")
             away_ml = game.get("away_moneyline")
+            total_line = game.get("total", 45.0)
             
-            home_stats = all_team_stats.get(home_team, {})
-            away_stats = all_team_stats.get(away_team, {})
+            # Get stats from nflverse
+            home_stats = predictor.team_stats.get(home_team, {})
+            away_stats = predictor.team_stats.get(away_team, {})
             
-            # Get predictions from both models
+            # Get prediction from simple model
             simple_pred = await predict_nfl_simple(
                 home_team, away_team, home_stats, away_stats, home_ml, away_ml
             )
-            xgb_pred = await predict_nfl_xgb_full(
-                home_team, away_team, home_stats, away_stats, home_ml, away_ml
+            
+            # Get prediction from nflverse model (uses real EPA data)
+            nflverse_pred = await predict_with_nflverse(
+                home_team, away_team, total_line, home_ml, away_ml
             )
             
             analyzed_games.append({
                 **game,
                 "simple_model": simple_pred,
-                "xgboost_model": xgb_pred,
+                "xgboost_model": nflverse_pred,  # Now using nflverse data
                 "home_stats": home_stats,
                 "away_stats": away_stats,
             })
@@ -3143,6 +3146,7 @@ async def get_nfl_model_testing_predictions(
             "sportsbook": sportsbook,
             "games": analyzed_games,
             "count": len(analyzed_games),
+            "data_source": "nflverse (nfl_data_py)",
         }
         
     except Exception as e:

@@ -1,9 +1,10 @@
 """
-Kyleskom NBA ML Adapter
+Kyleskom NBA ML Adapter - Fixed Version
 Bridges the reference kyleskom/NBA-Machine-Learning-Sports-Betting repo
 with our Model Testing pages.
 
 Uses their pre-trained XGBoost models (68.9% ML accuracy) and data pipeline.
+This version EXACTLY matches their main.py prediction methodology.
 """
 
 import logging
@@ -29,19 +30,23 @@ except ImportError:
     logger.warning("XGBoost not available")
 
 
-# Headers for NBA API (from reference repo)
+# Headers for NBA API (matching reference repo exactly)
 NBA_API_HEADERS = {
     "Accept": "*/*",
     "Accept-Encoding": "gzip, deflate, br",
     "Accept-Language": "en-US,en;q=0.9",
     "Connection": "keep-alive",
     "Origin": "https://www.nba.com",
+    "Priority": "u=3, i",
     "Referer": "https://www.nba.com/",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-site",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0.1 Safari/605.1.15"
 }
 
-# Team index mapping (from reference repo)
-TEAM_INDEX = {
+# Team index mapping (from reference repo's Dictionaries.py)
+TEAM_INDEX_CURRENT = {
     'Atlanta Hawks': 0, 'Boston Celtics': 1, 'Brooklyn Nets': 2, 'Charlotte Hornets': 3,
     'Chicago Bulls': 4, 'Cleveland Cavaliers': 5, 'Dallas Mavericks': 6, 'Denver Nuggets': 7,
     'Detroit Pistons': 8, 'Golden State Warriors': 9, 'Houston Rockets': 10, 'Indiana Pacers': 11,
@@ -56,13 +61,15 @@ TEAM_INDEX = {
 class KyleskomPredictor:
     """
     Uses kyleskom's pre-trained XGBoost models for NBA predictions.
+    This version matches their main.py exactly.
     """
     
     def __init__(self):
         self.model_ml = None
         self.model_ou = None
-        self.team_stats_df = None
-        self._loaded = False
+        self.df = None  # Raw DataFrame from NBA API (not sorted)
+        self._models_loaded = False
+        self._data_loaded = False
     
     def load_models(self) -> bool:
         """Load the pre-trained models from the reference repo."""
@@ -70,42 +77,58 @@ class KyleskomPredictor:
             logger.error("XGBoost not available")
             return False
         
+        if self._models_loaded:
+            return True
+        
         try:
-            # Load the best ML model (68.9% accuracy)
-            ml_model_path = os.path.join(MODELS_PATH, 'XGBoost_68.9%_ML-3.json')
-            if not os.path.exists(ml_model_path):
-                ml_model_path = os.path.join(MODELS_PATH, 'XGBoost_68.7%_ML-4.json')
+            # Find best ML model
+            ml_model_files = [
+                'XGBoost_68.9%_ML-3.json',
+                'XGBoost_68.7%_ML-4.json'
+            ]
             
-            if os.path.exists(ml_model_path):
-                self.model_ml = xgb.Booster()
-                self.model_ml.load_model(ml_model_path)
-                logger.info(f"Loaded ML model from {ml_model_path}")
-            else:
-                logger.error(f"ML model not found at {ml_model_path}")
+            for fname in ml_model_files:
+                ml_path = os.path.join(MODELS_PATH, fname)
+                if os.path.exists(ml_path):
+                    self.model_ml = xgb.Booster()
+                    self.model_ml.load_model(ml_path)
+                    logger.info(f"Loaded ML model: {fname}")
+                    break
+            
+            if not self.model_ml:
+                logger.error(f"No ML model found in {MODELS_PATH}")
                 return False
             
-            # Load the OU model
-            ou_model_path = os.path.join(MODELS_PATH, 'XGBoost_54.8%_UO-8.json')
-            if not os.path.exists(ou_model_path):
-                ou_model_path = os.path.join(MODELS_PATH, 'XGBoost_53.7%_UO-9.json')
+            # Find best OU model
+            ou_model_files = [
+                'XGBoost_54.8%_UO-8.json',
+                'XGBoost_53.7%_UO-9.json'
+            ]
             
-            if os.path.exists(ou_model_path):
-                self.model_ou = xgb.Booster()
-                self.model_ou.load_model(ou_model_path)
-                logger.info(f"Loaded OU model from {ou_model_path}")
+            for fname in ou_model_files:
+                ou_path = os.path.join(MODELS_PATH, fname)
+                if os.path.exists(ou_path):
+                    self.model_ou = xgb.Booster()
+                    self.model_ou.load_model(ou_path)
+                    logger.info(f"Loaded OU model: {fname}")
+                    break
             
-            self._loaded = True
+            self._models_loaded = True
             return True
             
         except Exception as e:
             logger.error(f"Error loading models: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return False
     
-    async def fetch_team_stats_from_nba_api(self) -> Optional[pd.DataFrame]:
+    async def fetch_data_from_nba_api(self) -> bool:
         """
-        Fetch current team stats from NBA API (like reference repo does).
-        Returns DataFrame with all team stats.
+        Fetch current team stats from NBA API exactly like reference repo's main.py.
         """
+        if self._data_loaded and self.df is not None:
+            return True
+        
         import aiohttp
         
         # Determine current season
@@ -115,6 +138,7 @@ class KyleskomPredictor:
         else:
             season = f"{now.year - 1}-{str(now.year)[2:]}"
         
+        # This is the exact same URL format as reference repo
         url = (
             f"https://stats.nba.com/stats/leaguedashteamstats?"
             f"Conference=&DateFrom=&DateTo=&Division=&GameScope=&GameSegment=&Height=&"
@@ -125,63 +149,39 @@ class KyleskomPredictor:
             f"TeamID=0&TwoWay=0&VsConference=&VsDivision="
         )
         
+        logger.info(f"Fetching NBA team stats for season {season}")
+        
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, headers=NBA_API_HEADERS, timeout=30) as response:
                     if response.status != 200:
                         logger.warning(f"NBA API returned {response.status}")
-                        return None
+                        return False
                     
                     data = await response.json()
             
+            # Parse exactly like reference repo's tools.py to_data_frame function
             result_sets = data.get('resultSets', [])
             if not result_sets:
-                return None
+                logger.error("No resultSets in NBA API response")
+                return False
             
-            team_data = result_sets[0]
-            headers = team_data.get('headers', [])
-            rows = team_data.get('rowSet', [])
+            data_list = result_sets[0]
+            headers = data_list.get('headers', [])
+            rows = data_list.get('rowSet', [])
             
-            df = pd.DataFrame(rows, columns=headers)
+            self.df = pd.DataFrame(data=rows, columns=headers)
+            logger.info(f"Fetched {len(self.df)} teams with {len(headers)} columns")
+            logger.info(f"Columns: {list(headers)[:10]}...")
             
-            # Sort by team index to match reference repo ordering
-            df['TEAM_INDEX'] = df['TEAM_NAME'].map(TEAM_INDEX)
-            df = df.sort_values('TEAM_INDEX').reset_index(drop=True)
-            
-            self.team_stats_df = df
-            logger.info(f"Fetched stats for {len(df)} teams from NBA API")
-            return df
+            self._data_loaded = True
+            return True
             
         except Exception as e:
             logger.error(f"Error fetching from NBA API: {e}")
-            return None
-    
-    def calculate_days_rest(self, team_name: str, schedule_df: pd.DataFrame = None) -> int:
-        """
-        Calculate days since last game for a team.
-        Falls back to 1 if schedule not available.
-        """
-        if schedule_df is None:
-            return 1
-        
-        try:
-            team_games = schedule_df[
-                (schedule_df['Home Team'] == team_name) | 
-                (schedule_df['Away Team'] == team_name)
-            ]
-            previous_games = team_games[
-                team_games['Date'] <= datetime.today()
-            ].sort_values('Date', ascending=False).head(1)
-            
-            if len(previous_games) > 0:
-                last_date = previous_games['Date'].iloc[0]
-                days_rest = (datetime.today() - last_date).days + 1
-                return min(days_rest, 7)  # Cap at 7
-            return 2  # Default
-            
-        except Exception as e:
-            logger.warning(f"Error calculating rest for {team_name}: {e}")
-            return 1
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
     
     async def predict_game(
         self,
@@ -192,53 +192,67 @@ class KyleskomPredictor:
         away_ml: int = None
     ) -> Dict[str, Any]:
         """
-        Predict game outcome using kyleskom's methodology.
-        
-        This matches the reference repo's approach:
-        1. Fetch all team stats from NBA API
-        2. Concatenate home + away team stats
-        3. Add Days-Rest-Home and Days-Rest-Away
-        4. Run through pre-trained XGBoost models
+        Predict game outcome EXACTLY like reference repo's main.py createTodaysGames function.
         """
-        if not self._loaded:
+        # Load models
+        if not self._models_loaded:
             if not self.load_models():
                 return {"error": "Could not load kyleskom models"}
         
-        # Fetch current team stats if not cached
-        if self.team_stats_df is None:
-            await self.fetch_team_stats_from_nba_api()
+        # Fetch data
+        if not self._data_loaded:
+            if not await self.fetch_data_from_nba_api():
+                return {"error": "Could not fetch team stats from NBA API"}
         
-        if self.team_stats_df is None:
-            return {"error": "Could not fetch team stats from NBA API"}
+        # Check if teams exist in our index
+        home_idx = TEAM_INDEX_CURRENT.get(home_team)
+        away_idx = TEAM_INDEX_CURRENT.get(away_team)
         
-        # Get team indices
-        home_idx = TEAM_INDEX.get(home_team)
-        away_idx = TEAM_INDEX.get(away_team)
+        if home_idx is None:
+            return {"error": f"Team not found in index: {home_team}"}
+        if away_idx is None:
+            return {"error": f"Team not found in index: {away_team}"}
         
-        if home_idx is None or away_idx is None:
-            return {"error": f"Team not found: {home_team} or {away_team}"}
-        
+        # Find teams in DataFrame by TEAM_NAME
         try:
-            # Get team rows (excluding TEAM_ID and TEAM_NAME for model)
-            home_row = self.team_stats_df.iloc[home_idx].drop(['TEAM_ID', 'TEAM_NAME', 'TEAM_INDEX'], errors='ignore')
-            away_row = self.team_stats_df.iloc[away_idx].drop(['TEAM_ID', 'TEAM_NAME', 'TEAM_INDEX'], errors='ignore')
+            home_row = self.df[self.df['TEAM_NAME'] == home_team]
+            away_row = self.df[self.df['TEAM_NAME'] == away_team]
             
-            # Concatenate like reference repo does
-            combined = pd.concat([home_row, away_row])
+            if len(home_row) == 0:
+                return {"error": f"Team not found in API data: {home_team}"}
+            if len(away_row) == 0:
+                return {"error": f"Team not found in API data: {away_team}"}
             
-            # Add rest days
-            combined['Days-Rest-Home'] = self.calculate_days_rest(home_team)
-            combined['Days-Rest-Away'] = self.calculate_days_rest(away_team)
+            home_series = home_row.iloc[0]
+            away_series = away_row.iloc[0]
             
-            # Convert to feature matrix
-            data = combined.values.astype(float).reshape(1, -1)
+            # Concatenate like reference repo (line 66 of main.py)
+            stats = pd.concat([home_series, away_series])
+            
+            # Add rest days (default to 1 like main.py fallback)
+            stats['Days-Rest-Home'] = 1
+            stats['Days-Rest-Away'] = 1
+            
+            # Convert to DataFrame for processing (like lines 71-72 of main.py)
+            match_data = [stats]
+            games_data_frame = pd.concat(match_data, ignore_index=True, axis=1)
+            games_data_frame = games_data_frame.T
+            
+            # Drop TEAM_ID and TEAM_NAME (like line 74 of main.py)
+            frame_ml = games_data_frame.drop(columns=['TEAM_ID', 'TEAM_NAME'], errors='ignore')
+            
+            # Convert to numpy array (like lines 75-76 of main.py)
+            data = frame_ml.values
+            data = data.astype(float)
+            
+            logger.info(f"Feature shape for {home_team} vs {away_team}: {data.shape}")
+            
+            # Create DMatrix and predict
             dmatrix = xgb.DMatrix(data)
-            
-            # Predict ML (Moneyline)
             ml_pred = self.model_ml.predict(dmatrix)[0]
             
-            # ML model outputs [away_win_prob, home_win_prob] or similar
-            # Reference repo uses argmax, let's get probabilities
+            # ML model uses multi:softprob with num_class=2
+            # Output is [away_win_prob, home_win_prob]
             if len(ml_pred) >= 2:
                 away_win_prob = float(ml_pred[0])
                 home_win_prob = float(ml_pred[1])
@@ -246,29 +260,29 @@ class KyleskomPredictor:
                 home_win_prob = float(ml_pred)
                 away_win_prob = 1 - home_win_prob
             
-            # Predict O/U if model available
+            # O/U prediction
             ou_pred = None
-            if self.model_ou:
-                # Add OU line to features for O/U prediction
-                combined_ou = combined.copy()
-                combined_ou['OU'] = total_line
-                data_ou = combined_ou.values.astype(float).reshape(1, -1)
+            if self.model_ou and total_line:
+                # For O/U, we need to add the OU column
+                frame_uo = frame_ml.copy()
+                frame_uo['OU'] = total_line
+                data_ou = frame_uo.values.astype(float)
                 dmatrix_ou = xgb.DMatrix(data_ou)
-                ou_pred_raw = self.model_ou.predict(dmatrix_ou)[0]
+                ou_raw = self.model_ou.predict(dmatrix_ou)[0]
                 
-                # O/U model outputs [under_prob, over_prob, push_prob]
-                if len(ou_pred_raw) >= 2:
-                    under_prob = float(ou_pred_raw[0])
-                    over_prob = float(ou_pred_raw[1])
+                # OU model uses multi:softprob with num_class=3 (under, over, push)
+                if len(ou_raw) >= 2:
+                    under_prob = float(ou_raw[0])
+                    over_prob = float(ou_raw[1])
                     ou_pred = {
-                        'under_prob': round(under_prob, 3),
-                        'over_prob': round(over_prob, 3),
                         'pick': 'OVER' if over_prob > under_prob else 'UNDER',
                         'confidence': round(max(over_prob, under_prob) * 100, 1),
-                        'total_line': total_line
+                        'total_line': total_line,
+                        'over_prob': round(over_prob, 3),
+                        'under_prob': round(under_prob, 3)
                     }
             
-            # Calculate EV and Kelly if odds provided
+            # Calculate EV and Kelly
             ev_home = ev_away = None
             kelly_home = kelly_away = None
             
@@ -279,7 +293,8 @@ class KyleskomPredictor:
                 kelly_away = self._kelly_criterion(away_ml, away_win_prob)
             
             predicted_winner = home_team if home_win_prob > away_win_prob else away_team
-            confidence = round(max(home_win_prob, away_win_prob) * 100, 1)
+            winner_idx = 1 if home_win_prob > away_win_prob else 0
+            confidence = round(ml_pred[winner_idx] * 100 if len(ml_pred) >= 2 else max(home_win_prob, away_win_prob) * 100, 1)
             
             return {
                 'model': 'kyleskom_xgb',
@@ -295,9 +310,7 @@ class KyleskomPredictor:
                 'ev_away': ev_away,
                 'kelly_home': kelly_home,
                 'kelly_away': kelly_away,
-                'features_used': len(combined),
-                'rest_home': combined.get('Days-Rest-Home', 1),
-                'rest_away': combined.get('Days-Rest-Away', 1),
+                'features_used': data.shape[1] if len(data.shape) > 1 else len(data),
             }
             
         except Exception as e:

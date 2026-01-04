@@ -637,35 +637,75 @@ async def predict_nba_simple(
     away_ml: int = None
 ) -> Dict[str, Any]:
     """
-    Make NBA prediction using simple model.
+    Make NBA prediction using simple statistical model.
+    Uses the passed stats (from NBA API) instead of database defaults.
     """
     try:
-        from scripts.nba_predictor import analyze_matchup
-        result = await analyze_matchup(home_team, away_team, None, None, home_ml, away_ml)
+        import math
         
-        home_win_prob = result.get('home_win_probability', 0.5)
+        # Use passed stats, with fallbacks to league averages
+        home_ppg = home_stats.get('ppg', home_stats.get('PTS', 114.0))
+        away_ppg = away_stats.get('ppg', away_stats.get('PTS', 114.0))
+        home_oppg = home_stats.get('oppg', home_stats.get('OPP_PTS', 114.0))
+        away_oppg = away_stats.get('oppg', away_stats.get('OPP_PTS', 114.0))
+        home_win_pct = home_stats.get('win_pct', home_stats.get('W_PCT', 0.5))
+        away_win_pct = away_stats.get('win_pct', away_stats.get('W_PCT', 0.5))
         
-        # Add EV and Kelly
-        ev_home = ev_away = None
-        kelly_home = kelly_away = None
+        # Ensure numeric values
+        home_ppg = float(home_ppg) if home_ppg else 114.0
+        away_ppg = float(away_ppg) if away_ppg else 114.0
+        home_oppg = float(home_oppg) if home_oppg else 114.0
+        away_oppg = float(away_oppg) if away_oppg else 114.0
+        home_win_pct = float(home_win_pct) if home_win_pct else 0.5
+        away_win_pct = float(away_win_pct) if away_win_pct else 0.5
         
-        if home_ml and away_ml and home_win_prob:
-            away_win_prob = 1 - home_win_prob
-            ev_home = calculate_expected_value(home_win_prob, home_ml)
-            ev_away = calculate_expected_value(away_win_prob, away_ml)
-            kelly_home = calculate_kelly_criterion(home_ml, home_win_prob)
-            kelly_away = calculate_kelly_criterion(away_ml, away_win_prob)
+        # Home court advantage (typically 2-3 points in NBA)
+        home_advantage = 2.5
         
-        result['ev_home'] = ev_home
-        result['ev_away'] = ev_away
-        result['kelly_home'] = kelly_home
-        result['kelly_away'] = kelly_away
-        result['model'] = 'simple'
+        # Calculate expected points
+        home_expected = (home_ppg + away_oppg) / 2 + home_advantage / 2
+        away_expected = (away_ppg + home_oppg) / 2 - home_advantage / 2
+        
+        # Predicted margin (positive = home win)
+        predicted_margin = home_expected - away_expected
+        
+        # Factor in win percentage
+        win_pct_diff = home_win_pct - away_win_pct
+        adjusted_margin = predicted_margin + (win_pct_diff * 5)  # Win% adds up to ~5 pts
+        
+        # Predicted total
+        predicted_total = home_expected + away_expected
+        
+        # Win probability using logistic function
+        home_win_prob = 1 / (1 + math.exp(-adjusted_margin * 0.15))
+        away_win_prob = 1 - home_win_prob
+        
+        # Build prediction result
+        result = {
+            'model': 'simple',
+            'home_team': home_team,
+            'away_team': away_team,
+            'predicted_winner': home_team if adjusted_margin > 0 else away_team,
+            'home_win_probability': round(home_win_prob, 4),
+            'away_win_probability': round(away_win_prob, 4),
+            'predicted_margin': round(adjusted_margin, 1),
+            'predicted_total': round(predicted_total, 1),
+            'confidence': round(max(home_win_prob, away_win_prob) * 100, 1),
+        }
+        
+        # Add EV and Kelly if odds provided
+        if home_ml and away_ml:
+            result['ev_home'] = calculate_expected_value(home_win_prob, home_ml)
+            result['ev_away'] = calculate_expected_value(away_win_prob, away_ml)
+            result['kelly_home'] = calculate_kelly_criterion(home_ml, home_win_prob)
+            result['kelly_away'] = calculate_kelly_criterion(away_ml, away_win_prob)
         
         return result
         
     except Exception as e:
         logger.error(f"Simple prediction error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return {"error": str(e), "model": "simple"}
 
 
@@ -678,32 +718,76 @@ async def predict_nfl_simple(
     away_ml: int = None
 ) -> Dict[str, Any]:
     """
-    Make NFL prediction using simple model.
+    Make NFL prediction using simple statistical model.
+    Uses the passed stats (from nflverse) instead of database defaults.
     """
     try:
-        from scripts.nfl_predictor import analyze_nfl_matchup
-        result = await analyze_nfl_matchup(home_team, away_team, None, None, home_ml, away_ml)
+        import math
         
-        home_win_prob = result.get('home_win_probability', 0.5)
+        # Use passed stats (from nflverse), with fallbacks
+        home_ppg = float(home_stats.get('ppg', 22.5))
+        away_ppg = float(away_stats.get('ppg', 22.5))
+        home_oppg = float(home_stats.get('oppg', 22.5))
+        away_oppg = float(away_stats.get('oppg', 22.5))
+        home_win_pct = float(home_stats.get('win_pct', 0.5))
+        away_win_pct = float(away_stats.get('win_pct', 0.5))
         
-        ev_home = ev_away = None
-        kelly_home = kelly_away = None
+        # EPA stats (key NFL analytics)
+        home_off_epa = float(home_stats.get('off_epa', home_stats.get('off_epa_per_play', 0.0)))
+        away_off_epa = float(away_stats.get('off_epa', away_stats.get('off_epa_per_play', 0.0)))
+        home_def_epa = float(home_stats.get('def_epa', home_stats.get('def_epa_per_play', 0.0)))
+        away_def_epa = float(away_stats.get('def_epa', away_stats.get('def_epa_per_play', 0.0)))
         
-        if home_ml and away_ml and home_win_prob:
-            away_win_prob = 1 - home_win_prob
-            ev_home = calculate_expected_value(home_win_prob, home_ml)
-            ev_away = calculate_expected_value(away_win_prob, away_ml)
-            kelly_home = calculate_kelly_criterion(home_ml, home_win_prob)
-            kelly_away = calculate_kelly_criterion(away_ml, away_win_prob)
+        # Home field advantage in NFL (~2.5 points)
+        home_advantage = 2.5
         
-        result['ev_home'] = ev_home
-        result['ev_away'] = ev_away
-        result['kelly_home'] = kelly_home
-        result['kelly_away'] = kelly_away
-        result['model'] = 'simple'
+        # Calculate using EPA differential as primary metric
+        home_net_epa = home_off_epa - home_def_epa
+        away_net_epa = away_off_epa - away_def_epa
+        epa_diff = home_net_epa - away_net_epa
+        
+        # Calculate expected points
+        home_expected = (home_ppg + away_oppg) / 2 + home_advantage / 2
+        away_expected = (away_ppg + home_oppg) / 2 - home_advantage / 2
+        
+        # Combine EPA and scoring for predicted margin
+        predicted_margin = home_expected - away_expected
+        
+        # Adjust by EPA (each 0.1 EPA ~= 3 points)
+        epa_adjustment = epa_diff * 30
+        adjusted_margin = predicted_margin + epa_adjustment * 0.3 + (home_win_pct - away_win_pct) * 5
+        
+        # Win probability using logistic function
+        home_win_prob = 1 / (1 + math.exp(-adjusted_margin * 0.12))
+        away_win_prob = 1 - home_win_prob
+        
+        # Predicted total
+        predicted_total = home_expected + away_expected
+        
+        result = {
+            'model': 'simple',
+            'home_team': home_team,
+            'away_team': away_team,
+            'predicted_winner': home_team if adjusted_margin > 0 else away_team,
+            'home_win_probability': round(home_win_prob, 4),
+            'away_win_probability': round(away_win_prob, 4),
+            'predicted_margin': round(adjusted_margin, 1),
+            'predicted_total': round(predicted_total, 1),
+            'confidence': round(max(home_win_prob, away_win_prob) * 100, 1),
+        }
+        
+        # Add EV and Kelly if odds provided
+        if home_ml and away_ml:
+            result['ev_home'] = calculate_expected_value(home_win_prob, home_ml)
+            result['ev_away'] = calculate_expected_value(away_win_prob, away_ml)
+            result['kelly_home'] = calculate_kelly_criterion(home_ml, home_win_prob)
+            result['kelly_away'] = calculate_kelly_criterion(away_ml, away_win_prob)
         
         return result
         
     except Exception as e:
         logger.error(f"NFL Simple prediction error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return {"error": str(e), "model": "simple"}
+
