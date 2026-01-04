@@ -1425,8 +1425,6 @@
             using var http = HttpClientFactory.CreateClient("PythonMLServiceClient");
             http.Timeout = TimeSpan.FromMinutes(10);
             
-            var payload = new { division = _baseballDivision, year = _baseballYear };
-            
             // Start polling for status
             _baseballPollTimer = new System.Threading.Timer(
                 async _ => await PollBaseballStatus(),
@@ -1435,7 +1433,7 @@
                 TimeSpan.FromSeconds(2)
             );
             
-            var response = await http.PostAsJsonAsync("/baseball/ncaa/import", payload);
+            var response = await http.PostAsync($"/baseball/ncaa/import?division={_baseballDivision}&year={_baseballYear}", null);
             
             if (response.IsSuccessStatusCode)
             {

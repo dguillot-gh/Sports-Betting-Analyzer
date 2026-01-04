@@ -2916,6 +2916,27 @@ async def import_college_baseball(payload: CollegeBaseballImportRequest = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post('/baseball/ncaa/import')
+async def import_college_baseball(
+    division: int = Query(1, description="NCAA Division (1, 2, or 3)"),
+    year: int = Query(None, description="Season year (defaults to current)"),
+    background_tasks: BackgroundTasks = BackgroundTasks()
+):
+    """
+    Start asynchronous import of college baseball data.
+    """
+    try:
+        from scripts.college_baseball_importer import run_college_baseball_import
+        
+        # Run in background
+        background_tasks.add_task(run_college_baseball_import, division, year)
+        
+        return {"status": "started", "message": f"Started import for Division {division}"}
+    except Exception as e:
+        logger.error(f"Error starting import: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get('/baseball/ncaa/status')
 def get_college_baseball_status():
     """Get current status of college baseball import."""

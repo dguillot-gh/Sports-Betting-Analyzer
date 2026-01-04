@@ -129,6 +129,46 @@
                                     </MudItem>
                                 </MudGrid>
                                 
+                                <!-- Model Predictions Side-by-Side -->
+                                <MudDivider Class="my-3" />
+                                <MudGrid Spacing="2">
+                                    <!-- Simple Model -->
+                                    <MudItem xs="6">
+                                        <MudPaper Elevation="1" Class="pa-2" Style="border-left: 3px solid #1976D2; background: rgba(25, 118, 210, 0.05);">
+                                            <MudText Typo="Typo.overline" Color="Color.Primary" Style="font-weight: bold;">📊 SIMPLE</MudText>
+                                            <MudText Typo="Typo.body2">
+                                                Pick: <strong>@game.PredictedWinner</strong>
+                                            </MudText>
+                                            <MudText Typo="Typo.caption">
+                                                @(game.HomeWinProb?.ToString("P0") ?? "--") home win
+                                            </MudText>
+                                        </MudPaper>
+                                    </MudItem>
+                                    <!-- XGBoost Model -->
+                                    <MudItem xs="6">
+                                        <MudPaper Elevation="1" Class="pa-2" Style="border-left: 3px solid #FF9800; background: rgba(255, 152, 0, 0.05);">
+                                            <MudText Typo="Typo.overline" Style="color: #FF9800; font-weight: bold;">🤖 XGB</MudText>
+                                            @if (game.XgbModel != null && string.IsNullOrEmpty(game.XgbModel.Error))
+                                            {
+                                                <MudText Typo="Typo.body2">
+                                                    Pick: <strong>@game.XgbModel.PredictedWinner</strong>
+                                                </MudText>
+                                                <MudText Typo="Typo.caption">
+                                                    @(game.XgbModel.HomeWinProb?.ToString("P0") ?? "--") home win
+                                                    @if (game.XgbModel.HasEdge)
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Class="ml-1">+@game.XgbModel.EdgePct%</MudChip>
+                                                    }
+                                                </MudText>
+                                            }
+                                            else
+                                            {
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">Train model first</MudText>
+                                            }
+                                        </MudPaper>
+                                    </MudItem>
+                                </MudGrid>
+                                
                                 @if (game.HasValue)
                                 {
                                     <MudAlert Severity="Severity.Success" Dense="true" Class="mt-3">
@@ -479,6 +519,19 @@
                         if (game.TryGetProperty("value_bets", out var vb) && vb.ValueKind == JsonValueKind.Array)
                         {
                             analyzed.ValueBets = vb.EnumerateArray().Select(v => v.GetString() ?? "").ToList();
+                        }
+                        
+                        // Parse XGBoost model predictions
+                        if (game.TryGetProperty("xgboost_model", out var xgb) && xgb.ValueKind == JsonValueKind.Object)
+                        {
+                            analyzed.XgbModel = new XgbModelData
+                            {
+                                PredictedWinner = xgb.TryGetProperty("predicted_winner", out var xpw) ? xpw.GetString() ?? "" : "",
+                                HomeWinProb = xgb.TryGetProperty("home_win_probability", out var xhwp) && xhwp.ValueKind == JsonValueKind.Number ? xhwp.GetDouble() : null,
+                                EdgePct = xgb.TryGetProperty("home_ml_edge", out var xe) && xe.ValueKind == JsonValueKind.Number ? xe.GetDouble() : null,
+                                HasEdge = xgb.TryGetProperty("ml_value", out var xv) && xv.ValueKind == JsonValueKind.True,
+                                Error = xgb.TryGetProperty("error", out var xerr) ? xerr.GetString() : null
+                            };
                         }
                         
                         _analyzedGames.Add(analyzed);
@@ -867,6 +920,16 @@
         public string ConfidenceLevel { get; set; } = "Medium";
         public bool HasValue { get; set; }
         public List<string> ValueBets { get; set; } = new();
+        public XgbModelData? XgbModel { get; set; }
+    }
+    
+    private class XgbModelData
+    {
+        public string PredictedWinner { get; set; } = "";
+        public double? HomeWinProb { get; set; }
+        public double? EdgePct { get; set; }
+        public bool HasEdge { get; set; }
+        public string? Error { get; set; }
     }
     
     private class AnalysisHistoryEntry

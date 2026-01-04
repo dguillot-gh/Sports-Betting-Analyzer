@@ -190,10 +190,10 @@ async def analyze_all_games(
 ):
     """
     Fetch today's games and run predictions on all of them.
-    Returns games with predictions and value bet flags.
+    Returns BOTH simple model and XGBoost predictions for side-by-side comparison.
     """
     from scripts.nba_odds import get_todays_nba_odds
-    from scripts.nba_predictor import analyze_matchup
+    from scripts.nba_predictor import analyze_matchup_dual
     
     # Get today's odds
     odds_data = await get_todays_nba_odds(sportsbook)
@@ -201,11 +201,11 @@ async def analyze_all_games(
     if odds_data.get("error") or not odds_data.get("games"):
         return odds_data
     
-    # Analyze each game
+    # Analyze each game with both models
     analyzed_games = []
     for game in odds_data["games"]:
         try:
-            prediction = await analyze_matchup(
+            prediction = await analyze_matchup_dual(
                 home_team=game.get("home_team", ""),
                 away_team=game.get("away_team", ""),
                 spread=game.get("spread"),
@@ -227,7 +227,8 @@ async def analyze_all_games(
         "sportsbook": sportsbook,
         "games": analyzed_games,
         "count": len(analyzed_games),
-        "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False))
+        "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False)),
+        "xgb_available": any(g.get("xgboost_model") and not g.get("xgboost_model", {}).get("error") for g in analyzed_games)
     }
 
 
@@ -327,8 +328,9 @@ async def analyze_all_nfl_games(
 ):
     """
     Fetch today's NFL games and run predictions on all of them.
+    Returns BOTH simple model and XGBoost predictions for side-by-side comparison.
     """
-    from scripts.nfl_predictor import get_todays_nfl_odds, analyze_nfl_matchup
+    from scripts.nfl_predictor import get_todays_nfl_odds, analyze_nfl_matchup_dual
     
     odds_data = await get_todays_nfl_odds(sportsbook)
     
@@ -338,7 +340,8 @@ async def analyze_all_nfl_games(
     analyzed_games = []
     for game in odds_data["games"]:
         try:
-            prediction = await analyze_nfl_matchup(
+            # Use dual prediction to get both simple and XGB models
+            prediction = await analyze_nfl_matchup_dual(
                 home_team=game.get("home_team", ""),
                 away_team=game.get("away_team", ""),
                 spread=game.get("spread"),
@@ -358,7 +361,8 @@ async def analyze_all_nfl_games(
         "games": analyzed_games,
         "count": len(analyzed_games),
         "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False)),
-        "epa_loaded": True  # EPA is loaded from nflreadpy on each analysis
+        "xgb_available": any(g.get("xgboost_model") and not g.get("xgboost_model", {}).get("error") for g in analyzed_games),
+        "epa_loaded": True
     }
 
 
