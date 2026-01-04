@@ -1,0 +1,337 @@
+@page "/model-testing-nfl"
+@using System.Text.Json
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject ILogger<ModelTestingNFL> Logger
+
+<PageTitle>NFL Model Testing</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+    <MudStack Spacing="4">
+        <!-- Header -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <div>
+                    <MudText Typo="Typo.h4">
+                        <MudIcon Icon="@Icons.Material.Filled.SportsFootball" Class="mr-2" />
+                        NFL Model Testing
+                    </MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Compare Simple vs XGBoost predictions with EPA data
+                    </MudText>
+                </div>
+                <MudStack Row="true" Spacing="2">
+                    <MudSelect T="string" @bind-Value="_selectedSportsbook" Label="Sportsbook" 
+                               Variant="Variant.Outlined" Dense="true" Style="width: 150px;">
+                        <MudSelectItem Value="@("fanduel")">FanDuel</MudSelectItem>
+                        <MudSelectItem Value="@("draftkings")">DraftKings</MudSelectItem>
+                        <MudSelectItem Value="@("betmgm")">BetMGM</MudSelectItem>
+                    </MudSelect>
+                    <MudButton Variant="Variant.Filled" Color="Color.Success"
+                               StartIcon="@Icons.Material.Filled.Refresh"
+                               OnClick="@RunAnalysis" Disabled="@_isLoading">
+                        @if (_isLoading)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            <span>Analyzing...</span>
+                        }
+                        else
+                        {
+                            <span>Analyze Games</span>
+                        }
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Warning"
+                               StartIcon="@Icons.Material.Filled.ModelTraining"
+                               OnClick="@TrainXGBoost" Disabled="@_isTraining">
+                        @(_isTraining ? "Training..." : "Train XGBoost")
+                    </MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+
+        @if (_error != null)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Filled">@_error</MudAlert>
+        }
+
+        @if (_games.Any())
+        {
+            <MudText Typo="Typo.subtitle1" Color="Color.Secondary">
+                @_games.Count game(s) found • @_date
+            </MudText>
+            
+            <MudGrid Spacing="3">
+                @foreach (var game in _games)
+                {
+                    <MudItem xs="12" md="6" lg="4">
+                        <MudCard Elevation="3" Class="h-100" Style="border-left: 4px solid #4caf50;">
+                            <MudCardHeader>
+                                <CardHeaderContent>
+                                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                        <MudText Typo="Typo.h6">@game.AwayTeam</MudText>
+                                        <MudText Typo="Typo.caption">@@</MudText>
+                                        <MudText Typo="Typo.h6">@game.HomeTeam</MudText>
+                                    </MudStack>
+                                </CardHeaderContent>
+                            </MudCardHeader>
+                            <MudCardContent>
+                                <MudStack Spacing="2">
+                                    <!-- Odds Row -->
+                                    <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Default">
+                                            Away: @FormatOdds(game.AwayMoneyline)
+                                        </MudChip>
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Default">
+                                            Home: @FormatOdds(game.HomeMoneyline)
+                                        </MudChip>
+                                    </MudStack>
+                                    
+                                    <MudDivider />
+                                    
+                                    <!-- Model Comparison Table -->
+                                    <MudSimpleTable Dense="true" Hover="true" Style="background: transparent;">
+                                        <thead>
+                                            <tr style="background: rgba(0,0,0,0.1);">
+                                                <th></th>
+                                                <th style="text-align: center;">📊 Simple</th>
+                                                <th style="text-align: center;">🤖 XGBoost</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td><MudText Typo="Typo.caption">Home Win %</MudText></td>
+                                                <td style="text-align: center;">
+                                                    <strong style="color: #4caf50;">
+                                                        @(((game.SimpleModel?.HomeWinProb ?? 0) * 100).ToString("F1"))%
+                                                    </strong>
+                                                </td>
+                                                <td style="text-align: center;">
+                                                    @if (game.XgbModel?.Error == null)
+                                                    {
+                                                        <strong style="color: #2196f3;">
+                                                            @(((game.XgbModel?.HomeWinProb ?? 0) * 100).ToString("F1"))%
+                                                        </strong>
+                                                    }
+                                                    else
+                                                    {
+                                                        <MudText Typo="Typo.caption" Color="Color.Warning">Train Required</MudText>
+                                                    }
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td><MudText Typo="Typo.caption">Pick</MudText></td>
+                                                <td style="text-align: center; color: #4caf50;">
+                                                    @(game.SimpleModel?.PredictedWinner ?? "—")
+                                                </td>
+                                                <td style="text-align: center; color: #2196f3;">
+                                                    @(game.XgbModel?.PredictedWinner ?? "—")
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td><MudText Typo="Typo.caption">EV (Home)</MudText></td>
+                                                <td style="text-align: center;">
+                                                    <span style="color: @(game.SimpleModel?.EvHome > 0 ? "#4caf50" : "#f44336")">
+                                                        @(game.SimpleModel?.EvHome?.ToString("+0.00;-0.00") ?? "—")
+                                                    </span>
+                                                </td>
+                                                <td style="text-align: center;">
+                                                    <span style="color: @(game.XgbModel?.EvHome > 0 ? "#4caf50" : "#f44336")">
+                                                        @(game.XgbModel?.EvHome?.ToString("+0.00;-0.00") ?? "—")
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td><MudText Typo="Typo.caption">Kelly %</MudText></td>
+                                                <td style="text-align: center;">
+                                                    @(game.SimpleModel?.KellyHome?.ToString("F1") ?? "—")%
+                                                </td>
+                                                <td style="text-align: center;">
+                                                    @(game.XgbModel?.KellyHome?.ToString("F1") ?? "—")%
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </MudSimpleTable>
+                                    
+                                    <!-- Agreement Badge -->
+                                    @{
+                                        var simpleWinner = game.SimpleModel?.PredictedWinner;
+                                        var xgbWinner = game.XgbModel?.PredictedWinner;
+                                        var modelsAgree = simpleWinner == xgbWinner && simpleWinner != null;
+                                    }
+                                    <MudStack Row="true" Justify="Justify.Center">
+                                        @if (modelsAgree)
+                                        {
+                                            <MudChip T="string" Color="Color.Success" Size="Size.Small">
+                                                ✓ Models Agree: @simpleWinner
+                                            </MudChip>
+                                        }
+                                        else if (xgbWinner != null)
+                                        {
+                                            <MudChip T="string" Color="Color.Warning" Size="Size.Small">
+                                                ⚠ Models Disagree
+                                            </MudChip>
+                                        }
+                                    </MudStack>
+                                </MudStack>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+        else if (!_isLoading)
+        {
+            <MudAlert Severity="Severity.Info">
+                Click "Analyze Games" to fetch today's NFL games and run predictions.
+            </MudAlert>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    private bool _isLoading = false;
+    private bool _isTraining = false;
+    private string? _error = null;
+    private string _selectedSportsbook = "fanduel";
+    private string _date = "";
+    private List<GamePrediction> _games = new();
+
+    private async Task RunAnalysis()
+    {
+        _isLoading = true;
+        _error = null;
+        _games.Clear();
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsync(
+                $"http://backend:8000/model-testing/nfl/predictions?sportsbook={_selectedSportsbook}", 
+                null
+            );
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var data = JsonSerializer.Deserialize<JsonElement>(json);
+                
+                _date = data.TryGetProperty("date", out var d) ? d.GetString() ?? "" : "";
+                
+                if (data.TryGetProperty("games", out var games))
+                {
+                    foreach (var game in games.EnumerateArray())
+                    {
+                        var gp = new GamePrediction
+                        {
+                            HomeTeam = game.TryGetProperty("home_team", out var ht) ? ht.GetString() ?? "" : "",
+                            AwayTeam = game.TryGetProperty("away_team", out var at) ? at.GetString() ?? "" : "",
+                            HomeMoneyline = game.TryGetProperty("home_moneyline", out var hm) && hm.ValueKind == JsonValueKind.Number ? hm.GetInt32() : null,
+                            AwayMoneyline = game.TryGetProperty("away_moneyline", out var am) && am.ValueKind == JsonValueKind.Number ? am.GetInt32() : null,
+                        };
+                        
+                        // Parse simple model
+                        if (game.TryGetProperty("simple_model", out var sm))
+                        {
+                            gp.SimpleModel = new ModelResult
+                            {
+                                HomeWinProb = sm.TryGetProperty("home_win_probability", out var shp) && shp.ValueKind == JsonValueKind.Number ? shp.GetDouble() : null,
+                                PredictedWinner = sm.TryGetProperty("predicted_winner", out var spw) ? spw.GetString() : null,
+                                EvHome = sm.TryGetProperty("ev_home", out var seh) && seh.ValueKind == JsonValueKind.Number ? seh.GetDouble() : null,
+                                EvAway = sm.TryGetProperty("ev_away", out var sea) && sea.ValueKind == JsonValueKind.Number ? sea.GetDouble() : null,
+                                KellyHome = sm.TryGetProperty("kelly_home", out var skh) && skh.ValueKind == JsonValueKind.Number ? skh.GetDouble() : null,
+                                KellyAway = sm.TryGetProperty("kelly_away", out var ska) && ska.ValueKind == JsonValueKind.Number ? ska.GetDouble() : null,
+                            };
+                        }
+                        
+                        // Parse XGBoost model
+                        if (game.TryGetProperty("xgboost_model", out var xm))
+                        {
+                            gp.XgbModel = new ModelResult
+                            {
+                                HomeWinProb = xm.TryGetProperty("home_win_probability", out var xhp) && xhp.ValueKind == JsonValueKind.Number ? xhp.GetDouble() : null,
+                                PredictedWinner = xm.TryGetProperty("predicted_winner", out var xpw) ? xpw.GetString() : null,
+                                EvHome = xm.TryGetProperty("ev_home", out var xeh) && xeh.ValueKind == JsonValueKind.Number ? xeh.GetDouble() : null,
+                                EvAway = xm.TryGetProperty("ev_away", out var xea) && xea.ValueKind == JsonValueKind.Number ? xea.GetDouble() : null,
+                                KellyHome = xm.TryGetProperty("kelly_home", out var xkh) && xkh.ValueKind == JsonValueKind.Number ? xkh.GetDouble() : null,
+                                KellyAway = xm.TryGetProperty("kelly_away", out var xka) && xka.ValueKind == JsonValueKind.Number ? xka.GetDouble() : null,
+                                Error = xm.TryGetProperty("error", out var xerr) ? xerr.GetString() : null,
+                            };
+                        }
+                        
+                        _games.Add(gp);
+                    }
+                }
+                
+                Snackbar.Add($"Analyzed {_games.Count} games", Severity.Success);
+            }
+            else
+            {
+                _error = $"API Error: {response.StatusCode}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            Logger.LogError(ex, "Error analyzing games");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task TrainXGBoost()
+    {
+        _isTraining = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsync("http://backend:8000/odds/nfl/train", null);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("XGBoost model trained successfully!", Severity.Success);
+                await RunAnalysis(); // Refresh predictions
+            }
+            else
+            {
+                Snackbar.Add("Training failed", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isTraining = false;
+        }
+    }
+
+    private string FormatOdds(int? odds)
+    {
+        if (!odds.HasValue) return "N/A";
+        return odds.Value > 0 ? $"+{odds.Value}" : odds.Value.ToString();
+    }
+
+    private class GamePrediction
+    {
+        public string HomeTeam { get; set; } = "";
+        public string AwayTeam { get; set; } = "";
+        public int? HomeMoneyline { get; set; }
+        public int? AwayMoneyline { get; set; }
+        public ModelResult? SimpleModel { get; set; }
+        public ModelResult? XgbModel { get; set; }
+    }
+
+    private class ModelResult
+    {
+        public double? HomeWinProb { get; set; }
+        public string? PredictedWinner { get; set; }
+        public double? EvHome { get; set; }
+        public double? EvAway { get; set; }
+        public double? KellyHome { get; set; }
+        public double? KellyAway { get; set; }
+        public string? Error { get; set; }
+    }
+}

@@ -3019,3 +3019,130 @@ def get_system_logs(level: str = None, limit: int = 100):
     '''Get recent system logs for the Logs Dashboard.'''
     logs = get_logs(level, limit)
     return {"logs": logs, "total": len(LOG_BUFFER), "showing": len(logs)}
+
+
+# ========== Model Testing Endpoints ==========
+
+@app.post('/model-testing/nba/predictions')
+async def get_nba_model_testing_predictions(
+    sportsbook: str = Query("fanduel", description="Sportsbook for odds")
+):
+    """
+    Get today's NBA games with BOTH simple and XGBoost predictions.
+    Uses full feature engineering (no hardcoded values).
+    """
+    try:
+        from scripts.nba_odds import get_todays_nba_odds
+        from scripts.model_testing_predictor import (
+            predict_nba_simple, predict_nba_xgb_full,
+            get_nba_team_stats
+        )
+        
+        # Get today's games with odds
+        odds_data = await get_todays_nba_odds(sportsbook)
+        
+        if odds_data.get("error") or not odds_data.get("games"):
+            return odds_data
+        
+        # Get all team stats once
+        all_team_stats = await get_nba_team_stats()
+        
+        analyzed_games = []
+        for game in odds_data["games"]:
+            home_team = game.get("home_team", "")
+            away_team = game.get("away_team", "")
+            home_ml = game.get("home_moneyline")
+            away_ml = game.get("away_moneyline")
+            
+            home_stats = all_team_stats.get(home_team, {})
+            away_stats = all_team_stats.get(away_team, {})
+            
+            # Get predictions from both models
+            simple_pred = await predict_nba_simple(
+                home_team, away_team, home_stats, away_stats, home_ml, away_ml
+            )
+            xgb_pred = await predict_nba_xgb_full(
+                home_team, away_team, home_stats, away_stats, home_ml, away_ml
+            )
+            
+            analyzed_games.append({
+                **game,
+                "simple_model": simple_pred,
+                "xgboost_model": xgb_pred,
+                "home_stats": home_stats,
+                "away_stats": away_stats,
+            })
+        
+        return {
+            "date": odds_data.get("date"),
+            "sportsbook": sportsbook,
+            "games": analyzed_games,
+            "count": len(analyzed_games),
+        }
+        
+    except Exception as e:
+        logger.error(f"Model testing NBA error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post('/model-testing/nfl/predictions')
+async def get_nfl_model_testing_predictions(
+    sportsbook: str = Query("fanduel", description="Sportsbook for odds")
+):
+    """
+    Get today's NFL games with BOTH simple and XGBoost predictions.
+    Uses full feature engineering (no hardcoded values).
+    """
+    try:
+        from scripts.nfl_predictor import get_todays_nfl_odds
+        from scripts.model_testing_predictor import (
+            predict_nfl_simple, predict_nfl_xgb_full,
+            get_nfl_team_stats
+        )
+        
+        # Get today's games with odds
+        odds_data = await get_todays_nfl_odds(sportsbook)
+        
+        if odds_data.get("error") or not odds_data.get("games"):
+            return odds_data
+        
+        # Get all team stats
+        all_team_stats = await get_nfl_team_stats()
+        
+        analyzed_games = []
+        for game in odds_data["games"]:
+            home_team = game.get("home_team", "")
+            away_team = game.get("away_team", "")
+            home_ml = game.get("home_moneyline")
+            away_ml = game.get("away_moneyline")
+            
+            home_stats = all_team_stats.get(home_team, {})
+            away_stats = all_team_stats.get(away_team, {})
+            
+            # Get predictions from both models
+            simple_pred = await predict_nfl_simple(
+                home_team, away_team, home_stats, away_stats, home_ml, away_ml
+            )
+            xgb_pred = await predict_nfl_xgb_full(
+                home_team, away_team, home_stats, away_stats, home_ml, away_ml
+            )
+            
+            analyzed_games.append({
+                **game,
+                "simple_model": simple_pred,
+                "xgboost_model": xgb_pred,
+                "home_stats": home_stats,
+                "away_stats": away_stats,
+            })
+        
+        return {
+            "date": odds_data.get("date"),
+            "sportsbook": sportsbook,
+            "games": analyzed_games,
+            "count": len(analyzed_games),
+        }
+        
+    except Exception as e:
+        logger.error(f"Model testing NFL error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
