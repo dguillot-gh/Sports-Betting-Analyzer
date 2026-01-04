@@ -56,7 +56,7 @@
 
         @if (_apiQuota != null)
         {
-            <MudChip Color="@(_apiQuota.RequestsRemaining > 100 ? Color.Success : _apiQuota.RequestsRemaining > 20 ? Color.Warning : Color.Error)" 
+            <MudChip T="string" Color="@(_apiQuota.RequestsRemaining > 100 ? Color.Success : _apiQuota.RequestsRemaining > 20 ? Color.Warning : Color.Error)" 
                      Size="Size.Small" Variant="Variant.Outlined">
                 <MudIcon Icon="@Icons.Material.Filled.Api" Size="Size.Small" Class="mr-1" />
                 API: @_apiQuota.RequestsRemaining remaining / @(_apiQuota.RequestsUsed + _apiQuota.RequestsRemaining) total
