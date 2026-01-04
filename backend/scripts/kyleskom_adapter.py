@@ -226,26 +226,33 @@ class KyleskomPredictor:
             home_series = home_row.iloc[0]
             away_series = away_row.iloc[0]
             
-            # Concatenate like reference repo (line 66 of main.py)
-            stats = pd.concat([home_series, away_series])
+            # Drop TEAM_ID before concatenation (we keep TEAM_NAME for now, drop later)
+            home_series = home_series.drop(['TEAM_ID'], errors='ignore')
+            away_series = away_series.drop(['TEAM_ID'], errors='ignore')
             
-            # Add rest days (default to 1 like main.py fallback)
+            # Rename away columns with .1 suffix (like Create_Games.py line 79-81)
+            away_series_renamed = away_series.rename(
+                index={col: f"{col}.1" if col != 'TEAM_NAME' else 'TEAM_NAME.1' for col in away_series.index}
+            )
+            
+            # Concatenate like reference repo (line 66 of main.py)
+            stats = pd.concat([home_series, away_series_renamed])
+            
+            # Add rest days at the end (like Create_Games.py lines 92-93)
             stats['Days-Rest-Home'] = 1
             stats['Days-Rest-Away'] = 1
             
-            # Convert to DataFrame for processing (like lines 71-72 of main.py)
-            match_data = [stats]
-            games_data_frame = pd.concat(match_data, ignore_index=True, axis=1)
-            games_data_frame = games_data_frame.T
+            # Now drop TEAM_NAME and TEAM_NAME.1 (like line 74 of main.py)
+            # We do this on the Series before converting to DataFrame
+            stats = stats.drop(['TEAM_NAME', 'TEAM_NAME.1'], errors='ignore')
             
-            # Drop TEAM_ID and TEAM_NAME (like line 74 of main.py)
-            frame_ml = games_data_frame.drop(columns=['TEAM_ID', 'TEAM_NAME'], errors='ignore')
+            # Convert to DataFrame row format
+            data = stats.values.astype(float).reshape(1, -1)
             
-            # Convert to numpy array (like lines 75-76 of main.py)
-            data = frame_ml.values
-            data = data.astype(float)
+            logger.info(f"Feature shape for {home_team} vs {away_team}: {data.shape} (expected 106 for ML)")
             
-            logger.info(f"Feature shape for {home_team} vs {away_team}: {data.shape}")
+            if data.shape[1] != 106:
+                logger.warning(f"Feature count mismatch! Expected 106, got {data.shape[1]}")
             
             # Create DMatrix and predict
             dmatrix = xgb.DMatrix(data)
@@ -263,24 +270,31 @@ class KyleskomPredictor:
             # O/U prediction
             ou_pred = None
             if self.model_ou and total_line:
-                # For O/U, we need to add the OU column
-                frame_uo = frame_ml.copy()
-                frame_uo['OU'] = total_line
-                data_ou = frame_uo.values.astype(float)
-                dmatrix_ou = xgb.DMatrix(data_ou)
-                ou_raw = self.model_ou.predict(dmatrix_ou)[0]
-                
-                # OU model uses multi:softprob with num_class=3 (under, over, push)
-                if len(ou_raw) >= 2:
-                    under_prob = float(ou_raw[0])
-                    over_prob = float(ou_raw[1])
-                    ou_pred = {
-                        'pick': 'OVER' if over_prob > under_prob else 'UNDER',
-                        'confidence': round(max(over_prob, under_prob) * 100, 1),
-                        'total_line': total_line,
-                        'over_prob': round(over_prob, 3),
-                        'under_prob': round(under_prob, 3)
-                    }
+                try:
+                    # For O/U, we need to add the OU column at the end (107 features total)
+                    # Append OU to the data array
+                    data_ou = np.append(data, [[total_line]], axis=1)
+                    
+                    logger.info(f"O/U feature shape: {data_ou.shape} (expected 107 for O/U)")
+                    
+                    dmatrix_ou = xgb.DMatrix(data_ou)
+                    ou_raw = self.model_ou.predict(dmatrix_ou)[0]
+                    
+                    # OU model uses multi:softprob with num_class=3 (under, over, push)
+                    if len(ou_raw) >= 2:
+                        under_prob = float(ou_raw[0])
+                        over_prob = float(ou_raw[1])
+                        ou_pred = {
+                            'pick': 'OVER' if over_prob > under_prob else 'UNDER',
+                            'confidence': round(max(over_prob, under_prob) * 100, 1),
+                            'total_line': total_line,
+                            'over_prob': round(over_prob, 3),
+                            'under_prob': round(under_prob, 3)
+                        }
+                except Exception as ou_error:
+                    logger.error(f"O/U prediction error: {ou_error}")
+                    import traceback
+                    logger.error(traceback.format_exc())
             
             # Calculate EV and Kelly
             ev_home = ev_away = None

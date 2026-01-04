@@ -119,7 +119,7 @@
                                                 </td>
                                             </tr>
                                             <tr>
-                                                <td><MudText Typo="Typo.caption">Pick</MudText></td>
+                                                <td><MudText Typo="Typo.caption">Pick (ML)</MudText></td>
                                                 <td style="text-align: center; color: #4caf50;">
                                                     @(game.SimpleModel?.PredictedWinner ?? "—")
                                                 </td>
@@ -185,6 +185,37 @@
                                             </MudChip>
                                         }
                                     </MudStack>
+                                    
+                                    <!-- Expandable Stats Detail -->
+                                    <MudExpansionPanels Elevation="0" Dense="true" Class="mt-2">
+                                        <MudExpansionPanel Text="View Stats Details" MaxHeight="300" Dense="true">
+                                            <MudGrid Spacing="1">
+                                                <!-- Home Team Stats -->
+                                                <MudItem xs="6">
+                                                    <MudText Typo="Typo.caption" Style="font-weight: bold;">@game.HomeTeam</MudText>
+                                                    <MudText Typo="Typo.caption">PPG: @(game.HomeStats?.GetValueOrDefault("ppg", game.HomeStats?.GetValueOrDefault("PTS"))?.ToString() ?? "—")</MudText>
+                                                    <MudText Typo="Typo.caption">Win%: @(FormatPercent(game.HomeStats?.GetValueOrDefault("win_pct", game.HomeStats?.GetValueOrDefault("W_PCT"))))</MudText>
+                                                    <MudText Typo="Typo.caption">FG%: @(FormatPercent(game.HomeStats?.GetValueOrDefault("fg_pct", game.HomeStats?.GetValueOrDefault("FG_PCT"))))</MudText>
+                                                    <MudText Typo="Typo.caption">3P%: @(FormatPercent(game.HomeStats?.GetValueOrDefault("fg3_pct", game.HomeStats?.GetValueOrDefault("FG3_PCT"))))</MudText>
+                                                </MudItem>
+                                                <!-- Away Team Stats -->
+                                                <MudItem xs="6">
+                                                    <MudText Typo="Typo.caption" Style="font-weight: bold;">@game.AwayTeam</MudText>
+                                                    <MudText Typo="Typo.caption">PPG: @(game.AwayStats?.GetValueOrDefault("ppg", game.AwayStats?.GetValueOrDefault("PTS"))?.ToString() ?? "—")</MudText>
+                                                    <MudText Typo="Typo.caption">Win%: @(FormatPercent(game.AwayStats?.GetValueOrDefault("win_pct", game.AwayStats?.GetValueOrDefault("W_PCT"))))</MudText>
+                                                    <MudText Typo="Typo.caption">FG%: @(FormatPercent(game.AwayStats?.GetValueOrDefault("fg_pct", game.AwayStats?.GetValueOrDefault("FG_PCT"))))</MudText>
+                                                    <MudText Typo="Typo.caption">3P%: @(FormatPercent(game.AwayStats?.GetValueOrDefault("fg3_pct", game.AwayStats?.GetValueOrDefault("FG3_PCT"))))</MudText>
+                                                </MudItem>
+                                            </MudGrid>
+                                            <MudDivider Class="my-2" />
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                <strong>Simple Model:</strong> Uses PPG, Win%, and home court advantage (+2.5 pts)
+                                            </MudText>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                <strong>XGBoost:</strong> Uses all 30+ stats from NBA API with pre-trained 68.9% accuracy model
+                                            </MudText>
+                                        </MudExpansionPanel>
+                                    </MudExpansionPanels>
                                 </MudStack>
                             </MudCardContent>
                         </MudCard>
@@ -282,6 +313,28 @@
                             }
                         }
                         
+                        // Parse team stats for detail view
+                        if (game.TryGetProperty("home_stats", out var hs) && hs.ValueKind == JsonValueKind.Object)
+                        {
+                            gp.HomeStats = new Dictionary<string, object>();
+                            foreach (var prop in hs.EnumerateObject())
+                            {
+                                gp.HomeStats[prop.Name] = prop.Value.ValueKind == JsonValueKind.Number 
+                                    ? prop.Value.GetDouble() 
+                                    : prop.Value.ToString();
+                            }
+                        }
+                        if (game.TryGetProperty("away_stats", out var aws) && aws.ValueKind == JsonValueKind.Object)
+                        {
+                            gp.AwayStats = new Dictionary<string, object>();
+                            foreach (var prop in aws.EnumerateObject())
+                            {
+                                gp.AwayStats[prop.Name] = prop.Value.ValueKind == JsonValueKind.Number 
+                                    ? prop.Value.GetDouble() 
+                                    : prop.Value.ToString();
+                            }
+                        }
+                        
                         _games.Add(gp);
                     }
                 }
@@ -338,6 +391,16 @@
         return odds.Value > 0 ? $"+{odds.Value}" : odds.Value.ToString();
     }
 
+    private string FormatPercent(object? value)
+    {
+        if (value == null) return "—";
+        if (double.TryParse(value.ToString(), out var d))
+        {
+            return d > 1 ? $"{d:F1}%" : $"{d * 100:F1}%";
+        }
+        return value.ToString() ?? "—";
+    }
+
     private class GamePrediction
     {
         public string HomeTeam { get; set; } = "";
@@ -346,6 +409,8 @@
         public int? AwayMoneyline { get; set; }
         public ModelResult? SimpleModel { get; set; }
         public ModelResult? XgbModel { get; set; }
+        public Dictionary<string, object>? HomeStats { get; set; }
+        public Dictionary<string, object>? AwayStats { get; set; }
     }
 
     private class ModelResult
@@ -367,3 +432,4 @@
         public double Confidence { get; set; }
     }
 }
+
