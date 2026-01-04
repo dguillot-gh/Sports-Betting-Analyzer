@@ -218,11 +218,10 @@ def _get_default_nba_stats() -> Dict:
 
 async def fetch_nfl_team_stats_from_nflverse() -> Dict[str, Dict]:
     """
-    Fetch comprehensive NFL team stats from nflverse using nfl_data_py.
+    Fetch comprehensive NFL team stats from nflverse using nflreadpy.
     Similar to how NBA page fetches from NBA API - gets all relevant team stats.
     """
     try:
-        import nfl_data_py as nfl
         import numpy as np
         
         # Determine current/recent season
@@ -233,9 +232,17 @@ async def fetch_nfl_team_stats_from_nflverse() -> Dict[str, Dict]:
         logger.info(f"Loading NFL team stats from nflverse for seasons {seasons}")
         
         # Load play-by-play data for EPA calculations
+        # Try nflreadpy first (actively maintained)
+        pbp = None
         try:
+            import nflreadpy as nfl
+            pbp_polars = nfl.load_pbp(seasons)
+            pbp = pbp_polars.to_pandas()
+            logger.info(f"Loaded {len(pbp)} plays from nflreadpy")
+        except ImportError:
+            import nfl_data_py as nfl
             pbp = nfl.import_pbp_data(seasons)
-            logger.info(f"Loaded {len(pbp)} plays from nflverse")
+            logger.info(f"Loaded {len(pbp)} plays from nfl_data_py")
         except Exception as e:
             logger.warning(f"Could not load pbp data: {e}")
             return {}

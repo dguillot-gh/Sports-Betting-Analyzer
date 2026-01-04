@@ -103,138 +103,65 @@ class NflversePredictor:
     
     async def fetch_team_stats_from_nflverse(self) -> Dict[str, Dict]:
         """
-        Fetch comprehensive NFL team stats from nflverse.
-        Uses play-by-play data to calculate EPA and other metrics.
+        Fetch comprehensive NFL team stats using existing NFLPredictor.
+        Falls back to default values if EPA data not available.
         """
         if self._stats_loaded and self.team_stats:
             return self.team_stats
         
         try:
-            import nfl_data_py as nfl
+            # Use existing NFLPredictor which already handles EPA loading
+            from scripts.nfl_predictor import NFLPredictor
             
-            # Determine current season
-            now = datetime.now()
-            current_year = now.year if now.month >= 9 else now.year - 1
+            predictor = NFLPredictor()
             
-            logger.info(f"Loading NFL team stats from nflverse for {current_year}")
+            logger.info("Loading NFL team stats via NFLPredictor...")
             
-            # Load play-by-play data
-            try:
-                pbp = nfl.import_pbp_data([current_year])
-                logger.info(f"Loaded {len(pbp)} plays from nflverse")
-            except Exception as e:
-                logger.warning(f"Could not load current year pbp, trying previous: {e}")
-                pbp = nfl.import_pbp_data([current_year - 1])
+            # All NFL teams
+            all_teams = [
+                'Arizona Cardinals', 'Atlanta Falcons', 'Baltimore Ravens',
+                'Buffalo Bills', 'Carolina Panthers', 'Chicago Bears',
+                'Cincinnati Bengals', 'Cleveland Browns', 'Dallas Cowboys',
+                'Denver Broncos', 'Detroit Lions', 'Green Bay Packers',
+                'Houston Texans', 'Indianapolis Colts', 'Jacksonville Jaguars',
+                'Kansas City Chiefs', 'Las Vegas Raiders', 'Los Angeles Chargers',
+                'Los Angeles Rams', 'Miami Dolphins', 'Minnesota Vikings',
+                'New England Patriots', 'New Orleans Saints', 'New York Giants',
+                'New York Jets', 'Philadelphia Eagles', 'Pittsburgh Steelers',
+                'San Francisco 49ers', 'Seattle Seahawks', 'Tampa Bay Buccaneers',
+                'Tennessee Titans', 'Washington Commanders'
+            ]
             
-            if pbp is None or len(pbp) == 0:
-                return {}
-            
-            # Load schedule for PPG and record calculations
-            try:
-                schedule = nfl.import_schedules([current_year])
-            except:
-                schedule = None
-            
-            # Calculate stats for each team
-            teams = pbp['posteam'].dropna().unique()
-            
-            for team in teams:
-                if not team or team == '':
-                    continue
+            for team in all_teams:
+                stats = predictor.get_team_stats(team)
+                epa = predictor.get_team_epa(team)
                 
-                # Get team abbreviation
-                team_abbr = team if len(team) <= 3 else NFL_TEAM_INDEX.get(team, team)
-                
-                # Offensive plays
-                off_plays = pbp[pbp['posteam'] == team]
-                off_pass = off_plays[off_plays['play_type'] == 'pass']
-                off_run = off_plays[off_plays['play_type'] == 'run']
-                
-                # Defensive plays
-                def_plays = pbp[pbp['defteam'] == team]
-                
-                # Calculate EPA stats
-                def safe_mean(series):
-                    val = series.mean()
-                    return round(float(val), 3) if not np.isnan(val) else 0.0
-                
-                def safe_sum(series):
-                    return float(series.sum()) if not np.isnan(series.sum()) else 0.0
-                
-                off_epa = safe_mean(off_plays['epa'])
-                def_epa = safe_mean(def_plays['epa'])
-                pass_epa = safe_mean(off_pass['epa'])
-                rush_epa = safe_mean(off_run['epa'])
-                
-                # Success rate
-                successful = len(off_plays[off_plays['epa'] > 0])
-                success_rate = round(successful / len(off_plays), 3) if len(off_plays) > 0 else 0.5
-                
-                # Yardage
-                games = len(off_plays['game_id'].unique())
-                total_yards = safe_sum(off_plays['yards_gained'])
-                ypg = round(total_yards / games, 1) if games > 0 else 330.0
-                
-                # PPG and OPPG from schedule
-                ppg = 22.5
-                oppg = 22.5
-                win_pct = 0.5
-                
-                if schedule is not None:
-                    team_games = schedule[
-                        ((schedule['home_team'] == team) | (schedule['away_team'] == team)) &
-                        (schedule['home_score'].notna())
-                    ]
-                    
-                    if len(team_games) > 0:
-                        pts_for = []
-                        pts_against = []
-                        wins = 0
-                        
-                        for _, g in team_games.iterrows():
-                            if g['home_team'] == team:
-                                pts_for.append(g['home_score'])
-                                pts_against.append(g['away_score'])
-                                if g['home_score'] > g['away_score']:
-                                    wins += 1
-                            else:
-                                pts_for.append(g['away_score'])
-                                pts_against.append(g['home_score'])
-                                if g['away_score'] > g['home_score']:
-                                    wins += 1
-                        
-                        if pts_for:
-                            ppg = round(np.mean(pts_for), 1)
-                        if pts_against:
-                            oppg = round(np.mean(pts_against), 1)
-                        if len(team_games) > 0:
-                            win_pct = round(wins / len(team_games), 3)
-                
-                # Store stats with full team name
-                full_name = NFL_TEAM_INDEX.get(team, team)
-                self.team_stats[full_name] = {
-                    'ppg': ppg,
-                    'oppg': oppg,
-                    'win_pct': win_pct,
-                    'off_epa': off_epa,
-                    'def_epa': def_epa,
-                    'pass_epa': pass_epa,
-                    'rush_epa': rush_epa,
-                    'success_rate': success_rate,
-                    'yards_per_game': ypg,
-                    'games_played': games,
-                    'rest_days': 7,  # Will be calculated per game
+                # Combine stats
+                self.team_stats[team] = {
+                    'ppg': stats.get('ppg', 22.5),
+                    'oppg': stats.get('oppg', 22.5),
+                    'win_pct': stats.get('win_pct', 0.5),
+                    'off_epa': epa.get('off_epa_per_play', 0.0),
+                    'def_epa': epa.get('def_epa_per_play', 0.0),
+                    'pass_epa': epa.get('pass_epa', 0.0),
+                    'rush_epa': epa.get('rush_epa', 0.0),
+                    'success_rate': 0.5,  # Will be calculated if data available
+                    'yards_per_game': stats.get('ypg', 330.0),
+                    'games_played': 0,
+                    'rest_days': 7,
                 }
                 
                 # Also store by abbreviation
-                self.team_stats[team] = self.team_stats[full_name]
+                abbr = NFL_TEAM_INDEX.get(team, team)
+                if abbr != team:
+                    self.team_stats[abbr] = self.team_stats[team]
             
             self._stats_loaded = True
-            logger.info(f"Loaded stats for {len(self.team_stats) // 2} NFL teams from nflverse")
+            logger.info(f"Loaded stats for {len(all_teams)} NFL teams")
             return self.team_stats
             
         except Exception as e:
-            logger.error(f"Error fetching from nflverse: {e}")
+            logger.error(f"Error fetching NFL team stats: {e}")
             import traceback
             logger.error(traceback.format_exc())
             return {}

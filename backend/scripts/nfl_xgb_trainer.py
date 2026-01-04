@@ -55,9 +55,6 @@ class NFLXGBTrainer:
         totals = []  # Total points scored
         
         try:
-            import nfl_data_py as nfl
-            
-            # Fetch game schedules 2018-2025
             # Try to load from local CSV first (Phase 1 artifact)
             local_schedule_path = "/app/data/nflverse/schedules.csv"
             if not os.path.exists(local_schedule_path):
@@ -71,8 +68,16 @@ class NFLXGBTrainer:
                 # Ensure filter is appropriate
                 schedules_df = schedules_df[schedules_df['season'].isin(range(2018, 2026))]
             else:
-                logger.info("Local schedules.csv not found, fetching from nflreadpy...")
-                schedules_df = nfl.import_schedules([2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025])
+                logger.info("Local schedules.csv not found, fetching from nflverse...")
+                # Try nflreadpy first (actively maintained)
+                try:
+                    import nflreadpy as nfl
+                    seasons = list(range(2018, 2026))
+                    schedules_polars = nfl.load_schedules(seasons)
+                    schedules_df = schedules_polars.to_pandas()
+                except ImportError:
+                    import nfl_data_py as nfl
+                    schedules_df = nfl.import_schedules([2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025])
             
             # Filter to completed games only
             games = schedules_df[schedules_df['home_score'].notna()].copy()

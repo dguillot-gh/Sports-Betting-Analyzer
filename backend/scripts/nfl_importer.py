@@ -115,31 +115,41 @@ async def download_nflverse(progress_callback=None):
         except Exception as e:
             logger.error(f"Error downloading {name}: {e}")
 
-    # Fetch Schedules and Rosters via nfl_data_py / nflreadpy (URL independent)
+    # Fetch Schedules and Rosters via nflreadpy (preferred) or nfl_data_py (legacy)
     try:
         if progress_callback:
-            progress_callback("Fetching schedules and rosters via nfl_data_py...")
+            progress_callback("Fetching schedules and rosters from nflverse...")
         
-        # Try importing either package
-        try:
-            import nfl_data_py as nfl
-        except ImportError:
-            import nflreadpy as nfl
-            
         # Schedules
         try:
-            # Fetch for all import years + next year
-            schedule_years = IMPORT_YEARS + [max(IMPORT_YEARS) + 1] 
-            sched = nfl.import_schedules(schedule_years)
+            schedule_years = IMPORT_YEARS + [max(IMPORT_YEARS) + 1]
+            
+            # Try nflreadpy first (actively maintained)
+            try:
+                import nflreadpy as nfl
+                sched_polars = nfl.load_schedules(schedule_years)
+                sched = sched_polars.to_pandas()
+                logger.info(f"Downloaded schedules via nflreadpy ({len(sched)} games)")
+            except ImportError:
+                import nfl_data_py as nfl
+                sched = nfl.import_schedules(schedule_years)
+                logger.info(f"Downloaded schedules via nfl_data_py ({len(sched)} games)")
+            
             sched.to_csv(NFLVERSE_DIR / "schedules.csv", index=False)
             downloaded.append("schedules")
-            logger.info(f"Downloaded schedules via library ({len(sched)} games)")
         except Exception as e:
-            logger.error(f"Error fetching schedules via lib: {e}")
+            logger.error(f"Error fetching schedules: {e}")
 
         # Rosters
         try:
-            rosters = nfl.import_weekly_rosters(IMPORT_YEARS)
+            try:
+                import nflreadpy as nfl
+                rosters_polars = nfl.load_rosters(IMPORT_YEARS)
+                rosters = rosters_polars.to_pandas()
+            except ImportError:
+                import nfl_data_py as nfl
+                rosters = nfl.import_weekly_rosters(IMPORT_YEARS)
+            
             rosters.to_csv(NFLVERSE_DIR / "roster.csv", index=False)
             downloaded.append("rosters")
             logger.info("Downloaded rosters via library")

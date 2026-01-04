@@ -64,16 +64,35 @@ class NFLPredictor:
             return
         
         try:
-            import nfl_data_py as nfl
+            pbp = None
             
-            # Try current season first, fall back to 2024 if 2025 not available
-            logger.info("Loading EPA data from nflreadpy...")
+            # Try nflreadpy first (actively maintained)
             try:
-                pbp = nfl.import_pbp_data([2024, 2025])
-                logger.info(f"Loaded pbp data with {len(pbp)} plays")
+                import nflreadpy as nfl
+                logger.info("Loading EPA data from nflreadpy...")
+                current_season = nfl.get_current_season()
+                
+                # Load current and previous season
+                seasons_to_load = [current_season, current_season - 1]
+                pbp_polars = nfl.load_pbp(seasons_to_load)
+                
+                # nflreadpy returns Polars DataFrame - convert to pandas
+                pbp = pbp_polars.to_pandas()
+                logger.info(f"Loaded {len(pbp)} plays from nflreadpy (seasons {seasons_to_load})")
+                
+            except ImportError:
+                logger.info("nflreadpy not available, trying nfl_data_py...")
+                import nfl_data_py as nfl_legacy
+                pbp = nfl_legacy.import_pbp_data([2024, 2025])
+                logger.info(f"Loaded {len(pbp)} plays from nfl_data_py")
+                
             except Exception as e:
-                logger.warning(f"Could not load 2025 pbp, trying 2024 only: {e}")
-                pbp = nfl.import_pbp_data([2024])
+                logger.warning(f"Could not load with nflreadpy: {e}, trying nfl_data_py...")
+                try:
+                    import nfl_data_py as nfl_legacy
+                    pbp = nfl_legacy.import_pbp_data([2024])
+                except Exception as e2:
+                    logger.error(f"Could not load NFL pbp data: {e2}")
             
             if pbp is None or len(pbp) == 0:
                 logger.warning("No play-by-play data loaded")

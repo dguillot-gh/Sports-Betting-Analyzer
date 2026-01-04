@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y \
 
 # Install R packages for NFL simulations
 RUN R -e "install.packages(c('jsonlite', 'dplyr'), repos='https://cloud.r-project.org')" && \
-    R -e "install.packages('nflseedR', repos='https://cloud.r-project.org')"
+    R -e "install.packages(c('nflseedR', 'nflreadr'), repos='https://cloud.r-project.org')"
 
 # Copy requirements first for caching
 COPY requirements.txt .
@@ -26,6 +26,14 @@ COPY . .
 
 # Create data directories
 RUN mkdir -p data/nascar data/nba data/nfl models
+
+# Download XGBoost model files dynamically from kyleskom's GitHub repo
+# Uses Python script that scans GitHub API to get latest models
+# Adding random string to bust Docker cache and ensure fresh download every build
+ARG CACHEBUST=1
+RUN python scripts/download_xgb_models.py && \
+    echo "Models downloaded at: $(date)" && \
+    ls -la scripts/nba_ml_reference/Models/XGBoost_Models/
 
 # Expose port
 EXPOSE 8000

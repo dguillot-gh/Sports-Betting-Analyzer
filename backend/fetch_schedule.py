@@ -1,5 +1,8 @@
+"""
+Fetch NFL schedules from nflverse.
+Uses nflreadpy (preferred, actively maintained) or nfl_data_py (legacy fallback).
+"""
 
-import nfl_data_py as nfl
 import pandas as pd
 import os
 
@@ -8,23 +11,33 @@ output_dir = "backend/data/nflverse"
 os.makedirs(output_dir, exist_ok=True)
 output_file = os.path.join(output_dir, "schedules.csv")
 
-print("Importing schedules via nfl_data_py...")
+years = [2020, 2021, 2022, 2023, 2024, 2025]
+print(f"Importing schedules for years {years}...")
+
 try:
-    # Import schedules for all relevant years
-    df = nfl.import_schedules(years=[2020, 2021, 2022, 2023, 2024, 2025])
-    print(f"Downloaded {len(df)} games.")
+    # Try nflreadpy first (actively maintained)
+    import nflreadpy as nfl
+    print("Using nflreadpy...")
+    df_polars = nfl.load_schedules(years)
+    df = df_polars.to_pandas()  # nflreadpy returns Polars DataFrame
+    print(f"Downloaded {len(df)} games via nflreadpy.")
     
-    # Save to CSV
-    df.to_csv(output_file, index=False)
-    print(f"Saved to {output_file}")
+except ImportError:
+    print("nflreadpy not available, trying nfl_data_py...")
+    import nfl_data_py as nfl
+    df = nfl.import_schedules(years)
+    print(f"Downloaded {len(df)} games via nfl_data_py.")
     
 except Exception as e:
-    print(f"Error: {e}")
-    # try nflreadpy import if nfl_data_py fails (sometimes naming confusion)
+    print(f"Error with nflreadpy: {e}")
     try:
-        import nflreadpy as nfl
-        df = nfl.import_schedules(years=[2020, 2021, 2022, 2023, 2024, 2025])
-        df.to_csv(output_file, index=False)
-        print(f"Saved to {output_file} (via nflreadpy)")
+        import nfl_data_py as nfl
+        df = nfl.import_schedules(years)
+        print(f"Downloaded {len(df)} games via nfl_data_py.")
     except Exception as e2:
-        print(f"Error 2: {e2}")
+        print(f"Both packages failed: {e2}")
+        exit(1)
+
+# Save to CSV
+df.to_csv(output_file, index=False)
+print(f"Saved to {output_file}")
