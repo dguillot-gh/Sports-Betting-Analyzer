@@ -13,9 +13,10 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install R packages for NFL simulations
+# Install R packages for NFL simulations and college baseball
 RUN R -e "install.packages(c('jsonlite', 'dplyr'), repos='https://cloud.r-project.org')" && \
-    R -e "install.packages(c('nflseedR', 'nflreadr'), repos='https://cloud.r-project.org')"
+    R -e "install.packages(c('nflseedR', 'nflreadr'), repos='https://cloud.r-project.org')" && \
+    R -e "install.packages('baseballr', repos='https://cloud.r-project.org')"
 
 # Copy requirements first for caching
 COPY requirements.txt .

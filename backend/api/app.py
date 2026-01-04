@@ -3154,3 +3154,163 @@ async def get_nfl_model_testing_predictions(
         logger.error(f"Model testing NFL error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ==================== COLLEGE BASEBALL ENDPOINTS ====================
+
+@app.get("/baseball/ncaa/teams")
+async def get_ncaa_baseball_teams(division: int = Query(1, ge=1, le=3)):
+    """
+    Get list of NCAA baseball teams for a division.
+    Division: 1, 2, or 3
+    """
+    try:
+        from scripts.college_baseball_importer import get_teams, get_import_summary
+        import subprocess
+        import json
+        from pathlib import Path
+        
+        # Check if teams file exists
+        teams = get_teams(division)
+        
+        if not teams:
+            # Try to fetch teams using R script
+            logger.info(f"No cached teams for D{division}, running import...")
+            
+            r_script = Path(__file__).parent.parent / "scripts" / "college_baseball_importer.R"
+            data_dir = Path("/app/data/baseball")
+            data_dir.mkdir(parents=True, exist_ok=True)
+            
+            try:
+                result = subprocess.run(
+                    ["Rscript", str(r_script), str(division), "2024", str(data_dir)],
+                    capture_output=True,
+                    text=True,
+                    timeout=120
+                )
+                if result.returncode == 0:
+                    teams = get_teams(division)
+            except subprocess.TimeoutExpired:
+                logger.warning("R script timed out")
+            except Exception as e:
+                logger.warning(f"R script error: {e}")
+        
+        # If still no teams, try direct baseballr call
+        if not teams:
+            logger.info("Falling back to direct baseballr call...")
+            # Alternative: use pybaseball if available
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ["Rscript", "-e", f"library(baseballr); teams <- ncaa_teams(division={division}, year=2024); cat(jsonlite::toJSON(teams))"],
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+                if result.returncode == 0 and result.stdout:
+                    teams = json.loads(result.stdout)
+            except Exception as e:
+                logger.error(f"Direct R call failed: {e}")
+        
+        # Format teams for frontend
+        formatted_teams = []
+        for team in teams:
+            formatted_teams.append({
+                "TeamId": team.get("team_id") or team.get("school_id"),
+                "TeamName": team.get("team_name") or team.get("school"),
+                "Conference": team.get("conference", ""),
+                "Division": division
+            })
+        
+        summary = get_import_summary(division)
+        
+        return {
+            "division": division,
+            "teams": formatted_teams,
+            "count": len(formatted_teams),
+            "last_import": summary.get("generated_at") if summary else None
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching NCAA teams: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/baseball/ncaa/stats/{team_id}")
+async def get_ncaa_baseball_stats(team_id: int, stat_type: str = Query("batting")):
+    """
+    Get player stats for a team.
+    stat_type: 'batting' or 'pitching'
+    """
+    try:
+        from scripts.college_baseball_importer import get_team_stats
+        
+        stats = get_team_stats(team_id, stat_type)
+        
+        if not stats:
+            # Try importing this team's stats
+            import subprocess
+            from pathlib import Path
+            
+            r_script = Path(__file__).parent.parent / "scripts" / "college_baseball_importer.R"
+            data_dir = Path("/app/data/baseball")
+            
+            try:
+                # Import specific team (4th arg)
+                subprocess.run(
+                    ["Rscript", str(r_script), "1", "2024", str(data_dir), str(team_id)],
+                    capture_output=True,
+                    timeout=60
+                )
+                stats = get_team_stats(team_id, stat_type)
+            except Exception as e:
+                logger.warning(f"Could not import team stats: {e}")
+        
+        return {
+            "team_id": team_id,
+            "stat_type": stat_type,
+            "stats": stats or [],
+            "count": len(stats) if stats else 0
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching team stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/baseball/ncaa/schedule/{team_id}")
+async def get_ncaa_baseball_schedule(team_id: int):
+    """Get team schedule/results."""
+    try:
+        from scripts.college_baseball_importer import get_team_schedule
+        
+        schedule = get_team_schedule(team_id)
+        
+        return {
+            "team_id": team_id,
+            "games": schedule or [],
+            "count": len(schedule) if schedule else 0
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching schedule: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/baseball/ncaa/import")
+async def import_ncaa_baseball(division: int = 1, year: int = 2024, background_tasks: BackgroundTasks = None):
+    """
+    Trigger import of NCAA baseball data.
+    """
+    try:
+        from scripts.college_baseball_importer import run_import
+        
+        if background_tasks:
+            background_tasks.add_task(run_import, division, year)
+            return {"status": "started", "division": division, "year": year}
+        else:
+            result = await run_import(division, year)
+            return result
+            
+    except Exception as e:
+        logger.error(f"Error starting import: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

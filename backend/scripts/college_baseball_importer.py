@@ -196,6 +196,10 @@ async def run_college_baseball_import(
     return await asyncio.to_thread(_run_import_process, division, year, team_id)
 
 
+# Alias for API compatibility
+run_import = run_college_baseball_import
+
+
 # LSU Tigers team ID for easy testing
 LSU_TEAM_ID = 365  # This is approximate, will need to verify
 
