@@ -3051,7 +3051,7 @@ async def get_nba_model_testing_predictions(
             away_team = game.get("away_team", "")
             home_ml = game.get("home_moneyline")
             away_ml = game.get("away_moneyline")
-            total_line = game.get("total", 225.0)
+            total_line = game.get("over_under") or game.get("total", 225.0)
             
             home_stats = all_team_stats.get(home_team, {})
             away_stats = all_team_stats.get(away_team, {})
