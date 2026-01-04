@@ -1,0 +1,555 @@
+@page "/baseball-stats"
+@page "/college-baseball"
+@rendermode InteractiveServer
+@using MudBlazor
+@using System.Text.Json
+@inject IHttpClientFactory HttpClientFactory
+@inject ISnackbar Snackbar
+@inject ILogger<BaseballStats> Logger
+
+<PageTitle>College Baseball Stats</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudStack Spacing="4">
+        <!-- Header -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <div class="d-flex align-center justify-space-between flex-wrap" style="gap: 16px;">
+                <div class="d-flex align-center">
+                    <MudIcon Icon="@Icons.Material.Filled.SportsBaseball" Size="Size.Large" Color="Color.Info" Class="mr-3" />
+                    <div>
+                        <MudText Typo="Typo.h5">College Baseball Stats</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">NCAA Division I, II, III batting and pitching statistics</MudText>
+                    </div>
+                </div>
+                <div class="d-flex" style="gap: 8px;">
+                    <MudChip T="string" Color="Color.Info" Size="Size.Small">D@_selectedDivision</MudChip>
+                    @if (_teams.Any())
+                    {
+                        <MudChip T="string" Color="Color.Success" Size="Size.Small">@_teams.Count Teams</MudChip>
+                    }
+                </div>
+            </div>
+        </MudPaper>
+        
+        <!-- Filters -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudGrid Spacing="2">
+                <MudItem xs="12" md="2">
+                    <MudSelect T="int" @bind-Value="_selectedDivision" Label="Division" 
+                               Variant="Variant.Outlined" Dense="true">
+                        <MudSelectItem Value="1">Division I</MudSelectItem>
+                        <MudSelectItem Value="2">Division II</MudSelectItem>
+                        <MudSelectItem Value="3">Division III</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudAutocomplete T="TeamInfo" @bind-Value="_selectedTeam" Label="Select Team" 
+                                     SearchFunc="@SearchTeams" ToStringFunc="@(t => t?.TeamName ?? "")"
+                                     Variant="Variant.Outlined" Dense="true"
+                                     AdornmentIcon="@Icons.Material.Filled.Search" AdornmentColor="Color.Primary" />
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudSelect T="int" @bind-Value="_selectedYear" Label="Year" 
+                               Variant="Variant.Outlined" Dense="true">
+                        @for (int y = DateTime.Now.Year; y >= 2015; y--)
+                        {
+                            <MudSelectItem Value="@y">@y</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadTeams"
+                               Disabled="@_isLoading" FullWidth="true" Size="Size.Large">
+                        @if (_isLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                        Load Teams
+                    </MudButton>
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudButton Variant="Variant.Filled" Color="Color.Info" OnClick="LoadTeamStats"
+                               Disabled="@(_isLoading || _selectedTeam == null)" FullWidth="true" Size="Size.Large">
+                        @if (_isLoadingStats) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                        Load Stats
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+        
+        <!-- Stats Tabs -->
+        @if (_battingStats.Any() || _pitchingStats.Any())
+        {
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+                <!-- Batting Stats Tab -->
+                <MudTabPanel Text="Batting" Icon="@Icons.Material.Filled.Sports">
+                    @if (_battingStats.Any())
+                    {
+                        <MudText Typo="Typo.h6" Class="mb-3">
+                            @_selectedTeam?.TeamName Batting Statistics (@_selectedYear)
+                        </MudText>
+                        <MudTable Items="@_battingStats" Dense="true" Hover="true" Striped="true" 
+                                  FixedHeader="true" Height="500px">
+                            <HeaderContent>
+                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.Name)">Player</MudTableSortLabel></MudTh>
+                                <MudTh>Pos</MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.GP)">GP</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.AB)">AB</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.R)">R</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.H)">H</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.Doubles)">2B</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.Triples)">3B</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.HR)">HR</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.RBI)">RBI</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel InitialDirection="SortDirection.Descending" SortBy="new Func<BattingPlayer, object>(x => x.AVG)">AVG</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.OBP)">OBP</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.SLG)">SLG</MudTableSortLabel></MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Player">
+                                    <div class="d-flex align-center">
+                                        <MudAvatar Color="Color.Info" Size="Size.Small" Class="mr-2">@context.Name.Substring(0, 1)</MudAvatar>
+                                        <MudText Typo="Typo.body2">@context.Name</MudText>
+                                    </div>
+                                </MudTd>
+                                <MudTd DataLabel="Pos">@context.Position</MudTd>
+                                <MudTd DataLabel="GP">@context.GP</MudTd>
+                                <MudTd DataLabel="AB">@context.AB</MudTd>
+                                <MudTd DataLabel="R">@context.R</MudTd>
+                                <MudTd DataLabel="H">@context.H</MudTd>
+                                <MudTd DataLabel="2B">@context.Doubles</MudTd>
+                                <MudTd DataLabel="3B">@context.Triples</MudTd>
+                                <MudTd DataLabel="HR">@context.HR</MudTd>
+                                <MudTd DataLabel="RBI">@context.RBI</MudTd>
+                                <MudTd DataLabel="AVG">
+                                    <MudChip T="string" Size="Size.Small" Color="@GetAvgColor(context.AVG)">@context.AVG.ToString("F3")</MudChip>
+                                </MudTd>
+                                <MudTd DataLabel="OBP">@context.OBP.ToString("F3")</MudTd>
+                                <MudTd DataLabel="SLG">@context.SLG.ToString("F3")</MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info">Select a team and click "Load Stats" to view batting statistics.</MudAlert>
+                    }
+                </MudTabPanel>
+                
+                <!-- Pitching Stats Tab -->
+                <MudTabPanel Text="Pitching" Icon="@Icons.Material.Filled.Speed">
+                    @if (_pitchingStats.Any())
+                    {
+                        <MudText Typo="Typo.h6" Class="mb-3">
+                            @_selectedTeam?.TeamName Pitching Statistics (@_selectedYear)
+                        </MudText>
+                        <MudTable Items="@_pitchingStats" Dense="true" Hover="true" Striped="true"
+                                  FixedHeader="true" Height="500px">
+                            <HeaderContent>
+                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.Name)">Player</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.W)">W</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.L)">L</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel InitialDirection="SortDirection.Ascending" SortBy="new Func<PitchingPlayer, object>(x => x.ERA)">ERA</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.GP)">GP</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.GS)">GS</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.IP)">IP</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.H)">H</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.R)">R</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.ER)">ER</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.BB)">BB</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.SO)">SO</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.SV)">SV</MudTableSortLabel></MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Player">
+                                    <div class="d-flex align-center">
+                                        <MudAvatar Color="Color.Warning" Size="Size.Small" Class="mr-2">@context.Name.Substring(0, 1)</MudAvatar>
+                                        <MudText Typo="Typo.body2">@context.Name</MudText>
+                                    </div>
+                                </MudTd>
+                                <MudTd DataLabel="W">@context.W</MudTd>
+                                <MudTd DataLabel="L">@context.L</MudTd>
+                                <MudTd DataLabel="ERA">
+                                    <MudChip T="string" Size="Size.Small" Color="@GetEraColor(context.ERA)">@context.ERA.ToString("F2")</MudChip>
+                                </MudTd>
+                                <MudTd DataLabel="GP">@context.GP</MudTd>
+                                <MudTd DataLabel="GS">@context.GS</MudTd>
+                                <MudTd DataLabel="IP">@context.IP.ToString("F1")</MudTd>
+                                <MudTd DataLabel="H">@context.H</MudTd>
+                                <MudTd DataLabel="R">@context.R</MudTd>
+                                <MudTd DataLabel="ER">@context.ER</MudTd>
+                                <MudTd DataLabel="BB">@context.BB</MudTd>
+                                <MudTd DataLabel="SO">@context.SO</MudTd>
+                                <MudTd DataLabel="SV">@context.SV</MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info">Select a team and click "Load Stats" to view pitching statistics.</MudAlert>
+                    }
+                </MudTabPanel>
+                
+                <!-- Schedule Tab -->
+                <MudTabPanel Text="Schedule" Icon="@Icons.Material.Filled.CalendarMonth">
+                    @if (_schedule.Any())
+                    {
+                        <MudText Typo="Typo.h6" Class="mb-3">
+                            @_selectedTeam?.TeamName Schedule (@_selectedYear)
+                        </MudText>
+                        <MudTable Items="@_schedule" Dense="true" Hover="true" Striped="true"
+                                  FixedHeader="true" Height="500px">
+                            <HeaderContent>
+                                <MudTh>Date</MudTh>
+                                <MudTh>Opponent</MudTh>
+                                <MudTh>Result</MudTh>
+                                <MudTh>Score</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Date">@context.Date</MudTd>
+                                <MudTd DataLabel="Opponent">
+                                    @if (context.IsHome)
+                                    {
+                                        <span>vs @context.Opponent</span>
+                                    }
+                                    else
+                                    {
+                                        <span>@@ @context.Opponent</span>
+                                    }
+                                </MudTd>
+                                <MudTd DataLabel="Result">
+                                    @if (!string.IsNullOrEmpty(context.Result))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" 
+                                                 Color="@(context.Result == "W" ? Color.Success : context.Result == "L" ? Color.Error : Color.Default)">
+                                            @context.Result
+                                        </MudChip>
+                                    }
+                                </MudTd>
+                                <MudTd DataLabel="Score">@context.Score</MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info">Select a team and click "Load Stats" to view schedule.</MudAlert>
+                    }
+                </MudTabPanel>
+            </MudTabs>
+        }
+        else if (!_isLoading && !_isLoadingStats)
+        {
+            <MudPaper Class="pa-6" Elevation="2">
+                <div class="d-flex flex-column align-center">
+                    <MudIcon Icon="@Icons.Material.Filled.SportsBaseball" Size="Size.Large" Color="Color.Secondary" Class="mb-4" />
+                    <MudText Typo="Typo.h6" Color="Color.Secondary">Select a division and team to view stats</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
+                        Click "Load Teams" to fetch the team list, then select a team and click "Load Stats"
+                    </MudText>
+                </div>
+            </MudPaper>
+        }
+        
+        <!-- Team List -->
+        @if (_teams.Any() && _selectedTeam == null)
+        {
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" Class="mb-3">Division @_selectedDivision Teams (@_teams.Count)</MudText>
+                <MudGrid Spacing="2">
+                    @foreach (var team in _teams.Take(50))
+                    {
+                        <MudItem xs="6" sm="4" md="3" lg="2">
+                            <MudButton Variant="Variant.Outlined" Color="Color.Info" FullWidth="true"
+                                       OnClick="@(() => SelectTeam(team))">
+                                @team.TeamName
+                            </MudButton>
+                        </MudItem>
+                    }
+                </MudGrid>
+                @if (_teams.Count > 50)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                        Showing first 50 of @_teams.Count teams. Use the search to find specific teams.
+                    </MudText>
+                }
+            </MudPaper>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    // State
+    private int _selectedDivision = 1;
+    private int _selectedYear = DateTime.Now.Year;
+    private TeamInfo? _selectedTeam;
+    private bool _isLoading = false;
+    private bool _isLoadingStats = false;
+    
+    // Data
+    private List<TeamInfo> _teams = new();
+    private List<BattingPlayer> _battingStats = new();
+    private List<PitchingPlayer> _pitchingStats = new();
+    private List<GameInfo> _schedule = new();
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTeams();
+    }
+    
+    private async Task LoadTeams()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        
+        try
+        {
+            using var http = HttpClientFactory.CreateClient("PythonMLServiceClient");
+            var response = await http.GetFromJsonAsync<TeamsResponse>($"/baseball/ncaa/teams?division={_selectedDivision}");
+            
+            if (response?.Teams != null)
+            {
+                _teams = response.Teams;
+                Snackbar.Add($"Loaded {_teams.Count} D{_selectedDivision} teams", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading teams");
+            Snackbar.Add($"Error loading teams: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+    
+    private async Task LoadTeamStats()
+    {
+        if (_selectedTeam == null) return;
+        
+        _isLoadingStats = true;
+        StateHasChanged();
+        
+        try
+        {
+            using var http = HttpClientFactory.CreateClient("PythonMLServiceClient");
+            
+            // Load batting
+            try
+            {
+                var battingResponse = await http.GetFromJsonAsync<StatsResponse>($"/baseball/ncaa/stats/{_selectedTeam.TeamId}?stat_type=batting");
+                if (battingResponse?.Stats != null)
+                {
+                    _battingStats = battingResponse.Stats.Select(s => new BattingPlayer
+                    {
+                        Name = GetString(s, "player_name", s.GetValueOrDefault("Name")?.ToString() ?? "Unknown"),
+                        Position = GetString(s, "Pos", ""),
+                        GP = GetInt(s, "GP"),
+                        AB = GetInt(s, "AB"),
+                        R = GetInt(s, "R"),
+                        H = GetInt(s, "H"),
+                        Doubles = GetInt(s, "2B"),
+                        Triples = GetInt(s, "3B"),
+                        HR = GetInt(s, "HR"),
+                        RBI = GetInt(s, "RBI"),
+                        AVG = GetDouble(s, "BA", GetDouble(s, "AVG")),
+                        OBP = GetDouble(s, "OBPct", GetDouble(s, "OBP")),
+                        SLG = GetDouble(s, "SlgPct", GetDouble(s, "SLG"))
+                    }).ToList();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Error loading batting: {Error}", ex.Message);
+            }
+            
+            // Load pitching
+            try
+            {
+                var pitchingResponse = await http.GetFromJsonAsync<StatsResponse>($"/baseball/ncaa/stats/{_selectedTeam.TeamId}?stat_type=pitching");
+                if (pitchingResponse?.Stats != null)
+                {
+                    _pitchingStats = pitchingResponse.Stats.Select(s => new PitchingPlayer
+                    {
+                        Name = GetString(s, "player_name", s.GetValueOrDefault("Name")?.ToString() ?? "Unknown"),
+                        W = GetInt(s, "W"),
+                        L = GetInt(s, "L"),
+                        ERA = GetDouble(s, "ERA"),
+                        GP = GetInt(s, "App", GetInt(s, "GP")),
+                        GS = GetInt(s, "GS"),
+                        IP = GetDouble(s, "IP"),
+                        H = GetInt(s, "H"),
+                        R = GetInt(s, "R"),
+                        ER = GetInt(s, "ER"),
+                        BB = GetInt(s, "BB"),
+                        SO = GetInt(s, "SO"),
+                        SV = GetInt(s, "SV")
+                    }).ToList();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Error loading pitching: {Error}", ex.Message);
+            }
+            
+            // Load schedule
+            try
+            {
+                var scheduleResponse = await http.GetFromJsonAsync<ScheduleResponse>($"/baseball/ncaa/schedule/{_selectedTeam.TeamId}");
+                if (scheduleResponse?.Games != null)
+                {
+                    _schedule = scheduleResponse.Games.Select(g => new GameInfo
+                    {
+                        Date = GetString(g, "date", ""),
+                        Opponent = GetString(g, "opponent", ""),
+                        IsHome = GetString(g, "home_away", "").ToLower() == "home",
+                        Result = GetString(g, "result", ""),
+                        Score = GetString(g, "score", "")
+                    }).ToList();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Error loading schedule: {Error}", ex.Message);
+            }
+            
+            Snackbar.Add($"Loaded stats for {_selectedTeam.TeamName}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading team stats");
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoadingStats = false;
+        }
+    }
+    
+    private void SelectTeam(TeamInfo team)
+    {
+        _selectedTeam = team;
+        StateHasChanged();
+    }
+    
+    private async Task<IEnumerable<TeamInfo>> SearchTeams(string value, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return _teams.Take(20);
+        
+        return _teams.Where(t => t.TeamName.Contains(value, StringComparison.OrdinalIgnoreCase)).Take(20);
+    }
+    
+    // Helper methods
+    private string GetString(Dictionary<string, object> dict, string key, string fallback = "")
+    {
+        if (dict.TryGetValue(key, out var val) && val != null)
+            return val.ToString() ?? fallback;
+        return fallback;
+    }
+    
+    private int GetInt(Dictionary<string, object> dict, string key, int fallback = 0)
+    {
+        if (dict.TryGetValue(key, out var val) && val != null)
+        {
+            if (val is JsonElement je && je.TryGetInt32(out var i)) return i;
+            if (int.TryParse(val.ToString(), out var parsed)) return parsed;
+        }
+        return fallback;
+    }
+    
+    private double GetDouble(Dictionary<string, object> dict, string key, double fallback = 0)
+    {
+        if (dict.TryGetValue(key, out var val) && val != null)
+        {
+            if (val is JsonElement je && je.TryGetDouble(out var d)) return d;
+            if (double.TryParse(val.ToString(), out var parsed)) return parsed;
+        }
+        return fallback;
+    }
+    
+    private Color GetAvgColor(double avg)
+    {
+        if (avg >= 0.300) return Color.Success;
+        if (avg >= 0.250) return Color.Info;
+        if (avg >= 0.200) return Color.Warning;
+        return Color.Error;
+    }
+    
+    private Color GetEraColor(double era)
+    {
+        if (era <= 2.50) return Color.Success;
+        if (era <= 3.50) return Color.Info;
+        if (era <= 4.50) return Color.Warning;
+        return Color.Error;
+    }
+    
+    // Models
+    private class TeamsResponse
+    {
+        public int Division { get; set; }
+        public int Count { get; set; }
+        public List<TeamInfo> Teams { get; set; } = new();
+    }
+    
+    private class TeamInfo
+    {
+        public int TeamId { get; set; }
+        public string TeamName { get; set; } = "";
+        public string Conference { get; set; } = "";
+    }
+    
+    private class StatsResponse
+    {
+        public int TeamId { get; set; }
+        public string StatType { get; set; } = "";
+        public int Count { get; set; }
+        public List<Dictionary<string, object>> Stats { get; set; } = new();
+    }
+    
+    private class ScheduleResponse
+    {
+        public int TeamId { get; set; }
+        public int Count { get; set; }
+        public List<Dictionary<string, object>> Games { get; set; } = new();
+    }
+    
+    private class BattingPlayer
+    {
+        public string Name { get; set; } = "";
+        public string Position { get; set; } = "";
+        public int GP { get; set; }
+        public int AB { get; set; }
+        public int R { get; set; }
+        public int H { get; set; }
+        public int Doubles { get; set; }
+        public int Triples { get; set; }
+        public int HR { get; set; }
+        public int RBI { get; set; }
+        public double AVG { get; set; }
+        public double OBP { get; set; }
+        public double SLG { get; set; }
+    }
+    
+    private class PitchingPlayer
+    {
+        public string Name { get; set; } = "";
+        public int W { get; set; }
+        public int L { get; set; }
+        public double ERA { get; set; }
+        public int GP { get; set; }
+        public int GS { get; set; }
+        public double IP { get; set; }
+        public int H { get; set; }
+        public int R { get; set; }
+        public int ER { get; set; }
+        public int BB { get; set; }
+        public int SO { get; set; }
+        public int SV { get; set; }
+    }
+    
+    private class GameInfo
+    {
+        public string Date { get; set; } = "";
+        public string Opponent { get; set; } = "";
+        public bool IsHome { get; set; }
+        public string Result { get; set; } = "";
+        public string Score { get; set; } = "";
+    }
+}

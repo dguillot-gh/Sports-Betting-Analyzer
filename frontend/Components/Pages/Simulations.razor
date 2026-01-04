@@ -315,7 +315,7 @@
                     </MudPaper>
                 </MudItem>
                 <MudItem xs="12" md="8">
-                    @if (_nflSimResults != null && !_nflSimResults.ContainsKey("error"))
+                    @if (_nflSimResults != null && !HasError(_nflSimResults))
                     {
                         <MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-3">
                             <MudTabPanel Text="Super Bowl Odds" Icon="@Icons.Material.Filled.EmojiEvents">
@@ -985,7 +985,7 @@
                 
                 Logger.LogInformation("Parsed keys: {Keys}", _nflSimResults != null ? string.Join(", ", _nflSimResults.Keys) : "null");
                 
-                if (_nflSimResults != null && !_nflSimResults.ContainsKey("error"))
+                if (_nflSimResults != null && !HasError(_nflSimResults))
                 {
                     Snackbar.Add("NFL simulation complete!", Severity.Success);
                     _nflSimStatus = "";
@@ -1051,6 +1051,22 @@
                 await Task.Delay(2000, token);
             }
         }
+    }
+    
+    private bool HasError(Dictionary<string, object>? dict)
+    {
+        if (dict == null) return false;
+        if (!dict.ContainsKey("error")) return false;
+        
+        var errorVal = dict["error"];
+        if (errorVal is bool b) return b;
+        if (errorVal is JsonElement je)
+        {
+            if (je.ValueKind == JsonValueKind.True) return true;
+            if (je.ValueKind == JsonValueKind.False) return false;
+        }
+        // If it's a string "true" or has some value, treat as error
+        return errorVal?.ToString()?.ToLower() == "true";
     }
     
     private List<Dictionary<string, object>> GetNFLTeamsList()

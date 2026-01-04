@@ -265,6 +265,62 @@
                 </MudCard>
             </MudItem>
         }
+        
+        <!-- College Baseball Card -->
+        <MudItem xs="12" md="6" lg="4">
+            <MudCard Elevation="3" Class="h-100">
+                <MudCardHeader>
+                    <CardHeaderAvatar>
+                        <MudAvatar Color="Color.Info">
+                            <MudIcon Icon="@Icons.Material.Filled.SportsBaseball" />
+                        </MudAvatar>
+                    </CardHeaderAvatar>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">College Baseball</MudText>
+                        <MudText Typo="Typo.caption">baseballr (NCAA)</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudStack Spacing="2">
+                        @if (_baseballSummary != null)
+                        {
+                            <MudAlert Severity="Severity.Success" Dense="true" Class="mb-2">
+                                <strong>Last Import:</strong> @FormatDate(_baseballSummary.GeneratedAt)
+                                <br/>D@(_baseballSummary.Division) - @_baseballSummary.ImportedTeams teams
+                            </MudAlert>
+                        }
+                        
+                        <MudSelect T="int" Label="Division" @bind-Value="_baseballDivision" Variant="Variant.Outlined" Dense="true">
+                            <MudSelectItem Value="1">Division I</MudSelectItem>
+                            <MudSelectItem Value="2">Division II</MudSelectItem>
+                            <MudSelectItem Value="3">Division III</MudSelectItem>
+                        </MudSelect>
+                        
+                        <MudNumericField T="int" Label="Year" @bind-Value="_baseballYear" 
+                                         Variant="Variant.Outlined" Dense="true" Min="2015" Max="2030" />
+                        
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="mr-1" />
+                            Uses baseballr to fetch rosters, batting, pitching stats
+                        </MudText>
+                    </MudStack>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Info"
+                               StartIcon="@Icons.Material.Filled.CloudDownload"
+                               OnClick="@OpenBaseballImportDialog"
+                               Disabled="@(_isUpdating || _isBaseballImporting)">
+                        Import D@(_baseballDivision)
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                               StartIcon="@Icons.Material.Filled.List"
+                               OnClick="@ViewBaseballTeams"
+                               Disabled="@(_baseballSummary == null)">
+                        View Teams
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
     </MudGrid>
 
     <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6" Class="mt-4">
@@ -603,6 +659,73 @@
     </DialogActions>
 </MudDialog>
 
+<!-- College Baseball Import Dialog -->
+<MudDialog @bind-Visible="_showBaseballImportDialog" Options="@_rdaDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.SportsBaseball" Class="mr-2" />
+            Import NCAA Baseball - Division @_baseballDivision
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (!_isBaseballImporting)
+        {
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.body2">
+                    This will download NCAA Division @_baseballDivision baseball data for @_baseballYear:
+                </MudText>
+                <MudList T="string" Dense="true">
+                    <MudListItem Icon="@Icons.Material.Filled.Groups" Dense="true">Team rosters</MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.Sports" Dense="true">Batting statistics</MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.Speed" Dense="true">Pitching statistics</MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.CalendarMonth" Dense="true">Schedules & results</MudListItem>
+                </MudList>
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    First import downloads top 50 teams. Use specific team ID for full team data.
+                </MudAlert>
+            </MudStack>
+        }
+        else
+        {
+            <MudStack Spacing="2">
+                <MudProgressLinear Color="@(_baseballStatus?.Status == "completed" ? Color.Success : Color.Info)" 
+                                    Indeterminate="@(_baseballStatus?.Status == "running")" />
+                <MudText Typo="Typo.body2">
+                    Status: @(_baseballStatus?.Message ?? "starting...")
+                </MudText>
+                
+                @if (_baseballStatus?.Status == "completed")
+                {
+                    <MudAlert Severity="Severity.Success" Dense="true">
+                        Import completed successfully!
+                    </MudAlert>
+                }
+                @if (_baseballStatus?.Status == "error")
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true">
+                        @_baseballStatus?.Message
+                    </MudAlert>
+                }
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (!_isBaseballImporting)
+        {
+            <MudButton OnClick="@CloseBaseballImportDialog">Cancel</MudButton>
+            <MudButton Color="Color.Info" Variant="Variant.Filled" OnClick="@StartBaseballImport">
+                Start Import
+            </MudButton>
+        }
+        else if (_baseballStatus?.Status == "completed" || _baseballStatus?.Status == "error")
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@CloseBaseballImportDialog">
+                Close
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
 @code {
     private DataStatusResponse? _dataStatus;
     private bool _isLoading = true;
@@ -640,11 +763,21 @@
     private bool _sportClearExisting = false;
     private SportImportStatus? _sportStatus;
     private System.Threading.Timer? _sportPollTimer;
+    
+    // College Baseball Import
+    private bool _showBaseballImportDialog = false;
+    private bool _isBaseballImporting = false;
+    private int _baseballDivision = 1;
+    private int _baseballYear = DateTime.Now.Year;
+    private BaseballImportStatus? _baseballStatus;
+    private BaseballImportSummary? _baseballSummary;
+    private System.Threading.Timer? _baseballPollTimer;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadStatus();
         await LoadHistory();
+        await LoadBaseballSummary();
     }
 
     private async Task LoadStatus()
@@ -1264,6 +1397,127 @@
         {
             Logger.LogError(ex, "Error polling sport import status");
         }
+    }
+    
+    // ========== College Baseball Import Methods ==========
+    
+    private void OpenBaseballImportDialog()
+    {
+        _showBaseballImportDialog = true;
+    }
+    
+    private void CloseBaseballImportDialog()
+    {
+        _showBaseballImportDialog = false;
+        _isBaseballImporting = false;
+        _baseballPollTimer?.Dispose();
+        _baseballPollTimer = null;
+    }
+    
+    private async Task StartBaseballImport()
+    {
+        _isBaseballImporting = true;
+        _baseballStatus = new BaseballImportStatus { Status = "running", Message = "Starting import..." };
+        StateHasChanged();
+        
+        try
+        {
+            using var http = HttpClientFactory.CreateClient("PythonMLServiceClient");
+            http.Timeout = TimeSpan.FromMinutes(10);
+            
+            var payload = new { division = _baseballDivision, year = _baseballYear };
+            
+            // Start polling for status
+            _baseballPollTimer = new System.Threading.Timer(
+                async _ => await PollBaseballStatus(),
+                null,
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromSeconds(2)
+            );
+            
+            var response = await http.PostAsJsonAsync("/baseball/ncaa/import", payload);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<BaseballImportSummary>();
+                _baseballSummary = result;
+                _baseballStatus = new BaseballImportStatus { Status = "completed", Message = "Import complete!" };
+                Snackbar.Add($"College baseball D{_baseballDivision} import complete!", Severity.Success);
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                _baseballStatus = new BaseballImportStatus { Status = "error", Message = error };
+            }
+        }
+        catch (Exception ex)
+        {
+            _baseballStatus = new BaseballImportStatus { Status = "error", Message = ex.Message };
+            Logger.LogError(ex, "Error importing college baseball");
+        }
+        finally
+        {
+            _baseballPollTimer?.Dispose();
+            _baseballPollTimer = null;
+            StateHasChanged();
+        }
+    }
+    
+    private async Task PollBaseballStatus()
+    {
+        try
+        {
+            using var http = HttpClientFactory.CreateClient("PythonMLServiceClient");
+            http.Timeout = TimeSpan.FromSeconds(5);
+            
+            var status = await http.GetFromJsonAsync<BaseballImportStatus>("/baseball/ncaa/status");
+            if (status != null)
+            {
+                _baseballStatus = status;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error polling baseball import status");
+        }
+    }
+    
+    private async Task ViewBaseballTeams()
+    {
+        // Could navigate to a teams list page or show a dialog
+        Snackbar.Add($"D{_baseballDivision} teams available via API: /baseball/ncaa/teams?division={_baseballDivision}", Severity.Info);
+    }
+    
+    private async Task LoadBaseballSummary()
+    {
+        try
+        {
+            using var http = HttpClientFactory.CreateClient("PythonMLServiceClient");
+            var summary = await http.GetFromJsonAsync<BaseballImportSummary>($"/baseball/ncaa/summary?division={_baseballDivision}");
+            _baseballSummary = summary;
+        }
+        catch
+        {
+            // No summary yet, that's ok
+        }
+    }
+    
+    // Model classes for Baseball
+    private class BaseballImportStatus
+    {
+        public string? Status { get; set; }
+        public string? Message { get; set; }
+        public int Progress { get; set; }
+    }
+    
+    private class BaseballImportSummary
+    {
+        public int Division { get; set; }
+        public int Year { get; set; }
+        public int TotalTeams { get; set; }
+        public int ImportedTeams { get; set; }
+        public string? GeneratedAt { get; set; }
     }
 }
 

@@ -2877,6 +2877,122 @@ def get_player_edge_scores(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ========== College Baseball Endpoints ==========
+
+class CollegeBaseballImportRequest(BaseModel):
+    division: int = 1  # 1, 2, or 3
+    year: Optional[int] = None  # Defaults to current year
+    team_id: Optional[int] = None  # Optional: import specific team only
+
+
+@app.post('/baseball/ncaa/import')
+async def import_college_baseball(payload: CollegeBaseballImportRequest = None):
+    """
+    Import college baseball data using baseballr.
+    """
+    try:
+        from scripts.college_baseball_importer import run_college_baseball_import
+        
+        division = payload.division if payload else 1
+        year = payload.year if payload else None
+        team_id = payload.team_id if payload else None
+        
+        results = await run_college_baseball_import(
+            division=division,
+            year=year,
+            team_id=team_id
+        )
+        return results
+        
+    except ImportError as e:
+        logger.error(f"Import error: {e}")
+        return {
+            "error": True,
+            "message": "College baseball importer module not available",
+            "detail": str(e)
+        }
+    except Exception as e:
+        logger.error(f"Error importing college baseball: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get('/baseball/ncaa/status')
+def get_college_baseball_status():
+    """Get current status of college baseball import."""
+    try:
+        from scripts.college_baseball_importer import get_import_status
+        return get_import_status()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.get('/baseball/ncaa/teams')
+def get_college_baseball_teams(division: int = 1):
+    """Get list of NCAA baseball teams for a division."""
+    try:
+        from scripts.college_baseball_importer import get_teams
+        teams = get_teams(division)
+        return {
+            "division": division,
+            "count": len(teams),
+            "teams": teams
+        }
+    except Exception as e:
+        logger.error(f"Error getting teams: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get('/baseball/ncaa/stats/{team_id}')
+def get_college_baseball_stats(team_id: int, stat_type: str = "batting"):
+    """Get batting or pitching stats for a team."""
+    try:
+        from scripts.college_baseball_importer import get_team_stats
+        stats = get_team_stats(team_id, stat_type)
+        if stats:
+            return {
+                "team_id": team_id,
+                "stat_type": stat_type,
+                "count": len(stats),
+                "stats": stats
+            }
+        return {"error": True, "message": f"No {stat_type} stats found for team {team_id}"}
+    except Exception as e:
+        logger.error(f"Error getting stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get('/baseball/ncaa/schedule/{team_id}')
+def get_college_baseball_schedule(team_id: int):
+    """Get schedule/results for a team."""
+    try:
+        from scripts.college_baseball_importer import get_team_schedule
+        schedule = get_team_schedule(team_id)
+        if schedule:
+            return {
+                "team_id": team_id,
+                "count": len(schedule),
+                "games": schedule
+            }
+        return {"error": True, "message": f"No schedule found for team {team_id}"}
+    except Exception as e:
+        logger.error(f"Error getting schedule: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get('/baseball/ncaa/summary')
+def get_college_baseball_summary(division: int = 1):
+    """Get import summary for a division."""
+    try:
+        from scripts.college_baseball_importer import get_import_summary
+        summary = get_import_summary(division)
+        if summary:
+            return summary
+        return {"error": True, "message": f"No import summary found for D{division}"}
+    except Exception as e:
+        logger.error(f"Error getting summary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get('/logs')
 def get_system_logs(level: str = None, limit: int = 100):
     '''Get recent system logs for the Logs Dashboard.'''
