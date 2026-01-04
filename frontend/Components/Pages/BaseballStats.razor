@@ -3,7 +3,7 @@
 @rendermode InteractiveServer
 @using MudBlazor
 @using System.Text.Json
-@inject IHttpClientFactory HttpClientFactory
+@inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject ILogger<BaseballStats> Logger
 
@@ -299,8 +299,7 @@
         
         try
         {
-            using var http = HttpClientFactory.CreateClient("PythonMLServiceClient");
-            var response = await http.GetFromJsonAsync<TeamsResponse>($"/baseball/ncaa/teams?division={_selectedDivision}");
+            var response = await Http.GetFromJsonAsync<TeamsResponse>($"http://backend:8000/baseball/ncaa/teams?division={_selectedDivision}");
             
             if (response?.Teams != null)
             {
@@ -328,12 +327,10 @@
         
         try
         {
-            using var http = HttpClientFactory.CreateClient("PythonMLServiceClient");
-            
             // Load batting
             try
             {
-                var battingResponse = await http.GetFromJsonAsync<StatsResponse>($"/baseball/ncaa/stats/{_selectedTeam.TeamId}?stat_type=batting");
+                var battingResponse = await Http.GetFromJsonAsync<StatsResponse>($"http://backend:8000/baseball/ncaa/stats/{_selectedTeam.TeamId}?stat_type=batting");
                 if (battingResponse?.Stats != null)
                 {
                     _battingStats = battingResponse.Stats.Select(s => new BattingPlayer
@@ -362,7 +359,7 @@
             // Load pitching
             try
             {
-                var pitchingResponse = await http.GetFromJsonAsync<StatsResponse>($"/baseball/ncaa/stats/{_selectedTeam.TeamId}?stat_type=pitching");
+                var pitchingResponse = await Http.GetFromJsonAsync<StatsResponse>($"http://backend:8000/baseball/ncaa/stats/{_selectedTeam.TeamId}?stat_type=pitching");
                 if (pitchingResponse?.Stats != null)
                 {
                     _pitchingStats = pitchingResponse.Stats.Select(s => new PitchingPlayer
@@ -391,7 +388,7 @@
             // Load schedule
             try
             {
-                var scheduleResponse = await http.GetFromJsonAsync<ScheduleResponse>($"/baseball/ncaa/schedule/{_selectedTeam.TeamId}");
+                var scheduleResponse = await Http.GetFromJsonAsync<ScheduleResponse>($"http://backend:8000/baseball/ncaa/schedule/{_selectedTeam.TeamId}");
                 if (scheduleResponse?.Games != null)
                 {
                     _schedule = scheduleResponse.Games.Select(g => new GameInfo
