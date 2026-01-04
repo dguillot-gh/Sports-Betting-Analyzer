@@ -3117,7 +3117,7 @@ async def get_nfl_model_testing_predictions(
             away_team = game.get("away_team", "")
             home_ml = game.get("home_moneyline")
             away_ml = game.get("away_moneyline")
-            total_line = game.get("total", 45.0)
+            total_line = game.get("over_under") or game.get("total", 45.0)
             
             # Get stats from nflverse
             home_stats = predictor.team_stats.get(home_team, {})
