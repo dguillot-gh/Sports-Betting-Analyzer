@@ -3028,15 +3028,13 @@ async def get_nba_model_testing_predictions(
     sportsbook: str = Query("fanduel", description="Sportsbook for odds")
 ):
     """
-    Get today's NBA games with BOTH simple and XGBoost predictions.
-    Uses full feature engineering (no hardcoded values).
+    Get today's NBA games with BOTH simple and kyleskom XGBoost predictions.
+    Uses kyleskom's pre-trained model (68.9% accuracy) and full NBA API data.
     """
     try:
         from scripts.nba_odds import get_todays_nba_odds
-        from scripts.model_testing_predictor import (
-            predict_nba_simple, predict_nba_xgb_full,
-            get_nba_team_stats
-        )
+        from scripts.model_testing_predictor import predict_nba_simple, get_nba_team_stats
+        from scripts.kyleskom_adapter import predict_with_kyleskom
         
         # Get today's games with odds
         odds_data = await get_todays_nba_odds(sportsbook)
@@ -3044,7 +3042,7 @@ async def get_nba_model_testing_predictions(
         if odds_data.get("error") or not odds_data.get("games"):
             return odds_data
         
-        # Get all team stats once
+        # Get all team stats for simple model
         all_team_stats = await get_nba_team_stats()
         
         analyzed_games = []
@@ -3053,22 +3051,25 @@ async def get_nba_model_testing_predictions(
             away_team = game.get("away_team", "")
             home_ml = game.get("home_moneyline")
             away_ml = game.get("away_moneyline")
+            total_line = game.get("total", 225.0)
             
             home_stats = all_team_stats.get(home_team, {})
             away_stats = all_team_stats.get(away_team, {})
             
-            # Get predictions from both models
+            # Get prediction from simple model
             simple_pred = await predict_nba_simple(
                 home_team, away_team, home_stats, away_stats, home_ml, away_ml
             )
-            xgb_pred = await predict_nba_xgb_full(
-                home_team, away_team, home_stats, away_stats, home_ml, away_ml
+            
+            # Get prediction from kyleskom's pre-trained model (68.9% accuracy)
+            kyleskom_pred = await predict_with_kyleskom(
+                home_team, away_team, total_line, home_ml, away_ml
             )
             
             analyzed_games.append({
                 **game,
                 "simple_model": simple_pred,
-                "xgboost_model": xgb_pred,
+                "xgboost_model": kyleskom_pred,  # Now using kyleskom's model
                 "home_stats": home_stats,
                 "away_stats": away_stats,
             })
@@ -3078,6 +3079,8 @@ async def get_nba_model_testing_predictions(
             "sportsbook": sportsbook,
             "games": analyzed_games,
             "count": len(analyzed_games),
+            "xgb_model_source": "kyleskom/NBA-Machine-Learning-Sports-Betting",
+            "xgb_model_accuracy": "68.9%",
         }
         
     except Exception as e:

@@ -17,7 +17,7 @@
                         NBA Model Testing
                     </MudText>
                     <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        Compare Simple vs XGBoost predictions with full feature engineering
+                        Using kyleskom/NBA-ML-Sports-Betting pre-trained model (68.9% accuracy)
                     </MudText>
                 </div>
                 <MudStack Row="true" Spacing="2">
@@ -149,6 +149,19 @@
                                                     @(game.XgbModel?.KellyHome?.ToString("F1") ?? "—")%
                                                 </td>
                                             </tr>
+                                            @if (game.XgbModel?.OverUnder != null)
+                                            {
+                                                <tr>
+                                                    <td><MudText Typo="Typo.caption">O/U Pick</MudText></td>
+                                                    <td style="text-align: center;">—</td>
+                                                    <td style="text-align: center;">
+                                                        <MudChip T="string" Size="Size.Small" 
+                                                                 Color="@(game.XgbModel.OverUnder.Pick == "OVER" ? Color.Info : Color.Secondary)">
+                                                            @game.XgbModel.OverUnder.Pick @game.XgbModel.OverUnder.TotalLine (@(game.XgbModel.OverUnder.Confidence)%)
+                                                        </MudChip>
+                                                    </td>
+                                                </tr>
+                                            }
                                         </tbody>
                                     </MudSimpleTable>
                                     
@@ -256,6 +269,17 @@
                                 KellyAway = xm.TryGetProperty("kelly_away", out var xka) && xka.ValueKind == JsonValueKind.Number ? xka.GetDouble() : null,
                                 Error = xm.TryGetProperty("error", out var xerr) ? xerr.GetString() : null,
                             };
+                            
+                            // Parse over/under prediction
+                            if (xm.TryGetProperty("over_under", out var ou) && ou.ValueKind == JsonValueKind.Object)
+                            {
+                                gp.XgbModel.OverUnder = new OverUnderPick
+                                {
+                                    Pick = ou.TryGetProperty("pick", out var oP) ? oP.GetString() ?? "" : "",
+                                    TotalLine = ou.TryGetProperty("total_line", out var oT) && oT.ValueKind == JsonValueKind.Number ? oT.GetDouble() : 0,
+                                    Confidence = ou.TryGetProperty("confidence", out var oC) && oC.ValueKind == JsonValueKind.Number ? oC.GetDouble() : 0,
+                                };
+                            }
                         }
                         
                         _games.Add(gp);
@@ -333,5 +357,13 @@
         public double? KellyHome { get; set; }
         public double? KellyAway { get; set; }
         public string? Error { get; set; }
+        public OverUnderPick? OverUnder { get; set; }
+    }
+
+    private class OverUnderPick
+    {
+        public string Pick { get; set; } = "";
+        public double TotalLine { get; set; }
+        public double Confidence { get; set; }
     }
 }
