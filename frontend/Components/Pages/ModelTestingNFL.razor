@@ -54,6 +54,15 @@
             <MudAlert Severity="Severity.Error" Variant="Variant.Filled">@_error</MudAlert>
         }
 
+        @if (_apiQuota != null)
+        {
+            <MudChip Color="@(_apiQuota.RequestsRemaining > 100 ? Color.Success : _apiQuota.RequestsRemaining > 20 ? Color.Warning : Color.Error)" 
+                     Size="Size.Small" Variant="Variant.Outlined">
+                <MudIcon Icon="@Icons.Material.Filled.Api" Size="Size.Small" Class="mr-1" />
+                API: @_apiQuota.RequestsRemaining remaining / @(_apiQuota.RequestsUsed + _apiQuota.RequestsRemaining) total
+            </MudChip>
+        }
+
         @if (_games.Any())
         {
             <MudText Typo="Typo.subtitle1" Color="Color.Secondary">
@@ -239,6 +248,7 @@
     private string _selectedSportsbook = "fanduel";
     private string _date = "";
     private List<GamePrediction> _games = new();
+    private ApiQuotaInfo? _apiQuota = null;
 
     private async Task RunAnalysis()
     {
@@ -260,6 +270,16 @@
                 var data = JsonSerializer.Deserialize<JsonElement>(json);
                 
                 _date = data.TryGetProperty("date", out var d) ? d.GetString() ?? "" : "";
+                
+                // Parse API quota if available
+                if (data.TryGetProperty("api_quota", out var quotaJson) && quotaJson.ValueKind != JsonValueKind.Null)
+                {
+                    _apiQuota = new ApiQuotaInfo
+                    {
+                        RequestsRemaining = quotaJson.TryGetProperty("requests_remaining", out var rem) ? rem.GetInt32() : 0,
+                        RequestsUsed = quotaJson.TryGetProperty("requests_used", out var used) ? used.GetInt32() : 0
+                    };
+                }
                 
                 if (data.TryGetProperty("games", out var games))
                 {
@@ -441,6 +461,12 @@
         public string Pick { get; set; } = "";
         public double TotalLine { get; set; }
         public double Confidence { get; set; }
+    }
+
+    private class ApiQuotaInfo
+    {
+        public int RequestsRemaining { get; set; }
+        public int RequestsUsed { get; set; }
     }
 }
 

@@ -3146,7 +3146,8 @@ async def get_nfl_model_testing_predictions(
             "sportsbook": sportsbook,
             "games": analyzed_games,
             "count": len(analyzed_games),
-            "data_source": "nflverse (nfl_data_py)",
+            "data_source": odds_data.get("source", "nflverse"),
+            "api_quota": odds_data.get("api_quota"),
         }
         
     except Exception as e:

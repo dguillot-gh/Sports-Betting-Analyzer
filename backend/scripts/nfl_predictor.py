@@ -259,17 +259,104 @@ class NFLPredictor:
 
 async def get_todays_nfl_odds(sportsbook: str = "fanduel") -> Dict[str, Any]:
     """
-    Fetch today's NFL odds from the specified sportsbook.
+    Fetch today's NFL odds. Uses The Odds API as primary source (more reliable),
+    falls back to sbrscrape if API key not available.
     """
+    import os
+    from datetime import date
+    
+    today = date.today()
+    
+    # Map sportsbook names to Odds API format
+    SPORTSBOOK_MAP = {
+        "fanduel": "fanduel",
+        "draftkings": "draftkings",
+        "betmgm": "betmgm",
+        "pointsbet": "pointsbetus",
+        "caesars": "williamhill_us",
+    }
+    
+    # Try The Odds API first (more reliable for live games)
+    odds_api_key = os.environ.get("ODDS_API_KEY", "4aee54c212eef472437166704a960985")
+    
+    if odds_api_key:
+        try:
+            import httpx
+            
+            book = SPORTSBOOK_MAP.get(sportsbook, "fanduel")
+            url = f"https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds"
+            params = {
+                "apiKey": odds_api_key,
+                "regions": "us",
+                "markets": "h2h,totals",
+                "bookmakers": book,
+            }
+            
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.get(url, params=params)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    games = []
+                    for event in data:
+                        try:
+                            home_team = event.get("home_team", "")
+                            away_team = event.get("away_team", "")
+                            
+                            game_data = {
+                                "home_team": home_team,
+                                "away_team": away_team,
+                                "game_time": event.get("commence_time", ""),
+                                "status": "scheduled",
+                            }
+                            
+                            # Extract odds from bookmakers
+                            for bookmaker in event.get("bookmakers", []):
+                                if bookmaker.get("key") == book:
+                                    for market in bookmaker.get("markets", []):
+                                        if market.get("key") == "h2h":
+                                            for outcome in market.get("outcomes", []):
+                                                if outcome.get("name") == home_team:
+                                                    game_data["home_moneyline"] = _decimal_to_american(outcome.get("price", 2.0))
+                                                elif outcome.get("name") == away_team:
+                                                    game_data["away_moneyline"] = _decimal_to_american(outcome.get("price", 2.0))
+                                        elif market.get("key") == "totals":
+                                            for outcome in market.get("outcomes", []):
+                                                if outcome.get("name") == "Over":
+                                                    game_data["over_under"] = outcome.get("point", 45.0)
+                                                    break
+                            
+                            games.append(game_data)
+                        except Exception as e:
+                            logger.warning(f"Error parsing Odds API game: {e}")
+                    
+                    if games:
+                        logger.info(f"Loaded {len(games)} NFL games from The Odds API")
+                        
+                        # Extract API quota from headers
+                        api_quota = {
+                            "requests_remaining": int(response.headers.get("x-requests-remaining", 0)),
+                            "requests_used": int(response.headers.get("x-requests-used", 0)),
+                        }
+                        
+                        return {
+                            "date": str(today),
+                            "sportsbook": sportsbook,
+                            "games": games,
+                            "count": len(games),
+                            "source": "the-odds-api",
+                            "api_quota": api_quota
+                        }
+                else:
+                    logger.warning(f"Odds API returned {response.status_code}")
+                    
+        except Exception as e:
+            logger.warning(f"The Odds API failed, falling back to sbrscrape: {e}")
+    
+    # Fallback to sbrscrape
     try:
         from sbrscrape import Scoreboard
-    except ImportError:
-        logger.error("sbrscrape not installed")
-        return {"error": "sbrscrape not installed", "games": []}
-    
-    try:
-        from datetime import date
-        today = date.today()
         sb = Scoreboard(sport="NFL", date=today)
         
         if not hasattr(sb, "games") or not sb.games:
@@ -308,12 +395,21 @@ async def get_todays_nfl_odds(sportsbook: str = "fanduel") -> Dict[str, Any]:
             "date": str(today),
             "sportsbook": sportsbook,
             "games": games,
-            "count": len(games)
+            "count": len(games),
+            "source": "sbrscrape"
         }
         
     except Exception as e:
         logger.error(f"Error fetching NFL odds: {e}")
         return {"error": str(e), "games": [], "sportsbook": sportsbook}
+
+
+def _decimal_to_american(decimal_odds: float) -> int:
+    """Convert decimal odds to American odds."""
+    if decimal_odds >= 2.0:
+        return int((decimal_odds - 1) * 100)
+    else:
+        return int(-100 / (decimal_odds - 1))
 
 
 async def analyze_nfl_matchup(home_team: str, away_team: str, 
