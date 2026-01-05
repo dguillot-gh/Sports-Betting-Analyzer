@@ -36,23 +36,22 @@ DATABASE_URL = "postgresql://sports_user:sportsbetting2024@postgres:5432/sports_
 NFLVERSE_BASE = "https://github.com/nflverse/nflverse-data/releases/download"
 NFLVERSE_PBP_BASE = "https://github.com/nflverse/nflverse-pbp/releases/download"
 
-# Years to import (2020-2024 from pre-computed stats files)
+# Years to import - extended to 2016+ for Next Gen Stats coverage
 # 2025 season uses PBP aggregation since nflverse hasn't published stats files for ongoing season
-IMPORT_YEARS = list(range(2020, 2025))
+IMPORT_YEARS = list(range(2016, 2025))  # Extended from 2020 to 2016 for NGS
+IMPORT_YEARS_MODERN = list(range(2020, 2025))  # Modern seasons for full stats
 
 # Per-season weekly player stats from nflverse-data releases
-# These files contain weekly stats per player (we'll aggregate to season totals)
 # URL format: https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats_YYYY.csv
 PLAYER_STATS_WEEKLY = {
     year: f"{NFLVERSE_BASE}/player_stats/player_stats_{year}.csv"
-    for year in IMPORT_YEARS
+    for year in IMPORT_YEARS_MODERN  # Weekly stats only reliable from 2020+
 }
 
 # Season-level aggregates (pre-computed by nflverse)
-# URL format: https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats_season_YYYY.csv  
 PLAYER_STATS_SEASON = {
     year: f"{NFLVERSE_BASE}/player_stats/player_stats_season_{year}.csv"
-    for year in IMPORT_YEARS
+    for year in IMPORT_YEARS_MODERN
 }
 
 # Supporting data files
@@ -61,12 +60,53 @@ NFLVERSE_FILES = {
     # Schedules and rosters fetched via library now
 }
 
+# ============== NEW: COMPREHENSIVE NFLVERSE DATASETS ==============
+
+# Next Gen Stats (available from 2016+)
+# Player-level tracking data: speed, separation, time to throw, etc.
+NEXTGEN_STATS = {
+    "passing": f"{NFLVERSE_BASE}/nextgen_stats/ngs_passing.parquet",
+    "rushing": f"{NFLVERSE_BASE}/nextgen_stats/ngs_rushing.parquet",
+    "receiving": f"{NFLVERSE_BASE}/nextgen_stats/ngs_receiving.parquet",
+}
+
+# Snap Counts (available from 2012+)
+# Game-level snap participation data
+SNAP_COUNTS_URL = f"{NFLVERSE_BASE}/snap_counts/snap_counts.parquet"
+
+# Combine Data (available from 2000+)
+# Athletic measurables from NFL Combine
+COMBINE_URL = f"{NFLVERSE_BASE}/combine/combine.parquet"
+
+# Draft Picks (available from 2000+)
+DRAFT_PICKS_URL = f"{NFLVERSE_BASE}/draft_picks/draft_picks.parquet"
+
+# Team Descriptions (logos, colors, etc.)
+TEAMS_URL = f"{NFLVERSE_BASE}/teams/teams.parquet"
+
+# Injuries (historical, 2009-2024 - 2025 source died)
+INJURIES_URL = f"{NFLVERSE_BASE}/injuries/injuries.parquet"
+
+# Contracts (estimated values)
+CONTRACTS_URL = f"{NFLVERSE_BASE}/contracts/contracts.parquet"
+
+# PFF/Advanced Stats (if available)
+ADVANCED_STATS = {
+    "pfr_passing": f"{NFLVERSE_BASE}/pfr_advstats/advstats_season_pass.parquet",
+    "pfr_rushing": f"{NFLVERSE_BASE}/pfr_advstats/advstats_season_rush.parquet",
+    "pfr_receiving": f"{NFLVERSE_BASE}/pfr_advstats/advstats_season_rec.parquet",
+    "pfr_defense": f"{NFLVERSE_BASE}/pfr_advstats/advstats_season_def.parquet",
+}
+
 # 2025 season data (play-by-play files, per game)
 PBP_2025_TAG = "raw_pbp_2025"
 
 # Local data paths
 DATA_DIR = Path("/app/data/nfl")
 NFLVERSE_DIR = Path("/app/data/nflverse")
+NGS_DIR = NFLVERSE_DIR / "nextgen_stats"
+ADVANCED_DIR = NFLVERSE_DIR / "advanced_stats"
+
 
 
 def compute_hash(data: dict) -> str:
@@ -160,6 +200,124 @@ async def download_nflverse(progress_callback=None):
         logger.error(f"Library import failed: {e}")
     
     return downloaded
+
+
+async def download_comprehensive_nflverse(progress_callback=None) -> dict:
+    """
+    Download comprehensive nflverse datasets for advanced analytics.
+    Includes: Next Gen Stats, Snap Counts, Combine, Draft Picks, Contracts, etc.
+    
+    Returns dict with download status for each dataset type.
+    """
+    import pyarrow.parquet as pq
+    import io
+    
+    results = {
+        "nextgen_stats": {"status": "pending", "files": []},
+        "snap_counts": {"status": "pending"},
+        "combine": {"status": "pending"},
+        "draft_picks": {"status": "pending"},
+        "injuries": {"status": "pending"},
+        "contracts": {"status": "pending"},
+        "teams": {"status": "pending"},
+        "advanced_stats": {"status": "pending", "files": []},
+    }
+    
+    # Create directories
+    NGS_DIR.mkdir(parents=True, exist_ok=True)
+    ADVANCED_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # Helper to download and save parquet files
+    async def download_parquet(url: str, save_path: Path, name: str) -> bool:
+        try:
+            if progress_callback:
+                progress_callback(f"Downloading {name}...")
+            
+            response = requests.get(url, timeout=300)
+            if response.status_code == 200:
+                # Save raw parquet file
+                save_path.write_bytes(response.content)
+                
+                # Try to read and get row count for logging
+                try:
+                    table = pq.read_table(save_path)
+                    row_count = table.num_rows
+                    logger.info(f"Downloaded {name}: {row_count:,} rows")
+                except Exception:
+                    logger.info(f"Downloaded {name}: {len(response.content):,} bytes")
+                
+                return True
+            else:
+                logger.warning(f"Failed to download {name}: HTTP {response.status_code}")
+                return False
+        except Exception as e:
+            logger.error(f"Error downloading {name}: {e}")
+            return False
+    
+    # 1. Download Next Gen Stats (passing, rushing, receiving)
+    ngs_success = []
+    for stat_type, url in NEXTGEN_STATS.items():
+        save_path = NGS_DIR / f"ngs_{stat_type}.parquet"
+        if await download_parquet(url, save_path, f"NGS {stat_type}"):
+            ngs_success.append(stat_type)
+    
+    results["nextgen_stats"]["status"] = "success" if ngs_success else "failed"
+    results["nextgen_stats"]["files"] = ngs_success
+    
+    # 2. Download Snap Counts
+    snap_path = NFLVERSE_DIR / "snap_counts.parquet"
+    results["snap_counts"]["status"] = "success" if await download_parquet(
+        SNAP_COUNTS_URL, snap_path, "Snap Counts"
+    ) else "failed"
+    
+    # 3. Download Combine Data
+    combine_path = NFLVERSE_DIR / "combine.parquet"
+    results["combine"]["status"] = "success" if await download_parquet(
+        COMBINE_URL, combine_path, "Combine Data"
+    ) else "failed"
+    
+    # 4. Download Draft Picks
+    draft_path = NFLVERSE_DIR / "draft_picks.parquet"
+    results["draft_picks"]["status"] = "success" if await download_parquet(
+        DRAFT_PICKS_URL, draft_path, "Draft Picks"
+    ) else "failed"
+    
+    # 5. Download Teams metadata
+    teams_path = NFLVERSE_DIR / "teams.parquet"
+    results["teams"]["status"] = "success" if await download_parquet(
+        TEAMS_URL, teams_path, "Teams"
+    ) else "failed"
+    
+    # 6. Download Injuries (historical)
+    injuries_path = NFLVERSE_DIR / "injuries.parquet"
+    results["injuries"]["status"] = "success" if await download_parquet(
+        INJURIES_URL, injuries_path, "Injuries (Historical)"
+    ) else "failed"
+    
+    # 7. Download Contracts
+    contracts_path = NFLVERSE_DIR / "contracts.parquet"
+    results["contracts"]["status"] = "success" if await download_parquet(
+        CONTRACTS_URL, contracts_path, "Contracts"
+    ) else "failed"
+    
+    # 8. Download PFR Advanced Stats
+    adv_success = []
+    for stat_type, url in ADVANCED_STATS.items():
+        save_path = ADVANCED_DIR / f"{stat_type}.parquet"
+        if await download_parquet(url, save_path, f"PFR {stat_type}"):
+            adv_success.append(stat_type)
+    
+    results["advanced_stats"]["status"] = "success" if adv_success else "failed"
+    results["advanced_stats"]["files"] = adv_success
+    
+    # Summary
+    success_count = sum(1 for v in results.values() if v.get("status") == "success")
+    logger.info(f"Comprehensive nflverse download complete: {success_count}/{len(results)} datasets")
+    
+    if progress_callback:
+        progress_callback(f"Downloaded {success_count}/{len(results)} comprehensive datasets")
+    
+    return results
 
 
 async def download_pbp_2025(progress_callback=None) -> list:

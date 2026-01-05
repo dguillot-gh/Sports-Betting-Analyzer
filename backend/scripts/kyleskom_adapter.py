@@ -59,55 +59,141 @@ TEAM_INDEX_CURRENT = {
 
 # Team name aliases - maps common variations to canonical names
 TEAM_NAME_ALIASES = {
-    # LA teams - most common mismatch
+    # LA teams - most common mismatch (all possible variations)
     'LA Clippers': 'Los Angeles Clippers',
     'LA Lakers': 'Los Angeles Lakers',
     'L.A. Clippers': 'Los Angeles Clippers',
     'L.A. Lakers': 'Los Angeles Lakers',
-    # Other common variations
-    'NY Knicks': 'New York Knicks',
-    'New York': 'New York Knicks',
-    'OKC Thunder': 'Oklahoma City Thunder',
-    'OKC': 'Oklahoma City Thunder',
-    'Philly 76ers': 'Philadelphia 76ers',
-    'Sixers': 'Philadelphia 76ers',
-    'GS Warriors': 'Golden State Warriors',
-    'GSW': 'Golden State Warriors',
-    'NOLA Pelicans': 'New Orleans Pelicans',
-    'Blazers': 'Portland Trail Blazers',
-    'Trail Blazers': 'Portland Trail Blazers',
-    # Short names (just in case)
-    'Celtics': 'Boston Celtics',
-    'Nets': 'Brooklyn Nets',
-    'Hornets': 'Charlotte Hornets',
-    'Bulls': 'Chicago Bulls',
-    'Cavaliers': 'Cleveland Cavaliers',
-    'Cavs': 'Cleveland Cavaliers',
-    'Mavericks': 'Dallas Mavericks',
-    'Mavs': 'Dallas Mavericks',
-    'Nuggets': 'Denver Nuggets',
-    'Pistons': 'Detroit Pistons',
-    'Warriors': 'Golden State Warriors',
-    'Rockets': 'Houston Rockets',
-    'Pacers': 'Indiana Pacers',
+    'LAC': 'Los Angeles Clippers',
+    'LAL': 'Los Angeles Lakers',
+    'Los Angeles': 'Los Angeles Lakers',  # Assume Lakers if just "Los Angeles"
     'Clippers': 'Los Angeles Clippers',
     'Lakers': 'Los Angeles Lakers',
+    
+    # Golden State variations
+    'GS Warriors': 'Golden State Warriors',
+    'GSW': 'Golden State Warriors',
+    'Golden State': 'Golden State Warriors',
+    'Warriors': 'Golden State Warriors',
+    
+    # Other common variations with abbreviations
+    'NY Knicks': 'New York Knicks',
+    'New York': 'New York Knicks',
+    'NYK': 'New York Knicks',
+    'Knicks': 'New York Knicks',
+    
+    'OKC Thunder': 'Oklahoma City Thunder',
+    'OKC': 'Oklahoma City Thunder',
+    'Oklahoma City': 'Oklahoma City Thunder',
+    'Thunder': 'Oklahoma City Thunder',
+    
+    'Philly 76ers': 'Philadelphia 76ers',
+    'PHI': 'Philadelphia 76ers',
+    'Sixers': 'Philadelphia 76ers',
+    '76ers': 'Philadelphia 76ers',
+    
+    'NOLA Pelicans': 'New Orleans Pelicans',
+    'NOP': 'New Orleans Pelicans',
+    'New Orleans': 'New Orleans Pelicans',
+    'Pelicans': 'New Orleans Pelicans',
+    
+    'Blazers': 'Portland Trail Blazers',
+    'Trail Blazers': 'Portland Trail Blazers',
+    'POR': 'Portland Trail Blazers',
+    'Portland': 'Portland Trail Blazers',
+    
+    # All teams with city-only and short name versions
+    'Boston': 'Boston Celtics',
+    'BOS': 'Boston Celtics',
+    'Celtics': 'Boston Celtics',
+    
+    'Brooklyn': 'Brooklyn Nets',
+    'BKN': 'Brooklyn Nets',
+    'Nets': 'Brooklyn Nets',
+    
+    'Charlotte': 'Charlotte Hornets',
+    'CHA': 'Charlotte Hornets',
+    'Hornets': 'Charlotte Hornets',
+    
+    'Chicago': 'Chicago Bulls',
+    'CHI': 'Chicago Bulls',
+    'Bulls': 'Chicago Bulls',
+    
+    'Cleveland': 'Cleveland Cavaliers',
+    'CLE': 'Cleveland Cavaliers',
+    'Cavaliers': 'Cleveland Cavaliers',
+    'Cavs': 'Cleveland Cavaliers',
+    
+    'Dallas': 'Dallas Mavericks',
+    'DAL': 'Dallas Mavericks',
+    'Mavericks': 'Dallas Mavericks',
+    'Mavs': 'Dallas Mavericks',
+    
+    'Denver': 'Denver Nuggets',
+    'DEN': 'Denver Nuggets',
+    'Nuggets': 'Denver Nuggets',
+    
+    'Detroit': 'Detroit Pistons',
+    'DET': 'Detroit Pistons',
+    'Pistons': 'Detroit Pistons',
+    
+    'Houston': 'Houston Rockets',
+    'HOU': 'Houston Rockets',
+    'Rockets': 'Houston Rockets',
+    
+    'Indiana': 'Indiana Pacers',
+    'IND': 'Indiana Pacers',
+    'Pacers': 'Indiana Pacers',
+    
+    'Memphis': 'Memphis Grizzlies',
+    'MEM': 'Memphis Grizzlies',
     'Grizzlies': 'Memphis Grizzlies',
+    
+    'Miami': 'Miami Heat',
+    'MIA': 'Miami Heat',
     'Heat': 'Miami Heat',
+    
+    'Milwaukee': 'Milwaukee Bucks',
+    'MIL': 'Milwaukee Bucks',
     'Bucks': 'Milwaukee Bucks',
+    
+    'Minnesota': 'Minnesota Timberwolves',
+    'MIN': 'Minnesota Timberwolves',
     'Timberwolves': 'Minnesota Timberwolves',
     'Wolves': 'Minnesota Timberwolves',
-    'Pelicans': 'New Orleans Pelicans',
-    'Knicks': 'New York Knicks',
-    'Thunder': 'Oklahoma City Thunder',
+    
+    'Orlando': 'Orlando Magic',
+    'ORL': 'Orlando Magic',
     'Magic': 'Orlando Magic',
-    '76ers': 'Philadelphia 76ers',
+    
+    'Phoenix': 'Phoenix Suns',
+    'PHX': 'Phoenix Suns',
     'Suns': 'Phoenix Suns',
+    
+    'Sacramento': 'Sacramento Kings',
+    'SAC': 'Sacramento Kings',
     'Kings': 'Sacramento Kings',
+    
+    'San Antonio': 'San Antonio Spurs',
+    'SAS': 'San Antonio Spurs',
     'Spurs': 'San Antonio Spurs',
+    
+    'Toronto': 'Toronto Raptors',
+    'TOR': 'Toronto Raptors',
     'Raptors': 'Toronto Raptors',
+    
+    'Utah': 'Utah Jazz',
+    'UTA': 'Utah Jazz',
     'Jazz': 'Utah Jazz',
+    
+    'Washington': 'Washington Wizards',
+    'WAS': 'Washington Wizards',
     'Wizards': 'Washington Wizards',
+    
+    # Atlanta - could be confused
+    'Atlanta': 'Atlanta Hawks',
+    'ATL': 'Atlanta Hawks',
+    'Hawks': 'Atlanta Hawks',
 }
 
 

@@ -3047,9 +3047,18 @@ async def get_nba_model_testing_predictions(
         
         analyzed_games = []
         for game in odds_data["games"]:
+            # Log original team names from sbrscrape for debugging
+            original_home = game.get("home_team", "")
+            original_away = game.get("away_team", "")
+            
             # Normalize team names to handle variations like "LA Clippers" -> "Los Angeles Clippers"
-            home_team = normalize_team_name(game.get("home_team", ""))
-            away_team = normalize_team_name(game.get("away_team", ""))
+            home_team = normalize_team_name(original_home)
+            away_team = normalize_team_name(original_away)
+            
+            # Log if normalization changed anything
+            if home_team != original_home or away_team != original_away:
+                logger.info(f"Team name normalization: '{original_home}' -> '{home_team}', '{original_away}' -> '{away_team}'")
+            
             home_ml = game.get("home_moneyline")
             away_ml = game.get("away_moneyline")
             total_line = game.get("over_under") or game.get("total", 225.0)
@@ -3068,6 +3077,9 @@ async def get_nba_model_testing_predictions(
                 home_team, away_team, total_line, home_ml, away_ml
             )
             
+            # Log kyleskom prediction result for debugging
+            if kyleskom_pred.get("error"):
+                logger.warning(f"Kyleskom prediction error for {home_team} vs {away_team}: {kyleskom_pred.get('error')}")
             analyzed_games.append({
                 **game,
                 "simple_model": simple_pred,
@@ -3745,3 +3757,225 @@ async def get_nba_standings():
         logger.error(f"Error getting NBA standings: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ============== NFL COMPREHENSIVE DATA ENDPOINTS ==============
+
+@app.post("/nfl/data/download-comprehensive")
+async def download_nfl_comprehensive_data():
+    """
+    Download comprehensive nflverse datasets including:
+    - Next Gen Stats (passing, rushing, receiving)
+    - Snap Counts
+    - Combine Data
+    - Draft Picks
+    - Injuries (historical)
+    - Contracts
+    - PFR Advanced Stats
+    """
+    try:
+        from scripts.nfl_importer import download_comprehensive_nflverse
+        result = await download_comprehensive_nflverse()
+        return {
+            "status": "complete",
+            "datasets": result
+        }
+    except Exception as e:
+        logger.error(f"Error downloading comprehensive nflverse data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/nfl/data/status")
+async def get_nfl_data_status():
+    """Check which nflverse datasets are available locally."""
+    from pathlib import Path
+    
+    NFLVERSE_DIR = Path("/app/data/nflverse")
+    NGS_DIR = NFLVERSE_DIR / "nextgen_stats"
+    ADVANCED_DIR = NFLVERSE_DIR / "advanced_stats"
+    
+    status = {
+        "nextgen_stats": {
+            "passing": (NGS_DIR / "ngs_passing.parquet").exists(),
+            "rushing": (NGS_DIR / "ngs_rushing.parquet").exists(),
+            "receiving": (NGS_DIR / "ngs_receiving.parquet").exists(),
+        },
+        "snap_counts": (NFLVERSE_DIR / "snap_counts.parquet").exists(),
+        "combine": (NFLVERSE_DIR / "combine.parquet").exists(),
+        "draft_picks": (NFLVERSE_DIR / "draft_picks.parquet").exists(),
+        "injuries": (NFLVERSE_DIR / "injuries.parquet").exists(),
+        "contracts": (NFLVERSE_DIR / "contracts.parquet").exists(),
+        "teams": (NFLVERSE_DIR / "teams.parquet").exists(),
+        "advanced_stats": {
+            "pfr_passing": (ADVANCED_DIR / "pfr_passing.parquet").exists(),
+            "pfr_rushing": (ADVANCED_DIR / "pfr_rushing.parquet").exists(),
+            "pfr_receiving": (ADVANCED_DIR / "pfr_receiving.parquet").exists(),
+            "pfr_defense": (ADVANCED_DIR / "pfr_defense.parquet").exists(),
+        },
+        "basic": {
+            "players": (NFLVERSE_DIR / "players.csv").exists(),
+            "schedules": (NFLVERSE_DIR / "schedules.csv").exists(),
+            "rosters": (NFLVERSE_DIR / "roster.csv").exists(),
+        }
+    }
+    
+    return {"datasets": status}
+
+
+@app.get("/nfl/nextgen/passing")
+async def get_nfl_ngs_passing(
+    season: int = Query(None, description="Filter by season"),
+    week: int = Query(None, description="Filter by week"),
+    player: str = Query(None, description="Filter by player name")
+):
+    """Get Next Gen Stats for passing."""
+    try:
+        import pyarrow.parquet as pq
+        from pathlib import Path
+        
+        file_path = Path("/app/data/nflverse/nextgen_stats/ngs_passing.parquet")
+        if not file_path.exists():
+            return {"error": "Next Gen passing stats not downloaded yet", "download": "/nfl/data/download-comprehensive"}
+        
+        table = pq.read_table(file_path)
+        df = table.to_pandas()
+        
+        # Apply filters
+        if season:
+            df = df[df['season'] == season]
+        if week:
+            df = df[df['week'] == week]
+        if player:
+            df = df[df['player_display_name'].str.contains(player, case=False, na=False)]
+        
+        # Sort by key metrics
+        if 'avg_time_to_throw' in df.columns:
+            df = df.sort_values('avg_time_to_throw', ascending=True)
+        
+        return {
+            "count": len(df),
+            "data": df.head(100).to_dict(orient='records')
+        }
+    except Exception as e:
+        logger.error(f"Error reading NGS passing: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/nfl/nextgen/rushing")
+async def get_nfl_ngs_rushing(
+    season: int = Query(None),
+    player: str = Query(None)
+):
+    """Get Next Gen Stats for rushing."""
+    try:
+        import pyarrow.parquet as pq
+        from pathlib import Path
+        
+        file_path = Path("/app/data/nflverse/nextgen_stats/ngs_rushing.parquet")
+        if not file_path.exists():
+            return {"error": "Next Gen rushing stats not downloaded yet"}
+        
+        table = pq.read_table(file_path)
+        df = table.to_pandas()
+        
+        if season:
+            df = df[df['season'] == season]
+        if player:
+            df = df[df['player_display_name'].str.contains(player, case=False, na=False)]
+        
+        return {"count": len(df), "data": df.head(100).to_dict(orient='records')}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/nfl/nextgen/receiving")
+async def get_nfl_ngs_receiving(
+    season: int = Query(None),
+    player: str = Query(None)
+):
+    """Get Next Gen Stats for receiving."""
+    try:
+        import pyarrow.parquet as pq
+        from pathlib import Path
+        
+        file_path = Path("/app/data/nflverse/nextgen_stats/ngs_receiving.parquet")
+        if not file_path.exists():
+            return {"error": "Next Gen receiving stats not downloaded yet"}
+        
+        table = pq.read_table(file_path)
+        df = table.to_pandas()
+        
+        if season:
+            df = df[df['season'] == season]
+        if player:
+            df = df[df['player_display_name'].str.contains(player, case=False, na=False)]
+        
+        return {"count": len(df), "data": df.head(100).to_dict(orient='records')}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/nfl/snap-counts")
+async def get_nfl_snap_counts(
+    season: int = Query(None),
+    week: int = Query(None),
+    team: str = Query(None),
+    player: str = Query(None)
+):
+    """Get snap count data for players."""
+    try:
+        import pyarrow.parquet as pq
+        from pathlib import Path
+        
+        file_path = Path("/app/data/nflverse/snap_counts.parquet")
+        if not file_path.exists():
+            return {"error": "Snap counts not downloaded yet"}
+        
+        table = pq.read_table(file_path)
+        df = table.to_pandas()
+        
+        if season:
+            df = df[df['season'] == season]
+        if week:
+            df = df[df['week'] == week]
+        if team:
+            df = df[df['team'].str.upper() == team.upper()]
+        if player:
+            df = df[df['player'].str.contains(player, case=False, na=False)]
+        
+        return {"count": len(df), "data": df.head(100).to_dict(orient='records')}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/nfl/combine")
+async def get_nfl_combine(
+    position: str = Query(None, description="Filter by position (QB, RB, WR, etc.)"),
+    year: int = Query(None, description="Draft year"),
+    team: str = Query(None)
+):
+    """Get NFL Combine data."""
+    try:
+        import pyarrow.parquet as pq
+        from pathlib import Path
+        
+        file_path = Path("/app/data/nflverse/combine.parquet")
+        if not file_path.exists():
+            return {"error": "Combine data not downloaded yet"}
+        
+        table = pq.read_table(file_path)
+        df = table.to_pandas()
+        
+        if position:
+            df = df[df['pos'].str.upper() == position.upper()]
+        if year:
+            df = df[df['draft_year'] == year]
+        if team:
+            df = df[df['team'].str.upper() == team.upper()]
+        
+        # Sort by 40 time for skill positions
+        if 'forty' in df.columns:
+            df = df.sort_values('forty', ascending=True)
+        
+        return {"count": len(df), "data": df.head(100).to_dict(orient='records')}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

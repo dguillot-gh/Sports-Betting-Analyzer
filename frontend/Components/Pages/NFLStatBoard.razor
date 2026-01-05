@@ -1,0 +1,678 @@
+@page "/nfl-stats"
+@page "/nfl/statboard"
+@rendermode InteractiveServer
+@using System.Text.Json
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject ILogger<NFLStatBoard> Logger
+
+<PageTitle>NFL Stat Board</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" GutterBottom="true">NFL Comprehensive Stat Board</MudText>
+    <MudText Typo="Typo.body1" Class="mb-4">
+        Advanced analytics powered by nflverse - Next Gen Stats, Snap Counts, Combine Data & more
+    </MudText>
+    
+    @* Data Status Banner *@
+    @if (!_dataLoaded)
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-4">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudText>Comprehensive NFL data not yet downloaded.</MudText>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="DownloadData" 
+                           Disabled="@_isDownloading">
+                    @if (_isDownloading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        @:Downloading...
+                    }
+                    else
+                    {
+                        @:Download All Data
+                    }
+                </MudButton>
+            </MudStack>
+        </MudAlert>
+    }
+    
+    <MudTabs @bind-ActivePanelIndex="_activeTab" Elevation="2" Rounded="true" 
+             ApplyEffectsToContainer="true" PanelClass="pa-4">
+        
+        @* Tab 1: Next Gen Stats *@
+        <MudTabPanel Text="Next Gen Stats" Icon="@Icons.Material.Filled.Speed">
+            <MudGrid>
+                <MudItem xs="12" md="3">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6" Class="mb-3">Filters</MudText>
+                        
+                        <MudSelect T="int" @bind-Value="_selectedSeason" Label="Season" 
+                                   Variant="Variant.Outlined" Class="mb-3">
+                            @for (int y = DateTime.Now.Year; y >= 2016; y--)
+                            {
+                                var year = y;
+                                <MudSelectItem Value="@year">@year</MudSelectItem>
+                            }
+                        </MudSelect>
+                        
+                        <MudSelect T="string" @bind-Value="_ngsCategory" Label="Category" 
+                                   Variant="Variant.Outlined" Class="mb-3">
+                            <MudSelectItem Value="@("passing")">Passing</MudSelectItem>
+                            <MudSelectItem Value="@("rushing")">Rushing</MudSelectItem>
+                            <MudSelectItem Value="@("receiving")">Receiving</MudSelectItem>
+                        </MudSelect>
+                        
+                        <MudTextField @bind-Value="_playerFilter" Label="Player Name" 
+                                      Variant="Variant.Outlined" Class="mb-3" />
+                        
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                                   OnClick="LoadNGSData" Disabled="@_isLoading">
+                            @if (_isLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                            Load Stats
+                        </MudButton>
+                    </MudPaper>
+                </MudItem>
+                
+                <MudItem xs="12" md="9">
+                    @if (_ngsData != null && _ngsData.Any())
+                    {
+                        <MudPaper Class="pa-4">
+                            <MudText Typo="Typo.h6" Class="mb-3">
+                                @_ngsCategory.ToUpper() Stats (@_selectedSeason) - @_ngsData.Count results
+                            </MudText>
+                            
+                            <MudSimpleTable Dense="true" Hover="true" Striped="true" Style="overflow-x: auto;">
+                                <thead>
+                                    <tr>
+                                        <th>Player</th>
+                                        <th>Team</th>
+                                        @if (_ngsCategory == "passing")
+                                        {
+                                            <th>Time to Throw</th>
+                                            <th>Comp Air Yds</th>
+                                            <th>Aggressiveness</th>
+                                            <th>CPOE</th>
+                                        }
+                                        else if (_ngsCategory == "rushing")
+                                        {
+                                            <th>Efficiency</th>
+                                            <th>RYOE</th>
+                                            <th>RYOE/Att</th>
+                                            <th>Attempts</th>
+                                        }
+                                        else
+                                        {
+                                            <th>Separation</th>
+                                            <th>Cushion</th>
+                                            <th>Targets</th>
+                                            <th>YAC</th>
+                                        }
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var player in _ngsData.Take(50))
+                                    {
+                                        <tr>
+                                            <td><strong>@GetString(player, "player_display_name")</strong></td>
+                                            <td>@GetString(player, "team_abbr")</td>
+                                            @if (_ngsCategory == "passing")
+                                            {
+                                                <td>@GetDouble(player, "avg_time_to_throw").ToString("F2")s</td>
+                                                <td>@GetDouble(player, "avg_completed_air_yards").ToString("F1")</td>
+                                                <td>@(GetDouble(player, "aggressiveness") * 100).ToString("F1")%</td>
+                                                <td>
+                                                    @{ var cpoe = GetDouble(player, "completion_percentage_above_expectation"); }
+                                                    <MudChip T="string" Size="Size.Small" 
+                                                             Color="@(cpoe > 0 ? Color.Success : Color.Error)">
+                                                        @(cpoe > 0 ? "+" : "")@cpoe.ToString("F1")%
+                                                    </MudChip>
+                                                </td>
+                                            }
+                                            else if (_ngsCategory == "rushing")
+                                            {
+                                                <td>@GetDouble(player, "efficiency").ToString("F1")</td>
+                                                <td>@GetDouble(player, "rush_yards_over_expected").ToString("F1")</td>
+                                                <td>@GetDouble(player, "rush_yards_over_expected_per_att").ToString("F2")</td>
+                                                <td>@GetDouble(player, "rush_attempts").ToString("F0")</td>
+                                            }
+                                            else
+                                            {
+                                                <td>@GetDouble(player, "avg_separation").ToString("F1")</td>
+                                                <td>@GetDouble(player, "avg_cushion").ToString("F1")</td>
+                                                <td>@GetDouble(player, "targets").ToString("F0")</td>
+                                                <td>@GetDouble(player, "avg_yac").ToString("F1")</td>
+                                            }
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudPaper>
+                    }
+                    else if (!_isLoading)
+                    {
+                        <MudPaper Class="pa-16 d-flex flex-column align-center justify-center" Style="min-height: 400px;">
+                            <MudIcon Icon="@Icons.Material.Filled.Analytics" Size="Size.Large" Color="Color.Primary" Class="mb-4" />
+                            <MudText Typo="Typo.h5">Next Gen Stats</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="text-center">
+                                Player tracking data including speed, separation, and efficiency metrics
+                            </MudText>
+                        </MudPaper>
+                    }
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+        
+        @* Tab 2: Snap Counts *@
+        <MudTabPanel Text="Snap Counts" Icon="@Icons.Material.Filled.Timer">
+            <MudGrid>
+                <MudItem xs="12" md="3">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6" Class="mb-3">Filters</MudText>
+                        
+                        <MudSelect T="int" @bind-Value="_snapSeason" Label="Season" 
+                                   Variant="Variant.Outlined" Class="mb-3">
+                            @for (int y = DateTime.Now.Year; y >= 2012; y--)
+                            {
+                                var year = y;
+                                <MudSelectItem Value="@year">@year</MudSelectItem>
+                            }
+                        </MudSelect>
+                        
+                        <MudTextField @bind-Value="_snapTeam" Label="Team (abbr)" 
+                                      Variant="Variant.Outlined" Class="mb-3" />
+                        
+                        <MudTextField @bind-Value="_snapPlayer" Label="Player Name" 
+                                      Variant="Variant.Outlined" Class="mb-3" />
+                        
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                                   OnClick="LoadSnapCounts" Disabled="@_isLoading">
+                            @if (_isLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                            Load Snaps
+                        </MudButton>
+                    </MudPaper>
+                </MudItem>
+                
+                <MudItem xs="12" md="9">
+                    @if (_snapData != null && _snapData.Any())
+                    {
+                        <MudPaper Class="pa-4">
+                            <MudText Typo="Typo.h6" Class="mb-3">
+                                Snap Counts (@_snapSeason) - @_snapData.Count results
+                            </MudText>
+                            
+                            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                <thead>
+                                    <tr>
+                                        <th>Player</th>
+                                        <th>Team</th>
+                                        <th>Position</th>
+                                        <th>Week</th>
+                                        <th>Off Snaps</th>
+                                        <th>Off %</th>
+                                        <th>Def Snaps</th>
+                                        <th>ST Snaps</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var snap in _snapData.Take(50))
+                                    {
+                                        <tr>
+                                            <td><strong>@GetString(snap, "player")</strong></td>
+                                            <td>@GetString(snap, "team")</td>
+                                            <td>@GetString(snap, "position")</td>
+                                            <td>@GetDouble(snap, "week").ToString("F0")</td>
+                                            <td>@GetDouble(snap, "offense_snaps").ToString("F0")</td>
+                                            <td>
+                                                @{ var offPct = GetDouble(snap, "offense_pct"); }
+                                                <MudChip T="string" Size="Size.Small" 
+                                                         Color="@(offPct >= 0.75 ? Color.Success : offPct >= 0.5 ? Color.Warning : Color.Default)">
+                                                    @(offPct * 100).ToString("F0")%
+                                                </MudChip>
+                                            </td>
+                                            <td>@GetDouble(snap, "defense_snaps").ToString("F0")</td>
+                                            <td>@GetDouble(snap, "st_snaps").ToString("F0")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudPaper>
+                    }
+                    else if (!_isLoading)
+                    {
+                        <MudPaper Class="pa-16 d-flex flex-column align-center justify-center" Style="min-height: 400px;">
+                            <MudIcon Icon="@Icons.Material.Filled.Timer" Size="Size.Large" Color="Color.Info" Class="mb-4" />
+                            <MudText Typo="Typo.h5">Snap Counts</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                Player participation data by game (2012+)
+                            </MudText>
+                        </MudPaper>
+                    }
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+        
+        @* Tab 3: Combine Data *@
+        <MudTabPanel Text="Combine" Icon="@Icons.Material.Filled.FitnessCenter">
+            <MudGrid>
+                <MudItem xs="12" md="3">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6" Class="mb-3">Filters</MudText>
+                        
+                        <MudSelect T="string" @bind-Value="_combinePosition" Label="Position" 
+                                   Variant="Variant.Outlined" Class="mb-3">
+                            <MudSelectItem Value="@("")">All Positions</MudSelectItem>
+                            <MudSelectItem Value="@("QB")">QB</MudSelectItem>
+                            <MudSelectItem Value="@("RB")">RB</MudSelectItem>
+                            <MudSelectItem Value="@("WR")">WR</MudSelectItem>
+                            <MudSelectItem Value="@("TE")">TE</MudSelectItem>
+                            <MudSelectItem Value="@("OL")">OL</MudSelectItem>
+                            <MudSelectItem Value="@("DL")">DL</MudSelectItem>
+                            <MudSelectItem Value="@("LB")">LB</MudSelectItem>
+                            <MudSelectItem Value="@("CB")">CB</MudSelectItem>
+                            <MudSelectItem Value="@("S")">S</MudSelectItem>
+                        </MudSelect>
+                        
+                        <MudSelect T="int?" @bind-Value="_combineYear" Label="Draft Year" 
+                                   Variant="Variant.Outlined" Class="mb-3">
+                            <MudSelectItem Value="@((int?)null)">All Years</MudSelectItem>
+                            @for (int y = DateTime.Now.Year; y >= 2000; y--)
+                            {
+                                var year = y;
+                                <MudSelectItem Value="@((int?)year)">@year</MudSelectItem>
+                            }
+                        </MudSelect>
+                        
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                                   OnClick="LoadCombineData" Disabled="@_isLoading">
+                            @if (_isLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                            Load Combine
+                        </MudButton>
+                    </MudPaper>
+                </MudItem>
+                
+                <MudItem xs="12" md="9">
+                    @if (_combineData != null && _combineData.Any())
+                    {
+                        <MudPaper Class="pa-4">
+                            <MudText Typo="Typo.h6" Class="mb-3">
+                                NFL Combine Results - @_combineData.Count athletes
+                            </MudText>
+                            
+                            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Pos</th>
+                                        <th>Year</th>
+                                        <th>40 Yard</th>
+                                        <th>Bench</th>
+                                        <th>Vertical</th>
+                                        <th>Broad</th>
+                                        <th>3 Cone</th>
+                                        <th>Shuttle</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var athlete in _combineData.Take(50))
+                                    {
+                                        <tr>
+                                            <td><strong>@GetString(athlete, "player_name")</strong></td>
+                                            <td>@GetString(athlete, "pos")</td>
+                                            <td>@GetDouble(athlete, "draft_year").ToString("F0")</td>
+                                            <td>
+                                                @{ var forty = GetDouble(athlete, "forty"); }
+                                                @if (forty > 0)
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" 
+                                                             Color="@(forty < 4.4 ? Color.Success : forty < 4.6 ? Color.Info : Color.Default)">
+                                                        @forty.ToString("F2")s
+                                                    </MudChip>
+                                                }
+                                                else { <span>-</span> }
+                                            </td>
+                                            <td>@(GetDouble(athlete, "bench") > 0 ? GetDouble(athlete, "bench").ToString("F0") : "-")</td>
+                                            <td>@(GetDouble(athlete, "vertical") > 0 ? GetDouble(athlete, "vertical").ToString("F1") + "\"" : "-")</td>
+                                            <td>@(GetDouble(athlete, "broad_jump") > 0 ? GetDouble(athlete, "broad_jump").ToString("F0") + "\"" : "-")</td>
+                                            <td>@(GetDouble(athlete, "cone") > 0 ? GetDouble(athlete, "cone").ToString("F2") + "s" : "-")</td>
+                                            <td>@(GetDouble(athlete, "shuttle") > 0 ? GetDouble(athlete, "shuttle").ToString("F2") + "s" : "-")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudPaper>
+                    }
+                    else if (!_isLoading)
+                    {
+                        <MudPaper Class="pa-16 d-flex flex-column align-center justify-center" Style="min-height: 400px;">
+                            <MudIcon Icon="@Icons.Material.Filled.FitnessCenter" Size="Size.Large" Color="Color.Warning" Class="mb-4" />
+                            <MudText Typo="Typo.h5">NFL Combine</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                Athletic measurables from the NFL Combine (2000+)
+                            </MudText>
+                        </MudPaper>
+                    }
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+        
+        @* Tab 4: Data Status *@
+        <MudTabPanel Text="Data Status" Icon="@Icons.Material.Filled.Storage">
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6" Class="mb-3">Dataset Availability</MudText>
+                        
+                        @if (_dataStatus != null)
+                        {
+                            <MudList T="string" Dense="true">
+                                @foreach (var kvp in _dataStatus)
+                                {
+                                    @if (kvp.Value is bool boolVal)
+                                    {
+                                        <MudListItem>
+                                            <MudStack Row="true" AlignItems="AlignItems.Center">
+                                                <MudIcon Icon="@(boolVal ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Cancel)"
+                                                         Color="@(boolVal ? Color.Success : Color.Error)" />
+                                                <MudText>@kvp.Key</MudText>
+                                            </MudStack>
+                                        </MudListItem>
+                                    }
+                                    else if (kvp.Value is Dictionary<string, object> nested)
+                                    {
+                                        <MudListItem>
+                                            <MudText Typo="Typo.subtitle2">@kvp.Key</MudText>
+                                            <MudList T="string" Dense="true" Class="ml-4">
+                                                @foreach (var sub in nested)
+                                                {
+                                                    var isAvail = sub.Value is bool b && b;
+                                                    <MudListItem>
+                                                        <MudStack Row="true" AlignItems="AlignItems.Center">
+                                                            <MudIcon Icon="@(isAvail ? Icons.Material.Filled.Check : Icons.Material.Filled.Close)"
+                                                                     Color="@(isAvail ? Color.Success : Color.Error)" Size="Size.Small" />
+                                                            <MudText Typo="Typo.body2">@sub.Key</MudText>
+                                                        </MudStack>
+                                                    </MudListItem>
+                                                }
+                                            </MudList>
+                                        </MudListItem>
+                                    }
+                                }
+                            </MudList>
+                        }
+                        
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mt-4" FullWidth="true"
+                                   OnClick="CheckDataStatus">
+                            Refresh Status
+                        </MudButton>
+                    </MudPaper>
+                </MudItem>
+                
+                <MudItem xs="12" md="6">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6" Class="mb-3">Download Data</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-4">
+                            Download comprehensive nflverse datasets including Next Gen Stats, 
+                            snap counts, combine data, and more.
+                        </MudText>
+                        
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                                   OnClick="DownloadData" Disabled="@_isDownloading" Class="mb-3">
+                            @if (_isDownloading)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                @:Downloading...
+                            }
+                            else
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.CloudDownload" Class="mr-2" />
+                                @:Download All Datasets
+                            }
+                        </MudButton>
+                        
+                        @if (_downloadResult != null)
+                        {
+                            <MudAlert Severity="Severity.Success">
+                                Download complete! Check status for results.
+                            </MudAlert>
+                        }
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
+
+@code {
+    private int _activeTab = 0;
+    private bool _isLoading = false;
+    private bool _isDownloading = false;
+    private bool _dataLoaded = false;
+    
+    // NGS state
+    private int _selectedSeason = DateTime.Now.Year;
+    private string _ngsCategory = "passing";
+    private string _playerFilter = "";
+    private List<Dictionary<string, object>>? _ngsData;
+    
+    // Snap counts state
+    private int _snapSeason = DateTime.Now.Year;
+    private string _snapTeam = "";
+    private string _snapPlayer = "";
+    private List<Dictionary<string, object>>? _snapData;
+    
+    // Combine state
+    private string _combinePosition = "";
+    private int? _combineYear;
+    private List<Dictionary<string, object>>? _combineData;
+    
+    // Data status
+    private Dictionary<string, object>? _dataStatus;
+    private object? _downloadResult;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckDataStatus();
+    }
+    
+    private async Task CheckDataStatus()
+    {
+        try
+        {
+            var response = await Http.GetAsync("http://backend:8000/nfl/data/status");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<JsonElement>(json);
+                if (result.TryGetProperty("datasets", out var datasets))
+                {
+                    _dataStatus = ParseJsonToDict(datasets);
+                    
+                    // Check if any advanced data is available
+                    _dataLoaded = _dataStatus.Values.Any(v => v is bool b && b);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error checking data status");
+        }
+    }
+    
+    private async Task DownloadData()
+    {
+        _isDownloading = true;
+        StateHasChanged();
+        
+        try
+        {
+            var response = await Http.PostAsync("http://backend:8000/nfl/data/download-comprehensive", null);
+            if (response.IsSuccessStatusCode)
+            {
+                _downloadResult = await response.Content.ReadAsStringAsync();
+                Snackbar.Add("Data download complete!", Severity.Success);
+                await CheckDataStatus();
+            }
+            else
+            {
+                Snackbar.Add("Download failed", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isDownloading = false;
+            StateHasChanged();
+        }
+    }
+    
+    private async Task LoadNGSData()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        
+        try
+        {
+            var url = $"http://backend:8000/nfl/nextgen/{_ngsCategory}?season={_selectedSeason}";
+            if (!string.IsNullOrEmpty(_playerFilter))
+                url += $"&player={Uri.EscapeDataString(_playerFilter)}";
+            
+            var response = await Http.GetAsync(url);
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<JsonElement>(json);
+                
+                if (result.TryGetProperty("data", out var data))
+                {
+                    _ngsData = ParseJsonArray(data);
+                    Snackbar.Add($"Loaded {_ngsData.Count} records", Severity.Success);
+                }
+                else if (result.TryGetProperty("error", out var error))
+                {
+                    Snackbar.Add(error.GetString() ?? "Data not available", Severity.Warning);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+    
+    private async Task LoadSnapCounts()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        
+        try
+        {
+            var url = $"http://backend:8000/nfl/snap-counts?season={_snapSeason}";
+            if (!string.IsNullOrEmpty(_snapTeam))
+                url += $"&team={Uri.EscapeDataString(_snapTeam)}";
+            if (!string.IsNullOrEmpty(_snapPlayer))
+                url += $"&player={Uri.EscapeDataString(_snapPlayer)}";
+            
+            var response = await Http.GetAsync(url);
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<JsonElement>(json);
+                
+                if (result.TryGetProperty("data", out var data))
+                {
+                    _snapData = ParseJsonArray(data);
+                    Snackbar.Add($"Loaded {_snapData.Count} snap records", Severity.Success);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+    
+    private async Task LoadCombineData()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        
+        try
+        {
+            var url = "http://backend:8000/nfl/combine?";
+            if (!string.IsNullOrEmpty(_combinePosition))
+                url += $"position={_combinePosition}&";
+            if (_combineYear.HasValue)
+                url += $"year={_combineYear}&";
+            
+            var response = await Http.GetAsync(url.TrimEnd('?', '&'));
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<JsonElement>(json);
+                
+                if (result.TryGetProperty("data", out var data))
+                {
+                    _combineData = ParseJsonArray(data);
+                    Snackbar.Add($"Loaded {_combineData.Count} combine records", Severity.Success);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+    
+    // Helper: Parse JSON array to list of dictionaries
+    private List<Dictionary<string, object>> ParseJsonArray(JsonElement element)
+    {
+        var result = new List<Dictionary<string, object>>();
+        foreach (var item in element.EnumerateArray())
+        {
+            result.Add(ParseJsonToDict(item));
+        }
+        return result;
+    }
+    
+    private Dictionary<string, object> ParseJsonToDict(JsonElement element)
+    {
+        var dict = new Dictionary<string, object>();
+        foreach (var prop in element.EnumerateObject())
+        {
+            dict[prop.Name] = prop.Value.ValueKind switch
+            {
+                JsonValueKind.String => prop.Value.GetString() ?? "",
+                JsonValueKind.Number => prop.Value.GetDouble(),
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                JsonValueKind.Object => ParseJsonToDict(prop.Value),
+                _ => prop.Value.ToString()
+            };
+        }
+        return dict;
+    }
+    
+    private string GetString(Dictionary<string, object> dict, string key) =>
+        dict.TryGetValue(key, out var val) && val is string s ? s : "";
+    
+    private double GetDouble(Dictionary<string, object> dict, string key) =>
+        dict.TryGetValue(key, out var val) && val is double d ? d : 0;
+}
