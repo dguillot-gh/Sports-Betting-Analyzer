@@ -86,192 +86,276 @@
             </MudStack>
         </MudPaper>
 
+
         @if (_error != null)
         {
             <MudAlert Severity="Severity.Error" Variant="Variant.Filled">@_error</MudAlert>
         }
 
-        @if (_games.Any())
-        {
-            <MudText Typo="Typo.subtitle1" Color="Color.Secondary">
-                @_games.Count game(s) found • @_date • Stats from NBA API
-            </MudText>
-            
-            <MudGrid Spacing="3">
-                @foreach (var game in _games)
+        <!-- Top-level Tabs -->
+        <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+            <!-- Games Tab (Original) -->
+            <MudTabPanel Text="Games" Icon="@Icons.Material.Filled.SportsBasketball">
+                @if (_games.Any())
                 {
-                    <MudItem xs="12" md="6" lg="4">
-                        <MudCard Elevation="3" Class="h-100">
-                            <MudCardHeader>
-                                <CardHeaderContent>
-                                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                                        <MudText Typo="Typo.h6">@game.AwayTeam</MudText>
-                                        <MudText Typo="Typo.caption">@@</MudText>
-                                        <MudText Typo="Typo.h6">@game.HomeTeam</MudText>
-                                    </MudStack>
-                                </CardHeaderContent>
-                            </MudCardHeader>
-                            <MudCardContent>
-                                <MudStack Spacing="2">
-                                    <!-- Odds Row -->
-                                    <MudStack Row="true" Justify="Justify.SpaceBetween">
-                                        <MudChip T="string" Size="Size.Small" Color="Color.Default">
-                                            Away: @FormatOdds(game.AwayMoneyline)
-                                        </MudChip>
-                                        <MudChip T="string" Size="Size.Small" Color="Color.Default">
-                                            Home: @FormatOdds(game.HomeMoneyline)
-                                        </MudChip>
-                                    </MudStack>
-                                    
-                                    <MudDivider />
-                                    
-                                    <!-- Model Comparison Table -->
-                                    <MudSimpleTable Dense="true" Hover="true" Style="background: transparent;">
-                                        <thead>
-                                            <tr style="background: rgba(0,0,0,0.1);">
-                                                <th></th>
-                                                <th style="text-align: center;">📊 Simple</th>
-                                                <th style="text-align: center;">🤖 XGBoost</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr>
-                                                <td><MudText Typo="Typo.caption">Home Win %</MudText></td>
-                                                <td style="text-align: center;">
-                                                    <strong style="color: #4caf50;">
-                                                        @(((game.SimpleModel?.HomeWinProb ?? 0) * 100).ToString("F1"))%
-                                                    </strong>
-                                                </td>
-                                                <td style="text-align: center;">
-                                                    @if (game.XgbModel?.Error == null)
+                    <MudText Typo="Typo.subtitle1" Color="Color.Secondary" Class="mb-3">
+                        @_games.Count game(s) found • @_date • Stats from NBA API
+                    </MudText>
+                    
+                    <MudGrid Spacing="3">
+                        @foreach (var game in _games)
+                        {
+                            <MudItem xs="12" md="6" lg="4">
+                                <MudCard Elevation="3" Class="h-100">
+                                    <MudCardHeader>
+                                        <CardHeaderContent>
+                                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                                <MudText Typo="Typo.h6">@game.AwayTeam</MudText>
+                                                <MudText Typo="Typo.caption">@@</MudText>
+                                                <MudText Typo="Typo.h6">@game.HomeTeam</MudText>
+                                            </MudStack>
+                                        </CardHeaderContent>
+                                    </MudCardHeader>
+                                    <MudCardContent>
+                                        <MudStack Spacing="2">
+                                            <!-- Odds Row -->
+                                            <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Default">
+                                                    Away: @FormatOdds(game.AwayMoneyline)
+                                                </MudChip>
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Default">
+                                                    Home: @FormatOdds(game.HomeMoneyline)
+                                                </MudChip>
+                                            </MudStack>
+                                            
+                                            <MudDivider />
+                                            
+                                            <!-- Model Comparison Table -->
+                                            <MudSimpleTable Dense="true" Hover="true" Style="background: transparent;">
+                                                <thead>
+                                                    <tr style="background: rgba(0,0,0,0.1);">
+                                                        <th></th>
+                                                        <th style="text-align: center;">📊 Simple</th>
+                                                        <th style="text-align: center;">🤖 XGBoost</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr>
+                                                        <td><MudText Typo="Typo.caption">Home Win %</MudText></td>
+                                                        <td style="text-align: center;">
+                                                            <strong style="color: #4caf50;">
+                                                                @(((game.SimpleModel?.HomeWinProb ?? 0) * 100).ToString("F1"))%
+                                                            </strong>
+                                                        </td>
+                                                        <td style="text-align: center;">
+                                                            @if (game.XgbModel?.Error == null)
+                                                            {
+                                                                <strong style="color: #2196f3;">
+                                                                    @(((game.XgbModel?.HomeWinProb ?? 0) * 100).ToString("F1"))%
+                                                                </strong>
+                                                            }
+                                                            else
+                                                            {
+                                                                <MudText Typo="Typo.caption" Color="Color.Warning">Train Required</MudText>
+                                                            }
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td><MudText Typo="Typo.caption">Pick (ML)</MudText></td>
+                                                        <td style="text-align: center; color: #4caf50;">
+                                                            @(game.SimpleModel?.PredictedWinner ?? "—")
+                                                        </td>
+                                                        <td style="text-align: center; color: #2196f3;">
+                                                            @(game.XgbModel?.PredictedWinner ?? "—")
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td><MudText Typo="Typo.caption">EV (Home)</MudText></td>
+                                                        <td style="text-align: center;">
+                                                            <span style="color: @(game.SimpleModel?.EvHome > 0 ? "#4caf50" : "#f44336")">
+                                                                @(game.SimpleModel?.EvHome?.ToString("+0.00;-0.00") ?? "—")
+                                                            </span>
+                                                        </td>
+                                                        <td style="text-align: center;">
+                                                            <span style="color: @(game.XgbModel?.EvHome > 0 ? "#4caf50" : "#f44336")">
+                                                                @(game.XgbModel?.EvHome?.ToString("+0.00;-0.00") ?? "—")
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td><MudText Typo="Typo.caption">Kelly %</MudText></td>
+                                                        <td style="text-align: center;">
+                                                            @(game.SimpleModel?.KellyHome?.ToString("F1") ?? "—")%
+                                                        </td>
+                                                        <td style="text-align: center;">
+                                                            @(game.XgbModel?.KellyHome?.ToString("F1") ?? "—")%
+                                                        </td>
+                                                    </tr>
+                                                    @if (game.XgbModel?.OverUnder != null)
                                                     {
-                                                        <strong style="color: #2196f3;">
-                                                            @(((game.XgbModel?.HomeWinProb ?? 0) * 100).ToString("F1"))%
-                                                        </strong>
+                                                        <tr>
+                                                            <td><MudText Typo="Typo.caption">O/U Pick</MudText></td>
+                                                            <td style="text-align: center;">—</td>
+                                                            <td style="text-align: center;">
+                                                                <MudChip T="string" Size="Size.Small" 
+                                                                         Color="@(game.XgbModel.OverUnder.Pick == "OVER" ? Color.Info : Color.Secondary)">
+                                                                    @game.XgbModel.OverUnder.Pick @game.XgbModel.OverUnder.TotalLine (@(game.XgbModel.OverUnder.Confidence)%)
+                                                                </MudChip>
+                                                            </td>
+                                                        </tr>
                                                     }
-                                                    else
-                                                    {
-                                                        <MudText Typo="Typo.caption" Color="Color.Warning">Train Required</MudText>
-                                                    }
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td><MudText Typo="Typo.caption">Pick (ML)</MudText></td>
-                                                <td style="text-align: center; color: #4caf50;">
-                                                    @(game.SimpleModel?.PredictedWinner ?? "—")
-                                                </td>
-                                                <td style="text-align: center; color: #2196f3;">
-                                                    @(game.XgbModel?.PredictedWinner ?? "—")
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td><MudText Typo="Typo.caption">EV (Home)</MudText></td>
-                                                <td style="text-align: center;">
-                                                    <span style="color: @(game.SimpleModel?.EvHome > 0 ? "#4caf50" : "#f44336")">
-                                                        @(game.SimpleModel?.EvHome?.ToString("+0.00;-0.00") ?? "—")
-                                                    </span>
-                                                </td>
-                                                <td style="text-align: center;">
-                                                    <span style="color: @(game.XgbModel?.EvHome > 0 ? "#4caf50" : "#f44336")">
-                                                        @(game.XgbModel?.EvHome?.ToString("+0.00;-0.00") ?? "—")
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td><MudText Typo="Typo.caption">Kelly %</MudText></td>
-                                                <td style="text-align: center;">
-                                                    @(game.SimpleModel?.KellyHome?.ToString("F1") ?? "—")%
-                                                </td>
-                                                <td style="text-align: center;">
-                                                    @(game.XgbModel?.KellyHome?.ToString("F1") ?? "—")%
-                                                </td>
-                                            </tr>
-                                            @if (game.XgbModel?.OverUnder != null)
-                                            {
-                                                <tr>
-                                                    <td><MudText Typo="Typo.caption">O/U Pick</MudText></td>
-                                                    <td style="text-align: center;">—</td>
-                                                    <td style="text-align: center;">
-                                                        <MudChip T="string" Size="Size.Small" 
-                                                                 Color="@(game.XgbModel.OverUnder.Pick == "OVER" ? Color.Info : Color.Secondary)">
-                                                            @game.XgbModel.OverUnder.Pick @game.XgbModel.OverUnder.TotalLine (@(game.XgbModel.OverUnder.Confidence)%)
-                                                        </MudChip>
-                                                    </td>
-                                                </tr>
+                                                </tbody>
+                                            </MudSimpleTable>
+                                            
+                                            <!-- Agreement Badge -->
+                                            @{
+                                                var simpleWinner = game.SimpleModel?.PredictedWinner;
+                                                var xgbWinner = game.XgbModel?.PredictedWinner;
+                                                var modelsAgree = simpleWinner == xgbWinner && simpleWinner != null;
                                             }
-                                        </tbody>
-                                    </MudSimpleTable>
-                                    
-                                    <!-- Agreement Badge -->
-                                    @{
-                                        var simpleWinner = game.SimpleModel?.PredictedWinner;
-                                        var xgbWinner = game.XgbModel?.PredictedWinner;
-                                        var modelsAgree = simpleWinner == xgbWinner && simpleWinner != null;
-                                    }
-                                    <MudStack Row="true" Justify="Justify.Center">
-                                        @if (modelsAgree)
-                                        {
-                                            <MudChip T="string" Color="Color.Success" Size="Size.Small">
-                                                ✓ Models Agree: @simpleWinner
-                                            </MudChip>
-                                        }
-                                        else if (xgbWinner != null)
-                                        {
-                                            <MudChip T="string" Color="Color.Warning" Size="Size.Small">
-                                                ⚠ Models Disagree
-                                            </MudChip>
-                                        }
-                                    </MudStack>
-                                    
-                                    <!-- Expandable Stats Detail -->
-                                    <MudExpansionPanels Elevation="0" Dense="true" Class="mt-2">
-                                        <MudExpansionPanel Text="View Stats Details" MaxHeight="300" Dense="true">
-                                            <MudGrid Spacing="1">
-                                                <!-- Home Team Stats -->
-                                                <MudItem xs="6">
-                                                    <MudText Typo="Typo.caption" Style="font-weight: bold;">@game.HomeTeam</MudText>
-                                                    <MudText Typo="Typo.caption">PPG: @(game.HomeStats?.GetValueOrDefault("ppg", game.HomeStats?.GetValueOrDefault("PTS"))?.ToString() ?? "—")</MudText>
-                                                    <MudText Typo="Typo.caption">Win%: @(FormatPercent(game.HomeStats?.GetValueOrDefault("win_pct", game.HomeStats?.GetValueOrDefault("W_PCT"))))</MudText>
-                                                    <MudText Typo="Typo.caption">FG%: @(FormatPercent(game.HomeStats?.GetValueOrDefault("fg_pct", game.HomeStats?.GetValueOrDefault("FG_PCT"))))</MudText>
-                                                    <MudText Typo="Typo.caption">3P%: @(FormatPercent(game.HomeStats?.GetValueOrDefault("fg3_pct", game.HomeStats?.GetValueOrDefault("FG3_PCT"))))</MudText>
-                                                </MudItem>
-                                                <!-- Away Team Stats -->
-                                                <MudItem xs="6">
-                                                    <MudText Typo="Typo.caption" Style="font-weight: bold;">@game.AwayTeam</MudText>
-                                                    <MudText Typo="Typo.caption">PPG: @(game.AwayStats?.GetValueOrDefault("ppg", game.AwayStats?.GetValueOrDefault("PTS"))?.ToString() ?? "—")</MudText>
-                                                    <MudText Typo="Typo.caption">Win%: @(FormatPercent(game.AwayStats?.GetValueOrDefault("win_pct", game.AwayStats?.GetValueOrDefault("W_PCT"))))</MudText>
-                                                    <MudText Typo="Typo.caption">FG%: @(FormatPercent(game.AwayStats?.GetValueOrDefault("fg_pct", game.AwayStats?.GetValueOrDefault("FG_PCT"))))</MudText>
-                                                    <MudText Typo="Typo.caption">3P%: @(FormatPercent(game.AwayStats?.GetValueOrDefault("fg3_pct", game.AwayStats?.GetValueOrDefault("FG3_PCT"))))</MudText>
-                                                </MudItem>
-                                            </MudGrid>
-                                            <MudDivider Class="my-2" />
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                <strong>Simple Model:</strong> Uses PPG, Win%, and home court advantage (+2.5 pts)
-                                            </MudText>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                <strong>XGBoost:</strong> Uses all 30+ stats from NBA API with pre-trained 68.9% accuracy model
-                                            </MudText>
-                                        </MudExpansionPanel>
-                                    </MudExpansionPanels>
-                                </MudStack>
-                            </MudCardContent>
-                        </MudCard>
-                    </MudItem>
+                                            <MudStack Row="true" Justify="Justify.Center">
+                                                @if (modelsAgree)
+                                                {
+                                                    <MudChip T="string" Color="Color.Success" Size="Size.Small">
+                                                        ✓ Models Agree: @simpleWinner
+                                                    </MudChip>
+                                                }
+                                                else if (xgbWinner != null)
+                                                {
+                                                    <MudChip T="string" Color="Color.Warning" Size="Size.Small">
+                                                        ⚠ Models Disagree
+                                                    </MudChip>
+                                                }
+                                            </MudStack>
+                                        </MudStack>
+                                    </MudCardContent>
+                                </MudCard>
+                            </MudItem>
+                        }
+                    </MudGrid>
                 }
-            </MudGrid>
-        }
-        else if (!_isLoading)
-        {
-            <MudAlert Severity="Severity.Info">
-                Click "Analyze Games" to fetch today's NBA games and run predictions.
-            </MudAlert>
-        }
+                else if (!_isLoading)
+                {
+                    <MudAlert Severity="Severity.Info">
+                        Click "Analyze Games" to fetch today's NBA games and run predictions.
+                    </MudAlert>
+                }
+            </MudTabPanel>
+
+            <!-- AI Predictions Tab -->
+            <MudTabPanel Text="AI Predictions" Icon="@Icons.Material.Filled.Psychology">
+                <MudStack Spacing="3">
+                    <MudAlert Severity="Severity.Info" Dense="true">
+                        <strong>5 AI Engines:</strong> Baseline, Linear (Ridge), Tree (XGBoost), MLP (Neural Net), Ensemble (Best)
+                    </MudAlert>
+                    
+                    @if (_games.Any())
+                    {
+                        <MudStack Row="true" Spacing="2" Class="mb-2">
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" 
+                                       OnClick="@LoadAllAiPredictions" Disabled="@_loadingAi">
+                                @if (_loadingAi)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                }
+                                Load AI Predictions for All Games
+                            </MudButton>
+                        </MudStack>
+                        
+                        <MudGrid Spacing="3">
+                            @foreach (var game in _games)
+                            {
+                                <MudItem xs="12" md="6">
+                                    <MudCard Elevation="3">
+                                        <MudCardHeader Style="background: linear-gradient(135deg, #1a237e 0%, #0d47a1 100%);">
+                                            <CardHeaderContent>
+                                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                                    <MudText Typo="Typo.h6" Style="color: white;">@game.AwayTeam @@ @game.HomeTeam</MudText>
+                                                    @if (game.AiPredictions != null)
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Success">Loaded</MudChip>
+                                                    }
+                                                </MudStack>
+                                            </CardHeaderContent>
+                                        </MudCardHeader>
+                                        <MudCardContent>
+                                            @if (game.AiPredictions == null)
+                                            {
+                                                <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
+                                                           OnClick="@(() => LoadAiPredictions(game))" Disabled="@_loadingAi">
+                                                    Load AI Predictions
+                                                </MudButton>
+                                            }
+                                            else
+                                            {
+                                                <MudSimpleTable Dense="true" Hover="true">
+                                                    <thead>
+                                                        <tr style="background: rgba(0,0,0,0.1);">
+                                                            <th>Engine</th>
+                                                            <th style="text-align: center;">Home Win %</th>
+                                                            <th style="text-align: center;">Margin</th>
+                                                            <th style="text-align: center;">Pick</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        @foreach (var engine in new[] { "Baseline", "Linear", "Tree", "MLP", "Ensemble" })
+                                                        {
+                                                            var pred = GetAiEnginePrediction(game.AiPredictions, engine);
+                                                            <tr style="@(engine == "Ensemble" ? "background: rgba(33, 150, 243, 0.15); font-weight: bold;" : "")">
+                                                                <td>
+                                                                    @engine
+                                                                    @if (engine == "Ensemble")
+                                                                    {
+                                                                        <MudChip T="string" Size="Size.Small" Color="Color.Info" 
+                                                                                 Style="margin-left: 4px; font-size: 0.65rem;">Best</MudChip>
+                                                                    }
+                                                                </td>
+                                                                <td style="text-align: center; color: @(pred.HomeWinProb > 0.5 ? "#4caf50" : "#f44336");">
+                                                                    @((pred.HomeWinProb * 100).ToString("F1"))%
+                                                                </td>
+                                                                <td style="text-align: center; color: @(pred.Margin > 0 ? "#4caf50" : "#f44336");">
+                                                                    @pred.Margin.ToString("+0.0;-0.0")
+                                                                </td>
+                                                                <td style="text-align: center; font-weight: bold;">
+                                                                    @(pred.HomeWinProb > 0.5 ? game.HomeTeam : game.AwayTeam)
+                                                                </td>
+                                                            </tr>
+                                                        }
+                                                    </tbody>
+                                                </MudSimpleTable>
+                                                @if (game.AiPredictions.Value.TryGetProperty("consensus", out var consensus))
+                                                {
+                                                    <MudStack Row="true" Justify="Justify.Center" Class="mt-3">
+                                                        <MudChip T="string" Size="Size.Medium" 
+                                                                 Color="@(consensus.TryGetProperty("confidence", out var conf) && conf.GetString() == "high" ? Color.Success : Color.Warning)">
+                                                            🎯 Consensus: @(consensus.TryGetProperty("pick", out var pick) ? (pick.GetString() == "Home" ? game.HomeTeam : game.AwayTeam) : "—")
+                                                            (@(consensus.TryGetProperty("home_win_prob", out var prob) ? (prob.GetDouble() * 100).ToString("F0") : "—")%)
+                                                        </MudChip>
+                                                    </MudStack>
+                                                }
+                                            }
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                            }
+                        </MudGrid>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info">
+                            Load games from the "Games" tab first, then switch here for AI predictions.
+                        </MudAlert>
+                    }
+                </MudStack>
+            </MudTabPanel>
+        </MudTabs>
     </MudStack>
 </MudContainer>
 
 @code {
     private bool _isLoading = false;
     private bool _isTraining = false;
+    private bool _loadingAi = false;
     private string? _error = null;
     private string _selectedSportsbook = "fanduel";
     private string _date = "";
@@ -448,6 +532,7 @@
         public ModelResult? XgbModel { get; set; }
         public Dictionary<string, object>? HomeStats { get; set; }
         public Dictionary<string, object>? AwayStats { get; set; }
+        public JsonElement? AiPredictions { get; set; }
     }
 
     private class ModelResult
@@ -467,6 +552,82 @@
         public string Pick { get; set; } = "";
         public double TotalLine { get; set; }
         public double Confidence { get; set; }
+    }
+
+    // AI Engine Predictions
+    private async Task LoadAiPredictions(GamePrediction game)
+    {
+        _loadingAi = true;
+        StateHasChanged();
+        
+        try
+        {
+            var homePpg = game.HomeStats?.GetValueOrDefault("ppg") ?? game.HomeStats?.GetValueOrDefault("PTS") ?? 110;
+            var awayPpg = game.AwayStats?.GetValueOrDefault("ppg") ?? game.AwayStats?.GetValueOrDefault("PTS") ?? 108;
+            var homeFg = game.HomeStats?.GetValueOrDefault("fg_pct") ?? game.HomeStats?.GetValueOrDefault("FG_PCT") ?? 0.47;
+            var awayFg = game.AwayStats?.GetValueOrDefault("fg_pct") ?? game.AwayStats?.GetValueOrDefault("FG_PCT") ?? 0.46;
+            
+            var url = $"http://backend:8000/nba/ai/predictions?home_team={Uri.EscapeDataString(game.HomeTeam)}&away_team={Uri.EscapeDataString(game.AwayTeam)}&home_ppg={homePpg}&away_ppg={awayPpg}&home_fg_pct={homeFg}&away_fg_pct={awayFg}";
+            var response = await Http.GetAsync(url);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                game.AiPredictions = JsonDocument.Parse(json).RootElement;
+                Snackbar.Add($"AI predictions loaded for {game.HomeTeam} vs {game.AwayTeam}", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to load AI predictions", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        
+        _loadingAi = false;
+        StateHasChanged();
+    }
+
+    private record AiEnginePredResult(double HomeWinProb, double Margin);
+
+    private AiEnginePredResult GetAiEnginePrediction(JsonElement? aiPredictions, string engine)
+    {
+        if (aiPredictions == null) return new AiEnginePredResult(0.5, 0);
+        
+        try
+        {
+            if (aiPredictions.Value.TryGetProperty("predictions", out var preds) &&
+                preds.TryGetProperty(engine, out var enginePred))
+            {
+                var prob = enginePred.TryGetProperty("home_win_prob", out var p) ? p.GetDouble() : 0.5;
+                var margin = enginePred.TryGetProperty("margin", out var m) ? m.GetDouble() : 0;
+                return new AiEnginePredResult(prob, margin);
+            }
+        }
+        catch { }
+        
+        return new AiEnginePredResult(0.5, 0);
+    }
+
+    private async Task LoadAllAiPredictions()
+    {
+        _loadingAi = true;
+        StateHasChanged();
+        
+        foreach (var game in _games)
+        {
+            if (game.AiPredictions == null)
+            {
+                await LoadAiPredictions(game);
+                await Task.Delay(100); // Small delay to avoid overwhelming the backend
+            }
+        }
+        
+        _loadingAi = false;
+        Snackbar.Add($"AI predictions loaded for all {_games.Count} games!", Severity.Success);
+        StateHasChanged();
     }
 }
 

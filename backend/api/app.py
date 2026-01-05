@@ -3314,3 +3314,137 @@ async def import_ncaa_baseball(division: int = 1, year: int = 2024, background_t
     except Exception as e:
         logger.error(f"Error starting import: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== NASCAR DATA EXPLORER (pynascar) ====================
+
+@app.get("/nascar/pynascar/status")
+async def get_pynascar_status():
+    """Check if pynascar is available."""
+    try:
+        from scripts.pynascar_adapter import is_pynascar_available
+        return {
+            "available": is_pynascar_available(),
+            "package": "pynascar",
+            "features": ["schedule", "race_data", "lap_times", "pit_stops", "driver_stats"]
+        }
+    except Exception as e:
+        return {"available": False, "error": str(e)}
+
+
+@app.get("/nascar/pynascar/schedule")
+async def get_pynascar_schedule(year: int = None, series: str = "cup"):
+    """Get NASCAR race schedule."""
+    try:
+        from scripts.pynascar_adapter import get_nascar_schedule
+        return get_nascar_schedule(year, series)
+    except Exception as e:
+        logger.error(f"Error fetching NASCAR schedule: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/nascar/pynascar/race/{race_id}")
+async def get_pynascar_race(race_id: int):
+    """Get detailed race data."""
+    try:
+        from scripts.pynascar_adapter import get_nascar_race
+        return get_nascar_race(race_id)
+    except Exception as e:
+        logger.error(f"Error fetching race data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/nascar/pynascar/lap-times/{race_id}")
+async def get_pynascar_lap_times(race_id: int, driver: str = None):
+    """Get lap times for a race."""
+    try:
+        from scripts.pynascar_adapter import get_nascar_lap_times
+        return get_nascar_lap_times(race_id, driver)
+    except Exception as e:
+        logger.error(f"Error fetching lap times: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/nascar/pynascar/pit-stops/{race_id}")
+async def get_pynascar_pit_stops(race_id: int):
+    """Get pit stop data for a race."""
+    try:
+        from scripts.pynascar_adapter import get_nascar_pit_stops
+        return get_nascar_pit_stops(race_id)
+    except Exception as e:
+        logger.error(f"Error fetching pit stops: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/nascar/pynascar/drivers")
+async def get_pynascar_drivers(year: int = None, series: str = "cup"):
+    """Get driver season statistics."""
+    try:
+        from scripts.pynascar_adapter import get_nascar_drivers
+        return get_nascar_drivers(year, series)
+    except Exception as e:
+        logger.error(f"Error fetching driver stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/nascar/pynascar/live")
+async def get_pynascar_live():
+    """Get currently live race data if any."""
+    try:
+        from scripts.pynascar_adapter import get_nascar_live
+        return get_nascar_live()
+    except Exception as e:
+        logger.error(f"Error checking live race: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== NBA_AI PREDICTIONS ====================
+
+@app.get("/nba/ai/predictions")
+async def get_nba_ai_predictions(
+    home_team: str = Query(..., description="Home team name"),
+    away_team: str = Query(..., description="Away team name"),
+    home_ppg: float = Query(110.0, description="Home team PPG"),
+    away_ppg: float = Query(108.0, description="Away team PPG"),
+    home_fg_pct: float = Query(0.47, description="Home team FG%"),
+    away_fg_pct: float = Query(0.46, description="Away team FG%")
+):
+    """
+    Get predictions from all NBA_AI engines.
+    
+    Returns predictions from: Baseline, Linear, Tree, MLP, Ensemble
+    """
+    try:
+        from scripts.nba_ai_adapter import get_nba_ai_predictions as ai_predict
+        
+        home_stats = {
+            "team_name": home_team,
+            "pts_per_game": home_ppg,
+            "fg_pct": home_fg_pct
+        }
+        away_stats = {
+            "team_name": away_team,
+            "pts_per_game": away_ppg,
+            "fg_pct": away_fg_pct
+        }
+        
+        return ai_predict(home_stats, away_stats)
+        
+    except Exception as e:
+        logger.error(f"Error getting NBA AI predictions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/nba/ai/engines")
+async def get_nba_ai_engines():
+    """List available NBA_AI prediction engines."""
+    return {
+        "engines": [
+            {"name": "Baseline", "description": "Simple PPG-based predictor", "confidence": "low"},
+            {"name": "Linear", "description": "Ridge Regression with rolling features", "confidence": "medium"},
+            {"name": "Tree", "description": "XGBoost model", "confidence": "high"},
+            {"name": "MLP", "description": "PyTorch neural network", "confidence": "medium"},
+            {"name": "Ensemble", "description": "Weighted average: 30% Linear + 40% Tree + 30% MLP", "confidence": "high"}
+        ],
+        "source": "https://github.com/NBA-Betting/NBA_AI"
+    }

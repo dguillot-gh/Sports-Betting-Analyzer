@@ -23,3 +23,6 @@ polars
 basketball_reference_web_scraper
 nba_api
 sbrscrape
+pynascar
+torch --index-url https://download.pytorch.org/whl/cpu
+joblib
