@@ -485,40 +485,26 @@
                     <MudPaper Class="pa-4">
                         <MudText Typo="Typo.h6" Class="mb-3">Dataset Availability</MudText>
                         
-                        @if (_dataStatus != null)
+                        @if (_fileStatus != null)
                         {
                             <MudList T="string" Dense="true">
-                                @foreach (var kvp in _dataStatus)
+                                @foreach (var kvp in _fileStatus.OrderBy(x => x.Key))
                                 {
-                                    @if (kvp.Value is bool boolVal)
-                                    {
-                                        <MudListItem>
-                                            <MudStack Row="true" AlignItems="AlignItems.Center">
-                                                <MudIcon Icon="@(boolVal ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Cancel)"
-                                                         Color="@(boolVal ? Color.Success : Color.Error)" />
-                                                <MudText>@kvp.Key</MudText>
-                                            </MudStack>
-                                        </MudListItem>
-                                    }
-                                    else if (kvp.Value is Dictionary<string, object> nested)
-                                    {
-                                        <MudListItem>
-                                            <MudText Typo="Typo.subtitle2">@kvp.Key</MudText>
-                                            <MudList T="string" Dense="true" Class="ml-4">
-                                                @foreach (var sub in nested)
+                                    <MudListItem>
+                                        <MudStack Row="true" AlignItems="AlignItems.Center">
+                                            <MudIcon Icon="@(kvp.Value.Exists ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Cancel)"
+                                                     Color="@(kvp.Value.Exists ? Color.Success : Color.Error)" />
+                                            <MudText>
+                                                @kvp.Key
+                                                @if (kvp.Value.LastModified.HasValue)
                                                 {
-                                                    var isAvail = sub.Value is bool b && b;
-                                                    <MudListItem>
-                                                        <MudStack Row="true" AlignItems="AlignItems.Center">
-                                                            <MudIcon Icon="@(isAvail ? Icons.Material.Filled.Check : Icons.Material.Filled.Close)"
-                                                                     Color="@(isAvail ? Color.Success : Color.Error)" Size="Size.Small" />
-                                                            <MudText Typo="Typo.body2">@sub.Key</MudText>
-                                                        </MudStack>
-                                                    </MudListItem>
+                                                    <span style="font-size: 0.8em; opacity: 0.7; margin-left: 8px;">
+                                                        (@kvp.Value.LastModified.Value.ToString("g"))
+                                                    </span>
                                                 }
-                                            </MudList>
-                                        </MudListItem>
-                                    }
+                                            </MudText>
+                                        </MudStack>
+                                    </MudListItem>
                                 }
                             </MudList>
                         }
@@ -777,8 +763,8 @@
                                                   Items="_chartData"
                                                   Name="Time to Throw (s)"
                                                   SeriesType="AC.SeriesType.Bar"
-                                                  XValue="@(e => e.PlayerName)"
-                                                  YValue="@(e => (decimal)e.TimeToThrow)" />
+                                                  XValue="_chartXValue"
+                                                  YValue="_chartYValueTTT" />
                             </AC.ApexChart>
                             
                             <MudDivider Class="my-4" />
@@ -796,8 +782,8 @@
                                                   Items="_chartData"
                                                   Name="CPOE %"
                                                   SeriesType="AC.SeriesType.Bar"
-                                                  XValue="@(e => e.PlayerName)"
-                                                  YValue="@(e => (decimal)e.CPOE)" />
+                                                  XValue="_chartXValue"
+                                                  YValue="_chartYValueCPOE" />
                             </AC.ApexChart>
                         }
                         else
@@ -892,7 +878,7 @@
     
     // Dialog state
     private bool _showDownloadDialog = false;
-    private DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true, DisableBackdropClick = true };
+    private DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
     
     // Status tracking
     private class DatasetInfo
@@ -904,10 +890,6 @@
     
     protected override async Task OnInitializedAsync()
     {
-        if (!string.IsNullOrEmpty(Sport))
-        {
-            // If sport logic needed
-        }
         await CheckDataStatus();
     }
     
@@ -1268,6 +1250,11 @@
         Xaxis = new AC.XAxis { Title = new AC.AxisTitle { Text = "Time (seconds)" } },
         Colors = new List<string> { "#00bcd4" }
     };
+
+    // Chart Delegates
+    private Func<NGSDataPoint, object> _chartXValue => e => e.PlayerName;
+    private Func<NGSDataPoint, decimal?> _chartYValueTTT => e => (decimal)e.TimeToThrow;
+    private Func<NGSDataPoint, decimal?> _chartYValueCPOE => e => (decimal)e.CPOE;
     
     private AC.ApexChartOptions<NGSDataPoint> _cpoeChartOptions = new()
     {
