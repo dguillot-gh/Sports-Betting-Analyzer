@@ -3711,3 +3711,35 @@ async def get_pynascar_live():
         logger.error(f"Error getting NASCAR live race: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ============== NBA SEASON SIMULATION ENDPOINTS ==============
+
+@app.post("/nba/simulation/season")
+async def run_nba_season_sim(
+    num_simulations: int = Query(1000, description="Number of Monte Carlo simulations")
+):
+    """
+    Run Monte Carlo simulation of NBA season.
+    Returns playoff probabilities and seed distributions for each team.
+    """
+    try:
+        from scripts.nba_season_simulator import run_nba_season_simulation
+        result = run_nba_season_simulation(num_simulations)
+        return result
+    except Exception as e:
+        logger.error(f"Error running NBA season simulation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/nba/simulation/standings")
+async def get_nba_standings():
+    """Get current NBA standings for simulation."""
+    try:
+        from scripts.nba_season_simulator import NBASeasonSimulator
+        simulator = NBASeasonSimulator()
+        standings = simulator.load_current_standings()
+        return {"standings": standings}
+    except Exception as e:
+        logger.error(f"Error getting NBA standings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+

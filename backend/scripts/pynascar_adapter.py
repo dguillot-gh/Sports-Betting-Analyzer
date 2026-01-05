@@ -36,6 +36,12 @@ class PyNASCARAdapter:
             "xfinity": "NASCAR Xfinity Series",
             "trucks": "NASCAR Craftsman Truck Series"
         }
+        # pynascar uses series_id: 1=Cup, 2=Xfinity, 3=Trucks
+        self.series_id_map = {
+            "cup": 1,
+            "xfinity": 2,
+            "trucks": 3
+        }
     
     def is_available(self) -> bool:
         """Check if pynascar is available."""
@@ -60,8 +66,9 @@ class PyNASCARAdapter:
             return self.cache[cache_key]
         
         try:
-            # pynascar Schedule only takes year, not series
-            schedule = Schedule(year=year)
+            # pynascar Schedule requires year and series_id
+            series_id = self.series_id_map.get(series, 1)  # Default to Cup
+            schedule = Schedule(year, series_id)
             
             races = []
             if hasattr(schedule, 'races'):
@@ -230,8 +237,9 @@ class PyNASCARAdapter:
             year = datetime.now().year
         
         try:
-            # pynascar DriversData may only take year
-            drivers_data = DriversData(year=year)
+            # pynascar DriversData requires year and series_id
+            series_id = self.series_id_map.get(series, 1)  # Default to Cup
+            drivers_data = DriversData(year, series_id)
             
             drivers = []
             if hasattr(drivers_data, 'drivers'):
@@ -268,8 +276,8 @@ class PyNASCARAdapter:
             return {"error": "pynascar not installed"}
         
         try:
-            # Get current year schedule (pynascar only takes year)
-            schedule = Schedule(year=datetime.now().year)
+            # Get current year schedule (pynascar requires year and series_id)
+            schedule = Schedule(datetime.now().year, 1)  # 1 = Cup Series
             
             # Look for in-progress race
             if hasattr(schedule, 'races'):
