@@ -57,6 +57,76 @@ TEAM_INDEX_CURRENT = {
     'Utah Jazz': 28, 'Washington Wizards': 29
 }
 
+# Team name aliases - maps common variations to canonical names
+TEAM_NAME_ALIASES = {
+    # LA teams - most common mismatch
+    'LA Clippers': 'Los Angeles Clippers',
+    'LA Lakers': 'Los Angeles Lakers',
+    'L.A. Clippers': 'Los Angeles Clippers',
+    'L.A. Lakers': 'Los Angeles Lakers',
+    # Other common variations
+    'NY Knicks': 'New York Knicks',
+    'New York': 'New York Knicks',
+    'OKC Thunder': 'Oklahoma City Thunder',
+    'OKC': 'Oklahoma City Thunder',
+    'Philly 76ers': 'Philadelphia 76ers',
+    'Sixers': 'Philadelphia 76ers',
+    'GS Warriors': 'Golden State Warriors',
+    'GSW': 'Golden State Warriors',
+    'NOLA Pelicans': 'New Orleans Pelicans',
+    'Blazers': 'Portland Trail Blazers',
+    'Trail Blazers': 'Portland Trail Blazers',
+    # Short names (just in case)
+    'Celtics': 'Boston Celtics',
+    'Nets': 'Brooklyn Nets',
+    'Hornets': 'Charlotte Hornets',
+    'Bulls': 'Chicago Bulls',
+    'Cavaliers': 'Cleveland Cavaliers',
+    'Cavs': 'Cleveland Cavaliers',
+    'Mavericks': 'Dallas Mavericks',
+    'Mavs': 'Dallas Mavericks',
+    'Nuggets': 'Denver Nuggets',
+    'Pistons': 'Detroit Pistons',
+    'Warriors': 'Golden State Warriors',
+    'Rockets': 'Houston Rockets',
+    'Pacers': 'Indiana Pacers',
+    'Clippers': 'Los Angeles Clippers',
+    'Lakers': 'Los Angeles Lakers',
+    'Grizzlies': 'Memphis Grizzlies',
+    'Heat': 'Miami Heat',
+    'Bucks': 'Milwaukee Bucks',
+    'Timberwolves': 'Minnesota Timberwolves',
+    'Wolves': 'Minnesota Timberwolves',
+    'Pelicans': 'New Orleans Pelicans',
+    'Knicks': 'New York Knicks',
+    'Thunder': 'Oklahoma City Thunder',
+    'Magic': 'Orlando Magic',
+    '76ers': 'Philadelphia 76ers',
+    'Suns': 'Phoenix Suns',
+    'Kings': 'Sacramento Kings',
+    'Spurs': 'San Antonio Spurs',
+    'Raptors': 'Toronto Raptors',
+    'Jazz': 'Utah Jazz',
+    'Wizards': 'Washington Wizards',
+}
+
+
+def normalize_team_name(team: str) -> str:
+    """Normalize team name to canonical format expected by kyleskom model."""
+    if team in TEAM_INDEX_CURRENT:
+        return team
+    if team in TEAM_NAME_ALIASES:
+        return TEAM_NAME_ALIASES[team]
+    # Try case-insensitive match
+    team_lower = team.lower()
+    for alias, canonical in TEAM_NAME_ALIASES.items():
+        if alias.lower() == team_lower:
+            return canonical
+    for canonical in TEAM_INDEX_CURRENT.keys():
+        if canonical.lower() == team_lower:
+            return canonical
+    return team  # Return original if no match
+
 
 class KyleskomPredictor:
     """
@@ -194,6 +264,10 @@ class KyleskomPredictor:
         """
         Predict game outcome EXACTLY like reference repo's main.py createTodaysGames function.
         """
+        # Normalize team names to handle variations like "LA Clippers" -> "Los Angeles Clippers"
+        home_team = normalize_team_name(home_team)
+        away_team = normalize_team_name(away_team)
+        
         # Load models
         if not self._models_loaded:
             if not self.load_models():

@@ -47,7 +47,7 @@ class PyNASCARAdapter:
         
         Args:
             year: Season year (default: current year)
-            series: 'cup', 'xfinity', or 'trucks'
+            series: 'cup', 'xfinity', or 'trucks' (note: pynascar may only support cup)
         """
         if not PYNASCAR_AVAILABLE:
             return {"error": "pynascar not installed", "install": "pip install pynascar"}
@@ -60,7 +60,8 @@ class PyNASCARAdapter:
             return self.cache[cache_key]
         
         try:
-            schedule = Schedule(year=year, series=series)
+            # pynascar Schedule only takes year, not series
+            schedule = Schedule(year=year)
             
             races = []
             if hasattr(schedule, 'races'):
@@ -229,7 +230,8 @@ class PyNASCARAdapter:
             year = datetime.now().year
         
         try:
-            drivers_data = DriversData(year=year, series=series)
+            # pynascar DriversData may only take year
+            drivers_data = DriversData(year=year)
             
             drivers = []
             if hasattr(drivers_data, 'drivers'):
@@ -266,8 +268,8 @@ class PyNASCARAdapter:
             return {"error": "pynascar not installed"}
         
         try:
-            # Get current year schedule
-            schedule = Schedule(year=datetime.now().year, series="cup")
+            # Get current year schedule (pynascar only takes year)
+            schedule = Schedule(year=datetime.now().year)
             
             # Look for in-progress race
             if hasattr(schedule, 'races'):

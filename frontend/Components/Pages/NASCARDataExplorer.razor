@@ -45,7 +45,8 @@
                            Dense="true" Style="min-width: 120px;">
                     @for (int y = DateTime.Now.Year; y >= 2020; y--)
                     {
-                        <MudSelectItem Value="@y">@y</MudSelectItem>
+                        var year = y;
+                        <MudSelectItem Value="@year">@year</MudSelectItem>
                     }
                 </MudSelect>
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" 
