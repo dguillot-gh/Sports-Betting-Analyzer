@@ -239,7 +239,7 @@
     {
         try
         {
-            var response = await Http.GetAsync("http://backend:8000/nascar/pynascar/status");
+            var response = await Http.GetAsync("http://backend:8000/pynascar/status");
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
@@ -255,7 +255,7 @@
         _isLoading = true;
         try
         {
-            var response = await Http.GetAsync($"http://backend:8000/nascar/pynascar/schedule?year={_selectedYear}&series={_selectedSeries}");
+            var response = await Http.GetAsync($"http://backend:8000/pynascar/schedule?year={_selectedYear}&series={_selectedSeries}");
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
@@ -275,7 +275,7 @@
         _isLoading = true;
         try
         {
-            var response = await Http.GetAsync($"http://backend:8000/nascar/pynascar/drivers?year={_selectedYear}&series={_selectedSeries}");
+            var response = await Http.GetAsync($"http://backend:8000/pynascar/drivers?year={_selectedYear}&series={_selectedSeries}");
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
@@ -295,7 +295,7 @@
         _isLoading = true;
         try
         {
-            var response = await Http.GetAsync($"http://backend:8000/nascar/pynascar/race/{raceId}");
+            var response = await Http.GetAsync($"http://backend:8000/pynascar/race/{raceId}");
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
@@ -315,7 +315,7 @@
         _isLoading = true;
         try
         {
-            var response = await Http.GetAsync("http://backend:8000/nascar/pynascar/live");
+            var response = await Http.GetAsync("http://backend:8000/pynascar/live");
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();

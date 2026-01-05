@@ -289,6 +289,65 @@
             </div>
         </MudPaper>
 
+        <!-- Open Source Credits -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h5" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Filled.Favorite" Class="mr-2" Color="Color.Error" />
+                Open Source Credits
+            </MudText>
+            <MudText Typo="Typo.body2" Class="mb-3">
+                This project integrates and builds upon excellent open source work from the community:
+            </MudText>
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudCard Outlined="true" Class="pa-3">
+                        <div class="d-flex align-center mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Color="Color.Tertiary" Class="mr-2" />
+                            <MudText Typo="Typo.h6">NBA_AI</MudText>
+                        </div>
+                        <MudText Typo="Typo.body2" Class="mb-2">
+                            AI-powered NBA game predictions using Baseline, Linear (Ridge), Tree (XGBoost), MLP (PyTorch), and Ensemble models.
+                        </MudText>
+                        <MudDivider Class="my-2" />
+                        <MudList T="string" Dense="true">
+                            <MudListItem Icon="@Icons.Material.Filled.Psychology">5 prediction engines</MudListItem>
+                            <MudListItem Icon="@Icons.Material.Filled.TrendingUp">43 rolling average features</MudListItem>
+                            <MudListItem Icon="@Icons.Material.Filled.Update">In-game live prediction updates</MudListItem>
+                        </MudList>
+                        <MudLink Href="https://github.com/NBA-Betting/NBA_AI" Target="_blank">
+                            <MudChip T="string" Color="Color.Primary" Size="Size.Small" Class="mt-2">
+                                <MudIcon Icon="@Icons.Custom.Brands.GitHub" Size="Size.Small" Class="mr-1" />
+                                NBA-Betting/NBA_AI
+                            </MudChip>
+                        </MudLink>
+                    </MudCard>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudCard Outlined="true" Class="pa-3">
+                        <div class="d-flex align-center mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Color="Color.Warning" Class="mr-2" />
+                            <MudText Typo="Typo.h6">kyleskom NBA-ML</MudText>
+                        </div>
+                        <MudText Typo="Typo.body2" Class="mb-2">
+                            XGBoost-based NBA prediction model with 68.9% accuracy on moneyline and over/under predictions.
+                        </MudText>
+                        <MudDivider Class="my-2" />
+                        <MudList T="string" Dense="true">
+                            <MudListItem Icon="@Icons.Material.Filled.CheckCircle">68.9% ML accuracy</MudListItem>
+                            <MudListItem Icon="@Icons.Material.Filled.AttachMoney">Expected Value calculations</MudListItem>
+                            <MudListItem Icon="@Icons.Material.Filled.Calculate">Kelly Criterion sizing</MudListItem>
+                        </MudList>
+                        <MudLink Href="https://github.com/kyleskom/NBA-Machine-Learning-Sports-Betting" Target="_blank">
+                            <MudChip T="string" Color="Color.Primary" Size="Size.Small" Class="mt-2">
+                                <MudIcon Icon="@Icons.Custom.Brands.GitHub" Size="Size.Small" Class="mr-1" />
+                                kyleskom/NBA-ML
+                            </MudChip>
+                        </MudLink>
+                    </MudCard>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
         <!-- Footer -->
         <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary" Class="mt-4">
             Built for educational purposes. Always gamble responsibly.

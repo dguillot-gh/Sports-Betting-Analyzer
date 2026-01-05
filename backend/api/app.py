@@ -3492,3 +3492,222 @@ async def get_nba_simulation_status():
         }
     except Exception as e:
         return {"available": False, "error": str(e)}
+
+
+# ============== NBA_AI INTEGRATION ENDPOINTS ==============
+
+@app.get("/nba/ai/integration/status")
+async def get_nba_ai_integration_status():
+    """Get status of NBA_AI integration from cloned repo."""
+    try:
+        from scripts.nba_ai_integration import get_integration_status
+        return get_integration_status()
+    except Exception as e:
+        logger.error(f"Error getting NBA_AI integration status: {e}")
+        return {"status": "error", "error": str(e)}
+
+
+@app.get("/nba/ai/integration/predictions")
+async def get_nba_ai_all_predictions(
+    home_team: str = Query(..., description="Home team name"),
+    away_team: str = Query(..., description="Away team name"),
+    home_ppg: float = Query(110.0, description="Home team PPG"),
+    away_ppg: float = Query(108.0, description="Away team PPG"),
+    home_opp_ppg: float = Query(112.0, description="Home team opponent PPG"),
+    away_opp_ppg: float = Query(112.0, description="Away team opponent PPG"),
+    home_fg_pct: float = Query(0.47, description="Home team FG%"),
+    away_fg_pct: float = Query(0.46, description="Away team FG%"),
+    home_win_pct: float = Query(0.5, description="Home team win%"),
+    away_win_pct: float = Query(0.5, description="Away team win%")
+):
+    """
+    Get predictions from all 5 NBA_AI engines.
+    
+    Uses the cloned NBA_AI repo (https://github.com/NBA-Betting/NBA_AI).
+    Engines: Baseline, Linear, Tree, MLP, Ensemble
+    """
+    try:
+        from scripts.nba_ai_integration import get_all_predictions
+        
+        home_stats = {
+            "pts_per_game": home_ppg,
+            "opp_pts_per_game": home_opp_ppg,
+            "fg_pct": home_fg_pct,
+            "win_pct": home_win_pct,
+            "pace": 100
+        }
+        away_stats = {
+            "pts_per_game": away_ppg,
+            "opp_pts_per_game": away_opp_ppg,
+            "fg_pct": away_fg_pct,
+            "win_pct": away_win_pct,
+            "pace": 100
+        }
+        
+        return get_all_predictions(home_team, away_team, home_stats, away_stats)
+    except Exception as e:
+        logger.error(f"Error getting NBA_AI predictions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/nba/ai/integration/live")
+async def get_nba_ai_live_prediction(
+    home_team: str = Query(..., description="Home team name"),
+    away_team: str = Query(..., description="Away team name"),
+    current_home_score: int = Query(..., description="Current home score"),
+    current_away_score: int = Query(..., description="Current away score"),
+    period: int = Query(..., description="Current period (1-4, 5+ for OT)"),
+    time_remaining: str = Query(..., description="Time remaining in period (MM:SS)")
+):
+    """
+    Get live in-game prediction updates.
+    
+    Uses NBA_AI's blending formula to update predictions based on:
+    - Pre-game prediction
+    - Current score
+    - Time remaining
+    
+    Credit: https://github.com/NBA-Betting/NBA_AI
+    """
+    try:
+        from scripts.nba_ai_integration import get_live_prediction_update
+        
+        return get_live_prediction_update(
+            home_team=home_team,
+            away_team=away_team,
+            current_home_score=current_home_score,
+            current_away_score=current_away_score,
+            period=period,
+            time_remaining=time_remaining
+        )
+    except Exception as e:
+        logger.error(f"Error getting live NBA_AI prediction: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/nba/ai/integration/train")
+async def train_nba_ai_models(
+    model_type: str = Query("all", description="Model type: Linear, Tree, MLP, or all"),
+    train_season: str = Query("2023-2024", description="Training season"),
+    test_season: str = Query("2024-2025", description="Test season")
+):
+    """
+    Train NBA_AI prediction models.
+    
+    This runs the NBA_AI training pipeline to train:
+    - Linear (Ridge Regression)
+    - Tree (XGBoost)
+    - MLP (PyTorch Neural Network)
+    
+    Requires the NBA_AI database to be present.
+    Credit: https://github.com/NBA-Betting/NBA_AI
+    """
+    try:
+        from scripts.nba_ai_integration import run_nba_ai_training
+        
+        result = run_nba_ai_training(
+            model_type=model_type,
+            train_season=train_season,
+            test_season=test_season
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error training NBA_AI models: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============== PYNASCAR ENDPOINTS ==============
+
+@app.get("/pynascar/status")
+async def pynascar_status():
+    """Check if pynascar is available."""
+    try:
+        from scripts.pynascar_adapter import is_pynascar_available
+        return {
+            "available": is_pynascar_available(),
+            "message": "pynascar package is available" if is_pynascar_available() else "pynascar not installed"
+        }
+    except Exception as e:
+        return {"available": False, "error": str(e)}
+
+
+@app.get("/pynascar/schedule")
+async def get_pynascar_schedule(
+    year: int = Query(None, description="Season year (default: current year)"),
+    series: str = Query("cup", description="Series: cup, xfinity, or trucks")
+):
+    """Get NASCAR race schedule for a season."""
+    try:
+        from scripts.pynascar_adapter import get_nascar_schedule
+        result = get_nascar_schedule(year, series)
+        return result
+    except Exception as e:
+        logger.error(f"Error getting NASCAR schedule: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/pynascar/race/{race_id}")
+async def get_pynascar_race(race_id: int):
+    """Get detailed data for a specific race including results, cautions, leaders."""
+    try:
+        from scripts.pynascar_adapter import get_nascar_race
+        result = get_nascar_race(race_id)
+        return result
+    except Exception as e:
+        logger.error(f"Error getting NASCAR race {race_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/pynascar/laps/{race_id}")
+async def get_pynascar_lap_times(
+    race_id: int,
+    driver: str = Query(None, description="Optional driver name to filter")
+):
+    """Get lap times for a race, optionally filtered by driver."""
+    try:
+        from scripts.pynascar_adapter import get_nascar_lap_times
+        result = get_nascar_lap_times(race_id, driver)
+        return result
+    except Exception as e:
+        logger.error(f"Error getting NASCAR lap times for race {race_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/pynascar/pits/{race_id}")
+async def get_pynascar_pit_stops(race_id: int):
+    """Get pit stop data for a race."""
+    try:
+        from scripts.pynascar_adapter import get_nascar_pit_stops
+        result = get_nascar_pit_stops(race_id)
+        return result
+    except Exception as e:
+        logger.error(f"Error getting NASCAR pit stops for race {race_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/pynascar/drivers")
+async def get_pynascar_drivers(
+    year: int = Query(None, description="Season year (default: current year)"),
+    series: str = Query("cup", description="Series: cup, xfinity, or trucks")
+):
+    """Get driver statistics for a season."""
+    try:
+        from scripts.pynascar_adapter import get_nascar_drivers
+        result = get_nascar_drivers(year, series)
+        return result
+    except Exception as e:
+        logger.error(f"Error getting NASCAR drivers: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/pynascar/live")
+async def get_pynascar_live():
+    """Get data for currently live race if any."""
+    try:
+        from scripts.pynascar_adapter import get_nascar_live
+        result = get_nascar_live()
+        return result
+    except Exception as e:
+        logger.error(f"Error getting NASCAR live race: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+

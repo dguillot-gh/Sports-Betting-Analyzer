@@ -566,8 +566,13 @@
             var awayPpg = game.AwayStats?.GetValueOrDefault("ppg") ?? game.AwayStats?.GetValueOrDefault("PTS") ?? 108;
             var homeFg = game.HomeStats?.GetValueOrDefault("fg_pct") ?? game.HomeStats?.GetValueOrDefault("FG_PCT") ?? 0.47;
             var awayFg = game.AwayStats?.GetValueOrDefault("fg_pct") ?? game.AwayStats?.GetValueOrDefault("FG_PCT") ?? 0.46;
+            var homeOppPpg = game.HomeStats?.GetValueOrDefault("opp_ppg") ?? 112;
+            var awayOppPpg = game.AwayStats?.GetValueOrDefault("opp_ppg") ?? 112;
+            var homeWinPct = game.HomeStats?.GetValueOrDefault("win_pct") ?? game.HomeStats?.GetValueOrDefault("W_PCT") ?? 0.5;
+            var awayWinPct = game.AwayStats?.GetValueOrDefault("win_pct") ?? game.AwayStats?.GetValueOrDefault("W_PCT") ?? 0.5;
             
-            var url = $"http://backend:8000/nba/ai/predictions?home_team={Uri.EscapeDataString(game.HomeTeam)}&away_team={Uri.EscapeDataString(game.AwayTeam)}&home_ppg={homePpg}&away_ppg={awayPpg}&home_fg_pct={homeFg}&away_fg_pct={awayFg}";
+            // Call NBA_AI integration endpoint (uses cloned repo from https://github.com/NBA-Betting/NBA_AI)
+            var url = $"http://backend:8000/nba/ai/integration/predictions?home_team={Uri.EscapeDataString(game.HomeTeam)}&away_team={Uri.EscapeDataString(game.AwayTeam)}&home_ppg={homePpg}&away_ppg={awayPpg}&home_opp_ppg={homeOppPpg}&away_opp_ppg={awayOppPpg}&home_fg_pct={homeFg}&away_fg_pct={awayFg}&home_win_pct={homeWinPct}&away_win_pct={awayWinPct}";
             var response = await Http.GetAsync(url);
             
             if (response.IsSuccessStatusCode)
