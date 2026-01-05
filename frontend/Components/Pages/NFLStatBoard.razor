@@ -2,9 +2,11 @@
 @page "/nfl/statboard"
 @rendermode InteractiveServer
 @using System.Text.Json
+@using AC = ApexCharts
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject ILogger<NFLStatBoard> Logger
+@inject IDialogService DialogService
 
 <PageTitle>NFL Stat Board</PageTitle>
 
@@ -19,22 +21,80 @@
     {
         <MudAlert Severity="Severity.Info" Class="mb-4">
             <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                <MudText>Comprehensive NFL data not yet downloaded.</MudText>
+                <MudText>Comprehensive NFL data not yet downloaded or verified.</MudText>
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="DownloadData" 
-                           Disabled="@_isDownloading">
-                    @if (_isDownloading)
-                    {
-                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                        @:Downloading...
-                    }
-                    else
-                    {
-                        @:Download All Data
-                    }
+                           Disabled="@_showDownloadDialog">
+                    Download All Data
                 </MudButton>
             </MudStack>
         </MudAlert>
     }
+    else
+    {
+        <MudAlert Severity="Severity.Success" Class="mb-4" Variant="Variant.Outlined">
+             <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudText>
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Class="mr-2" Color="Color.Success" />
+                    Data loaded and ready.
+                </MudText>
+                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="DownloadData" Size="Size.Small"
+                           Disabled="@_showDownloadDialog">
+                    Check for Updates
+                </MudButton>
+            </MudStack>
+        </MudAlert>
+    }
+    
+    @* File Status Details *@
+    <MudExpansionPanel Text="Data File Status" Class="mb-4" Dense="true">
+        <MudSimpleTable Dense="true" Hover="true" Striped="true">
+            <thead>
+                <tr>
+                    <th>Dataset</th>
+                    <th>Status</th>
+                    <th>Last Updated</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var kvp in _fileStatus.OrderBy(x => x.Key))
+                {
+                    <tr>
+                        <td><code>@kvp.Key</code></td>
+                        <td>
+                            @if (kvp.Value.Exists)
+                            {
+                                <MudChip T="string" Color="Color.Success" Size="Size.Small">Available</MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Color="Color.Error" Size="Size.Small">Missing</MudChip>
+                            }
+                        </td>
+                        <td>
+                            @if (kvp.Value.LastModified.HasValue)
+                            {
+                                @kvp.Value.LastModified.Value.ToString("g")
+                                
+                                var age = DateTime.Now - kvp.Value.LastModified.Value;
+                                if (age.TotalDays > 7 && DateTime.Now.Month >= 9 && DateTime.Now.Month <= 12) 
+                                {
+                                     <MudChip T="string" Color="Color.Warning" Size="Size.Small" Class="ml-2">Update Available?</MudChip>
+                                }
+                            }
+                            else
+                            {
+                                <span class="mud-text-secondary">N/A</span>
+                            }
+                        </td>
+                        <td>
+                            @if (!kvp.Value.Exists) { <MudText Typo="Typo.caption" Color="Color.Error">Required for some features</MudText> }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    </MudExpansionPanel>
     
     <MudTabs @bind-ActivePanelIndex="_activeTab" Elevation="2" Rounded="true" 
              ApplyEffectsToContainer="true" PanelClass="pa-4">
@@ -62,7 +122,17 @@
                             <MudSelectItem Value="@("receiving")">Receiving</MudSelectItem>
                         </MudSelect>
                         
+                        <MudSelect T="string" @bind-Value="_teamFilter" Label="Team (Optional)" 
+                                   Variant="Variant.Outlined" Class="mb-3" Clearable="true">
+                            <MudSelectItem Value="@("")">All Teams</MudSelectItem>
+                            @foreach (var team in NFL_TEAMS)
+                            {
+                                <MudSelectItem Value="@team">@team</MudSelectItem>
+                            }
+                        </MudSelect>
+                        
                         <MudTextField @bind-Value="_playerFilter" Label="Player Name" 
+                                      Placeholder="Search by name..."
                                       Variant="Variant.Outlined" Class="mb-3" />
                         
                         <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
@@ -88,24 +158,72 @@
                                         <th>Team</th>
                                         @if (_ngsCategory == "passing")
                                         {
-                                            <th>Time to Throw</th>
-                                            <th>Comp Air Yds</th>
-                                            <th>Aggressiveness</th>
-                                            <th>CPOE</th>
+                                            <th>
+                                                <MudTooltip Text="Average time from snap to pass release. Faster = quicker decision making.">
+                                                    Time to Throw
+                                                </MudTooltip>
+                                            </th>
+                                            <th>
+                                                <MudTooltip Text="Average air yards on completed passes. Higher = deeper completions.">
+                                                    Comp Air Yds
+                                                </MudTooltip>
+                                            </th>
+                                            <th>
+                                                <MudTooltip Text="% of throws into tight windows. Higher = more aggressive/risky passing.">
+                                                    Aggressiveness
+                                                </MudTooltip>
+                                            </th>
+                                            <th>
+                                                <MudTooltip Text="Completion % Above Expectation. Positive = outperforming expected completion rate.">
+                                                    CPOE
+                                                </MudTooltip>
+                                            </th>
                                         }
                                         else if (_ngsCategory == "rushing")
                                         {
-                                            <th>Efficiency</th>
-                                            <th>RYOE</th>
-                                            <th>RYOE/Att</th>
-                                            <th>Attempts</th>
+                                            <th>
+                                                <MudTooltip Text="Rush efficiency rating based on yards gained vs expected.">
+                                                    Efficiency
+                                                </MudTooltip>
+                                            </th>
+                                            <th>
+                                                <MudTooltip Text="Rush Yards Over Expected. Positive = gaining more yards than expected.">
+                                                    RYOE
+                                                </MudTooltip>
+                                            </th>
+                                            <th>
+                                                <MudTooltip Text="RYOE per attempt. Measures consistent value above expectation per carry.">
+                                                    RYOE/Att
+                                                </MudTooltip>
+                                            </th>
+                                            <th>
+                                                <MudTooltip Text="Total rush attempts for the season/week.">
+                                                    Attempts
+                                                </MudTooltip>
+                                            </th>
                                         }
                                         else
                                         {
-                                            <th>Separation</th>
-                                            <th>Cushion</th>
-                                            <th>Targets</th>
-                                            <th>YAC</th>
+                                            <th>
+                                                <MudTooltip Text="Average separation from defender at catch point. Higher = more open.">
+                                                    Separation
+                                                </MudTooltip>
+                                            </th>
+                                            <th>
+                                                <MudTooltip Text="Average distance from defender at snap. Higher = playing off coverage.">
+                                                    Cushion
+                                                </MudTooltip>
+                                            </th>
+                                            <th>
+                                                <MudTooltip Text="Number of times targeted on pass plays.">
+                                                    Targets
+                                                </MudTooltip>
+                                            </th>
+                                            <th>
+                                                <MudTooltip Text="Average Yards After Catch. Higher = more elusive with ball in hands.">
+                                                    YAC
+                                                </MudTooltip>
+                                            </th>
                                         }
                                     </tr>
                                 </thead>
@@ -119,7 +237,12 @@
                                             {
                                                 <td>@GetDouble(player, "avg_time_to_throw").ToString("F2")s</td>
                                                 <td>@GetDouble(player, "avg_completed_air_yards").ToString("F1")</td>
-                                                <td>@(GetDouble(player, "aggressiveness") * 100).ToString("F1")%</td>
+                                                <td>
+                                                    @{
+                                                        var agg = GetDouble(player, "aggressiveness") * 100;
+                                                    }
+                                                    @agg.ToString("F1")%
+                                                </td>
                                                 <td>
                                                     @{ var cpoe = GetDouble(player, "completion_percentage_above_expectation"); }
                                                     <MudChip T="string" Size="Size.Small" 
@@ -439,7 +562,280 @@
                 </MudItem>
             </MudGrid>
         </MudTabPanel>
+        
+        @* Tab 4: Draft Picks *@
+        <MudTabPanel Text="Draft Picks" Icon="@Icons.Material.Filled.School">
+            <MudGrid>
+                <MudItem xs="12" md="3">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6" Class="mb-3">Filters</MudText>
+                        <MudSelect T="int?" @bind-Value="_draftYear" Label="Year" Variant="Variant.Outlined" Clearable="true" Class="mb-3">
+                            @for (int y = DateTime.Now.Year; y >= 2000; y--) { var year = y; <MudSelectItem T="int?" Value="@year">@year</MudSelectItem> }
+                        </MudSelect>
+                        <MudSelect T="string" @bind-Value="_draftTeam" Label="Team" Variant="Variant.Outlined" Clearable="true" Class="mb-3">
+                            @foreach (var team in NFL_TEAMS) { <MudSelectItem Value="@team">@team</MudSelectItem> }
+                        </MudSelect>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="LoadDraftData" Disabled="@_isLoading">Load Draft</MudButton>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" md="9">
+                    <MudTable Items="@_draftData" Dense="true" Hover="true" Striped="true" Loading="@_isLoading">
+                        <HeaderContent>
+                            <MudTh>Year</MudTh><MudTh>Rnd</MudTh><MudTh>Pick</MudTh><MudTh>Team</MudTh><MudTh>Player</MudTh><MudTh>Pos</MudTh><MudTh>College</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>@GetString(context, "season")</MudTd>
+                            <MudTd>@GetString(context, "round")</MudTd>
+                            <MudTd>@GetString(context, "pick")</MudTd>
+                            <MudTd>@GetString(context, "team")</MudTd>
+                            <MudTd>@GetString(context, "pfr_player_name")</MudTd>
+                            <MudTd>@GetString(context, "position")</MudTd>
+                            <MudTd>@GetString(context, "college")</MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
+        @* Tab 5: Injuries *@
+        <MudTabPanel Text="Injuries" Icon="@Icons.Material.Filled.LocalHospital">
+            <MudGrid>
+                <MudItem xs="12" md="3">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6" Class="mb-3">Filters</MudText>
+                        <MudSelect T="int?" @bind-Value="_injuryYear" Label="Year" Variant="Variant.Outlined" Clearable="true" Class="mb-3">
+                            @for (int y = DateTime.Now.Year; y >= 2009; y--) { var year = y; <MudSelectItem T="int?" Value="@year">@year</MudSelectItem> }
+                        </MudSelect>
+                         <MudSelect T="string" @bind-Value="_injuryTeam" Label="Team" Variant="Variant.Outlined" Clearable="true" Class="mb-3">
+                            @foreach (var team in NFL_TEAMS) { <MudSelectItem Value="@team">@team</MudSelectItem> }
+                        </MudSelect>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="LoadInjuryData" Disabled="@_isLoading">Load Injuries</MudButton>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" md="9">
+                    <MudTable Items="@_injuryData" Dense="true" Hover="true" Striped="true" Loading="@_isLoading">
+                        <HeaderContent>
+                            <MudTh>Year</MudTh><MudTh>Wk</MudTh><MudTh>Team</MudTh><MudTh>Player</MudTh><MudTh>Pos</MudTh><MudTh>Report Status</MudTh><MudTh>Description</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>@GetString(context, "season")</MudTd>
+                            <MudTd>@GetString(context, "week")</MudTd>
+                            <MudTd>@GetString(context, "team")</MudTd>
+                            <MudTd>@GetString(context, "full_name")</MudTd>
+                            <MudTd>@GetString(context, "position")</MudTd>
+                            <MudTd>@GetString(context, "report_status")</MudTd>
+                            <MudTd>@GetString(context, "description")</MudTd>
+                        </RowTemplate>
+                        <PagerContent><MudTablePager /></PagerContent>
+                    </MudTable>
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
+        @* Tab 6: Contracts *@
+        <MudTabPanel Text="Contracts" Icon="@Icons.Material.Filled.AttachMoney">
+             <MudGrid>
+                <MudItem xs="12" md="3">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6" Class="mb-3">Filters</MudText>
+                        <MudSelect T="string" @bind-Value="_contractTeam" Label="Team" Variant="Variant.Outlined" Clearable="true" Class="mb-3">
+                             @foreach (var team in NFL_TEAMS) { <MudSelectItem Value="@team">@team</MudSelectItem> }
+                        </MudSelect>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="LoadContractData" Disabled="@_isLoading">Load Contracts</MudButton>
+                    </MudPaper>
+                </MudItem>
+                 <MudItem xs="12" md="9">
+                    <MudTable Items="@_contractData" Dense="true" Hover="true" Striped="true" Loading="@_isLoading">
+                        <HeaderContent>
+                            <MudTh>Player</MudTh><MudTh>Pos</MudTh><MudTh>Team</MudTh><MudTh>Year Signed</MudTh><MudTh>Years</MudTh><MudTh>Total Value</MudTh><MudTh>APY</MudTh><MudTh>Guaranteed</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>@GetString(context, "player")</MudTd>
+                            <MudTd>@GetString(context, "position")</MudTd>
+                            <MudTd>@GetString(context, "team")</MudTd>
+                            <MudTd>@GetString(context, "year_signed")</MudTd>
+                            <MudTd>@GetString(context, "years")</MudTd>
+                            <MudTd>@(((decimal)GetDouble(context, "value")).ToString("C0"))</MudTd>
+                            <MudTd>@(((decimal)GetDouble(context, "apy")).ToString("C0"))</MudTd>
+                            <MudTd>@(((decimal)GetDouble(context, "guaranteed")).ToString("C0"))</MudTd>
+                        </RowTemplate>
+                        <PagerContent><MudTablePager /></PagerContent>
+                    </MudTable>
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+        
+        @* Tab 7: Teams *@
+        <MudTabPanel Text="Teams" Icon="@Icons.Material.Filled.Groups">
+             <MudTable Items="@_teamData" Dense="true" Hover="true" Striped="true" Loading="@_isLoading">
+                <HeaderContent>
+                    <MudTh>Logo</MudTh><MudTh>Abbr</MudTh><MudTh>Name</MudTh><MudTh>Conference</MudTh><MudTh>Division</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd><MudImage Src="@GetString(context, "team_logo_espn")" Height="30" /></MudTd>
+                    <MudTd>@GetString(context, "team_abbr")</MudTd>
+                    <MudTd>@GetString(context, "team_name")</MudTd>
+                    <MudTd>@GetString(context, "team_conf")</MudTd>
+                    <MudTd>@GetString(context, "team_division")</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudTabPanel>
+        
+        @* Tab 8: Advanced Stats (PFR) *@
+        <MudTabPanel Text="Advanced Stats" Icon="@Icons.Material.Filled.Analytics">
+            <MudGrid>
+                <MudItem xs="12" md="3">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6" Class="mb-3">Filters</MudText>
+                        <MudSelect T="int?" @bind-Value="_advSeason" Label="Season" Variant="Variant.Outlined" Class="mb-3">
+                             @for (int y = DateTime.Now.Year; y >= 2018; y--) { var year = y; <MudSelectItem T="int?" Value="@year">@year</MudSelectItem> }
+                        </MudSelect>
+                        <MudSelect T="string" @bind-Value="_advCategory" Label="Category" Variant="Variant.Outlined" Class="mb-3">
+                            <MudSelectItem Value="@("passing")">Passing</MudSelectItem>
+                            <MudSelectItem Value="@("rushing")">Rushing</MudSelectItem>
+                            <MudSelectItem Value="@("receiving")">Receiving</MudSelectItem>
+                            <MudSelectItem Value="@("defense")">Defense</MudSelectItem>
+                        </MudSelect>
+                         <MudSelect T="string" @bind-Value="_advTeam" Label="Team" Variant="Variant.Outlined" Clearable="true" Class="mb-3">
+                             @foreach (var team in NFL_TEAMS) { <MudSelectItem Value="@team">@team</MudSelectItem> }
+                        </MudSelect>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="LoadAdvancedStats" Disabled="@_isLoading">Load Advanced</MudButton>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" md="9">
+                    <MudTable Items="@_advData" Dense="true" Hover="true" Striped="true" Loading="@_isLoading" Height="500px">
+                        <HeaderContent>
+                            <MudTh>Player</MudTh><MudTh>Tm</MudTh><MudTh>Pos</MudTh>
+                            @if (_advCategory == "passing") { <MudTh>Bad Th%</MudTh><MudTh>Drop%</MudTh><MudTh>Prss%</MudTh><MudTh>Scrm%</MudTh> }
+                            else if (_advCategory == "rushing") { <MudTh>YBC/Att</MudTh><MudTh>YAC/Att</MudTh><MudTh>BrkTkl</MudTh><MudTh>Att/Br</MudTh> }
+                            else if (_advCategory == "receiving") { <MudTh>YBC/R</MudTh><MudTh>YAC/R</MudTh><MudTh>Drop%</MudTh><MudTh>Rate</MudTh> }
+                            else if (_advCategory == "defense") { <MudTh>Int</MudTh><MudTh>Tgt</MudTh><MudTh>Cmp%</MudTh><MudTh>Rat</MudTh> }
+                        </HeaderContent>
+                        <RowTemplate>
+                             <MudTd>@GetString(context, "player")</MudTd>
+                             <MudTd>@GetString(context, "team")</MudTd>
+                             <MudTd>@GetString(context, "pos")</MudTd>
+                             @if (_advCategory == "passing") 
+                             { 
+                                <MudTd>@GetDouble(context, "bad_throw_pct")%</MudTd>
+                                <MudTd>@GetDouble(context, "dropped_pct")%</MudTd>
+                                <MudTd>@GetDouble(context, "pressure_pct")%</MudTd>
+                                <MudTd>@GetDouble(context, "scramble_pct")%</MudTd>
+                             }
+                             else if (_advCategory == "rushing")
+                             {
+                                <MudTd>@GetDouble(context, "ybc_att_avg")</MudTd>
+                                <MudTd>@GetDouble(context, "yac_att_avg")</MudTd>
+                                <MudTd>@GetDouble(context, "broken_tackles")</MudTd>
+                                <MudTd>@GetDouble(context, "att_broken_tackle")</MudTd>
+                             }
+                             else if (_advCategory == "receiving")
+                             {
+                                <MudTd>@GetDouble(context, "ybc_rec_avg")</MudTd>
+                                <MudTd>@GetDouble(context, "yac_rec_avg")</MudTd>
+                                <MudTd>@GetDouble(context, "drop_pct")%</MudTd>
+                                <MudTd>@GetDouble(context, "rat")</MudTd>
+                             }
+                             else if (_advCategory == "defense")
+                             {
+                                <MudTd>@GetDouble(context, "int")</MudTd>
+                                <MudTd>@GetDouble(context, "targets")</MudTd>
+                                <MudTd>@GetDouble(context, "completion_pct")%</MudTd>
+                                <MudTd>@GetDouble(context, "rat")</MudTd>
+                             }
+                        </RowTemplate>
+                         <PagerContent><MudTablePager /></PagerContent>
+                    </MudTable>
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
+        @* Tab 9: Charts & Visualizations *@
+        <MudTabPanel Text="Charts" Icon="@Icons.Material.Filled.BarChart">
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudPaper Class="pa-4">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+                            <MudText Typo="Typo.h6">
+                                <MudIcon Icon="@Icons.Material.Filled.ShowChart" Class="mr-2" />
+                                QB Performance Comparison
+                            </MudText>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadChartData"
+                                       Disabled="@_isLoading">
+                                @if (_isLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                                Load Chart Data
+                            </MudButton>
+                        </MudStack>
+                        
+                        @if (_chartData != null && _chartData.Any())
+                        {
+                            <AC.ApexChart TItem="NGSDataPoint"
+                                         Title=""
+                                         Height="400"
+                                         Options="_chartOptions">
+                                <AC.ApexPointSeries TItem="NGSDataPoint"
+                                                  Items="_chartData"
+                                                  Name="Time to Throw (s)"
+                                                  SeriesType="AC.SeriesType.Bar"
+                                                  XValue="@(e => e.PlayerName)"
+                                                  YValue="@(e => (decimal)e.TimeToThrow)" />
+                            </AC.ApexChart>
+                            
+                            <MudDivider Class="my-4" />
+                            
+                            <MudText Typo="Typo.h6" Class="mb-3">
+                                <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Class="mr-2" />
+                                CPOE Distribution
+                            </MudText>
+                            
+                            <AC.ApexChart TItem="NGSDataPoint"
+                                         Title=""
+                                         Height="350"
+                                         Options="_cpoeChartOptions">
+                                <AC.ApexPointSeries TItem="NGSDataPoint"
+                                                  Items="_chartData"
+                                                  Name="CPOE %"
+                                                  SeriesType="AC.SeriesType.Bar"
+                                                  XValue="@(e => e.PlayerName)"
+                                                  YValue="@(e => (decimal)e.CPOE)" />
+                            </AC.ApexChart>
+                        }
+                        else
+                        {
+                            <MudPaper Class="pa-16 d-flex flex-column align-center justify-center" Style="min-height: 400px; background: transparent;">
+                                <MudIcon Icon="@Icons.Material.Filled.BarChart" Size="Size.Large" Color="Color.Primary" Class="mb-4" />
+                                <MudText Typo="Typo.h5">NFL Performance Charts</MudText>
+                                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="text-center mb-4">
+                                    Interactive visualizations using ApexCharts
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    Click "Load Chart Data" to visualize Next Gen Stats
+                                </MudText>
+                            </MudPaper>
+                        }
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
     </MudTabs>
+    
+    @* Download Dialog *@
+    <MudDialog @bind-Visible="_showDownloadDialog" Options="_dialogOptions">
+        <TitleContent>
+            <MudText Typo="Typo.h6">
+                <MudIcon Icon="@Icons.Material.Filled.CloudDownload" Class="mr-2" />
+                Downloading NFL Data
+            </MudText>
+        </TitleContent>
+        <DialogContent>
+            <MudStack Spacing="3">
+                <MudText>Downloading and processing comprehensive NFLverse data...</MudText>
+                <MudText Typo="Typo.caption">Includes Next Gen Stats, Snap Counts, Contracts, Injuries, and more.</MudText>
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-3" />
+                <MudAlert Severity="Severity.Info" Dense="true">This process may take 1-2 minutes depending on connection speed.</MudAlert>
+            </MudStack>
+        </DialogContent>
+    </MudDialog>
 </MudContainer>
 
 @code {
@@ -452,6 +848,7 @@
     private int _selectedSeason = DateTime.Now.Year;
     private string _ngsCategory = "passing";
     private string _playerFilter = "";
+    private string _teamFilter = "";
     private List<Dictionary<string, object>>? _ngsData;
     
     // Snap counts state
@@ -465,12 +862,52 @@
     private int? _combineYear;
     private List<Dictionary<string, object>>? _combineData;
     
+    // Draft Picks state
+    private int? _draftYear;
+    private string _draftTeam = "";
+    private List<Dictionary<string, object>>? _draftData;
+    
+    // Injuries state
+    private int? _injuryYear = DateTime.Now.Year;
+    private string _injuryTeam = "";
+    private List<Dictionary<string, object>>? _injuryData;
+    
+    // Contracts state
+    private string _contractTeam = "";
+    private List<Dictionary<string, object>>? _contractData;
+    
+    // Teams state
+    private List<Dictionary<string, object>>? _teamData;
+
+    // Advanced Stats state
+    private int? _advSeason = DateTime.Now.Year;
+    private string _advCategory = "passing";
+    private string _advTeam = "";
+    private List<Dictionary<string, object>>? _advData;
+    
     // Data status
-    private Dictionary<string, object>? _dataStatus;
-    private object? _downloadResult;
+    private string? _statusJson;
+    private Dictionary<string, string> _datasetStatus = new();
+    private string? _downloadResult;
+    
+    // Dialog state
+    private bool _showDownloadDialog = false;
+    private DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true, DisableBackdropClick = true };
+    
+    // Status tracking
+    private class DatasetInfo
+    {
+        public bool Exists { get; set; }
+        public DateTime? LastModified { get; set; }
+    }
+    private Dictionary<string, DatasetInfo> _fileStatus = new();
     
     protected override async Task OnInitializedAsync()
     {
+        if (!string.IsNullOrEmpty(Sport))
+        {
+            // If sport logic needed
+        }
         await CheckDataStatus();
     }
     
@@ -482,14 +919,39 @@
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
-                var result = JsonSerializer.Deserialize<JsonElement>(json);
-                if (result.TryGetProperty("datasets", out var datasets))
+                var root = JsonSerializer.Deserialize<JsonElement>(json);
+                
+                _fileStatus.Clear();
+                
+                void ParseRecursive(JsonElement element, string prefix)
                 {
-                    _dataStatus = ParseJsonToDict(datasets);
-                    
-                    // Check if any advanced data is available
-                    _dataLoaded = _dataStatus.Values.Any(v => v is bool b && b);
+                    if (element.ValueKind == JsonValueKind.Object)
+                    {
+                        // Check if leaf node (has "exists" property)
+                        if (element.TryGetProperty("exists", out var existsProp))
+                        {
+                            var info = new DatasetInfo { Exists = existsProp.GetBoolean() };
+                            if (element.TryGetProperty("timestamp", out var tsProp) && tsProp.ValueKind == JsonValueKind.String)
+                            {
+                                if (DateTime.TryParse(tsProp.GetString(), out var dt))
+                                    info.LastModified = dt;
+                            }
+                            _fileStatus[prefix] = info;
+                        }
+                        else
+                        {
+                            // Recurse
+                            foreach (var prop in element.EnumerateObject())
+                            {
+                                var key = string.IsNullOrEmpty(prefix) ? prop.Name : $"{prefix}.{prop.Name}";
+                                ParseRecursive(prop.Value, key);
+                            }
+                        }
+                    }
                 }
+                
+                ParseRecursive(root, "");
+                _dataLoaded = _fileStatus.Values.Any(x => x.Exists);
             }
         }
         catch (Exception ex)
@@ -500,7 +962,7 @@
     
     private async Task DownloadData()
     {
-        _isDownloading = true;
+        _showDownloadDialog = true;
         StateHasChanged();
         
         try
@@ -523,7 +985,7 @@
         }
         finally
         {
-            _isDownloading = false;
+            _showDownloadDialog = false;
             StateHasChanged();
         }
     }
@@ -536,6 +998,8 @@
         try
         {
             var url = $"http://backend:8000/nfl/nextgen/{_ngsCategory}?season={_selectedSeason}";
+            if (!string.IsNullOrEmpty(_teamFilter))
+                url += $"&team={Uri.EscapeDataString(_teamFilter)}";
             if (!string.IsNullOrEmpty(_playerFilter))
                 url += $"&player={Uri.EscapeDataString(_playerFilter)}";
             
@@ -675,4 +1139,217 @@
     
     private double GetDouble(Dictionary<string, object> dict, string key) =>
         dict.TryGetValue(key, out var val) && val is double d ? d : 0;
+    
+    private async Task LoadDraftData()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        try
+        {
+            var url = "http://backend:8000/nfl/draft?";
+            if (_draftYear.HasValue) url += $"season={_draftYear}&";
+            if (!string.IsNullOrEmpty(_draftTeam)) url += $"team={Uri.EscapeDataString(_draftTeam)}&";
+            
+            var response = await Http.GetAsync(url.TrimEnd('&', '?'));
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<JsonElement>(json);
+                 if (result.TryGetProperty("data", out var data))
+                    _draftData = ParseJsonArray(data);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _isLoading = false; StateHasChanged(); }
+    }
+
+    private async Task LoadInjuryData()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        try
+        {
+            var url = "http://backend:8000/nfl/injuries?";
+            if (_injuryYear.HasValue) url += $"season={_injuryYear}&";
+            if (!string.IsNullOrEmpty(_injuryTeam)) url += $"team={Uri.EscapeDataString(_injuryTeam)}&";
+            
+            var response = await Http.GetAsync(url.TrimEnd('&', '?'));
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<JsonElement>(json);
+                 if (result.TryGetProperty("data", out var data))
+                    _injuryData = ParseJsonArray(data);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _isLoading = false; StateHasChanged(); }
+    }
+
+    private async Task LoadContractData()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        try
+        {
+            var url = "http://backend:8000/nfl/contracts?";
+            if (!string.IsNullOrEmpty(_contractTeam)) url += $"team={Uri.EscapeDataString(_contractTeam)}&";
+            
+            var response = await Http.GetAsync(url.TrimEnd('&', '?'));
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<JsonElement>(json);
+                 if (result.TryGetProperty("data", out var data))
+                    _contractData = ParseJsonArray(data);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _isLoading = false; StateHasChanged(); }
+    }
+
+    private async Task LoadTeamData()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        try
+        {
+            var response = await Http.GetAsync("http://backend:8000/nfl/teams");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<JsonElement>(json);
+                 if (result.TryGetProperty("data", out var data))
+                    _teamData = ParseJsonArray(data);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _isLoading = false; StateHasChanged(); }
+    }
+    
+    private async Task LoadAdvancedStats()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        try
+        {
+            var url = $"http://backend:8000/nfl/advanced/{_advCategory}?";
+            if (_advSeason.HasValue) url += $"season={_advSeason}&";
+            if (!string.IsNullOrEmpty(_advTeam)) url += $"team={Uri.EscapeDataString(_advTeam)}&";
+            
+            var response = await Http.GetAsync(url.TrimEnd('&', '?'));
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<JsonElement>(json);
+                 if (result.TryGetProperty("data", out var data))
+                    _advData = ParseJsonArray(data);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _isLoading = false; StateHasChanged(); }
+    }
+    
+    // Chart data and options
+    private List<NGSDataPoint>? _chartData;
+    
+    private AC.ApexChartOptions<NGSDataPoint> _chartOptions = new()
+    {
+        Chart = new AC.Chart
+        {
+            Toolbar = new AC.Toolbar { Show = true },
+            Background = "transparent"
+        },
+        Theme = new AC.Theme { Mode = AC.Mode.Dark },
+        PlotOptions = new AC.PlotOptions
+        {
+            Bar = new AC.PlotOptionsBar { Horizontal = true }
+        },
+        Xaxis = new AC.XAxis { Title = new AC.AxisTitle { Text = "Time (seconds)" } },
+        Colors = new List<string> { "#00bcd4" }
+    };
+    
+    private AC.ApexChartOptions<NGSDataPoint> _cpoeChartOptions = new()
+    {
+        Chart = new AC.Chart
+        {
+            Toolbar = new AC.Toolbar { Show = true },
+            Background = "transparent"
+        },
+        Theme = new AC.Theme { Mode = AC.Mode.Dark },
+        PlotOptions = new AC.PlotOptions
+        {
+            Bar = new AC.PlotOptionsBar { Horizontal = true }
+        },
+        Colors = new List<string> { "#4caf50", "#f44336" }
+    };
+    
+    private async Task LoadChartData()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        
+        try
+        {
+            var url = $"http://backend:8000/nfl/nextgen/passing?season={_selectedSeason}";
+            var response = await Http.GetAsync(url);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<JsonElement>(json);
+                
+                if (result.TryGetProperty("data", out var data))
+                {
+                    _chartData = new List<NGSDataPoint>();
+                    foreach (var item in data.EnumerateArray().Take(15))
+                    {
+                        var point = new NGSDataPoint
+                        {
+                            PlayerName = item.TryGetProperty("player_display_name", out var name) 
+                                ? name.GetString() ?? "" : "",
+                            Team = item.TryGetProperty("team_abbr", out var team) 
+                                ? team.GetString() ?? "" : "",
+                            TimeToThrow = item.TryGetProperty("avg_time_to_throw", out var ttt) 
+                                ? ttt.GetDouble() : 0,
+                            CPOE = item.TryGetProperty("completion_percentage_above_expectation", out var cpoe) 
+                                ? cpoe.GetDouble() : 0,
+                            Aggressiveness = item.TryGetProperty("aggressiveness", out var agg) 
+                                ? agg.GetDouble() * 100 : 0
+                        };
+                        _chartData.Add(point);
+                    }
+                    Snackbar.Add($"Loaded {_chartData.Count} records for charts", Severity.Success);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+    
+    // Data model for charts
+    public class NGSDataPoint
+    {
+        public string PlayerName { get; set; } = "";
+        public string Team { get; set; } = "";
+        public double TimeToThrow { get; set; }
+        public double CPOE { get; set; }
+        public double Aggressiveness { get; set; }
+    }
+    
+    // NFL Teams for filtering
+    private static readonly List<string> NFL_TEAMS = new()
+    {
+        "ARI", "ATL", "BAL", "BUF", "CAR", "CHI", "CIN", "CLE",
+        "DAL", "DEN", "DET", "GB", "HOU", "IND", "JAX", "KC",
+        "LAC", "LAR", "LV", "MIA", "MIN", "NE", "NO", "NYG",
+        "NYJ", "PHI", "PIT", "SEA", "SF", "TB", "TEN", "WAS"
+    };
 }

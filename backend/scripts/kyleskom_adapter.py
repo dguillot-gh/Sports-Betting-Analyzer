@@ -374,11 +374,38 @@ class KyleskomPredictor:
             return {"error": f"Team not found in index: {away_team}"}
         
         # Find teams in DataFrame by TEAM_NAME
+        # Note: NBA API may use different names than our canonical (e.g., "LA Clippers" vs "Los Angeles Clippers")
         try:
+            # Build reverse mapping for NBA API lookup
+            nba_api_name_map = {
+                'Los Angeles Clippers': 'LA Clippers',
+                'Los Angeles Lakers': 'LA Lakers',
+                # Add other possible mismatches
+            }
+            
+            # Try canonical name first, then NBA API variant
+            home_api_name = nba_api_name_map.get(home_team, home_team)
+            away_api_name = nba_api_name_map.get(away_team, away_team)
+            
+            # Try canonical name first
             home_row = self.df[self.df['TEAM_NAME'] == home_team]
+            if len(home_row) == 0:
+                # Try NBA API variant
+                home_row = self.df[self.df['TEAM_NAME'] == home_api_name]
+            if len(home_row) == 0:
+                # Try case-insensitive partial match
+                home_row = self.df[self.df['TEAM_NAME'].str.contains(home_team.split()[-1], case=False, na=False)]
+            
             away_row = self.df[self.df['TEAM_NAME'] == away_team]
+            if len(away_row) == 0:
+                away_row = self.df[self.df['TEAM_NAME'] == away_api_name]
+            if len(away_row) == 0:
+                away_row = self.df[self.df['TEAM_NAME'].str.contains(away_team.split()[-1], case=False, na=False)]
             
             if len(home_row) == 0:
+                # Log available teams for debugging
+                available = list(self.df['TEAM_NAME'].unique()) if 'TEAM_NAME' in self.df.columns else []
+                logger.error(f"Team not found in API data: {home_team}. Available: {available[:5]}...")
                 return {"error": f"Team not found in API data: {home_team}"}
             if len(away_row) == 0:
                 return {"error": f"Team not found in API data: {away_team}"}

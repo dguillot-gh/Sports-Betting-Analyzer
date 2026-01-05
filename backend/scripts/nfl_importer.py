@@ -71,8 +71,8 @@ NEXTGEN_STATS = {
 }
 
 # Snap Counts (available from 2012+)
-# Game-level snap participation data
-SNAP_COUNTS_URL = f"{NFLVERSE_BASE}/snap_counts/snap_counts.parquet"
+# URL format: snap_counts/snap_counts_{year}.parquet
+SNAP_COUNTS_BASE = f"{NFLVERSE_BASE}/snap_counts/snap_counts_{{year}}.parquet"
 
 # Combine Data (available from 2000+)
 # Athletic measurables from NFL Combine
@@ -82,13 +82,14 @@ COMBINE_URL = f"{NFLVERSE_BASE}/combine/combine.parquet"
 DRAFT_PICKS_URL = f"{NFLVERSE_BASE}/draft_picks/draft_picks.parquet"
 
 # Team Descriptions (logos, colors, etc.)
-TEAMS_URL = f"{NFLVERSE_BASE}/teams/teams.parquet"
+TEAMS_URL = f"{NFLVERSE_BASE}/teams/teams_colors_logos.parquet"
 
-# Injuries (historical, 2009-2024 - 2025 source died)
-INJURIES_URL = f"{NFLVERSE_BASE}/injuries/injuries.parquet"
+# Injuries (historical, 2009-2024)
+# URL format: injuries/injuries_{year}.parquet
+INJURIES_BASE = f"{NFLVERSE_BASE}/injuries/injuries_{{year}}.parquet"
 
-# Contracts (estimated values)
-CONTRACTS_URL = f"{NFLVERSE_BASE}/contracts/contracts.parquet"
+# Contracts (historical)
+CONTRACTS_URL = f"{NFLVERSE_BASE}/contracts/historical_contracts.parquet"
 
 # PFF/Advanced Stats (if available)
 ADVANCED_STATS = {
@@ -264,11 +265,35 @@ async def download_comprehensive_nflverse(progress_callback=None) -> dict:
     results["nextgen_stats"]["status"] = "success" if ngs_success else "failed"
     results["nextgen_stats"]["files"] = ngs_success
     
-    # 2. Download Snap Counts
-    snap_path = NFLVERSE_DIR / "snap_counts.parquet"
-    results["snap_counts"]["status"] = "success" if await download_parquet(
-        SNAP_COUNTS_URL, snap_path, "Snap Counts"
-    ) else "failed"
+    # 2. Download Snap Counts (2012-2024) - Aggregate yearly files
+    snap_success = True
+    snap_dfs = []
+    
+    for year in range(2012, 2025):
+        try:
+            url = SNAP_COUNTS_BASE.format(year=year)
+            response = requests.get(url, timeout=60)
+            if response.status_code == 200:
+                with io.BytesIO(response.content) as buffer:
+                    df = pd.read_parquet(buffer)
+                    snap_dfs.append(df)
+            else:
+                logger.warning(f"Failed to download Snap Counts {year}: HTTP {response.status_code}")
+        except Exception as e:
+            logger.error(f"Error downloading Snap Counts {year}: {e}")
+            
+    if snap_dfs:
+        try:
+            full_snaps = pd.concat(snap_dfs, ignore_index=True)
+            snap_path = NFLVERSE_DIR / "snap_counts.parquet"
+            full_snaps.to_parquet(snap_path)
+            logger.info(f"Saved aggregated Snap Counts: {len(full_snaps):,} rows")
+            results["snap_counts"]["status"] = "success"
+        except Exception as e:
+            logger.error(f"Error saving aggregated Snap Counts: {e}")
+            results["snap_counts"]["status"] = "failed"
+    else:
+        results["snap_counts"]["status"] = "failed"
     
     # 3. Download Combine Data
     combine_path = NFLVERSE_DIR / "combine.parquet"
@@ -282,19 +307,40 @@ async def download_comprehensive_nflverse(progress_callback=None) -> dict:
         DRAFT_PICKS_URL, draft_path, "Draft Picks"
     ) else "failed"
     
-    # 5. Download Teams metadata
+    # 5. Download Teams metadata (Teams Colors & Logos)
     teams_path = NFLVERSE_DIR / "teams.parquet"
     results["teams"]["status"] = "success" if await download_parquet(
         TEAMS_URL, teams_path, "Teams"
     ) else "failed"
     
-    # 6. Download Injuries (historical)
-    injuries_path = NFLVERSE_DIR / "injuries.parquet"
-    results["injuries"]["status"] = "success" if await download_parquet(
-        INJURIES_URL, injuries_path, "Injuries (Historical)"
-    ) else "failed"
+    # 6. Download Injuries (historical, 2009-2024) - Aggregate yearly files
+    inj_dfs = []
     
-    # 7. Download Contracts
+    for year in range(2009, 2025):
+        try:
+            url = INJURIES_BASE.format(year=year)
+            response = requests.get(url, timeout=60)
+            if response.status_code == 200:
+                with io.BytesIO(response.content) as buffer:
+                    df = pd.read_parquet(buffer)
+                    inj_dfs.append(df)
+        except Exception as e:
+            logger.warning(f"Error downloading Injuries {year}: {e}")
+            
+    if inj_dfs:
+        try:
+            full_inj = pd.concat(inj_dfs, ignore_index=True)
+            injuries_path = NFLVERSE_DIR / "injuries.parquet"
+            full_inj.to_parquet(injuries_path)
+            logger.info(f"Saved aggregated Injuries: {len(full_inj):,} rows")
+            results["injuries"]["status"] = "success"
+        except Exception as e:
+            logger.error(f"Error saving aggregated Injuries: {e}")
+            results["injuries"]["status"] = "failed"
+    else:
+        results["injuries"]["status"] = "failed"
+    
+    # 7. Download Contracts (Historical)
     contracts_path = NFLVERSE_DIR / "contracts.parquet"
     results["contracts"]["status"] = "success" if await download_parquet(
         CONTRACTS_URL, contracts_path, "Contracts"
