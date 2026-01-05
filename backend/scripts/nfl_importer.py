@@ -228,6 +228,12 @@ async def download_comprehensive_nflverse(progress_callback=None) -> dict:
     NGS_DIR.mkdir(parents=True, exist_ok=True)
     ADVANCED_DIR.mkdir(parents=True, exist_ok=True)
     
+    # 0. Download basic nflverse data (Players, Schedules, Rosters, Stats)
+    if progress_callback:
+        progress_callback("Checking basic NFLverse data (rosters, schedules)...")
+    
+    basic_results = await download_nflverse(progress_callback)
+    
     # Helper to download and save parquet files
     async def download_parquet(url: str, save_path: Path, name: str) -> bool:
         try:

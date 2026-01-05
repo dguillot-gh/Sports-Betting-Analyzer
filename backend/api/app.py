@@ -3819,10 +3819,10 @@ async def get_nfl_data_status():
         "injuries": get_file_info(NFLVERSE_DIR / "injuries.parquet"),
         "contracts": get_file_info(NFLVERSE_DIR / "contracts.parquet"),
         "advanced_stats": {
-            "passing": get_file_info(ADVANCED_DIR / "advstats_season_pass.parquet"),
-            "rushing": get_file_info(ADVANCED_DIR / "advstats_season_rush.parquet"),
-            "receiving": get_file_info(ADVANCED_DIR / "advstats_season_rec.parquet"),
-            "defense": get_file_info(ADVANCED_DIR / "advstats_season_def.parquet"),
+            "passing": get_file_info(ADVANCED_DIR / "pfr_passing.parquet"),
+            "rushing": get_file_info(ADVANCED_DIR / "pfr_rushing.parquet"),
+            "receiving": get_file_info(ADVANCED_DIR / "pfr_receiving.parquet"),
+            "defense": get_file_info(ADVANCED_DIR / "pfr_defense.parquet"),
         },
         "basic": {
             "players": get_file_info(NFLVERSE_DIR / "players.csv"),
