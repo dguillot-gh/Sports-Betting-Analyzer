@@ -3448,3 +3448,47 @@ async def get_nba_ai_engines():
         ],
         "source": "https://github.com/NBA-Betting/NBA_AI"
     }
+
+
+# ==================== NBA SEASON SIMULATION (Monte Carlo) ====================
+
+@app.post("/nba/simulation/season")
+async def run_nba_season_simulation(
+    num_simulations: int = Query(1000, description="Number of simulations to run (100-10000)")
+):
+    """
+    Run Monte Carlo simulation of remaining NBA season.
+    
+    Based on: https://github.com/matsonj/nba-monte-carlo
+    
+    Returns playoff odds, seed distributions, and win projections for each team.
+    """
+    try:
+        from scripts.nba_season_simulator import run_nba_season_simulation as run_sim
+        
+        # Clamp simulations to reasonable range
+        num_simulations = max(100, min(10000, num_simulations))
+        
+        logger.info(f"Running NBA season simulation with {num_simulations} iterations")
+        results = run_sim(num_simulations=num_simulations)
+        
+        return results
+        
+    except Exception as e:
+        logger.error(f"Error running NBA season simulation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/nba/simulation/status")
+async def get_nba_simulation_status():
+    """Check if NBA simulation is available."""
+    try:
+        from scripts.nba_season_simulator import NBA_API_AVAILABLE
+        return {
+            "available": True,
+            "nba_api_available": NBA_API_AVAILABLE,
+            "description": "Monte Carlo NBA season simulator",
+            "source": "https://github.com/matsonj/nba-monte-carlo"
+        }
+    except Exception as e:
+        return {"available": False, "error": str(e)}

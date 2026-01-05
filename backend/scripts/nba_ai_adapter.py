@@ -68,7 +68,7 @@ class NBABaselinePredictor:
     def _margin_to_prob(self, margin: float) -> float:
         """Convert predicted margin to win probability using logistic function."""
         # Approximate: 4 points = ~64% win probability
-        return 1 / (1 + np.exp(-margin / 5))
+        return float(1 / (1 + np.exp(-margin / 5)))
 
 
 class NBALinearPredictor:
@@ -152,7 +152,7 @@ class NBALinearPredictor:
         return features
     
     def _margin_to_prob(self, margin: float) -> float:
-        return 1 / (1 + np.exp(-margin / 5))
+        return float(1 / (1 + np.exp(-margin / 5)))
 
 
 class NBATreePredictor:
@@ -233,7 +233,7 @@ class NBATreePredictor:
         }
     
     def _margin_to_prob(self, margin: float) -> float:
-        return 1 / (1 + np.exp(-margin / 5))
+        return float(1 / (1 + np.exp(-margin / 5)))
 
 
 class NBAMLPPredictor:
@@ -317,7 +317,7 @@ class NBAMLPPredictor:
         return features
     
     def _margin_to_prob(self, margin: float) -> float:
-        return 1 / (1 + np.exp(-margin / 5))
+        return float(1 / (1 + np.exp(-margin / 5)))
 
 
 class NBAEnsemblePredictor:

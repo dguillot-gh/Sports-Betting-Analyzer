@@ -14,10 +14,112 @@
 <PageTitle>Race Simulations & Predictions</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
-    <MudText Typo="Typo.h4" GutterBottom="true">Race Simulations & Predictions</MudText>
-    <MudText Typo="Typo.body1" Class="mb-4">NASCAR predictions, interactive simulator, and Monte Carlo simulations</MudText>
+    <MudText Typo="Typo.h4" GutterBottom="true">Season Simulations</MudText>
+    <MudText Typo="Typo.body1" Class="mb-4">Monte Carlo simulations for NASCAR, NFL, and NBA seasons</MudText>
+
 
     <MudTabs @bind-ActivePanelIndex="_activeTab" Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+        <!-- Tab: NBA Season Simulator -->
+        <MudTabPanel Text="NBA Season" Icon="@Icons.Material.Filled.SportsBasketball">
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6" Class="mb-3">NBA Season Simulation</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">
+                            Monte Carlo simulation of NBA season. Uses Elo ratings to calculate playoff probabilities and seed distributions.
+                        </MudText>
+                        
+                        <MudNumericField @bind-Value="_nbaNumSimulations" Label="Simulations" 
+                                         Min="100" Max="10000" Step="100" Variant="Variant.Outlined" Class="mb-4" />
+                        
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" 
+                                   OnClick="RunNBASeasonSim" Disabled="@_nbaSeasonLoading">
+                            @if (_nbaSeasonLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                            @(_nbaSeasonLoading ? "Simulating..." : "Run Season Simulation")
+                        </MudButton>
+                        
+                        @if (_nbaSeasonResults != null)
+                        {
+                            <MudAlert Severity="Severity.Success" Dense="true" Class="mt-3">
+                                @_nbaSeasonResults.Simulations simulations completed
+                            </MudAlert>
+                        }
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" md="8">
+                    @if (_nbaSeasonResults != null && _nbaSeasonResults.Results != null)
+                    {
+                        <MudPaper Class="pa-4">
+                            <MudText Typo="Typo.h6" Class="mb-3">
+                                NBA Playoff Probabilities (@_nbaSeasonResults.GamesRemaining games remaining)
+                            </MudText>
+                            
+                            <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-2">
+                                <MudTabPanel Text="Eastern">
+                                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                        <thead>
+                                            <tr>
+                                                <th>Team</th>
+                                                <th>Current</th>
+                                                <th>Avg Wins</th>
+                                                <th>Playoff %</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var team in _nbaSeasonResults.Results.Where(r => r.Conference == "East").OrderByDescending(r => r.PlayoffPct).Take(15))
+                                            {
+                                                <tr>
+                                                    <td><strong>@team.Team</strong></td>
+                                                    <td>@team.CurrentWins-@team.CurrentLosses</td>
+                                                    <td>@team.AvgWins</td>
+                                                    <td style="color: @(team.PlayoffPct > 80 ? "#4caf50" : team.PlayoffPct > 50 ? "#ff9800" : "#f44336"); font-weight: bold;">
+                                                        @team.PlayoffPct%
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </MudSimpleTable>
+                                </MudTabPanel>
+                                <MudTabPanel Text="Western">
+                                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                        <thead>
+                                            <tr>
+                                                <th>Team</th>
+                                                <th>Current</th>
+                                                <th>Avg Wins</th>
+                                                <th>Playoff %</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var team in _nbaSeasonResults.Results.Where(r => r.Conference == "West").OrderByDescending(r => r.PlayoffPct).Take(15))
+                                            {
+                                                <tr>
+                                                    <td><strong>@team.Team</strong></td>
+                                                    <td>@team.CurrentWins-@team.CurrentLosses</td>
+                                                    <td>@team.AvgWins</td>
+                                                    <td style="color: @(team.PlayoffPct > 80 ? "#4caf50" : team.PlayoffPct > 50 ? "#ff9800" : "#f44336"); font-weight: bold;">
+                                                        @team.PlayoffPct%
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </MudSimpleTable>
+                                </MudTabPanel>
+                            </MudTabs>
+                        </MudPaper>
+                    }
+                    else if (!_nbaSeasonLoading)
+                    {
+                        <MudPaper Class="pa-16 d-flex flex-column justify-center align-center" Style="min-height: 300px;">
+                            <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Size="Size.Large" Color="Color.Secondary" Class="mb-4" />
+                            <MudText Typo="Typo.h6" Color="Color.Secondary">Click "Run Season Simulation" to start</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Uses Elo ratings to simulate remaining NBA season</MudText>
+                        </MudPaper>
+                    }
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
         <!-- Tab 1: Quick Predict -->
         <MudTabPanel Text="Quick Predict" Icon="@Icons.Material.Filled.FlashOn">
             @if (!_isPythonServiceAvailable)
@@ -791,6 +893,11 @@
     private string _mcStatus = "";
     private SimulationResponse? _mcResponse;
 
+    // NBA Season Simulator State
+    private int _nbaNumSimulations = 1000;
+    private bool _nbaSeasonLoading = false;
+    private NBASeasonSimResult? _nbaSeasonResults = null;
+
     protected override async Task OnInitializedAsync()
     {
         try
@@ -1540,5 +1647,70 @@
             return parsed;
         
         return false;
+    }
+
+    // NBA Season Simulation Methods
+    private async Task RunNBASeasonSim()
+    {
+        _nbaSeasonLoading = true;
+        _nbaSeasonResults = null;
+        StateHasChanged();
+        
+        try
+        {
+            using var http = new HttpClient();
+            http.Timeout = TimeSpan.FromMinutes(5);
+            var response = await http.PostAsync($"http://backend:8000/nba/simulation/season?num_simulations={_nbaNumSimulations}", null);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                _nbaSeasonResults = JsonSerializer.Deserialize<NBASeasonSimResult>(json, new JsonSerializerOptions 
+                { 
+                    PropertyNameCaseInsensitive = true 
+                });
+                Snackbar.Add($"NBA simulation complete! {_nbaNumSimulations} simulations run.", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add($"Simulation failed: {response.StatusCode}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error running NBA season simulation");
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _nbaSeasonLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private class NBASeasonSimResult
+    {
+        public int Simulations { get; set; }
+        public int GamesRemaining { get; set; }
+        public string? DataSource { get; set; }
+        public List<NBATeamResult>? Results { get; set; }
+    }
+
+    private class NBATeamResult
+    {
+        public string Team { get; set; } = "";
+        public string Conference { get; set; } = "";
+        public int CurrentWins { get; set; }
+        public int CurrentLosses { get; set; }
+        public double AvgWins { get; set; }
+        public int MinWins { get; set; }
+        public int MaxWins { get; set; }
+        public double PlayoffPct { get; set; }
+        public double Seed1 { get; set; }
+        public double Seed2 { get; set; }
+        public double Seed3 { get; set; }
+        public double Seed4 { get; set; }
+        public double Seed5 { get; set; }
+        public double Seed6 { get; set; }
     }
 }

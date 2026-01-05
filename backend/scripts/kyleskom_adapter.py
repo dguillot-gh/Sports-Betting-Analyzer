@@ -286,10 +286,10 @@ class KyleskomPredictor:
                         over_prob = float(ou_raw[1])
                         ou_pred = {
                             'pick': 'OVER' if over_prob > under_prob else 'UNDER',
-                            'confidence': round(max(over_prob, under_prob) * 100, 1),
-                            'total_line': total_line,
-                            'over_prob': round(over_prob, 3),
-                            'under_prob': round(under_prob, 3)
+                            'confidence': float(round(max(over_prob, under_prob) * 100, 1)),
+                            'total_line': float(total_line),
+                            'over_prob': float(round(over_prob, 3)),
+                            'under_prob': float(round(under_prob, 3))
                         }
                 except Exception as ou_error:
                     logger.error(f"O/U prediction error: {ou_error}")
@@ -308,23 +308,23 @@ class KyleskomPredictor:
             
             predicted_winner = home_team if home_win_prob > away_win_prob else away_team
             winner_idx = 1 if home_win_prob > away_win_prob else 0
-            confidence = round(ml_pred[winner_idx] * 100 if len(ml_pred) >= 2 else max(home_win_prob, away_win_prob) * 100, 1)
+            confidence = float(round(float(ml_pred[winner_idx]) * 100 if len(ml_pred) >= 2 else max(home_win_prob, away_win_prob) * 100, 1))
             
             return {
                 'model': 'kyleskom_xgb',
                 'model_accuracy': '68.9%',
                 'home_team': home_team,
                 'away_team': away_team,
-                'home_win_probability': round(home_win_prob, 4),
-                'away_win_probability': round(away_win_prob, 4),
+                'home_win_probability': float(round(home_win_prob, 4)),
+                'away_win_probability': float(round(away_win_prob, 4)),
                 'predicted_winner': predicted_winner,
-                'confidence': confidence,
+                'confidence': float(confidence),
                 'over_under': ou_pred,
-                'ev_home': ev_home,
-                'ev_away': ev_away,
-                'kelly_home': kelly_home,
-                'kelly_away': kelly_away,
-                'features_used': data.shape[1] if len(data.shape) > 1 else len(data),
+                'ev_home': float(ev_home) if ev_home is not None else None,
+                'ev_away': float(ev_away) if ev_away is not None else None,
+                'kelly_home': float(kelly_home) if kelly_home is not None else None,
+                'kelly_away': float(kelly_away) if kelly_away is not None else None,
+                'features_used': int(data.shape[1]) if len(data.shape) > 1 else int(len(data)),
             }
             
         except Exception as e:
