@@ -3034,7 +3034,7 @@ async def get_nba_model_testing_predictions(
     try:
         from scripts.nba_odds import get_todays_nba_odds
         from scripts.model_testing_predictor import predict_nba_simple, get_nba_team_stats
-        from scripts.kyleskom_adapter import predict_with_kyleskom
+        from scripts.kyleskom_adapter import predict_with_kyleskom, normalize_team_name
         
         # Get today's games with odds
         odds_data = await get_todays_nba_odds(sportsbook)
@@ -3047,12 +3047,14 @@ async def get_nba_model_testing_predictions(
         
         analyzed_games = []
         for game in odds_data["games"]:
-            home_team = game.get("home_team", "")
-            away_team = game.get("away_team", "")
+            # Normalize team names to handle variations like "LA Clippers" -> "Los Angeles Clippers"
+            home_team = normalize_team_name(game.get("home_team", ""))
+            away_team = normalize_team_name(game.get("away_team", ""))
             home_ml = game.get("home_moneyline")
             away_ml = game.get("away_moneyline")
             total_line = game.get("over_under") or game.get("total", 225.0)
             
+            # Use normalized names for stats lookup too
             home_stats = all_team_stats.get(home_team, {})
             away_stats = all_team_stats.get(away_team, {})
             

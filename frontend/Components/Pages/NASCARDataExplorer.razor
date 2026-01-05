@@ -350,13 +350,20 @@
         var list = new List<RaceInfo>();
         foreach (var race in races.EnumerateArray())
         {
+            // Handle null values safely - pynascar may return null for some fields
+            int raceId = 0;
+            if (race.TryGetProperty("race_id", out var idProp) && idProp.ValueKind == JsonValueKind.Number)
+            {
+                raceId = idProp.GetInt32();
+            }
+            
             list.Add(new RaceInfo
             {
-                RaceId = race.TryGetProperty("race_id", out var id) ? id.GetInt32() : 0,
-                Name = race.TryGetProperty("name", out var name) ? name.GetString() ?? "" : "",
-                Track = race.TryGetProperty("track", out var track) ? track.GetString() ?? "" : "",
-                Date = race.TryGetProperty("date", out var date) ? date.GetString() ?? "" : "",
-                Status = race.TryGetProperty("status", out var status) ? status.GetString() ?? "" : ""
+                RaceId = raceId,
+                Name = race.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String ? name.GetString() ?? "" : "",
+                Track = race.TryGetProperty("track", out var track) && track.ValueKind == JsonValueKind.String ? track.GetString() ?? "" : "",
+                Date = race.TryGetProperty("date", out var date) && date.ValueKind == JsonValueKind.String ? date.GetString() ?? "" : "",
+                Status = race.TryGetProperty("status", out var status) && status.ValueKind == JsonValueKind.String ? status.GetString() ?? "" : ""
             });
         }
         return list;
