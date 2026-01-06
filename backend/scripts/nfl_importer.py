@@ -187,15 +187,39 @@ async def download_nflverse(progress_callback=None):
                 import nflreadpy as nfl
                 rosters_polars = nfl.load_rosters(IMPORT_YEARS)
                 rosters = rosters_polars.to_pandas()
+                rosters.to_csv(NFLVERSE_DIR / "roster.csv", index=False)
+                downloaded.append("rosters")
+                logger.info(f"Downloaded rosters via nflreadpy ({len(rosters)} rows)")
             except ImportError:
-                import nfl_data_py as nfl
-                rosters = nfl.import_weekly_rosters(IMPORT_YEARS)
-            
-            rosters.to_csv(NFLVERSE_DIR / "roster.csv", index=False)
-            downloaded.append("rosters")
-            logger.info("Downloaded rosters via library")
+                try:
+                    import nfl_data_py as nfl
+                    rosters = nfl.import_weekly_rosters(IMPORT_YEARS)
+                    rosters.to_csv(NFLVERSE_DIR / "roster.csv", index=False)
+                    downloaded.append("rosters")
+                    logger.info(f"Downloaded rosters via nfl_data_py ({len(rosters)} rows)")
+                except ImportError:
+                    # Fallback: Direct HTTP download of combined rosters
+                    logger.warning("Neither nflreadpy nor nfl_data_py installed, using direct HTTP download for rosters")
+                    roster_dfs = []
+                    for year in IMPORT_YEARS:
+                        try:
+                            url = f"{NFLVERSE_BASE}/rosters/roster_{year}.parquet"
+                            response = requests.get(url, timeout=60)
+                            if response.status_code == 200:
+                                import io
+                                df = pd.read_parquet(io.BytesIO(response.content))
+                                roster_dfs.append(df)
+                                logger.info(f"Downloaded roster_{year}.parquet ({len(df)} rows)")
+                        except Exception as e:
+                            logger.warning(f"Failed to download roster {year}: {e}")
+                    
+                    if roster_dfs:
+                        full_rosters = pd.concat(roster_dfs, ignore_index=True)
+                        full_rosters.to_csv(NFLVERSE_DIR / "roster.csv", index=False)
+                        downloaded.append("rosters")
+                        logger.info(f"Saved aggregated rosters: {len(full_rosters)} rows")
         except Exception as e:
-            logger.error(f"Error fetching rosters via lib: {e}")
+            logger.error(f"Error fetching rosters: {e}")
             
     except Exception as e:
         logger.error(f"Library import failed: {e}")
