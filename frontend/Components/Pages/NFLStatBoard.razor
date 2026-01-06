@@ -803,6 +803,231 @@
                 </MudItem>
             </MudGrid>
         </MudTabPanel>
+        
+        @* Tab 10: Player Dashboard *@
+        <MudTabPanel Text="Player Dashboard" Icon="@Icons.Material.Filled.Dashboard">
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudText Typo="Typo.h6" Class="mb-3">
+                        <MudIcon Icon="@Icons.Material.Filled.Leaderboard" Class="mr-2" />
+                        Position Leaderboards
+                    </MudText>
+                </MudItem>
+                
+                @* QB Leaders *@
+                <MudItem xs="12" md="6">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
+                            <MudText Typo="Typo.h6" Color="Color.Primary">
+                                <MudIcon Icon="@Icons.Material.Filled.Sports" Class="mr-2" />
+                                QB Leaders
+                            </MudText>
+                            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="LoadQBLeaders">
+                                <MudIcon Icon="@Icons.Material.Filled.Refresh" />
+                            </MudButton>
+                        </MudStack>
+                        
+                        @if (_qbLeaders.Any())
+                        {
+                            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                <thead>
+                                    <tr>
+                                        <th>Rank</th>
+                                        <th>Player</th>
+                                        <th>Team</th>
+                                        <th>Pass Yds</th>
+                                        <th>TDs</th>
+                                        <th>Rating</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @{ int qbRank = 1; }
+                                    @foreach (var qb in _qbLeaders.Take(10))
+                                    {
+                                        <tr>
+                                            <td>@qbRank</td>
+                                            <td><strong>@GetString(qb, "player")</strong></td>
+                                            <td>@GetString(qb, "team")</td>
+                                            <td>@GetDouble(qb, "passing_yards").ToString("N0")</td>
+                                            <td>@GetDouble(qb, "passing_tds")</td>
+                                            <td>@GetDouble(qb, "passer_rating").ToString("F1")</td>
+                                        </tr>
+                                        qbRank++;
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Click refresh to load QB leaders</MudText>
+                        }
+                    </MudPaper>
+                </MudItem>
+                
+                @* RB Leaders *@
+                <MudItem xs="12" md="6">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
+                            <MudText Typo="Typo.h6" Color="Color.Secondary">
+                                <MudIcon Icon="@Icons.Material.Filled.DirectionsRun" Class="mr-2" />
+                                RB Leaders
+                            </MudText>
+                            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="LoadRBLeaders">
+                                <MudIcon Icon="@Icons.Material.Filled.Refresh" />
+                            </MudButton>
+                        </MudStack>
+                        
+                        @if (_rbLeaders.Any())
+                        {
+                            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                <thead>
+                                    <tr>
+                                        <th>Rank</th>
+                                        <th>Player</th>
+                                        <th>Team</th>
+                                        <th>Rush Yds</th>
+                                        <th>TDs</th>
+                                        <th>YPC</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @{ int rbRank = 1; }
+                                    @foreach (var rb in _rbLeaders.Take(10))
+                                    {
+                                        <tr>
+                                            <td>@rbRank</td>
+                                            <td><strong>@GetString(rb, "player")</strong></td>
+                                            <td>@GetString(rb, "team")</td>
+                                            <td>@GetDouble(rb, "rushing_yards").ToString("N0")</td>
+                                            <td>@GetDouble(rb, "rushing_tds")</td>
+                                            <td>@GetDouble(rb, "ypc").ToString("F1")</td>
+                                        </tr>
+                                        rbRank++;
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Click refresh to load RB leaders</MudText>
+                        }
+                    </MudPaper>
+                </MudItem>
+                
+                @* WR Leaders *@
+                <MudItem xs="12" md="6">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
+                            <MudText Typo="Typo.h6" Color="Color.Tertiary">
+                                <MudIcon Icon="@Icons.Material.Filled.CatchingPokemon" Class="mr-2" />
+                                WR Leaders
+                            </MudText>
+                            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="LoadWRLeaders">
+                                <MudIcon Icon="@Icons.Material.Filled.Refresh" />
+                            </MudButton>
+                        </MudStack>
+                        
+                        @if (_wrLeaders.Any())
+                        {
+                            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                <thead>
+                                    <tr>
+                                        <th>Rank</th>
+                                        <th>Player</th>
+                                        <th>Team</th>
+                                        <th>Rec Yds</th>
+                                        <th>TDs</th>
+                                        <th>Rec</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @{ int wrRank = 1; }
+                                    @foreach (var wr in _wrLeaders.Take(10))
+                                    {
+                                        <tr>
+                                            <td>@wrRank</td>
+                                            <td><strong>@GetString(wr, "player")</strong></td>
+                                            <td>@GetString(wr, "team")</td>
+                                            <td>@GetDouble(wr, "receiving_yards").ToString("N0")</td>
+                                            <td>@GetDouble(wr, "receiving_tds")</td>
+                                            <td>@GetDouble(wr, "receptions")</td>
+                                        </tr>
+                                        wrRank++;
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Click refresh to load WR leaders</MudText>
+                        }
+                    </MudPaper>
+                </MudItem>
+                
+                @* TE Leaders *@
+                <MudItem xs="12" md="6">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
+                            <MudText Typo="Typo.h6" Color="Color.Info">
+                                <MudIcon Icon="@Icons.Material.Filled.SportsFootball" Class="mr-2" />
+                                TE Leaders
+                            </MudText>
+                            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="LoadTELeaders">
+                                <MudIcon Icon="@Icons.Material.Filled.Refresh" />
+                            </MudButton>
+                        </MudStack>
+                        
+                        @if (_teLeaders.Any())
+                        {
+                            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                <thead>
+                                    <tr>
+                                        <th>Rank</th>
+                                        <th>Player</th>
+                                        <th>Team</th>
+                                        <th>Rec Yds</th>
+                                        <th>TDs</th>
+                                        <th>Rec</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @{ int teRank = 1; }
+                                    @foreach (var te in _teLeaders.Take(10))
+                                    {
+                                        <tr>
+                                            <td>@teRank</td>
+                                            <td><strong>@GetString(te, "player")</strong></td>
+                                            <td>@GetString(te, "team")</td>
+                                            <td>@GetDouble(te, "receiving_yards").ToString("N0")</td>
+                                            <td>@GetDouble(te, "receiving_tds")</td>
+                                            <td>@GetDouble(te, "receptions")</td>
+                                        </tr>
+                                        teRank++;
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Click refresh to load TE leaders</MudText>
+                        }
+                    </MudPaper>
+                </MudItem>
+                
+                @* Load All Button *@
+                <MudItem xs="12">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadAllLeaders"
+                               Disabled="@_isLoading" FullWidth="true">
+                        @if (_isLoading)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        <MudIcon Icon="@Icons.Material.Filled.Leaderboard" Class="mr-2" />
+                        Load All Leaderboards
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
     </MudTabs>
     
     @* Download Dialog *@
@@ -879,6 +1104,12 @@
     // Dialog state
     private bool _showDownloadDialog = false;
     private DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
+    
+    // Leaderboard state
+    private List<Dictionary<string, object>> _qbLeaders = new();
+    private List<Dictionary<string, object>> _rbLeaders = new();
+    private List<Dictionary<string, object>> _wrLeaders = new();
+    private List<Dictionary<string, object>> _teLeaders = new();
     
     // Status tracking
     private class DatasetInfo
@@ -1339,4 +1570,123 @@
         "LAC", "LAR", "LV", "MIA", "MIN", "NE", "NO", "NYG",
         "NYJ", "PHI", "PIT", "SEA", "SF", "TB", "TEN", "WAS"
     };
+    
+    // Leaderboard methods
+    private async Task LoadQBLeaders()
+    {
+        try
+        {
+            var response = await Http.GetAsync($"http://backend:8000/nfl/ngs?season={_selectedSeason}&category=passing&limit=20");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var data = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(json, 
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (data != null)
+                {
+                    _qbLeaders = data.OrderByDescending(x => GetDouble(x, "passing_yards")).Take(10).ToList();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading QB leaders");
+        }
+    }
+    
+    private async Task LoadRBLeaders()
+    {
+        try
+        {
+            var response = await Http.GetAsync($"http://backend:8000/nfl/ngs?season={_selectedSeason}&category=rushing&limit=20");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var data = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(json,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (data != null)
+                {
+                    _rbLeaders = data.OrderByDescending(x => GetDouble(x, "rushing_yards")).Take(10).ToList();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading RB leaders");
+        }
+    }
+    
+    private async Task LoadWRLeaders()
+    {
+        try
+        {
+            var response = await Http.GetAsync($"http://backend:8000/nfl/ngs?season={_selectedSeason}&category=receiving&limit=30");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var data = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(json,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (data != null)
+                {
+                    // Filter for WRs
+                    _wrLeaders = data
+                        .Where(x => GetString(x, "position") == "WR" || GetString(x, "pos") == "WR")
+                        .OrderByDescending(x => GetDouble(x, "receiving_yards"))
+                        .Take(10).ToList();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading WR leaders");
+        }
+    }
+    
+    private async Task LoadTELeaders()
+    {
+        try
+        {
+            var response = await Http.GetAsync($"http://backend:8000/nfl/ngs?season={_selectedSeason}&category=receiving&limit=30");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var data = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(json,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (data != null)
+                {
+                    // Filter for TEs
+                    _teLeaders = data
+                        .Where(x => GetString(x, "position") == "TE" || GetString(x, "pos") == "TE")
+                        .OrderByDescending(x => GetDouble(x, "receiving_yards"))
+                        .Take(10).ToList();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading TE leaders");
+        }
+    }
+    
+    private async Task LoadAllLeaders()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        
+        try
+        {
+            await Task.WhenAll(
+                LoadQBLeaders(),
+                LoadRBLeaders(),
+                LoadWRLeaders(),
+                LoadTELeaders()
+            );
+            Snackbar.Add("All leaderboards loaded!", Severity.Success);
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
 }

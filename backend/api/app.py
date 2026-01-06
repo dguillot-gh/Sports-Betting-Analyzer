@@ -3998,3 +3998,177 @@ async def get_nfl_advanced_stats(
         return {"count": len(df), "data": df.head(100).to_dict(orient='records')}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== APEX MODEL ENDPOINTS ====================
+
+@app.get("/apex/predict/nba")
+async def apex_predict_nba(
+    home_team: str = Query(..., description="Home team name"),
+    away_team: str = Query(..., description="Away team name"),
+    total_line: float = Query(225.0, description="O/U line"),
+    home_ml: int = Query(None, description="Home moneyline odds"),
+    away_ml: int = Query(None, description="Away moneyline odds")
+):
+    """Predict NBA game using Apex model."""
+    try:
+        from scripts.apex_model import predict_nba_apex
+        return await predict_nba_apex(home_team, away_team, total_line, home_ml, away_ml)
+    except Exception as e:
+        logger.error(f"Apex NBA prediction error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/apex/predict/nfl")
+async def apex_predict_nfl(
+    home_team: str = Query(..., description="Home team abbreviation"),
+    away_team: str = Query(..., description="Away team abbreviation"),
+    total_line: float = Query(45.0, description="O/U line"),
+    home_ml: int = Query(None, description="Home moneyline odds"),
+    away_ml: int = Query(None, description="Away moneyline odds")
+):
+    """Predict NFL game using Apex model."""
+    try:
+        from scripts.apex_model import predict_nfl_apex
+        return await predict_nfl_apex(home_team, away_team, total_line, home_ml, away_ml)
+    except Exception as e:
+        logger.error(f"Apex NFL prediction error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/apex/train")
+async def apex_train(
+    sport: str = Query("all", description="Sport to train: nba, nfl, or all"),
+    epochs: int = Query(500, description="Training epochs")
+):
+    """Train Apex model for specified sport(s)."""
+    try:
+        from scripts.apex_trainer import train_apex_nba, train_apex_nfl, train_apex_all
+        
+        if sport.lower() == "nba":
+            return await train_apex_nba(epochs)
+        elif sport.lower() == "nfl":
+            return await train_apex_nfl(epochs)
+        else:
+            return await train_apex_all(epochs)
+    except Exception as e:
+        logger.error(f"Apex training error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/apex/status")
+async def apex_status():
+    """Get Apex model training status and info."""
+    try:
+        from scripts.apex_model import get_apex_predictor
+        predictor = get_apex_predictor()
+        return predictor.get_model_info()
+    except Exception as e:
+        logger.error(f"Apex status error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/apex/compare/nba")
+async def apex_compare_nba(
+    home_team: str = Query(..., description="Home team name"),
+    away_team: str = Query(..., description="Away team name"),
+    total_line: float = Query(225.0, description="O/U line"),
+    home_ml: int = Query(None, description="Home moneyline odds"),
+    away_ml: int = Query(None, description="Away moneyline odds")
+):
+    """Compare all 3 models (Simple, Kyle, Apex) for NBA prediction."""
+    try:
+        results = {"home_team": home_team, "away_team": away_team, "models": {}}
+        
+        # 1. Simple model (basic rolling averages)
+        try:
+            from scripts.nba_simple_predictor import predict_simple
+            simple_result = await predict_simple(home_team, away_team)
+            results["models"]["simple"] = simple_result if simple_result else {"error": "Not available"}
+        except Exception as e:
+            results["models"]["simple"] = {"error": str(e)}
+        
+        # 2. Kyle model (kyleskom's XGBoost)
+        try:
+            from scripts.kyleskom_adapter import predict_with_kyleskom
+            kyle_result = await predict_with_kyleskom(home_team, away_team, total_line, home_ml, away_ml)
+            results["models"]["kyle"] = kyle_result
+        except Exception as e:
+            results["models"]["kyle"] = {"error": str(e)}
+        
+        # 3. Apex model (our enhanced)
+        try:
+            from scripts.apex_model import predict_nba_apex
+            apex_result = await predict_nba_apex(home_team, away_team, total_line, home_ml, away_ml)
+            results["models"]["apex"] = apex_result
+        except Exception as e:
+            results["models"]["apex"] = {"error": str(e)}
+        
+        return results
+    except Exception as e:
+        logger.error(f"Model comparison error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/apex/compare/nfl")
+async def apex_compare_nfl(
+    home_team: str = Query(..., description="Home team abbreviation"),
+    away_team: str = Query(..., description="Away team abbreviation"),
+    total_line: float = Query(45.0, description="O/U line"),
+    home_ml: int = Query(None, description="Home moneyline odds"),
+    away_ml: int = Query(None, description="Away moneyline odds")
+):
+    """Compare Simple and Apex models for NFL prediction (Kyle is NBA-only)."""
+    try:
+        results = {"home_team": home_team, "away_team": away_team, "models": {}}
+        
+        # 1. Simple model (existing NFL XGBoost)
+        try:
+            from scripts.nfl_xgb_trainer import predict_nfl_xgb
+            # Get basic stats for prediction
+            simple_result = await predict_nfl_xgb(home_team, away_team, {}, {})
+            results["models"]["simple"] = simple_result if simple_result else {"error": "Not available"}
+        except Exception as e:
+            results["models"]["simple"] = {"error": str(e)}
+        
+        # 2. Kyle model - NOT available for NFL
+        results["models"]["kyle"] = {"error": "Kyle model is NBA-only"}
+        
+        # 3. Apex model
+        try:
+            from scripts.apex_model import predict_nfl_apex
+            apex_result = await predict_nfl_apex(home_team, away_team, total_line, home_ml, away_ml)
+            results["models"]["apex"] = apex_result
+        except Exception as e:
+            results["models"]["apex"] = {"error": str(e)}
+        
+        return results
+    except Exception as e:
+        logger.error(f"NFL model comparison error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/apex/backtest")
+async def apex_backtest(
+    sport: str = Query("nfl", description="Sport to backtest: nba or nfl"),
+    test_year: int = Query(2024, description="Year to test on"),
+    sample_size: int = Query(50, description="Max games to test (1-100)")
+):
+    """
+    Run backtest on historical games to verify model accuracy.
+    
+    Returns concrete accuracy proof by testing on games where outcome is known.
+    """
+    try:
+        from scripts.apex_trainer import backtest_on_historical
+        
+        # Limit sample size
+        sample_size = min(max(1, sample_size), 100)
+        
+        return await backtest_on_historical(sport, test_year, sample_size)
+    except Exception as e:
+        logger.error(f"Backtest error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
