@@ -3645,12 +3645,12 @@ async def get_nfl_data_status():
         "draft_picks": get_file_info(NFLVERSE_DIR / "draft_picks.parquet"),
         "teams": get_file_info(NFLVERSE_DIR / "teams.parquet"),
         "injuries": get_file_info(NFLVERSE_DIR / "injuries.parquet"),
-        "contracts": get_file_info(NFLVERSE_DIR / "contracts.parquet"),
+        "contracts": get_file_info(NFLVERSE_DIR / "historical_contracts.parquet"),
         "advanced_stats": {
-            "passing": get_file_info(ADVANCED_DIR / "pfr_passing.parquet"),
-            "rushing": get_file_info(ADVANCED_DIR / "pfr_rushing.parquet"),
-            "receiving": get_file_info(ADVANCED_DIR / "pfr_receiving.parquet"),
-            "defense": get_file_info(ADVANCED_DIR / "pfr_defense.parquet"),
+            "passing": get_file_info(ADVANCED_DIR / "advstats_season_pass.parquet"),
+            "rushing": get_file_info(ADVANCED_DIR / "advstats_season_rush.parquet"),
+            "receiving": get_file_info(ADVANCED_DIR / "advstats_season_rec.parquet"),
+            "defense": get_file_info(ADVANCED_DIR / "advstats_season_def.parquet"),
         },
         "basic": {
             "players": get_file_info(NFLVERSE_DIR / "players.csv"),
@@ -3880,20 +3880,27 @@ async def get_nfl_injuries(
         
         file_path = Path("/app/data/nflverse/injuries.parquet")
         if not file_path.exists():
-            return {"error": "Injuries data not downloaded yet"}
+            return {"error": "Injuries data not downloaded yet", "data": []}
         
         table = pq.read_table(file_path)
         df = table.to_pandas()
         
+        # Handle column name variations
         if season:
-            df = df[df['season'] == season]
+            if 'season' in df.columns:
+                df = df[df['season'] == season]
         if team:
-            df = df[df['team'].str.upper() == team.upper()]
+            team_col = next((c for c in ['team', 'team_abbr', 'club_code'] if c in df.columns), None)
+            if team_col:
+                df = df[df[team_col].str.upper() == team.upper()]
         if player:
-            df = df[df['full_name'].str.contains(player, case=False, na=False)]
+            name_col = next((c for c in ['full_name', 'name', 'player', 'player_name'] if c in df.columns), None)
+            if name_col:
+                df = df[df[name_col].str.contains(player, case=False, na=False)]
             
-        return {"count": len(df), "data": df.head(100).to_dict(orient='records')}
+        return {"count": len(df), "data": df.head(100).to_dict(orient='records'), "columns": list(df.columns)}
     except Exception as e:
+        logger.error(f"Error loading injuries: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -3908,22 +3915,30 @@ async def get_nfl_contracts(
         import pyarrow.parquet as pq
         from pathlib import Path
         
-        file_path = Path("/app/data/nflverse/contracts.parquet")
+        file_path = Path("/app/data/nflverse/historical_contracts.parquet")
         if not file_path.exists():
-            return {"error": "Contracts data not downloaded yet"}
+            return {"error": "Contracts data not downloaded yet", "data": []}
         
         table = pq.read_table(file_path)
         df = table.to_pandas()
         
+        # Handle column name variations
         if team:
-            df = df[df['team'].str.upper() == team.upper()]
+            team_col = next((c for c in ['team', 'team_abbr', 'club'] if c in df.columns), None)
+            if team_col:
+                df = df[df[team_col].str.upper() == team.upper()]
         if player:
-            df = df[df['player'].str.contains(player, case=False, na=False)]
+            name_col = next((c for c in ['player', 'player_name', 'name', 'full_name'] if c in df.columns), None)
+            if name_col:
+                df = df[df[name_col].str.contains(player, case=False, na=False)]
         if position:
-            df = df[df['position'].str.upper() == position.upper()]
+            pos_col = next((c for c in ['position', 'pos'] if c in df.columns), None)
+            if pos_col:
+                df = df[df[pos_col].str.upper() == position.upper()]
             
-        return {"count": len(df), "data": df.head(100).to_dict(orient='records')}
+        return {"count": len(df), "data": df.head(100).to_dict(orient='records'), "columns": list(df.columns)}
     except Exception as e:
+        logger.error(f"Error loading contracts: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -3957,7 +3972,7 @@ async def get_nfl_advanced_stats(
         import pyarrow.parquet as pq
         from pathlib import Path
         
-        # Map category to filename
+        # Map category to filename (PFR Advanced Stats - using nflverse source naming)
         file_map = {
             "passing": "advstats_season_pass.parquet",
             "rushing": "advstats_season_rush.parquet",

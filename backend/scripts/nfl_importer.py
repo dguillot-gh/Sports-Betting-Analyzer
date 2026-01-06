@@ -91,12 +91,12 @@ INJURIES_BASE = f"{NFLVERSE_BASE}/injuries/injuries_{{year}}.parquet"
 # Contracts (historical)
 CONTRACTS_URL = f"{NFLVERSE_BASE}/contracts/historical_contracts.parquet"
 
-# PFF/Advanced Stats (if available)
+# PFR Advanced Stats - Use source filenames for consistency
 ADVANCED_STATS = {
-    "pfr_passing": f"{NFLVERSE_BASE}/pfr_advstats/advstats_season_pass.parquet",
-    "pfr_rushing": f"{NFLVERSE_BASE}/pfr_advstats/advstats_season_rush.parquet",
-    "pfr_receiving": f"{NFLVERSE_BASE}/pfr_advstats/advstats_season_rec.parquet",
-    "pfr_defense": f"{NFLVERSE_BASE}/pfr_advstats/advstats_season_def.parquet",
+    "advstats_season_pass": f"{NFLVERSE_BASE}/pfr_advstats/advstats_season_pass.parquet",
+    "advstats_season_rush": f"{NFLVERSE_BASE}/pfr_advstats/advstats_season_rush.parquet",
+    "advstats_season_rec": f"{NFLVERSE_BASE}/pfr_advstats/advstats_season_rec.parquet",
+    "advstats_season_def": f"{NFLVERSE_BASE}/pfr_advstats/advstats_season_def.parquet",
 }
 
 # 2025 season data (play-by-play files, per game)
@@ -370,8 +370,8 @@ async def download_comprehensive_nflverse(progress_callback=None) -> dict:
     else:
         results["injuries"]["status"] = "failed"
     
-    # 7. Download Contracts (Historical)
-    contracts_path = NFLVERSE_DIR / "contracts.parquet"
+    # 7. Download Contracts (Historical) - uses source filename
+    contracts_path = NFLVERSE_DIR / "historical_contracts.parquet"
     results["contracts"]["status"] = "success" if await download_parquet(
         CONTRACTS_URL, contracts_path, "Contracts"
     ) else "failed"
