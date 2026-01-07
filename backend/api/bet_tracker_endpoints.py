@@ -477,3 +477,115 @@ async def get_bet_stats(
         }
     finally:
         await conn.close()
+
+
+@router.get("/stats/chart-data")
+async def get_chart_data(
+    sport: Optional[str] = Query(None, description="Filter by sport"),
+    days: int = Query(30, description="Data for last N days")
+):
+    """
+    Get time-series data for betting analytics charts.
+    Returns: daily profits, cumulative ROI trend, outcome distribution.
+    """
+    import asyncpg
+    from datetime import datetime, timedelta
+    
+    await ensure_tables()
+    
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        sport_filter = "AND sport = $2" if sport else ""
+        params = [days] if not sport else [days, sport]
+        
+        # Daily profit/loss
+        daily_query = f"""
+            SELECT 
+                DATE(created_at) as bet_date,
+                COALESCE(SUM(profit), 0) as daily_profit,
+                COALESCE(SUM(stake), 0) as daily_stake,
+                COUNT(*) as bet_count,
+                SUM(CASE WHEN outcome = 'win' THEN 1 ELSE 0 END) as wins,
+                SUM(CASE WHEN outcome = 'loss' THEN 1 ELSE 0 END) as losses,
+                SUM(CASE WHEN outcome = 'cashout' THEN 1 ELSE 0 END) as cashouts
+            FROM bets
+            WHERE created_at > NOW() - INTERVAL '{days} days'
+                AND outcome != 'pending'
+                {sport_filter}
+            GROUP BY DATE(created_at)
+            ORDER BY bet_date ASC
+        """
+        
+        daily_rows = await conn.fetch(daily_query, *params) if sport else await conn.fetch(daily_query)
+        
+        # Build daily data with cumulative ROI
+        daily_data = []
+        cumulative_profit = 0
+        cumulative_stake = 0
+        
+        for row in daily_rows:
+            cumulative_profit += float(row["daily_profit"])
+            cumulative_stake += float(row["daily_stake"])
+            cumulative_roi = (cumulative_profit / cumulative_stake * 100) if cumulative_stake > 0 else 0
+            
+            daily_data.append({
+                "date": row["bet_date"].isoformat(),
+                "profit": float(row["daily_profit"]),
+                "stake": float(row["daily_stake"]),
+                "bets": row["bet_count"],
+                "wins": row["wins"],
+                "losses": row["losses"],
+                "cashouts": row["cashouts"],
+                "cumulative_profit": cumulative_profit,
+                "cumulative_roi": round(cumulative_roi, 2)
+            })
+        
+        # Outcome totals for pie chart
+        totals_query = f"""
+            SELECT 
+                outcome,
+                COUNT(*) as count,
+                COALESCE(SUM(profit), 0) as profit
+            FROM bets
+            WHERE created_at > NOW() - INTERVAL '{days} days'
+                AND outcome != 'pending'
+                {sport_filter}
+            GROUP BY outcome
+        """
+        
+        totals_rows = await conn.fetch(totals_query, *params) if sport else await conn.fetch(totals_query)
+        
+        outcome_distribution = {
+            "wins": 0,
+            "losses": 0,
+            "cashouts": 0,
+            "win_profit": 0,
+            "loss_amount": 0,
+            "cashout_profit": 0
+        }
+        
+        for row in totals_rows:
+            if row["outcome"] == "win":
+                outcome_distribution["wins"] = row["count"]
+                outcome_distribution["win_profit"] = float(row["profit"])
+            elif row["outcome"] == "loss":
+                outcome_distribution["losses"] = row["count"]
+                outcome_distribution["loss_amount"] = abs(float(row["profit"]))
+            elif row["outcome"] == "cashout":
+                outcome_distribution["cashouts"] = row["count"]
+                outcome_distribution["cashout_profit"] = float(row["profit"])
+        
+        return {
+            "period_days": days,
+            "sport": sport or "all",
+            "daily_data": daily_data,
+            "outcome_distribution": outcome_distribution,
+            "summary": {
+                "total_profit": cumulative_profit,
+                "total_stake": cumulative_stake,
+                "roi": round((cumulative_profit / cumulative_stake * 100), 2) if cumulative_stake > 0 else 0,
+                "total_bets": sum(d["bets"] for d in daily_data)
+            }
+        }
+    finally:
+        await conn.close()

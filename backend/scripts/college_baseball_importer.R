@@ -58,15 +58,27 @@ safe_fetch <- function(expr, description) {
 # 1. Fetch all teams for division
 cat(sprintf("\n=== Fetching Division %d Teams ===\n", division))
 
-teams <- safe_fetch(
-  baseballr::ncaa_teams(division = division, year = year),
-  sprintf("D%d teams for %d", division, year)
-)
+teams <- tryCatch({
+  cat(sprintf("Calling baseballr::ncaa_teams(division=%d, year=%d)...\n", division, year))
+  result <- baseballr::ncaa_teams(division = division, year = year)
+  cat(sprintf("  -> Got %d rows\n", if(!is.null(result)) nrow(result) else 0))
+  result
+}, error = function(e) {
+  cat(sprintf("ERROR calling ncaa_teams: %s\n", e$message))
+  cat("This could be due to:\n")
+  cat("  1. NCAA website is down or blocking requests\n")
+  cat("  2. Network connectivity issues\n")
+  cat("  3. baseballr package needs updating\n")
+  cat("  4. Invalid division/year combination\n")
+  return(NULL)
+})
 
 if (is.null(teams) || nrow(teams) == 0) {
-  cat("ERROR: No teams found!\n")
+  cat(sprintf("ERROR: No teams found for Division %d, Year %d!\n", division, year))
+  cat("Try a different year (e.g., 2024) or check network connectivity.\n")
   quit(status = 1)
 }
+
 
 # Save teams list
 teams_file <- file.path(output_dir, sprintf("teams_d%d.json", division))

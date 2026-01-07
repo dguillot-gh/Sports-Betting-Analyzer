@@ -191,6 +191,136 @@
                 </MudPaper>
             </MudItem>
         </MudGrid>
+
+        <!-- Analytics Section -->
+        <MudExpansionPanels Class="mt-4">
+            <MudExpansionPanel Text="📊 Analytics" IsInitiallyExpanded="false">
+                <MudStack Spacing="3">
+                    <MudStack Row="true" Spacing="2" Class="mb-2">
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="LoadChartData" Disabled="@_loadingCharts">
+                            @if (_loadingCharts)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            }
+                            Refresh Charts
+                        </MudButton>
+                        <MudSelect T="int" @bind-Value="_chartDays" Label="Period" Dense="true" Variant="Variant.Outlined" Style="width:120px;">
+                            <MudSelectItem Value="7">7 Days</MudSelectItem>
+                            <MudSelectItem Value="30">30 Days</MudSelectItem>
+                            <MudSelectItem Value="90">90 Days</MudSelectItem>
+                        </MudSelect>
+                    </MudStack>
+
+                    @if (_chartData != null)
+                    {
+                        <MudGrid Spacing="3">
+                            <!-- Summary Cards -->
+                            <MudItem xs="12" md="3">
+                                <MudPaper Class="pa-3" Elevation="2" Style="text-align:center;">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">ROI</MudText>
+                                    <MudText Typo="Typo.h5" Color="@(_chartRoi >= 0 ? Color.Success : Color.Error)">
+                                        @(_chartRoi >= 0 ? "+" : "")@_chartRoi.ToString("F1")%
+                                    </MudText>
+                                </MudPaper>
+                            </MudItem>
+                            <MudItem xs="12" md="3">
+                                <MudPaper Class="pa-3" Elevation="2" Style="text-align:center;">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Total Profit</MudText>
+                                    <MudText Typo="Typo.h5" Color="@(_chartProfit >= 0 ? Color.Success : Color.Error)">
+                                        @(_chartProfit >= 0 ? "+" : "")$@_chartProfit.ToString("F2")
+                                    </MudText>
+                                </MudPaper>
+                            </MudItem>
+                            <MudItem xs="12" md="3">
+                                <MudPaper Class="pa-3" Elevation="2" Style="text-align:center;">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Win Rate</MudText>
+                                    <MudText Typo="Typo.h5" Color="Color.Info">
+                                        @_chartWinRate.ToString("F1")%
+                                    </MudText>
+                                </MudPaper>
+                            </MudItem>
+                            <MudItem xs="12" md="3">
+                                <MudPaper Class="pa-3" Elevation="2" Style="text-align:center;">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Total Bets</MudText>
+                                    <MudText Typo="Typo.h5">@_chartTotalBets</MudText>
+                                </MudPaper>
+                            </MudItem>
+
+                            <!-- Win/Loss/Cashout Distribution -->
+                            <MudItem xs="12" md="4">
+                                <MudPaper Class="pa-4" Elevation="2">
+                                    <MudText Typo="Typo.h6" Class="mb-3">Outcome Distribution</MudText>
+                                    <MudStack Spacing="2">
+                                        @{
+                                            var totalOutcomes = _outcomeWins + _outcomeLosses + _outcomeCashouts;
+                                            var winPct = totalOutcomes > 0 ? (_outcomeWins * 100.0 / totalOutcomes) : 0;
+                                            var lossPct = totalOutcomes > 0 ? (_outcomeLosses * 100.0 / totalOutcomes) : 0;
+                                            var cashPct = totalOutcomes > 0 ? (_outcomeCashouts * 100.0 / totalOutcomes) : 0;
+                                        }
+                                        <div>
+                                            <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                                <MudText Typo="Typo.body2">Wins (@_outcomeWins)</MudText>
+                                                <MudText Typo="Typo.body2" Color="Color.Success">@winPct.ToString("F1")%</MudText>
+                                            </MudStack>
+                                            <MudProgressLinear Color="Color.Success" Value="@winPct" />
+                                        </div>
+                                        <div>
+                                            <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                                <MudText Typo="Typo.body2">Losses (@_outcomeLosses)</MudText>
+                                                <MudText Typo="Typo.body2" Color="Color.Error">@lossPct.ToString("F1")%</MudText>
+                                            </MudStack>
+                                            <MudProgressLinear Color="Color.Error" Value="@lossPct" />
+                                        </div>
+                                        <div>
+                                            <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                                <MudText Typo="Typo.body2">Cashouts (@_outcomeCashouts)</MudText>
+                                                <MudText Typo="Typo.body2" Color="Color.Warning">@cashPct.ToString("F1")%</MudText>
+                                            </MudStack>
+                                            <MudProgressLinear Color="Color.Warning" Value="@cashPct" />
+                                        </div>
+                                    </MudStack>
+                                </MudPaper>
+                            </MudItem>
+
+                            <!-- Daily Profit Trend -->
+                            <MudItem xs="12" md="8">
+                                <MudPaper Class="pa-4" Elevation="2">
+                                    <MudText Typo="Typo.h6" Class="mb-3">Daily Profit/ROI Trend</MudText>
+                                    @if (_dailyData.Any())
+                                    {
+                                        <MudSimpleTable Dense="true" Hover="true" Style="max-height:200px; overflow-y:auto;">
+                                            <thead>
+                                                <tr><th>Date</th><th>Bets</th><th>W/L/C</th><th>Profit</th><th>Cum. ROI</th></tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var d in _dailyData.TakeLast(10).Reverse())
+                                                {
+                                                    <tr>
+                                                        <td>@d.Date</td>
+                                                        <td>@d.Bets</td>
+                                                        <td style="color:green;">@d.Wins<span style="color:gray;">/</span><span style="color:red;">@d.Losses</span>@(d.Cashouts > 0 ? $"/{d.Cashouts}" : "")</td>
+                                                        <td style="color:@(d.Profit >= 0 ? "green" : "red")">@(d.Profit >= 0 ? "+" : "")$@d.Profit.ToString("F2")</td>
+                                                        <td style="color:@(d.CumulativeRoi >= 0 ? "green" : "red")">@(d.CumulativeRoi >= 0 ? "+" : "")@d.CumulativeRoi.ToString("F1")%</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </MudSimpleTable>
+                                    }
+                                    else
+                                    {
+                                        <MudText Color="Color.Secondary">No data yet. Place some bets first!</MudText>
+                                    }
+                                </MudPaper>
+                            </MudItem>
+                        </MudGrid>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info">Click "Refresh Charts" to load analytics.</MudAlert>
+                    }
+                </MudStack>
+            </MudExpansionPanel>
+        </MudExpansionPanels>
     </MudStack>
 </MudContainer>
 
@@ -207,6 +337,17 @@
     private List<Bet> _bets = new();
     private int _wins = 0, _losses = 0;
     private decimal _netProfit = 0;
+
+    // Chart state
+    private bool _loadingCharts = false;
+    private int _chartDays = 30;
+    private JsonElement? _chartData = null;
+    private decimal _chartRoi = 0;
+    private decimal _chartProfit = 0;
+    private decimal _chartWinRate = 0;
+    private int _chartTotalBets = 0;
+    private int _outcomeWins = 0, _outcomeLosses = 0, _outcomeCashouts = 0;
+    private List<DailyData> _dailyData = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -474,4 +615,65 @@
     private record Game { public string GameId { get; init; } = ""; public string Home { get; init; } = ""; public string Away { get; init; } = ""; public int HomeML { get; init; } public int AwayML { get; init; } public decimal Total { get; init; } }
     private record Leg { public string Description { get; init; } = ""; public int Odds { get; init; } public string? GameId { get; init; } }
     private record Bet { public int Id { get; init; } public string Description { get; init; } = ""; public decimal Stake { get; init; } public int Odds { get; init; } public string Outcome { get; init; } = "pending"; }
+    private record DailyData { public string Date { get; init; } = ""; public decimal Profit { get; init; } public int Bets { get; init; } public int Wins { get; init; } public int Losses { get; init; } public int Cashouts { get; init; } public decimal CumulativeRoi { get; init; } }
+
+    private async Task LoadChartData()
+    {
+        _loadingCharts = true;
+        StateHasChanged();
+
+        try
+        {
+            var resp = await Http.GetFromJsonAsync<JsonElement>($"http://backend:8000/bets/stats/chart-data?days={_chartDays}");
+            _chartData = resp;
+
+            // Parse summary
+            if (resp.TryGetProperty("summary", out var summary))
+            {
+                _chartRoi = summary.TryGetProperty("roi", out var roi) && roi.ValueKind == JsonValueKind.Number ? roi.GetDecimal() : 0;
+                _chartProfit = summary.TryGetProperty("total_profit", out var profit) && profit.ValueKind == JsonValueKind.Number ? profit.GetDecimal() : 0;
+                _chartTotalBets = summary.TryGetProperty("total_bets", out var bets) && bets.ValueKind == JsonValueKind.Number ? bets.GetInt32() : 0;
+            }
+
+            // Parse outcome distribution
+            if (resp.TryGetProperty("outcome_distribution", out var outcomes))
+            {
+                _outcomeWins = outcomes.TryGetProperty("wins", out var w) && w.ValueKind == JsonValueKind.Number ? w.GetInt32() : 0;
+                _outcomeLosses = outcomes.TryGetProperty("losses", out var l) && l.ValueKind == JsonValueKind.Number ? l.GetInt32() : 0;
+                _outcomeCashouts = outcomes.TryGetProperty("cashouts", out var c) && c.ValueKind == JsonValueKind.Number ? c.GetInt32() : 0;
+            }
+
+            // Calculate win rate
+            var totalDecided = _outcomeWins + _outcomeLosses;
+            _chartWinRate = totalDecided > 0 ? (_outcomeWins * 100m / totalDecided) : 0;
+
+            // Parse daily data
+            _dailyData.Clear();
+            if (resp.TryGetProperty("daily_data", out var daily))
+            {
+                foreach (var d in daily.EnumerateArray())
+                {
+                    _dailyData.Add(new DailyData
+                    {
+                        Date = d.TryGetProperty("date", out var dt) ? dt.GetString()?.Substring(5) ?? "" : "",
+                        Profit = d.TryGetProperty("profit", out var p) && p.ValueKind == JsonValueKind.Number ? p.GetDecimal() : 0,
+                        Bets = d.TryGetProperty("bets", out var b) && b.ValueKind == JsonValueKind.Number ? b.GetInt32() : 0,
+                        Wins = d.TryGetProperty("wins", out var wi) && wi.ValueKind == JsonValueKind.Number ? wi.GetInt32() : 0,
+                        Losses = d.TryGetProperty("losses", out var lo) && lo.ValueKind == JsonValueKind.Number ? lo.GetInt32() : 0,
+                        Cashouts = d.TryGetProperty("cashouts", out var ca) && ca.ValueKind == JsonValueKind.Number ? ca.GetInt32() : 0,
+                        CumulativeRoi = d.TryGetProperty("cumulative_roi", out var cr) && cr.ValueKind == JsonValueKind.Number ? cr.GetDecimal() : 0
+                    });
+                }
+            }
+
+            Snackbar.Add("Chart data loaded!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading charts: {ex.Message}", Severity.Warning);
+        }
+
+        _loadingCharts = false;
+        StateHasChanged();
+    }
 }

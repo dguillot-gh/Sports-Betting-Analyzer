@@ -2908,39 +2908,6 @@ def get_college_baseball_status():
         return {"status": "error", "message": str(e)}
 
 
-@app.get('/baseball/ncaa/teams')
-def get_college_baseball_teams(division: int = 1):
-    """Get list of NCAA baseball teams for a division."""
-    try:
-        from scripts.college_baseball_importer import get_teams
-        teams = get_teams(division)
-        return {
-            "division": division,
-            "count": len(teams),
-            "teams": teams
-        }
-    except Exception as e:
-        logger.error(f"Error getting teams: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get('/baseball/ncaa/stats/{team_id}')
-def get_college_baseball_stats(team_id: int, stat_type: str = "batting"):
-    """Get batting or pitching stats for a team."""
-    try:
-        from scripts.college_baseball_importer import get_team_stats
-        stats = get_team_stats(team_id, stat_type)
-        if stats:
-            return {
-                "team_id": team_id,
-                "stat_type": stat_type,
-                "count": len(stats),
-                "stats": stats
-            }
-        return {"error": True, "message": f"No {stat_type} stats found for team {team_id}"}
-    except Exception as e:
-        logger.error(f"Error getting stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get('/baseball/ncaa/schedule/{team_id}')
@@ -3607,6 +3574,57 @@ async def get_nfl_data_status():
     }
     
     return {"datasets": status}
+
+
+@app.get("/nfl/ngs")
+async def get_nfl_ngs(
+    season: int = Query(None, description="Filter by season"),
+    category: str = Query("passing", description="Category: passing, rushing, or receiving"),
+    limit: int = Query(50, description="Max results to return")
+):
+    """
+    Unified Next Gen Stats endpoint for leaderboards.
+    Routes to appropriate category handler based on parameter.
+    """
+    try:
+        import pyarrow.parquet as pq
+        from pathlib import Path
+        
+        category = category.lower()
+        file_map = {
+            "passing": "ngs_passing.parquet",
+            "rushing": "ngs_rushing.parquet", 
+            "receiving": "ngs_receiving.parquet"
+        }
+        
+        if category not in file_map:
+            return {"error": f"Invalid category: {category}. Use passing, rushing, or receiving."}
+        
+        file_path = Path(f"/app/data/nflverse/nextgen_stats/{file_map[category]}")
+        if not file_path.exists():
+            return {"error": f"NGS {category} data not downloaded yet", "download": "/nfl/data/download-comprehensive"}
+        
+        table = pq.read_table(file_path)
+        df = table.to_pandas()
+        
+        # Apply season filter
+        if season and 'season' in df.columns:
+            df = df[df['season'] == season]
+        
+        # Sort by relevant metric for leaderboard
+        sort_cols = {
+            "passing": "passing_yards",
+            "rushing": "rushing_yards",
+            "receiving": "receiving_yards"
+        }
+        if sort_cols[category] in df.columns:
+            df = df.sort_values(sort_cols[category], ascending=False)
+        
+        return df.head(limit).to_dict(orient='records')
+        
+    except Exception as e:
+        logger.error(f"Error in /nfl/ngs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/nfl/nextgen/passing")
