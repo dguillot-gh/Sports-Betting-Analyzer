@@ -1,0 +1,57 @@
+@using MudBlazor
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body1" Class="mb-3">
+            Enter the amount you cashed out for:
+        </MudText>
+        <MudTextField T="decimal" @bind-Value="_cashoutAmount" Label="Cash Out Amount" 
+                      Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentText="$"
+                      Immediate="true" />
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+            Original stake: $@Stake.ToString("F2")
+        </MudText>
+        @if (_cashoutAmount > 0)
+        {
+            var profit = _cashoutAmount - Stake;
+            <MudText Typo="Typo.body2" Color="@(profit >= 0 ? Color.Success : Color.Error)" Class="mt-2">
+                @(profit >= 0 ? "Profit" : "Loss"): @(profit >= 0 ? "+" : "")$@profit.ToString("F2")
+            </MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Warning" Variant="Variant.Filled" OnClick="Submit" 
+                   Disabled="@(_cashoutAmount <= 0)">
+            Cash Out
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance? MudDialog { get; set; }
+
+    [Parameter] public int BetId { get; set; }
+    [Parameter] public decimal Stake { get; set; }
+    [Parameter] public decimal? CurrentCashout { get; set; }
+
+    private decimal _cashoutAmount;
+
+    protected override void OnInitialized()
+    {
+        _cashoutAmount = CurrentCashout ?? 0;
+    }
+
+    private void Cancel() => MudDialog?.Cancel();
+
+    private void Submit()
+    {
+        if (_cashoutAmount <= 0)
+        {
+            Snackbar.Add("Enter a valid cash out amount", Severity.Warning);
+            return;
+        }
+        MudDialog?.Close(DialogResult.Ok(_cashoutAmount));
+    }
+}

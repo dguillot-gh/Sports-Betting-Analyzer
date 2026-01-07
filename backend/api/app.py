@@ -12,6 +12,7 @@ from api.results_endpoints import router as results_router
 from api.backtest_endpoints import router as backtest_router
 from api.player_stats_endpoints import router as player_stats_router
 from api.cache_endpoints import router as cache_router
+from api.bet_tracker_endpoints import router as bet_tracker_router
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
@@ -47,6 +48,7 @@ app.include_router(results_router)  # Game results for syncing
 app.include_router(backtest_router)  # Backtesting endpoints
 app.include_router(player_stats_router)  # Player stats and hit rates
 app.include_router(cache_router)  # Odds caching for late night games
+app.include_router(bet_tracker_router)  # Bet tracking
 
 # Dev CORS. Tighten for production.
 app.add_middleware(
@@ -2863,52 +2865,30 @@ class CollegeBaseballImportRequest(BaseModel):
 
 
 @app.post('/baseball/ncaa/import')
-async def import_college_baseball(payload: CollegeBaseballImportRequest = None):
-    """
-    Import college baseball data using baseballr.
-    """
-    try:
-        from scripts.college_baseball_importer import run_college_baseball_import
-        
-        division = payload.division if payload else 1
-        year = payload.year if payload else None
-        team_id = payload.team_id if payload else None
-        
-        results = await run_college_baseball_import(
-            division=division,
-            year=year,
-            team_id=team_id
-        )
-        return results
-        
-    except ImportError as e:
-        logger.error(f"Import error: {e}")
-        return {
-            "error": True,
-            "message": "College baseball importer module not available",
-            "detail": str(e)
-        }
-    except Exception as e:
-        logger.error(f"Error importing college baseball: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post('/baseball/ncaa/import')
 async def import_college_baseball(
     division: int = Query(1, description="NCAA Division (1, 2, or 3)"),
-    year: int = Query(None, description="Season year (defaults to current)"),
+    year: int = Query(2025, description="Season year"),
+    team_id: Optional[int] = Query(None, description="Optional specific team ID"),
     background_tasks: BackgroundTasks = BackgroundTasks()
 ):
     """
-    Start asynchronous import of college baseball data.
+    Import college baseball data using baseballr.
+    Runs in background to avoid timeout.
     """
     try:
         from scripts.college_baseball_importer import run_college_baseball_import
         
-        # Run in background
-        background_tasks.add_task(run_college_baseball_import, division, year)
+        logger.info(f"Starting college baseball import: D{division}, Year {year}")
         
-        return {"status": "started", "message": f"Started import for Division {division}"}
+        # Run in background
+        background_tasks.add_task(run_college_baseball_import, division, year, team_id)
+        
+        return {
+            "status": "started", 
+            "message": f"Started import for Division {division}, Year {year}",
+            "division": division,
+            "year": year
+        }
     except Exception as e:
         logger.error(f"Error starting import: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -3285,27 +3265,6 @@ async def get_ncaa_baseball_schedule(team_id: int):
     except Exception as e:
         logger.error(f"Error fetching schedule: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/baseball/ncaa/import")
-async def import_ncaa_baseball(division: int = 1, year: int = 2024, background_tasks: BackgroundTasks = None):
-    """
-    Trigger import of NCAA baseball data.
-    """
-    try:
-        from scripts.college_baseball_importer import run_import
-        
-        if background_tasks:
-            background_tasks.add_task(run_import, division, year)
-            return {"status": "started", "division": division, "year": year}
-        else:
-            result = await run_import(division, year)
-            return result
-            
-    except Exception as e:
-        logger.error(f"Error starting import: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 
 

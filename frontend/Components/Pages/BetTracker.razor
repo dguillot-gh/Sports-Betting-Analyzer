@@ -1,0 +1,379 @@
+@page "/bet-tracker"
+@using System.Text.Json
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Bet Tracker</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+    <MudStack Spacing="4">
+        <!-- Header -->
+        <MudPaper Class="pa-4" Elevation="2" Style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <div>
+                    <MudText Typo="Typo.h4" Style="color: white;">
+                        <MudIcon Icon="@Icons.Material.Filled.Receipt" Class="mr-2" />
+                        Bet Tracker
+                    </MudText>
+                </div>
+                <MudStack Row="true" Spacing="3">
+                    <MudChip T="string" Color="Color.Success" Size="Size.Small">@_wins W</MudChip>
+                    <MudChip T="string" Color="Color.Error" Size="Size.Small">@_losses L</MudChip>
+                    <MudChip T="string" Color="@(_netProfit >= 0 ? Color.Success : Color.Error)" Size="Size.Small">
+                        @(_netProfit >= 0 ? "+" : "")$@_netProfit.ToString("F2")
+                    </MudChip>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+
+        <MudGrid>
+            <!-- Left: Available Games -->
+            <MudItem xs="12" md="5">
+                <MudPaper Class="pa-4" Elevation="2" Style="max-height: 600px; overflow-y: auto;">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+                        <MudText Typo="Typo.h6">Available Games</MudText>
+                        <MudStack Row="true" Spacing="1">
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="@(_sport == "nfl" ? Color.Primary : Color.Default)"
+                                       OnClick="@(() => { _sport = "nfl"; _ = LoadGames(); })">NFL</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="@(_sport == "nba" ? Color.Primary : Color.Default)"
+                                       OnClick="@(() => { _sport = "nba"; _ = LoadGames(); })">NBA</MudButton>
+                            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="LoadGames" />
+                        </MudStack>
+                    </MudStack>
+
+                    @if (_loadingGames)
+                    {
+                        <MudProgressLinear Indeterminate="true" />
+                    }
+                    else if (_games.Any())
+                    {
+                        @foreach (var game in _games)
+                        {
+                            <MudCard Class="mb-2" Elevation="1">
+                                <MudCardContent Class="pa-2">
+                                    <MudText Typo="Typo.body2">@game.Away @@ @game.Home</MudText>
+                                    <MudStack Row="true" Spacing="1" Class="mt-1 flex-wrap">
+                                        @if (game.HomeML != 0)
+                                        {
+                                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                                       OnClick="@(() => AddLeg($"{game.Home} ML", game.HomeML, game.GameId))">
+                                                @game.Home.Split(' ').Last() @FormatOdds(game.HomeML)
+                                            </MudButton>
+                                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                                       OnClick="@(() => AddLeg($"{game.Away} ML", game.AwayML, game.GameId))">
+                                                @game.Away.Split(' ').Last() @FormatOdds(game.AwayML)
+                                            </MudButton>
+                                        }
+                                        @if (game.Total > 0)
+                                        {
+                                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Tertiary"
+                                                       OnClick="@(() => AddLeg($"O {game.Total}", -110, game.GameId))">O @game.Total</MudButton>
+                                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Tertiary"
+                                                       OnClick="@(() => AddLeg($"U {game.Total}", -110, game.GameId))">U @game.Total</MudButton>
+                                        }
+                                    </MudStack>
+                                </MudCardContent>
+                            </MudCard>
+                        }
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info" Dense="true">
+                            No games. Click "Analyze + Cache" on Live Odds first.
+                        </MudAlert>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <!-- Right: Bet Slip + History -->
+            <MudItem xs="12" md="7">
+                <!-- Bet Slip -->
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-2">
+                        Bet Slip
+                        @if (_legs.Any())
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ml-2">
+                                @(_legs.Count == 1 ? "Single" : $"{_legs.Count}-Leg Parlay")
+                            </MudChip>
+                        }
+                    </MudText>
+
+                    @if (!_legs.Any())
+                    {
+                        <MudText Color="Color.Secondary" Typo="Typo.body2">Click a bet to add.</MudText>
+                    }
+                    else
+                    {
+                        @foreach (var leg in _legs)
+                        {
+                            <MudPaper Class="pa-2 mb-1" Style="background: rgba(0,0,0,0.05);">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                    <MudText Typo="Typo.body2">@leg.Description (@FormatOdds(leg.Odds))</MudText>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="@(() => _legs.Remove(leg))" />
+                                </MudStack>
+                            </MudPaper>
+                        }
+
+                        @if (_legs.Count > 1)
+                        {
+                            <MudText Typo="Typo.body2" Class="mt-2">
+                                Parlay Odds: <strong style="color:#2196f3;">@FormatOdds(GetParlayOdds())</strong>
+                            </MudText>
+                        }
+
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End" Class="mt-3">
+                            <MudSelect T="string" @bind-Value="_sportsbook" Label="Book" Variant="Variant.Outlined" Dense="true" Style="width:140px;">
+                                <MudSelectItem Value="@("fanduel")">FanDuel</MudSelectItem>
+                                <MudSelectItem Value="@("draftkings")">DraftKings</MudSelectItem>
+                                <MudSelectItem Value="@("betmgm")">BetMGM</MudSelectItem>
+                            </MudSelect>
+                            <MudTextField T="decimal" @bind-Value="_stake" Label="Stake" Variant="Variant.Outlined" Dense="true"
+                                          Style="width:100px;" Adornment="Adornment.Start" AdornmentText="$" />
+                            <div>
+                                <MudText Typo="Typo.caption">To Win</MudText>
+                                <MudText Typo="Typo.body1" Style="color:#4caf50;"><strong>$@CalcWin().ToString("F2")</strong></MudText>
+                            </div>
+                        </MudStack>
+                        <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true" Class="mt-2"
+                                   OnClick="PlaceBet" Disabled="@(_stake <= 0)">Place Bet</MudButton>
+                    }
+                </MudPaper>
+
+                <!-- Manual Add -->
+                <MudExpansionPanels Class="mt-3">
+                    <MudExpansionPanel Text="Manual Entry">
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End">
+                            <MudTextField T="string" @bind-Value="_manualDesc" Label="Description" Dense="true" Placeholder="Chiefs ML" />
+                            <MudTextField T="int" @bind-Value="_manualOdds" Label="Odds" Dense="true" Style="width:80px;" />
+                            <MudButton Variant="Variant.Outlined" OnClick="AddManualLeg">Add</MudButton>
+                        </MudStack>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+
+                <!-- History -->
+                <MudPaper Class="pa-4 mt-3" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-2">Recent Bets</MudText>
+                    @if (_bets.Any())
+                    {
+                        <MudSimpleTable Dense="true" Hover="true" Style="max-height:250px; overflow-y:auto;">
+                            <thead>
+                                <tr><th>Bet</th><th>Stake</th><th>Odds</th><th>Result</th></tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var b in _bets.Take(10))
+                                {
+                                    <tr>
+                                        <td>@b.Description</td>
+                                        <td>$@b.Stake.ToString("F2")</td>
+                                        <td>@FormatOdds(b.Odds)</td>
+                                        <td>
+                                            <MudButtonGroup Size="Size.Small">
+                                                <MudButton Color="@(b.Outcome=="win"?Color.Success:Color.Default)" Variant="@(b.Outcome=="win"?Variant.Filled:Variant.Outlined)"
+                                                           OnClick="@(()=>SetOutcome(b.Id, b.Outcome=="win"?"pending":"win"))">W</MudButton>
+                                                <MudButton Color="@(b.Outcome=="loss"?Color.Error:Color.Default)" Variant="@(b.Outcome=="loss"?Variant.Filled:Variant.Outlined)"
+                                                           OnClick="@(()=>SetOutcome(b.Id, b.Outcome=="loss"?"pending":"loss"))">L</MudButton>
+                                                <MudButton Color="@(b.Outcome=="cashout"?Color.Warning:Color.Default)" Variant="@(b.Outcome=="cashout"?Variant.Filled:Variant.Outlined)"
+                                                           OnClick="@(()=>CashOut(b))">C</MudButton>
+                                            </MudButtonGroup>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+                    else
+                    {
+                        <MudText Color="Color.Secondary">No bets yet.</MudText>
+                    }
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    </MudStack>
+</MudContainer>
+
+@code {
+    // State
+    private string _sport = "nfl";
+    private bool _loadingGames = false;
+    private List<Game> _games = new();
+    private List<Leg> _legs = new();
+    private string _sportsbook = "fanduel";
+    private decimal _stake = 10;
+    private string _manualDesc = "";
+    private int _manualOdds = -110;
+    private List<Bet> _bets = new();
+    private int _wins = 0, _losses = 0;
+    private decimal _netProfit = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadGames();
+        await LoadBets();
+        await LoadStats();
+    }
+
+    private async Task LoadGames()
+    {
+        _loadingGames = true;
+        _games.Clear();
+        StateHasChanged();
+        try
+        {
+            var resp = await Http.GetAsync($"http://backend:8000/cache/games/{_sport}");
+            if (resp.IsSuccessStatusCode)
+            {
+                var json = await resp.Content.ReadAsStringAsync();
+                var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("games", out var gamesArr))
+                {
+                    foreach (var g in gamesArr.EnumerateArray())
+                    {
+                        var home = g.TryGetProperty("home_team", out var h) ? h.GetString() ?? "" : "";
+                        var away = g.TryGetProperty("away_team", out var a) ? a.GetString() ?? "" : "";
+                        var gid = g.TryGetProperty("game_id", out var id) ? id.GetString() ?? "" : "";
+                        int homeML = 0, awayML = 0;
+                        decimal total = 0;
+                        
+                        if (g.TryGetProperty("odds_data", out var odds))
+                        {
+                            if (odds.TryGetProperty("home_ml", out var hm) && hm.ValueKind == JsonValueKind.Number)
+                                homeML = hm.GetInt32();
+                            if (odds.TryGetProperty("away_ml", out var am) && am.ValueKind == JsonValueKind.Number)
+                                awayML = am.GetInt32();
+                            if (odds.TryGetProperty("total", out var t) && t.ValueKind == JsonValueKind.Number)
+                                total = t.GetDecimal();
+                        }
+                        
+                        _games.Add(new Game { GameId = gid, Home = home, Away = away, HomeML = homeML, AwayML = awayML, Total = total });
+                    }
+                }
+            }
+        }
+        catch { }
+        _loadingGames = false;
+    }
+
+    private void AddLeg(string desc, int odds, string gameId)
+    {
+        _legs.Add(new Leg { Description = desc, Odds = odds, GameId = gameId });
+        Snackbar.Add($"Added: {desc}", Severity.Success);
+    }
+
+    private void AddManualLeg()
+    {
+        if (string.IsNullOrWhiteSpace(_manualDesc)) return;
+        _legs.Add(new Leg { Description = _manualDesc, Odds = _manualOdds });
+        _manualDesc = "";
+    }
+
+    private int GetParlayOdds()
+    {
+        if (_legs.Count <= 1) return _legs.FirstOrDefault()?.Odds ?? 0;
+        double dec = 1;
+        foreach (var l in _legs)
+            dec *= l.Odds > 0 ? (l.Odds / 100.0) + 1 : (100.0 / Math.Abs(l.Odds)) + 1;
+        return dec >= 2 ? (int)((dec - 1) * 100) : (int)(-100 / (dec - 1));
+    }
+
+    private decimal CalcWin()
+    {
+        if (_stake <= 0 || !_legs.Any()) return 0;
+        var odds = GetParlayOdds();
+        return odds > 0 ? _stake * odds / 100 : _stake * 100 / Math.Abs(odds);
+    }
+
+    private async Task PlaceBet()
+    {
+        if (_stake <= 0 || !_legs.Any()) return;
+        try
+        {
+            var req = new
+            {
+                sport = _sport,
+                bet_type = _legs.Count > 1 ? "parlay" : "single",
+                sportsbook = _sportsbook,
+                stake = _stake,
+                odds = GetParlayOdds(),
+                description = _legs.Count > 1 ? $"{_legs.Count}-leg: {string.Join(", ", _legs.Select(l => l.Description))}" : _legs[0].Description,
+                legs = _legs.Select(l => new { description = l.Description, odds = l.Odds, game_id = l.GameId }).ToList()
+            };
+            var resp = await Http.PostAsJsonAsync("http://backend:8000/bets", req);
+            if (resp.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"Bet placed! Win: ${CalcWin():F2}", Severity.Success);
+                _legs.Clear();
+                await LoadBets();
+                await LoadStats();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadBets()
+    {
+        try
+        {
+            var resp = await Http.GetFromJsonAsync<JsonElement>("http://backend:8000/bets?limit=20");
+            _bets.Clear();
+            if (resp.TryGetProperty("bets", out var arr))
+            {
+                foreach (var b in arr.EnumerateArray())
+                {
+                    _bets.Add(new Bet
+                    {
+                        Id = b.GetProperty("id").GetInt32(),
+                        Description = b.TryGetProperty("description", out var d) ? d.GetString() ?? "" : "",
+                        Stake = b.TryGetProperty("stake", out var s) && s.ValueKind == JsonValueKind.Number ? s.GetDecimal() : 0,
+                        Odds = b.TryGetProperty("odds", out var o) && o.ValueKind == JsonValueKind.Number ? o.GetInt32() : 0,
+                        Outcome = b.TryGetProperty("outcome", out var oc) ? oc.GetString() ?? "pending" : "pending"
+                    });
+                }
+            }
+        }
+        catch { }
+    }
+
+    private async Task LoadStats()
+    {
+        try
+        {
+            var resp = await Http.GetFromJsonAsync<JsonElement>("http://backend:8000/bets/stats/summary");
+            _wins = resp.TryGetProperty("wins", out var w) ? w.GetInt32() : 0;
+            _losses = resp.TryGetProperty("losses", out var l) ? l.GetInt32() : 0;
+            _netProfit = resp.TryGetProperty("net_profit", out var p) && p.ValueKind == JsonValueKind.Number ? p.GetDecimal() : 0;
+        }
+        catch { }
+    }
+
+    private async Task SetOutcome(int id, string outcome)
+    {
+        await Http.PatchAsJsonAsync($"http://backend:8000/bets/{id}/outcome", new { outcome });
+        await LoadBets();
+        await LoadStats();
+    }
+
+    private async Task CashOut(Bet bet)
+    {
+        var param = new DialogParameters { { "BetId", bet.Id }, { "Stake", bet.Stake } };
+        var dlg = await DialogService.ShowAsync<CashOutDialog>("Cash Out", param);
+        var result = await dlg.Result;
+        if (!result.Canceled && result.Data is decimal amt)
+        {
+            await Http.PatchAsJsonAsync($"http://backend:8000/bets/{bet.Id}/outcome", new { outcome = "cashout", cashout_amount = amt });
+            await LoadBets();
+            await LoadStats();
+        }
+    }
+
+    private string FormatOdds(int odds) => odds > 0 ? $"+{odds}" : odds.ToString();
+
+    // Simple models
+    private record Game { public string GameId { get; init; } = ""; public string Home { get; init; } = ""; public string Away { get; init; } = ""; public int HomeML { get; init; } public int AwayML { get; init; } public decimal Total { get; init; } }
+    private record Leg { public string Description { get; init; } = ""; public int Odds { get; init; } public string? GameId { get; init; } }
+    private record Bet { public int Id { get; init; } public string Description { get; init; } = ""; public decimal Stake { get; init; } public int Odds { get; init; } public string Outcome { get; init; } = "pending"; }
+}
