@@ -160,7 +160,7 @@
                     {
                         <MudSimpleTable Dense="true" Hover="true" Style="max-height:250px; overflow-y:auto;">
                             <thead>
-                                <tr><th>Bet</th><th>Stake</th><th>Odds</th><th>Result</th></tr>
+                                <tr><th>Bet</th><th>Stake</th><th>Odds</th><th>Result</th><th></th></tr>
                             </thead>
                             <tbody>
                                 @foreach (var b in _bets.Take(10))
@@ -178,6 +178,12 @@
                                                 <MudButton Color="@(b.Outcome=="cashout"?Color.Warning:Color.Default)" Variant="@(b.Outcome=="cashout"?Variant.Filled:Variant.Outlined)"
                                                            OnClick="@(()=>CashOut(b))">C</MudButton>
                                             </MudButtonGroup>
+                                        </td>
+                                        <td>
+                                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Info"
+                                                           OnClick="@(() => OpenEditDialog(b))" Title="Edit bet" />
+                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                                           OnClick="@(() => DeleteBet(b.Id))" Title="Delete bet" />
                                         </td>
                                     </tr>
                                 }
@@ -324,6 +330,32 @@
     </MudStack>
 </MudContainer>
 
+<!-- Edit Bet Dialog -->
+<MudDialog @bind-Visible="_editDialogOpen" Options="new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true }">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Edit Bet</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField T="string" @bind-Value="_editDescription" Label="Description" Variant="Variant.Outlined" />
+            <MudStack Row="true" Spacing="2">
+                <MudTextField T="decimal" @bind-Value="_editStake" Label="Stake" Variant="Variant.Outlined" 
+                              Adornment="Adornment.Start" AdornmentText="$" />
+                <MudTextField T="int" @bind-Value="_editOdds" Label="Odds" Variant="Variant.Outlined" />
+            </MudStack>
+            <MudSelect T="string" @bind-Value="_editSportsbook" Label="Sportsbook" Variant="Variant.Outlined">
+                <MudSelectItem Value="@("fanduel")">FanDuel</MudSelectItem>
+                <MudSelectItem Value="@("draftkings")">DraftKings</MudSelectItem>
+                <MudSelectItem Value="@("betmgm")">BetMGM</MudSelectItem>
+            </MudSelect>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _editDialogOpen = false)">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveEdit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
 @code {
     // State
     private string _sport = "nfl";
@@ -348,6 +380,14 @@
     private int _chartTotalBets = 0;
     private int _outcomeWins = 0, _outcomeLosses = 0, _outcomeCashouts = 0;
     private List<DailyData> _dailyData = new();
+
+    // Edit dialog state
+    private bool _editDialogOpen = false;
+    private int _editBetId = 0;
+    private string _editDescription = "";
+    private decimal _editStake = 10;
+    private int _editOdds = -110;
+    private string _editSportsbook = "fanduel";
 
     protected override async Task OnInitializedAsync()
     {
@@ -610,6 +650,76 @@
     }
 
     private string FormatOdds(int odds) => odds > 0 ? $"+{odds}" : odds.ToString();
+
+    private async Task DeleteBet(int betId)
+    {
+        var confirm = await DialogService.ShowMessageBox(
+            "Delete Bet",
+            "Are you sure you want to delete this bet? This cannot be undone.",
+            yesText: "Delete", cancelText: "Cancel");
+        
+        if (confirm == true)
+        {
+            try
+            {
+                var resp = await Http.DeleteAsync($"http://backend:8000/bets/{betId}");
+                if (resp.IsSuccessStatusCode)
+                {
+                    Snackbar.Add("Bet deleted", Severity.Success);
+                    await LoadBets();
+                    await LoadStats();
+                }
+                else
+                {
+                    Snackbar.Add("Failed to delete bet", Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private void OpenEditDialog(Bet bet)
+    {
+        _editBetId = bet.Id;
+        _editDescription = bet.Description;
+        _editStake = bet.Stake;
+        _editOdds = bet.Odds;
+        _editDialogOpen = true;
+    }
+
+    private async Task SaveEdit()
+    {
+        try
+        {
+            var req = new
+            {
+                stake = _editStake,
+                odds = _editOdds,
+                description = _editDescription,
+                sportsbook = _editSportsbook
+            };
+            
+            var resp = await Http.PutAsJsonAsync($"http://backend:8000/bets/{_editBetId}", req);
+            if (resp.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Bet updated!", Severity.Success);
+                _editDialogOpen = false;
+                await LoadBets();
+                await LoadStats();
+            }
+            else
+            {
+                Snackbar.Add("Failed to update bet", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
 
     // Simple models
     private record Game { public string GameId { get; init; } = ""; public string Home { get; init; } = ""; public string Away { get; init; } = ""; public int HomeML { get; init; } public int AwayML { get; init; } public decimal Total { get; init; } }

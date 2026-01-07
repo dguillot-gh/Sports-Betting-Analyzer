@@ -404,6 +404,86 @@ async def update_bet_outcome(bet_id: int, request: UpdateOutcomeRequest):
         await conn.close()
 
 
+class UpdateBetRequest(BaseModel):
+    """Request to update bet details."""
+    stake: Optional[float] = None
+    odds: Optional[int] = None
+    description: Optional[str] = None
+    sportsbook: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@router.put("/{bet_id}")
+async def update_bet(bet_id: int, request: UpdateBetRequest):
+    """Update bet details (stake, odds, description, etc.)."""
+    import asyncpg
+    
+    await ensure_tables()
+    
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        # Check bet exists
+        row = await conn.fetchrow("SELECT * FROM bets WHERE id = $1", bet_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Bet not found")
+        
+        # Build update query dynamically
+        updates = []
+        params = []
+        param_idx = 1
+        
+        if request.stake is not None:
+            updates.append(f"stake = ${param_idx}")
+            params.append(request.stake)
+            param_idx += 1
+        
+        if request.odds is not None:
+            updates.append(f"odds = ${param_idx}")
+            params.append(request.odds)
+            param_idx += 1
+            
+        if request.description is not None:
+            updates.append(f"description = ${param_idx}")
+            params.append(request.description)
+            param_idx += 1
+            
+        if request.sportsbook is not None:
+            updates.append(f"sportsbook = ${param_idx}")
+            params.append(request.sportsbook)
+            param_idx += 1
+            
+        if request.notes is not None:
+            updates.append(f"notes = ${param_idx}")
+            params.append(request.notes)
+            param_idx += 1
+        
+        if not updates:
+            return {"id": bet_id, "message": "No changes provided"}
+        
+        # Recalculate potential payout if stake or odds changed
+        new_stake = request.stake if request.stake is not None else float(row["stake"])
+        new_odds = request.odds if request.odds is not None else (int(row["odds"]) if row["odds"] else 0)
+        
+        if new_odds != 0:
+            potential_payout = calculate_potential_payout(new_stake, new_odds)
+            updates.append(f"potential_payout = ${param_idx}")
+            params.append(potential_payout)
+            param_idx += 1
+        
+        params.append(bet_id)
+        query = f"UPDATE bets SET {', '.join(updates)} WHERE id = ${param_idx}"
+        
+        await conn.execute(query, *params)
+        
+        return {
+            "id": bet_id,
+            "message": "Bet updated",
+            "updated_fields": [u.split(" = ")[0] for u in updates]
+        }
+    finally:
+        await conn.close()
+
+
 @router.delete("/{bet_id}")
 async def delete_bet(bet_id: int):
     """Delete a bet."""
