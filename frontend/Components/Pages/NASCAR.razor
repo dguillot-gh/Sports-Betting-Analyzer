@@ -1,0 +1,1026 @@
+@page "/nascar"
+@using System.Text.Json
+@using System.Timers
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+<PageTitle>NASCAR Dashboard</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+    <MudStack Spacing="4">
+        <!-- Header -->
+        <MudPaper Class="pa-4" Elevation="2" Style="background: linear-gradient(135deg, #ff6f00 0%, #ff8f00 50%, #ffc107 100%);">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <div>
+                    <MudText Typo="Typo.h4" Style="color: white;">
+                        <MudIcon Icon="@Icons.Material.Filled.Flag" Class="mr-2" />
+                        NASCAR Dashboard
+                    </MudText>
+                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.9);">
+                        Live Race Data • Schedule • Analytics
+                    </MudText>
+                </div>
+                <MudStack Row="true" Spacing="2">
+                    <MudSelect T="int" @bind-Value="_seriesId" Label="Series" 
+                               Variant="Variant.Outlined" Dense="true" Style="width: 150px; background: white;">
+                        <MudSelectItem Value="@(1)">Cup Series</MudSelectItem>
+                        <MudSelectItem Value="@(2)">Xfinity Series</MudSelectItem>
+                        <MudSelectItem Value="@(3)">Truck Series</MudSelectItem>
+                    </MudSelect>
+                    <MudButton Variant="Variant.Filled" Color="Color.Dark" OnClick="RefreshData" Disabled="@_loading">
+                        @(_loading ? "Loading..." : "Refresh")
+                    </MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+
+        <!-- Tabs -->
+        <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+            <!-- Live Race Tab -->
+            <MudTabPanel Text="Live Race" Icon="@Icons.Material.Filled.PlayCircle">
+                @if (_liveRaceActive)
+                {
+                    <MudStack Spacing="3">
+                        <!-- Connection Status Bar -->
+                        <MudPaper Class="pa-2" Style="background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 100%);">
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                    <MudIcon Icon="@Icons.Material.Filled.FiberManualRecord" 
+                                             Style="color: #4caf50; animation: pulse 1s infinite;" Size="Size.Small" />
+                                    <MudText Style="color: white;">LIVE</MudText>
+                                    <MudText Style="color: rgba(255,255,255,0.7);">
+                                        • Refreshing in @_refreshCountdown s
+                                    </MudText>
+                                </MudStack>
+                                <MudStack Row="true" Spacing="2">
+                                    <MudTooltip Text="@(_captureActive ? "Stop capturing race data" : "Start capturing race data for analysis")">
+                                        <MudButton Variant="Variant.Filled" 
+                                                   Color="@(_captureActive ? Color.Error : Color.Primary)" 
+                                                   Size="Size.Small"
+                                                   OnClick="ToggleCapture">
+                                            <MudIcon Icon="@(_captureActive ? Icons.Material.Filled.Stop : Icons.Material.Filled.FiberManualRecord)" 
+                                                     Class="mr-1" Size="Size.Small" />
+                                            @(_captureActive ? "Stop Capture" : "Capture Data")
+                                        </MudButton>
+                                    </MudTooltip>
+                                </MudStack>
+                            </MudStack>
+                        </MudPaper>
+
+                        <!-- Race Info Header -->
+                        <MudPaper Class="pa-4" Style="background: linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%);">
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                <div>
+                                    <MudText Typo="Typo.h5" Style="color: white;">@_liveData?.TrackName</MudText>
+                                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">
+                                        Run: @_liveData?.RunName • Series: @GetSeriesName(_liveData?.SeriesId ?? 0)
+                                    </MudText>
+                                </div>
+                                <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+                                    <MudChip T="string" Color="@GetFlagColor(_liveData?.FlagState ?? 0)" Size="Size.Large">
+                                        @GetFlagName(_liveData?.FlagState ?? 0)
+                                    </MudChip>
+                                    <div style="text-align: center;">
+                                        <MudText Typo="Typo.h4" Style="color: #ffc107;">@_liveData?.LapNumber</MudText>
+                                        <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.7);">
+                                            of @_liveData?.LapsInRace
+                                        </MudText>
+                                    </div>
+                                    <div style="text-align: center;">
+                                        <MudText Typo="Typo.h4" Style="color: #4caf50;">@_liveData?.LapsToGo</MudText>
+                                        <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.7);">
+                                            To Go
+                                        </MudText>
+                                    </div>
+                                </MudStack>
+                            </MudStack>
+                            
+                            <!-- Stage Progress -->
+                            <MudDivider Class="my-3" Style="border-color: rgba(255,255,255,0.2);" />
+                            <MudStack Row="true" Spacing="2">
+                                <MudText Style="color: rgba(255,255,255,0.7);">Stage @_liveData?.Stage?.StageNum</MudText>
+                                <MudProgressLinear Color="Color.Warning" Value="@GetStageProgress()" Class="my-2" Style="flex: 1;" />
+                            </MudStack>
+                        </MudPaper>
+
+                        <!-- Leaderboard -->
+                        <MudPaper Class="pa-3" Elevation="1">
+                            <MudText Typo="Typo.h6" Class="mb-3">
+                                <MudIcon Icon="@Icons.Material.Filled.Leaderboard" Class="mr-2" />
+                                Live Positions
+                            </MudText>
+                            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                <thead>
+                                    <tr>
+                                        <th>Pos</th>
+                                        <th>#</th>
+                                        <th>Driver</th>
+                                        <th>Laps</th>
+                                        <th>Delta</th>
+                                        <th>Last Lap</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (_liveData?.Vehicles != null)
+                                    {
+                                        @foreach (var vehicle in _liveData.Vehicles.Take(20))
+                                        {
+                                            <tr>
+                                                <td><strong>@vehicle.Position</strong></td>
+                                                <td>@vehicle.CarNumber</td>
+                                                <td>@vehicle.DriverName</td>
+                                                <td>@vehicle.LapsCompleted</td>
+                                                <td style="color: @(vehicle.Delta > 0 ? "#4caf50" : "#f44336");">
+                                                    @(vehicle.Delta > 0 ? "+" : "")@vehicle.Delta.ToString("F3")
+                                                </td>
+                                                <td>@vehicle.LastLapTime.ToString("F3")</td>
+                                                <td>
+                                                    <MudChip T="string" Size="Size.Small" 
+                                                             Color="@(vehicle.Status == "Running" ? Color.Success : Color.Error)">
+                                                        @vehicle.Status
+                                                    </MudChip>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudPaper>
+
+                        <!-- Stats Row -->
+                        <MudStack Row="true" Spacing="3">
+                            <MudPaper Class="pa-3 flex-1" Elevation="1">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Cautions</MudText>
+                                <MudText Typo="Typo.h5">@_liveData?.NumberOfCautions</MudText>
+                            </MudPaper>
+                            <MudPaper Class="pa-3 flex-1" Elevation="1">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Caution Laps</MudText>
+                                <MudText Typo="Typo.h5">@_liveData?.NumberOfCautionLaps</MudText>
+                            </MudPaper>
+                            <MudPaper Class="pa-3 flex-1" Elevation="1">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Lead Changes</MudText>
+                                <MudText Typo="Typo.h5">@_liveData?.NumberOfLeadChanges</MudText>
+                            </MudPaper>
+                            <MudPaper Class="pa-3 flex-1" Elevation="1">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Leaders</MudText>
+                                <MudText Typo="Typo.h5">@_liveData?.NumberOfLeaders</MudText>
+                            </MudPaper>
+                        </MudStack>
+                    </MudStack>
+                }
+                else
+                {
+                    <MudStack AlignItems="AlignItems.Center" Class="pa-6">
+                        <MudIcon Icon="@Icons.Material.Filled.RssFeed" Size="Size.Large" Color="Color.Default" />
+                        <MudText Typo="Typo.h5">No Live Race</MudText>
+                        <MudText Color="Color.Secondary">Data will automatically appear when a race is in progress.</MudText>
+                        
+                        <!-- Demo Mode Toggle -->
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mt-3">
+                            <MudSwitch T="bool" @bind-Value="_demoMode" Color="Color.Warning" Label="Demo Mode" />
+                            <MudTooltip Text="Show raw API data even when no race is active (for testing)">
+                                <MudIcon Icon="@Icons.Material.Filled.Help" Size="Size.Small" Color="Color.Secondary" />
+                            </MudTooltip>
+                        </MudStack>
+                        
+                        @if (_demoMode && _liveData != null)
+                        {
+                            <MudPaper Class="pa-4 mt-3" Style="background: #1a1a1a; width: 100%; max-width: 600px;">
+                                <MudText Typo="Typo.subtitle2" Style="color: #ffc107;">Raw API Response:</MudText>
+                                <MudStack Spacing="1" Class="mt-2">
+                                    <MudText Style="color: white;">Race ID: <strong>@_liveData.RaceId</strong></MudText>
+                                    <MudText Style="color: white;">Series ID: <strong>@_liveData.SeriesId</strong></MudText>
+                                    <MudText Style="color: white;">Lap: <strong>@_liveData.LapNumber</strong></MudText>
+                                    <MudText Style="color: white;">Flag State: <strong>@_liveData.FlagState (@GetFlagName(_liveData.FlagState))</strong></MudText>
+                                    <MudText Style="color: white;">Laps In Race: <strong>@_liveData.LapsInRace</strong></MudText>
+                                    <MudText Style="color: white;">Vehicles: <strong>@(_liveData.Vehicles?.Count ?? 0)</strong></MudText>
+                                    <MudText Style="color: white;">Track: <strong>@(_liveData.TrackName ?? "null")</strong></MudText>
+                                    <MudText Style="color: white;">Run Name: <strong>@(_liveData.RunName ?? "null")</strong></MudText>
+                                </MudStack>
+                                <MudAlert Severity="Severity.Info" Class="mt-3">
+                                    API is connected! When a race starts, this page will show live positions.
+                                </MudAlert>
+                            </MudPaper>
+                        }
+
+                        @if (_nextRace != null)
+                        {
+                            <MudPaper Class="pa-4 mt-4" Style="background: linear-gradient(135deg, #1a237e 0%, #283593 100%); max-width: 400px;">
+                                <MudText Typo="Typo.subtitle2" Style="color: rgba(255,255,255,0.7);">Next Race</MudText>
+                                <MudText Typo="Typo.h6" Style="color: white;">@_nextRace.RaceName</MudText>
+                                <MudText Style="color: rgba(255,255,255,0.9);">@_nextRace.TrackName</MudText>
+                                <MudText Style="color: #ffc107;">@_nextRace.RaceDate.ToString("MMM dd, yyyy h:mm tt")</MudText>
+                            </MudPaper>
+                        }
+                    </MudStack>
+                }
+            </MudTabPanel>
+
+            <!-- Schedule Tab -->
+            <MudTabPanel Text="Schedule" Icon="@Icons.Material.Filled.CalendarMonth">
+                <MudStack Spacing="3">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.h6">
+                            <MudIcon Icon="@Icons.Material.Filled.EmojiEvents" Class="mr-2" />
+                            @(_seriesId == 1 ? "Cup Series" : _seriesId == 2 ? "Xfinity Series" : "Truck Series") - @_scheduleYear Season
+                        </MudText>
+                        <MudSelect T="int" @bind-Value="_scheduleYear" Label="Year" Dense="true" Style="width: 100px;">
+                            <MudSelectItem Value="@(2025)">2025</MudSelectItem>
+                            <MudSelectItem Value="@(2024)">2024</MudSelectItem>
+                            <MudSelectItem Value="@(2023)">2023</MudSelectItem>
+                        </MudSelect>
+                    </MudStack>
+
+                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                        <thead>
+                            <tr style="background: linear-gradient(135deg, #ff6f00 0%, #ff8f00 100%);">
+                                <th style="color: white;">#</th>
+                                <th style="color: white;">Race</th>
+                                <th style="color: white;">Track</th>
+                                <th style="color: white;">Date</th>
+                                <th style="color: white;">Laps</th>
+                                <th style="color: white;">Winner</th>
+                                <th style="color: white;">Cautions</th>
+                                <th style="color: white;">Leads</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var race in _schedule)
+                            {
+                                var isPast = race.RaceDate < DateTime.Now;
+                                <tr style="@(isPast ? "" : "background: rgba(255, 193, 7, 0.1);")">
+                                    <td>@race.RaceNumber</td>
+                                    <td>
+                                        <MudStack Spacing="0">
+                                            <MudText Typo="Typo.body2"><strong>@race.RaceName</strong></MudText>
+                                            @if (race.RestrictorPlate)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Error">Superspeedway</MudChip>
+                                            }
+                                        </MudStack>
+                                    </td>
+                                    <td>@race.TrackName</td>
+                                    <td>
+                                        <MudStack Spacing="0">
+                                            <MudText Typo="Typo.body2">@race.RaceDate.ToString("MMM dd")</MudText>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@race.RaceDate.ToString("h:mm tt")</MudText>
+                                        </MudStack>
+                                    </td>
+                                    <td>@race.ScheduledLaps</td>
+                                    <td>
+                                        @if (race.WinnerDriverId > 0)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Success">
+                                                <MudIcon Icon="@Icons.Material.Filled.EmojiEvents" Size="Size.Small" />
+                                                @race.WinnerName
+                                            </MudChip>
+                                        }
+                                        else if (!isPast)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Default">Upcoming</MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudText Color="Color.Secondary">--</MudText>
+                                        }
+                                    </td>
+                                    <td>@(race.NumberOfCautions > 0 ? race.NumberOfCautions.ToString() : "--")</td>
+                                    <td>@(race.NumberOfLeadChanges > 0 ? race.NumberOfLeadChanges.ToString() : "--")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                </MudStack>
+            </MudTabPanel>
+
+            <!-- Model Lab Tab -->
+            <MudTabPanel Text="Model Lab" Icon="@Icons.Material.Filled.Science">
+                <MudStack Spacing="3">
+                    <MudPaper Class="pa-3" Style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);">
+                        <MudText Typo="Typo.h6" Style="color: white;">
+                            <MudIcon Icon="@Icons.Material.Filled.AutoGraph" Class="mr-2" />
+                            NASCAR Predictive Analytics
+                        </MudText>
+                        <MudText Style="color: rgba(255,255,255,0.7);">
+                            Track patterns, historical data, and race analytics
+                        </MudText>
+                    </MudPaper>
+
+                    @if (_nextRace != null)
+                    {
+                        <!-- Next Race Analysis -->
+                        <MudPaper Class="pa-4" Elevation="2">
+                            <MudText Typo="Typo.h6" Class="mb-3">
+                                <MudIcon Icon="@Icons.Material.Filled.Speed" Class="mr-2" />
+                                Next Race Analysis: @_nextRace.RaceName
+                            </MudText>
+                            
+                            <MudStack Row="true" Spacing="4">
+                                <MudPaper Class="pa-3 flex-1" Style="background: #f5f5f5;">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Track</MudText>
+                                    <MudText Typo="Typo.h6">@_nextRace.TrackName</MudText>
+                                </MudPaper>
+                                <MudPaper Class="pa-3 flex-1" Style="background: #f5f5f5;">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Laps</MudText>
+                                    <MudText Typo="Typo.h6">@_nextRace.ScheduledLaps</MudText>
+                                </MudPaper>
+                                <MudPaper Class="pa-3 flex-1" Style="background: #f5f5f5;">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Type</MudText>
+                                    <MudText Typo="Typo.h6">@(_nextRace.RestrictorPlate ? "Superspeedway" : "Standard")</MudText>
+                                </MudPaper>
+                                <MudPaper Class="pa-3 flex-1" Style="background: #f5f5f5;">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Stage Laps</MudText>
+                                    <MudText Typo="Typo.h6">@_nextRace.Stage1Laps / @_nextRace.Stage2Laps / @_nextRace.Stage3Laps</MudText>
+                                </MudPaper>
+                            </MudStack>
+                        </MudPaper>
+
+                        <!-- Track History -->
+                        <MudPaper Class="pa-4" Elevation="2">
+                            <MudText Typo="Typo.h6" Class="mb-3">
+                                <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-2" />
+                                Track History: @_nextRace.TrackName
+                            </MudText>
+                            
+                            @if (_trackHistory.Any())
+                            {
+                                <MudStack Row="true" Spacing="4" Class="mb-3">
+                                    <MudPaper Class="pa-3 flex-1" Style="background: linear-gradient(135deg, #4a148c 0%, #7b1fa2 100%);">
+                                        <MudText Style="color: rgba(255,255,255,0.7);" Typo="Typo.caption">Avg Cautions</MudText>
+                                        <MudText Typo="Typo.h5" Style="color: white;">@_trackHistory.Average(r => r.NumberOfCautions).ToString("F1")</MudText>
+                                    </MudPaper>
+                                    <MudPaper Class="pa-3 flex-1" Style="background: linear-gradient(135deg, #1565c0 0%, #1e88e5 100%);">
+                                        <MudText Style="color: rgba(255,255,255,0.7);" Typo="Typo.caption">Avg Lead Changes</MudText>
+                                        <MudText Typo="Typo.h5" Style="color: white;">@_trackHistory.Average(r => r.NumberOfLeadChanges).ToString("F1")</MudText>
+                                    </MudPaper>
+                                    <MudPaper Class="pa-3 flex-1" Style="background: linear-gradient(135deg, #2e7d32 0%, #43a047 100%);">
+                                        <MudText Style="color: rgba(255,255,255,0.7);" Typo="Typo.caption">Avg Leaders</MudText>
+                                        <MudText Typo="Typo.h5" Style="color: white;">@_trackHistory.Average(r => r.NumberOfLeaders).ToString("F1")</MudText>
+                                    </MudPaper>
+                                </MudStack>
+
+                                <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                    <thead>
+                                        <tr>
+                                            <th>Year</th>
+                                            <th>Winner</th>
+                                            <th>Cautions</th>
+                                            <th>Lead Changes</th>
+                                            <th>Margin</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var race in _trackHistory.OrderByDescending(r => r.RaceDate).Take(5))
+                                        {
+                                            <tr>
+                                                <td>@race.RaceDate.Year</td>
+                                                <td><strong>@race.WinnerName</strong></td>
+                                                <td>@race.NumberOfCautions</td>
+                                                <td>@race.NumberOfLeadChanges</td>
+                                                <td>@race.MarginOfVictory</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            }
+                            else
+                            {
+                                <MudText Color="Color.Secondary">No historical data available for this track.</MudText>
+                            }
+                        </MudPaper>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info">Select a series and load schedule to see analytics.</MudAlert>
+                    }
+                </MudStack>
+            </MudTabPanel>
+
+            <!-- Data & ML Tab -->
+            <MudTabPanel Text="Data & ML" Icon="@Icons.Material.Filled.Storage">
+                <MudStack Spacing="3">
+                    <!-- Header -->
+                    <MudPaper Class="pa-3" Style="background: linear-gradient(135deg, #1565c0 0%, #0d47a1 100%);">
+                        <MudText Typo="Typo.h6" Style="color: white;">
+                            <MudIcon Icon="@Icons.Material.Filled.DataObject" Class="mr-2" />
+                            Race Data Pipeline
+                        </MudText>
+                        <MudText Style="color: rgba(255,255,255,0.7);">
+                            Capture live races → Consolidate to Parquet → Query for ML
+                        </MudText>
+                    </MudPaper>
+
+                    <!-- Capture Status -->
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudText Typo="Typo.h6" Class="mb-3">
+                            <MudIcon Icon="@Icons.Material.Filled.FiberManualRecord" 
+                                     Color="@(_captureActive ? Color.Success : Color.Default)" Class="mr-2" />
+                            Live Capture
+                        </MudText>
+                        <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+                            <MudButton Variant="Variant.Filled" 
+                                       Color="@(_captureActive ? Color.Error : Color.Success)"
+                                       OnClick="ToggleCapture"
+                                       StartIcon="@(_captureActive ? Icons.Material.Filled.Stop : Icons.Material.Filled.PlayArrow)">
+                                @(_captureActive ? "Stop Capture" : "Start Capture")
+                            </MudButton>
+                            <MudText Color="Color.Secondary">
+                                @if (_captureActive)
+                                {
+                                    <span>Recording every 5 seconds...</span>
+                                }
+                                else
+                                {
+                                    <span>Not recording. Start during a live race.</span>
+                                }
+                            </MudText>
+                        </MudStack>
+                        <MudDivider Class="my-3" />
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            Captured snapshots: <strong>@_captureInfo.TotalSnapshots</strong> • 
+                            Races: <strong>@_captureInfo.RacesCaptured</strong>
+                        </MudText>
+                    </MudPaper>
+
+                    <!-- Consolidate to ML -->
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudText Typo="Typo.h6" Class="mb-3">
+                            <MudIcon Icon="@Icons.Material.Filled.Transform" Class="mr-2" />
+                            Consolidate to Parquet
+                        </MudText>
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End">
+                            <MudTextField T="int" @bind-Value="_consolidateRaceId" Label="Race ID" 
+                                          Variant="Variant.Outlined" Style="max-width: 150px;" />
+                            <MudSelect T="int" @bind-Value="_consolidateSeriesId" Label="Series" 
+                                       Variant="Variant.Outlined" Style="max-width: 150px;">
+                                <MudSelectItem Value="@(1)">Cup</MudSelectItem>
+                                <MudSelectItem Value="@(2)">Xfinity</MudSelectItem>
+                                <MudSelectItem Value="@(3)">Trucks</MudSelectItem>
+                            </MudSelect>
+                            <MudCheckBox T="bool" @bind-Value="_cleanupAfterConsolidate" Label="Delete JSONs" />
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" 
+                                       OnClick="ConsolidateToParquet" Disabled="@_mlLoading"
+                                       StartIcon="@Icons.Material.Filled.SaveAlt">
+                                @(_mlLoading ? "Processing..." : "Consolidate")
+                            </MudButton>
+                        </MudStack>
+                        @if (!string.IsNullOrEmpty(_consolidateResult))
+                        {
+                            <MudAlert Severity="Severity.Success" Class="mt-3">@_consolidateResult</MudAlert>
+                        }
+                    </MudPaper>
+
+                    <!-- Available Datasets -->
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+                            <MudText Typo="Typo.h6">
+                                <MudIcon Icon="@Icons.Material.Filled.Folder" Class="mr-2" />
+                                ML Datasets
+                            </MudText>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" 
+                                       OnClick="LoadMLDatasets" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.Refresh">
+                                Refresh
+                            </MudButton>
+                        </MudStack>
+                        
+                        @if (_mlDatasets.Any())
+                        {
+                            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                <thead>
+                                    <tr>
+                                        <th>Race ID</th>
+                                        <th>Series</th>
+                                        <th>Track</th>
+                                        <th>Laps</th>
+                                        <th>Drivers</th>
+                                        <th>Size</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var ds in _mlDatasets)
+                                    {
+                                        <tr>
+                                            <td><strong>@ds.RaceId</strong></td>
+                                            <td>@GetSeriesName(ds.SeriesId)</td>
+                                            <td>@ds.TrackName</td>
+                                            <td>@ds.Laps</td>
+                                            <td>@ds.Drivers</td>
+                                            <td>@ds.SizeMb MB</td>
+                                            <td>
+                                                <MudButton Size="Size.Small" Variant="Variant.Text" 
+                                                           Color="Color.Primary"
+                                                           OnClick="@(() => ViewDriverStats(ds.RaceId, ds.SeriesId))">
+                                                    Stats
+                                                </MudButton>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        }
+                        else
+                        {
+                            <MudText Color="Color.Secondary">
+                                No ML datasets yet. Capture a race and consolidate to Parquet.
+                            </MudText>
+                        }
+                    </MudPaper>
+
+                    <!-- Driver Stats Viewer -->
+                    @if (_driverStats.Any())
+                    {
+                        <MudPaper Class="pa-4" Elevation="2">
+                            <MudText Typo="Typo.h6" Class="mb-3">
+                                <MudIcon Icon="@Icons.Material.Filled.Leaderboard" Class="mr-2" />
+                                Driver Race Stats
+                            </MudText>
+                            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                <thead>
+                                    <tr style="background: linear-gradient(135deg, #1565c0 0%, #0d47a1 100%);">
+                                        <th style="color: white;">Rank</th>
+                                        <th style="color: white;">Driver</th>
+                                        <th style="color: white;">#</th>
+                                        <th style="color: white;">Finish</th>
+                                        <th style="color: white;">Avg Pos</th>
+                                        <th style="color: white;">Best</th>
+                                        <th style="color: white;">Gained</th>
+                                        <th style="color: white;">Avg Lap</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var stat in _driverStats.Take(20))
+                                    {
+                                        <tr>
+                                            <td><strong>@stat.FinishRank</strong></td>
+                                            <td>@stat.DriverName</td>
+                                            <td>@stat.CarNumber</td>
+                                            <td>P@stat.FinishPosition</td>
+                                            <td>@stat.AvgPosition.ToString("F1")</td>
+                                            <td>P@stat.BestPosition</td>
+                                            <td style="color: @(stat.TotalPositionsGained >= 0 ? "#4caf50" : "#f44336");">
+                                                @(stat.TotalPositionsGained >= 0 ? "+" : "")@stat.TotalPositionsGained.ToString("F0")
+                                            </td>
+                                            <td>@stat.AvgLapTime.ToString("F2")s</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudPaper>
+                    }
+                </MudStack>
+            </MudTabPanel>
+        </MudTabs>
+    </MudStack>
+</MudContainer>
+
+@code {
+    private int _seriesId = 1;
+    private int _scheduleYear = 2025;
+    private bool _loading = false;
+    private bool _liveRaceActive = false;
+    private Timer? _refreshTimer;
+    private Timer? _countdownTimer;
+    private int _refreshCountdown = 5;
+    private bool _captureActive = false;
+    private bool _demoMode = false;
+    private const int REFRESH_INTERVAL = 5; // 5 second refresh for live data
+
+    // Live data
+    private LiveFeedData? _liveData;
+    private RaceInfo? _nextRace;
+    
+    // Schedule data
+    private List<RaceInfo> _schedule = new();
+    private List<RaceInfo> _trackHistory = new();
+
+    // Data & ML tab
+    private CaptureStatusInfo _captureInfo = new();
+    private List<MLDatasetInfo> _mlDatasets = new();
+    private List<DriverStatsInfo> _driverStats = new();
+    private int _consolidateRaceId = 0;
+    private int _consolidateSeriesId = 1;
+    private bool _cleanupAfterConsolidate = false;
+    private bool _mlLoading = false;
+    private string _consolidateResult = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSchedule();
+        await CheckLiveRace();
+        await LoadCaptureStatus();
+        await LoadMLDatasets();
+        
+        // Auto-refresh every 5 seconds for live data
+        _refreshTimer = new Timer(REFRESH_INTERVAL * 1000);
+        _refreshTimer.Elapsed += async (s, e) => await RefreshLiveData();
+        _refreshTimer.Start();
+        
+        // Countdown timer updates every second
+        _countdownTimer = new Timer(1000);
+        _countdownTimer.Elapsed += (s, e) => UpdateCountdown();
+        _countdownTimer.Start();
+    }
+
+    private void UpdateCountdown()
+    {
+        _refreshCountdown--;
+        if (_refreshCountdown <= 0) _refreshCountdown = REFRESH_INTERVAL;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ToggleCapture()
+    {
+        try
+        {
+            if (_captureActive)
+            {
+                await Http.PostAsync("http://backend:8000/nascar/capture/stop", null);
+                _captureActive = false;
+                Snackbar.Add("Data capture stopped", Severity.Info);
+            }
+            else
+            {
+                await Http.PostAsync($"http://backend:8000/nascar/capture/start?interval={REFRESH_INTERVAL}", null);
+                _captureActive = true;
+                Snackbar.Add("Data capture started - recording race positions", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Capture toggle failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private string GetSeriesName(int seriesId) => seriesId switch
+    {
+        1 => "Cup Series",
+        2 => "Xfinity Series", 
+        3 => "Truck Series",
+        _ => "Unknown"
+    };
+
+    private async Task RefreshData()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        await LoadSchedule();
+        await CheckLiveRace();
+
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadSchedule()
+    {
+        try
+        {
+            var response = await Http.GetAsync($"http://backend:8000/nascar/schedule/{_scheduleYear}?series={_seriesId}");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                _schedule = JsonSerializer.Deserialize<List<RaceInfo>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+                
+                // Find next race
+                _nextRace = _schedule.FirstOrDefault(r => r.RaceDate > DateTime.Now);
+                
+                // Load track history if we have a next race
+                if (_nextRace != null)
+                {
+                    _trackHistory = _schedule.Where(r => 
+                        r.TrackName == _nextRace.TrackName && 
+                        r.RaceDate < DateTime.Now && 
+                        r.WinnerDriverId > 0
+                    ).ToList();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load schedule: {ex.Message}", Severity.Error);
+            await LoadScheduleFromNascar();
+        }
+    }
+
+    private async Task LoadScheduleFromNascar()
+    {
+        try
+        {
+            var url = $"https://cf.nascar.com/cacher/{_scheduleYear}/race_list_basic.json";
+            var response = await Http.GetAsync(url);
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var data = JsonSerializer.Deserialize<RaceListResponse>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                
+                _schedule = _seriesId switch
+                {
+                    1 => data?.Series1 ?? new(),
+                    2 => data?.Series2 ?? new(),
+                    3 => data?.Series3 ?? new(),
+                    _ => new()
+                };
+
+                // Number the races
+                for (int i = 0; i < _schedule.Count; i++)
+                    _schedule[i].RaceNumber = i + 1;
+
+                _nextRace = _schedule.FirstOrDefault(r => r.RaceDate > DateTime.Now);
+                
+                if (_nextRace != null)
+                {
+                    _trackHistory = _schedule.Where(r => 
+                        r.TrackName == _nextRace.TrackName && 
+                        r.RaceDate < DateTime.Now && 
+                        r.WinnerDriverId > 0
+                    ).ToList();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load from NASCAR API: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task CheckLiveRace()
+    {
+        try
+        {
+            var response = await Http.GetAsync("https://cf.nascar.com/live/feeds/live-feed.json");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                _liveData = JsonSerializer.Deserialize<LiveFeedData>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                _liveRaceActive = _liveData?.RaceId > 0 && _liveData?.Vehicles?.Any() == true;
+            }
+        }
+        catch
+        {
+            _liveRaceActive = false;
+        }
+    }
+
+    private async Task RefreshLiveData()
+    {
+        if (_liveRaceActive)
+        {
+            await CheckLiveRace();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private double GetStageProgress()
+    {
+        if (_liveData?.Stage == null || _liveData.Stage.LapsInStage == 0) return 0;
+        var lapsIntoStage = _liveData.LapNumber - (_liveData.Stage.FinishAtLap - _liveData.Stage.LapsInStage);
+        return Math.Max(0, Math.Min(100, (lapsIntoStage / (double)_liveData.Stage.LapsInStage) * 100));
+    }
+
+    private Color GetFlagColor(int flagState) => flagState switch
+    {
+        1 => Color.Success, // Green
+        2 => Color.Warning, // Yellow
+        4 => Color.Error,   // Red
+        8 => Color.Info,    // White
+        _ => Color.Default
+    };
+
+    private string GetFlagName(int flagState) => flagState switch
+    {
+        1 => "GREEN",
+        2 => "CAUTION",
+        4 => "RED",
+        8 => "WHITE FLAG",
+        9 => "CHECKERED",
+        _ => "UNKNOWN"
+    };
+
+    public void Dispose()
+    {
+        _refreshTimer?.Stop();
+        _refreshTimer?.Dispose();
+        _countdownTimer?.Stop();
+        _countdownTimer?.Dispose();
+    }
+
+    // Data Models
+    public class RaceListResponse
+    {
+        public List<RaceInfo> Series1 { get; set; } = new();
+        public List<RaceInfo> Series2 { get; set; } = new();
+        public List<RaceInfo> Series3 { get; set; } = new();
+    }
+
+    public class RaceInfo
+    {
+        public int RaceNumber { get; set; }
+        public int RaceId { get; set; }
+        public int SeriesId { get; set; }
+        public string RaceName { get; set; } = "";
+        public string TrackName { get; set; } = "";
+        public DateTime RaceDate { get; set; }
+        public int ScheduledLaps { get; set; }
+        public int ActualLaps { get; set; }
+        public int Stage1Laps { get; set; }
+        public int Stage2Laps { get; set; }
+        public int Stage3Laps { get; set; }
+        public int WinnerDriverId { get; set; }
+        public string WinnerName { get; set; } = "";
+        public int NumberOfCautions { get; set; }
+        public int NumberOfCautionLaps { get; set; }
+        public int NumberOfLeadChanges { get; set; }
+        public int NumberOfLeaders { get; set; }
+        public bool RestrictorPlate { get; set; }
+        public string MarginOfVictory { get; set; } = "";
+        public double AverageSpeed { get; set; }
+    }
+
+    public class LiveFeedData
+    {
+        public int LapNumber { get; set; }
+        public int RaceId { get; set; }
+        public int SeriesId { get; set; }
+        public int LapsInRace { get; set; }
+        public int LapsToGo { get; set; }
+        public int FlagState { get; set; }
+        public string? TrackName { get; set; }
+        public string? RunName { get; set; }
+        public int NumberOfCautions { get; set; }
+        public int NumberOfCautionLaps { get; set; }
+        public int NumberOfLeadChanges { get; set; }
+        public int NumberOfLeaders { get; set; }
+        public StageInfo? Stage { get; set; }
+        public List<VehicleData>? Vehicles { get; set; }
+    }
+
+    public class StageInfo
+    {
+        public int StageNum { get; set; }
+        public int FinishAtLap { get; set; }
+        public int LapsInStage { get; set; }
+    }
+
+    public class VehicleData
+    {
+        public int Position { get; set; }
+        public string CarNumber { get; set; } = "";
+        public string DriverName { get; set; } = "";
+        public int LapsCompleted { get; set; }
+        public double Delta { get; set; }
+        public double LastLapTime { get; set; }
+        public string Status { get; set; } = "Running";
+    }
+
+    // Data & ML Models
+    public class CaptureStatusInfo
+    {
+        public bool CaptureActive { get; set; }
+        public int TotalSnapshots { get; set; }
+        public int RacesCaptured { get; set; }
+    }
+
+    public class MLDatasetInfo
+    {
+        public int RaceId { get; set; }
+        public int SeriesId { get; set; }
+        public string TrackName { get; set; } = "";
+        public int Laps { get; set; }
+        public int Drivers { get; set; }
+        public double SizeMb { get; set; }
+    }
+
+    public class DriverStatsInfo
+    {
+        public string DriverName { get; set; } = "";
+        public string CarNumber { get; set; } = "";
+        public int FinishRank { get; set; }
+        public double FinishPosition { get; set; }
+        public double AvgPosition { get; set; }
+        public int BestPosition { get; set; }
+        public double TotalPositionsGained { get; set; }
+        public double AvgLapTime { get; set; }
+    }
+
+    public class MLDatasetsResponse
+    {
+        public int TotalDatasets { get; set; }
+        public List<MLDatasetInfo> Datasets { get; set; } = new();
+    }
+
+    public class DriverStatsResponse
+    {
+        public int RaceId { get; set; }
+        public List<DriverStatsInfo> Stats { get; set; } = new();
+    }
+
+    public class ConsolidateResponse
+    {
+        public string Status { get; set; } = "";
+        public int Records { get; set; }
+        public int Drivers { get; set; }
+        public int Laps { get; set; }
+        public double FileSizeMb { get; set; }
+    }
+
+    // Data & ML Methods
+    private async Task LoadCaptureStatus()
+    {
+        try
+        {
+            var response = await Http.GetAsync("http://backend:8000/nascar/capture/status");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                _captureInfo = JsonSerializer.Deserialize<CaptureStatusInfo>(json, 
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            }
+        }
+        catch { /* Ignore errors */ }
+    }
+
+    private async Task LoadMLDatasets()
+    {
+        try
+        {
+            var response = await Http.GetAsync("http://backend:8000/nascar/ml/datasets");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<MLDatasetsResponse>(json, 
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                _mlDatasets = result?.Datasets ?? new();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load datasets: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ConsolidateToParquet()
+    {
+        if (_consolidateRaceId <= 0)
+        {
+            Snackbar.Add("Please enter a valid Race ID", Severity.Warning);
+            return;
+        }
+
+        _mlLoading = true;
+        _consolidateResult = "";
+        StateHasChanged();
+
+        try
+        {
+            var url = $"http://backend:8000/nascar/ml/consolidate/{_consolidateRaceId}?series={_consolidateSeriesId}&cleanup={_cleanupAfterConsolidate.ToString().ToLower()}";
+            var response = await Http.PostAsync(url, null);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<ConsolidateResponse>(json, 
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                
+                _consolidateResult = $"✓ Created Parquet: {result?.Records:N0} records, {result?.Drivers} drivers, {result?.Laps} laps ({result?.FileSizeMb:F2} MB)";
+                await LoadMLDatasets();
+                Snackbar.Add("Race data consolidated to Parquet!", Severity.Success);
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Consolidation failed: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+
+        _mlLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task ViewDriverStats(int raceId, int seriesId)
+    {
+        try
+        {
+            var response = await Http.GetAsync($"http://backend:8000/nascar/ml/driver-stats/{raceId}?series={seriesId}");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<DriverStatsResponse>(json, 
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                _driverStats = result?.Stats ?? new();
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load stats: {ex.Message}", Severity.Error);
+        }
+    }
+}

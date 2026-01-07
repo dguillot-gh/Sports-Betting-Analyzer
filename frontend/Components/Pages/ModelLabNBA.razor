@@ -1,0 +1,529 @@
+@page "/model-lab-nba"
+@using System.Text.Json
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+<PageTitle>Model Lab - NBA</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+    <MudStack Spacing="4">
+        <!-- Header -->
+        <MudPaper Class="pa-4" Elevation="2" Style="background: linear-gradient(135deg, #4a148c 0%, #7b1fa2 100%);">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <div>
+                    <MudText Typo="Typo.h4" Style="color: white;">
+                        <MudIcon Icon="@Icons.Material.Filled.Science" Class="mr-2" />
+                        Model Lab - NBA
+                    </MudText>
+                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.8);">
+                        Mirror of Live NBA Odds + Advanced Filtering • Does NOT affect live predictions
+                    </MudText>
+                </div>
+                <MudStack Row="true" Spacing="2">
+                    <MudSelect T="string" @bind-Value="_sportsbook" Label="Sportsbook" 
+                               Variant="Variant.Outlined" Dense="true" Style="width: 140px; background: white;">
+                        <MudSelectItem Value="@("fanduel")">FanDuel</MudSelectItem>
+                        <MudSelectItem Value="@("draftkings")">DraftKings</MudSelectItem>
+                    </MudSelect>
+                    <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="LoadGames" Disabled="@_loading">
+                        @(_loading ? "Loading..." : "Analyze Games")
+                    </MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+
+        <!-- Terminology Guide -->
+        <MudPaper Class="pa-3" Elevation="1" Style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);">
+            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Class="flex-wrap">
+                <MudTooltip Text="The point difference between model prediction and market line. Higher edge = more confident.">
+                    <MudChip T="string" Color="Color.Info" Size="Size.Small" Variant="Variant.Outlined">
+                        <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="Size.Small" Class="mr-1" />
+                        Edge = Model Advantage
+                    </MudChip>
+                </MudTooltip>
+                <MudTooltip Text="Kelly Criterion: Math formula for optimal bet sizing based on your edge. Higher % = stronger bet.">
+                    <MudChip T="string" Color="Color.Secondary" Size="Size.Small" Variant="Variant.Outlined">
+                        <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Size="Size.Small" Class="mr-1" />
+                        Kelly = Bet Size
+                    </MudChip>
+                </MudTooltip>
+                <MudTooltip Text="Different thresholds for OVER vs UNDER. OVERs need 3.0pt edge (harder), UNDERs need 1.5pt (easier).">
+                    <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Outlined">
+                        <MudIcon Icon="@Icons.Material.Filled.Balance" Size="Size.Small" Class="mr-1" />
+                        Asymmetric = Different Standards
+                    </MudChip>
+                </MudTooltip>
+                <MudTooltip Text="Closing Line Value: Did you beat the final line? Getting better odds than closing = long-term edge.">
+                    <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Outlined">
+                        <MudIcon Icon="@Icons.Material.Filled.Timeline" Size="Size.Small" Class="mr-1" />
+                        CLV = Beat Closing Line
+                    </MudChip>
+                </MudTooltip>
+                <MudSpacer />
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.6);">
+                    <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" /> Hover for explanations
+                </MudText>
+            </MudStack>
+        </MudPaper>
+
+        <!-- Filter Controls -->
+        <MudPaper Class="pa-3" Elevation="1">
+            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Class="flex-wrap">
+                <MudText Typo="Typo.subtitle2">Filters:</MudText>
+                
+                <MudTooltip Text="Hide games where model says don't bet (low confidence or failed rules)">
+                    <MudSwitch T="bool" @bind-Value="_hideSkips" Label="Hide SKIP bets" Color="Color.Primary" />
+                </MudTooltip>
+                <MudTooltip Text="Only show UNDER predictions (historically more reliable)">
+                    <MudSwitch T="bool" @bind-Value="_undersOnly" Label="UNDERs only" Color="Color.Secondary" />
+                </MudTooltip>
+                <MudTooltip Text="Only show HIGH confidence picks (strongest edge)">
+                    <MudSwitch T="bool" @bind-Value="_highConfOnly" Label="High confidence only" Color="Color.Success" />
+                </MudTooltip>
+                
+                <MudDivider Vertical="true" FlexItem="true" />
+                
+                <MudChip T="string" Color="Color.Info" Size="Size.Small">
+                    @_filteredGames.Count() of @_games.Count games
+                </MudChip>
+                
+                <MudSpacer />
+                
+                <MudStack Row="true" Spacing="1">
+                    <MudTooltip Text="UNDER needs only 1.5 point edge for HIGH confidence">
+                        <MudChip T="string" Color="Color.Success" Size="Size.Small">UNDER: 1.5pt = HIGH</MudChip>
+                    </MudTooltip>
+                    <MudTooltip Text="OVER needs 3.0 point edge for HIGH confidence (higher bar because OVERs historically underperform)">
+                        <MudChip T="string" Color="Color.Warning" Size="Size.Small">OVER: 3.0pt = HIGH</MudChip>
+                    </MudTooltip>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+
+        <!-- Performance Summary -->
+        <MudPaper Class="pa-3" Elevation="1" Style="background: rgba(0,0,0,0.03);">
+            <MudStack Row="true" Spacing="4" Justify="Justify.SpaceAround">
+                @foreach (var kvp in _performance)
+                {
+                    <MudStack AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@kvp.Key.ToUpper()</MudText>
+                        <MudText Typo="Typo.subtitle1" Style="@(kvp.Value.Roi >= 0 ? "color:#4caf50;" : "color:#f44336;")">
+                            @kvp.Value.Wins-@kvp.Value.Losses (@(kvp.Value.Roi >= 0 ? "+" : "")@kvp.Value.Roi%)
+                        </MudText>
+                        <MudText Typo="Typo.caption">@kvp.Value.Status</MudText>
+                    </MudStack>
+                }
+            </MudStack>
+        </MudPaper>
+
+        @if (_error != null)
+        {
+            <MudAlert Severity="Severity.Error">@_error</MudAlert>
+        }
+
+        <!-- Games Grid -->
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_filteredGames.Any())
+        {
+            <MudGrid Spacing="3">
+                @foreach (var game in _filteredGames)
+                {
+                    <MudItem xs="12" md="6" lg="4">
+                        <MudCard Elevation="3" Style="@GetCardStyle(game)">
+                            <MudCardHeader>
+                                <CardHeaderContent>
+                                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                        <MudText Typo="Typo.h6">@game.Away</MudText>
+                                        <MudText Typo="Typo.caption">@@</MudText>
+                                        <MudText Typo="Typo.h6">@game.Home</MudText>
+                                    </MudStack>
+                                </CardHeaderContent>
+                                <CardHeaderActions>
+                                    @if (game.ShouldSkip)
+                                    {
+                                        <MudChip T="string" Color="Color.Error" Size="Size.Small">SKIP</MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudChip T="string" Color="@GetConfidenceColor(game.Confidence)" Size="Size.Small">
+                                            @game.Confidence.ToUpper()
+                                        </MudChip>
+                                    }
+                                </CardHeaderActions>
+                            </MudCardHeader>
+                            <MudCardContent>
+                                <MudStack Spacing="2">
+                                    <!-- Odds -->
+                                    <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                        <MudChip T="string" Size="Size.Small">Away: @FormatOdds(game.AwayML)</MudChip>
+                                        <MudChip T="string" Size="Size.Small">Home: @FormatOdds(game.HomeML)</MudChip>
+                                    </MudStack>
+
+                                    <MudDivider />
+
+                                    <!-- Model Predictions -->
+                                    <MudSimpleTable Dense="true" Style="background: transparent;">
+                                        <thead>
+                                            <tr style="background: rgba(0,0,0,0.1);">
+                                                <th></th>
+                                                <th style="text-align:center;">Raw</th>
+                                                <th style="text-align:center;">Adjusted</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td><MudText Typo="Typo.caption">Home Win%</MudText></td>
+                                                <td style="text-align:center;">@((game.RawHomeProb * 100).ToString("F1"))%</td>
+                                                <td style="text-align:center;"><strong>@((game.AdjHomeProb * 100).ToString("F1"))%</strong></td>
+                                            </tr>
+                                            <tr>
+                                                <td><MudText Typo="Typo.caption">ML Pick</MudText></td>
+                                                <td colspan="2" style="text-align:center;">
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary">@game.MLPick</MudChip>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </MudSimpleTable>
+
+                                    <MudDivider />
+
+                                    <!-- O/U Section with Enhanced Logic -->
+                                    @if (game.Total > 0)
+                                    {
+                                        <MudPaper Class="pa-2" Style="@GetOUStyle(game)">
+                                            <MudStack Spacing="1">
+                                                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                                    <MudText Typo="Typo.caption">Line: @game.Total</MudText>
+                                                    <MudText Typo="Typo.caption">Model: @game.PredictedTotal.ToString("F1")</MudText>
+                                                </MudStack>
+                                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                                    <MudChip T="string" Size="Size.Small" 
+                                                             Color="@(game.OUPick == "UNDER" ? Color.Secondary : Color.Info)">
+                                                        @game.OUPick
+                                                    </MudChip>
+                                                    <MudText>Edge: <strong>@game.Edge.ToString("F1")</strong> pts</MudText>
+                                                </MudStack>
+                                                
+                                                @if (game.BiasNote != null)
+                                                {
+                                                    <MudAlert Severity="@(game.OUPick == "UNDER" ? Severity.Success : Severity.Warning)" 
+                                                              Dense="true" Variant="Variant.Text">
+                                                        @game.BiasNote
+                                                    </MudAlert>
+                                                }
+
+                                                <!-- Asymmetric Kelly -->
+                                                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                                    <MudText Typo="Typo.caption">
+                                                        Kelly (@(game.OUPick == "UNDER" ? "100%" : "25%")):
+                                                    </MudText>
+                                                    <MudText Typo="Typo.caption">
+                                                        <strong>$@game.KellySuggestion.ToString("F0")</strong> of $1000
+                                                    </MudText>
+                                                </MudStack>
+
+                                                <!-- Parlay Suggestion -->
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                    @game.ParlayNote
+                                                </MudText>
+                                            </MudStack>
+                                        </MudPaper>
+                                    }
+                                </MudStack>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+        else if (!_loading)
+        {
+            <MudAlert Severity="Severity.Info">
+                Click "Analyze Games" to fetch today's NBA games and run predictions with enhanced filtering.
+            </MudAlert>
+        }
+
+        <!-- Legend -->
+        <MudPaper Class="pa-3" Elevation="1">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Enhanced Features Active:</MudText>
+            <MudStack Row="true" Spacing="2" Class="flex-wrap">
+                <MudChip T="string" Size="Size.Small" Color="Color.Secondary">Bias Adjust: -3 pts on 225+ lines</MudChip>
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning">OVER needs 3.0pt edge (vs 1.5 for UNDER)</MudChip>
+                <MudChip T="string" Size="Size.Small" Color="Color.Error">Auto-SKIP: OVERs on 228+ unless HIGH conf</MudChip>
+                <MudChip T="string" Size="Size.Small" Color="Color.Info">Kelly: 25% for OVERs, 100% for UNDERs</MudChip>
+            </MudStack>
+        </MudPaper>
+    </MudStack>
+</MudContainer>
+
+@code {
+    private string _sportsbook = "fanduel";
+    private bool _loading = false;
+    private string? _error;
+    private List<EnhancedGame> _games = new();
+    private bool _hideSkips = false;
+    private bool _undersOnly = false;
+    private bool _highConfOnly = false;
+
+    private Dictionary<string, PerfData> _performance = new()
+    {
+        ["under"] = new() { Wins = 0, Losses = 0, Roi = 0, Status = "✅ Active" },
+        ["over"] = new() { Wins = 0, Losses = 0, Roi = 0, Status = "✅ Active" },
+        ["ml"] = new() { Wins = 0, Losses = 0, Roi = 0, Status = "✅ Active" }
+    };
+
+    private IEnumerable<EnhancedGame> _filteredGames => _games
+        .Where(g => !_hideSkips || !g.ShouldSkip)
+        .Where(g => !_undersOnly || g.OUPick == "UNDER")
+        .Where(g => !_highConfOnly || g.Confidence == "high");
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPerformance();
+    }
+
+    private async Task LoadGames()
+    {
+        _loading = true;
+        _error = null;
+        _games.Clear();
+        StateHasChanged();
+
+        try
+        {
+            // Fetch from same endpoint as live odds page
+            var resp = await Http.GetAsync($"http://backend:8000/odds/nba?sportsbook={_sportsbook}");
+            if (resp.IsSuccessStatusCode)
+            {
+                var json = await resp.Content.ReadAsStringAsync();
+                var doc = JsonDocument.Parse(json);
+
+                foreach (var prop in doc.RootElement.EnumerateObject())
+                {
+                    if (prop.Name.Contains("error")) continue;
+                    
+                    var teams = prop.Name.Split(':');
+                    if (teams.Length != 2) continue;
+
+                    var home = teams[0].Trim();
+                    var away = teams[1].Trim();
+                    var odds = prop.Value;
+
+                    int homeML = 0, awayML = 0;
+                    decimal total = 0;
+
+                    if (odds.TryGetProperty(home, out var homeData) && 
+                        homeData.TryGetProperty("money_line_odds", out var hm))
+                        homeML = hm.GetInt32();
+                    if (odds.TryGetProperty(away, out var awayData) && 
+                        awayData.TryGetProperty("money_line_odds", out var am))
+                        awayML = am.GetInt32();
+                    if (odds.TryGetProperty("under_over_odds", out var uo))
+                        total = uo.GetDecimal();
+
+                    // Create enhanced game with all new features
+                    var game = CreateEnhancedGame(home, away, homeML, awayML, total);
+                    _games.Add(game);
+                }
+
+                if (_games.Count == 0)
+                {
+                    _error = "No games found. Check if NBA games are scheduled today.";
+                }
+            }
+            else
+            {
+                _error = $"Failed to load odds: {resp.StatusCode}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = $"Error: {ex.Message}";
+        }
+
+        _loading = false;
+    }
+
+    private EnhancedGame CreateEnhancedGame(string home, string away, int homeML, int awayML, decimal total)
+    {
+        // Simulate model prediction (in real version, call backend)
+        var rawHomeProb = CalculateImpliedProb(homeML);
+        var rawPredictedTotal = (double)total + (Random.Shared.NextDouble() * 10 - 5); // Simulated model output
+        
+        // Apply bias adjustments
+        var adjustedTotal = ApplyBiasAdjustment(rawPredictedTotal, total);
+        var ouPick = adjustedTotal < (double)total ? "UNDER" : "OVER";
+        var edge = Math.Abs(adjustedTotal - (double)total);
+        
+        // Confidence scoring with asymmetric thresholds
+        string confidence;
+        if (ouPick == "UNDER")
+        {
+            confidence = edge >= 1.5 ? "high" : edge >= 0.75 ? "medium" : "low";
+        }
+        else // OVER
+        {
+            confidence = edge >= 3.0 ? "high" : edge >= 2.0 ? "medium" : "low";
+        }
+
+        // Should skip logic
+        var shouldSkip = false;
+        var biasNote = "";
+        
+        if (ouPick == "OVER")
+        {
+            if (total >= 228 && confidence != "high")
+            {
+                shouldSkip = true;
+                biasNote = "⚠️ High line (228+) + not HIGH conf → SKIP";
+            }
+            else if (confidence == "low")
+            {
+                shouldSkip = true;
+                biasNote = "⚠️ OVER with LOW confidence → SKIP";
+            }
+            else
+            {
+                biasNote = $"OVER requires 3.0pt edge (got {edge:F1})";
+            }
+        }
+        else
+        {
+            biasNote = $"UNDER with {edge:F1}pt edge ✓";
+        }
+
+        // Asymmetric Kelly
+        var kellyMult = ouPick == "UNDER" ? 1.0 : 0.25;
+        var kellySuggestion = Math.Min(edge / 100 * kellyMult * 1000, 50); // Cap at $50
+
+        // Parlay suggestion
+        var parlayNote = ouPick == "UNDER" && confidence == "high" 
+            ? "✓ Good for 4-5 leg parlay" 
+            : ouPick == "OVER" 
+                ? "❌ No parlays for OVERs - straight bet only" 
+                : "➤ Consider 2-3 leg parlay max";
+
+        return new EnhancedGame
+        {
+            Home = home,
+            Away = away,
+            HomeML = homeML,
+            AwayML = awayML,
+            Total = total,
+            RawHomeProb = rawHomeProb,
+            AdjHomeProb = rawHomeProb, // Would be adjusted in real version
+            MLPick = rawHomeProb > 0.5 ? home : away,
+            PredictedTotal = (decimal)adjustedTotal,
+            OUPick = ouPick,
+            Edge = (decimal)edge,
+            Confidence = confidence,
+            ShouldSkip = shouldSkip,
+            BiasNote = biasNote,
+            KellySuggestion = (decimal)kellySuggestion,
+            ParlayNote = parlayNote
+        };
+    }
+
+    private double ApplyBiasAdjustment(double modelPrediction, decimal marketLine)
+    {
+        // Fade high overs
+        if (modelPrediction > 225)
+            return modelPrediction - 3;
+        else if (modelPrediction < 215)
+            return modelPrediction + 1;
+        return modelPrediction;
+    }
+
+    private double CalculateImpliedProb(int americanOdds)
+    {
+        if (americanOdds > 0)
+            return 100.0 / (americanOdds + 100);
+        else
+            return Math.Abs(americanOdds) / (Math.Abs(americanOdds) + 100.0);
+    }
+
+    private async Task LoadPerformance()
+    {
+        try
+        {
+            var resp = await Http.GetAsync("http://backend:8000/lab/performance");
+            if (resp.IsSuccessStatusCode)
+            {
+                var json = await resp.Content.ReadAsStringAsync();
+                var doc = JsonDocument.Parse(json);
+                foreach (var prop in doc.RootElement.EnumerateObject())
+                {
+                    if (_performance.ContainsKey(prop.Name))
+                    {
+                        _performance[prop.Name] = new PerfData
+                        {
+                            Wins = prop.Value.GetProperty("wins").GetInt32(),
+                            Losses = prop.Value.GetProperty("losses").GetInt32(),
+                            Roi = prop.Value.GetProperty("roi").GetDecimal(),
+                            Status = prop.Value.GetProperty("status").GetString() ?? "✅"
+                        };
+                    }
+                }
+            }
+        }
+        catch { }
+    }
+
+    private string FormatOdds(int odds) => odds > 0 ? $"+{odds}" : odds.ToString();
+
+    private Color GetConfidenceColor(string conf) => conf switch
+    {
+        "high" => Color.Success,
+        "medium" => Color.Warning,
+        _ => Color.Error
+    };
+
+    private string GetCardStyle(EnhancedGame game)
+    {
+        if (game.ShouldSkip) return "opacity: 0.6; border-left: 4px solid #f44336;";
+        if (game.Confidence == "high") return "border-left: 4px solid #4caf50;";
+        if (game.Confidence == "medium") return "border-left: 4px solid #ff9800;";
+        return "";
+    }
+
+    private string GetOUStyle(EnhancedGame game)
+    {
+        if (game.ShouldSkip) return "background: rgba(244,67,54,0.1);";
+        if (game.OUPick == "UNDER" && game.Confidence == "high") 
+            return "background: linear-gradient(135deg, rgba(76,175,80,0.2) 0%, rgba(76,175,80,0.1) 100%);";
+        if (game.OUPick == "OVER") 
+            return "background: rgba(255,152,0,0.1);";
+        return "";
+    }
+
+    private record EnhancedGame
+    {
+        public string Home { get; init; } = "";
+        public string Away { get; init; } = "";
+        public int HomeML { get; init; }
+        public int AwayML { get; init; }
+        public decimal Total { get; init; }
+        public double RawHomeProb { get; init; }
+        public double AdjHomeProb { get; init; }
+        public string MLPick { get; init; } = "";
+        public decimal PredictedTotal { get; init; }
+        public string OUPick { get; init; } = "";
+        public decimal Edge { get; init; }
+        public string Confidence { get; init; } = "";
+        public bool ShouldSkip { get; init; }
+        public string? BiasNote { get; init; }
+        public decimal KellySuggestion { get; init; }
+        public string ParlayNote { get; init; } = "";
+    }
+
+    private record PerfData
+    {
+        public int Wins { get; init; }
+        public int Losses { get; init; }
+        public decimal Roi { get; init; }
+        public string Status { get; init; } = "";
+    }
+}

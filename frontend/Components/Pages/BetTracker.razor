@@ -132,8 +132,9 @@
                             <MudTextField T="decimal" @bind-Value="_stake" Label="Stake" Variant="Variant.Outlined" Dense="true"
                                           Style="width:100px;" Adornment="Adornment.Start" AdornmentText="$" />
                             <div>
-                                <MudText Typo="Typo.caption">To Win</MudText>
-                                <MudText Typo="Typo.body1" Style="color:#4caf50;"><strong>$@CalcWin().ToString("F2")</strong></MudText>
+                                <MudText Typo="Typo.caption">Total Payout</MudText>
+                                <MudText Typo="Typo.body1" Style="color:#4caf50;"><strong>$@CalcPayout().ToString("F2")</strong></MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">(+$@CalcWin().ToString("F2") profit)</MudText>
                             </div>
                         </MudStack>
                         <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true" Class="mt-2"
@@ -219,40 +220,131 @@
         _loadingGames = true;
         _games.Clear();
         StateHasChanged();
+        
         try
         {
-            var resp = await Http.GetAsync($"http://backend:8000/cache/games/{_sport}");
+            // Fetch LIVE odds directly from the odds endpoint
+            var resp = await Http.GetAsync($"http://backend:8000/odds/{_sport}?sportsbook=fanduel");
             if (resp.IsSuccessStatusCode)
             {
                 var json = await resp.Content.ReadAsStringAsync();
                 var doc = JsonDocument.Parse(json);
-                if (doc.RootElement.TryGetProperty("games", out var gamesArr))
+                
+                // The /odds endpoint returns games in different formats - parse flexibly
+                if (doc.RootElement.TryGetProperty("games", out var gamesArr) || 
+                    doc.RootElement.TryGetProperty("odds", out gamesArr))
                 {
                     foreach (var g in gamesArr.EnumerateArray())
                     {
-                        var home = g.TryGetProperty("home_team", out var h) ? h.GetString() ?? "" : "";
-                        var away = g.TryGetProperty("away_team", out var a) ? a.GetString() ?? "" : "";
-                        var gid = g.TryGetProperty("game_id", out var id) ? id.GetString() ?? "" : "";
-                        int homeML = 0, awayML = 0;
-                        decimal total = 0;
-                        
-                        if (g.TryGetProperty("odds_data", out var odds))
+                        ParseAndAddGame(g);
+                    }
+                }
+                else if (doc.RootElement.ValueKind == JsonValueKind.Object)
+                {
+                    // Format: {"TeamA:TeamB": {...odds...}}
+                    foreach (var prop in doc.RootElement.EnumerateObject())
+                    {
+                        var teams = prop.Name.Split(':');
+                        if (teams.Length == 2)
                         {
-                            if (odds.TryGetProperty("home_ml", out var hm) && hm.ValueKind == JsonValueKind.Number)
+                            var home = teams[0].Trim();
+                            var away = teams[1].Trim();
+                            int homeML = 0, awayML = 0;
+                            decimal total = 0;
+                            
+                            var odds = prop.Value;
+                            if (odds.TryGetProperty(home, out var homeData) && 
+                                homeData.TryGetProperty("money_line_odds", out var hm) && hm.ValueKind == JsonValueKind.Number)
                                 homeML = hm.GetInt32();
-                            if (odds.TryGetProperty("away_ml", out var am) && am.ValueKind == JsonValueKind.Number)
+                            if (odds.TryGetProperty(away, out var awayData) && 
+                                awayData.TryGetProperty("money_line_odds", out var am) && am.ValueKind == JsonValueKind.Number)
                                 awayML = am.GetInt32();
-                            if (odds.TryGetProperty("total", out var t) && t.ValueKind == JsonValueKind.Number)
-                                total = t.GetDecimal();
+                            if (odds.TryGetProperty("under_over_odds", out var uo) && uo.ValueKind == JsonValueKind.Number)
+                                total = uo.GetDecimal();
+                            
+                            _games.Add(new Game { GameId = $"{home}:{away}", Home = home, Away = away, HomeML = homeML, AwayML = awayML, Total = total });
                         }
-                        
-                        _games.Add(new Game { GameId = gid, Home = home, Away = away, HomeML = homeML, AwayML = awayML, Total = total });
                     }
                 }
             }
+            
+            // If no live games, try cache as fallback
+            if (_games.Count == 0)
+            {
+                var cacheResp = await Http.GetAsync($"http://backend:8000/cache/games/{_sport}?include_expired=true");
+                if (cacheResp.IsSuccessStatusCode)
+                {
+                    var json = await cacheResp.Content.ReadAsStringAsync();
+                    var doc = JsonDocument.Parse(json);
+                    if (doc.RootElement.TryGetProperty("games", out var gamesArr))
+                    {
+                        foreach (var g in gamesArr.EnumerateArray())
+                        {
+                            ParseCachedGame(g);
+                        }
+                    }
+                }
+            }
+            
+            if (_games.Count == 0)
+            {
+                Snackbar.Add($"No {_sport.ToUpper()} games available right now.", Severity.Info);
+            }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading games: {ex.Message}", Severity.Error);
+        }
         _loadingGames = false;
+    }
+
+    private void ParseAndAddGame(JsonElement g)
+    {
+        var home = g.TryGetProperty("home_team", out var h) ? h.GetString() ?? "" : "";
+        var away = g.TryGetProperty("away_team", out var a) ? a.GetString() ?? "" : "";
+        var gid = g.TryGetProperty("game_id", out var id) ? id.GetString() ?? $"{home}:{away}" : $"{home}:{away}";
+        int homeML = 0, awayML = 0;
+        decimal total = 0;
+        
+        // Check multiple possible formats
+        if (g.TryGetProperty("odds_data", out var odds) && odds.ValueKind == JsonValueKind.Object)
+        {
+            if (odds.TryGetProperty("home_ml", out var hm) && hm.ValueKind == JsonValueKind.Number)
+                homeML = hm.GetInt32();
+            if (odds.TryGetProperty("away_ml", out var am) && am.ValueKind == JsonValueKind.Number)
+                awayML = am.GetInt32();
+            if (odds.TryGetProperty("total", out var t) && t.ValueKind == JsonValueKind.Number)
+                total = t.GetDecimal();
+        }
+        
+        if (!string.IsNullOrEmpty(home) && !string.IsNullOrEmpty(away))
+        {
+            _games.Add(new Game { GameId = gid, Home = home, Away = away, HomeML = homeML, AwayML = awayML, Total = total });
+        }
+    }
+
+    private void ParseCachedGame(JsonElement g)
+    {
+        var home = g.TryGetProperty("home_team", out var h) ? h.GetString() ?? "" : "";
+        var away = g.TryGetProperty("away_team", out var a) ? a.GetString() ?? "" : "";
+        var gid = g.TryGetProperty("game_id", out var id) ? id.GetString() ?? "" : "";
+        int homeML = 0, awayML = 0;
+        decimal total = 0;
+        
+        if (g.TryGetProperty("odds_data", out var odds) && odds.ValueKind == JsonValueKind.Object)
+        {
+            if (odds.TryGetProperty("home_ml", out var hm) && hm.ValueKind == JsonValueKind.Number)
+                homeML = hm.GetInt32();
+            if (odds.TryGetProperty("away_ml", out var am) && am.ValueKind == JsonValueKind.Number)
+                awayML = am.GetInt32();
+            if (odds.TryGetProperty("total", out var t) && t.ValueKind == JsonValueKind.Number)
+                total = t.GetDecimal();
+        }
+        
+        if (!string.IsNullOrEmpty(home) && !string.IsNullOrEmpty(away))
+        {
+            _games.Add(new Game { GameId = gid, Home = home, Away = away, HomeML = homeML, AwayML = awayML, Total = total });
+        }
     }
 
     private void AddLeg(string desc, int odds, string gameId)
@@ -265,6 +357,7 @@
     {
         if (string.IsNullOrWhiteSpace(_manualDesc)) return;
         _legs.Add(new Leg { Description = _manualDesc, Odds = _manualOdds });
+        Snackbar.Add($"Added: {_manualDesc}", Severity.Success);
         _manualDesc = "";
     }
 
@@ -282,6 +375,11 @@
         if (_stake <= 0 || !_legs.Any()) return 0;
         var odds = GetParlayOdds();
         return odds > 0 ? _stake * odds / 100 : _stake * 100 / Math.Abs(odds);
+    }
+
+    private decimal CalcPayout()
+    {
+        return _stake + CalcWin();
     }
 
     private async Task PlaceBet()
@@ -302,7 +400,7 @@
             var resp = await Http.PostAsJsonAsync("http://backend:8000/bets", req);
             if (resp.IsSuccessStatusCode)
             {
-                Snackbar.Add($"Bet placed! Win: ${CalcWin():F2}", Severity.Success);
+                Snackbar.Add($"Bet placed! Payout: ${CalcPayout():F2}", Severity.Success);
                 _legs.Clear();
                 await LoadBets();
                 await LoadStats();

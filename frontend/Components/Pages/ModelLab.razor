@@ -1,0 +1,326 @@
+@page "/model-lab"
+@using System.Text.Json
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+<PageTitle>Model Lab</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+    <MudStack Spacing="4">
+        <!-- Header -->
+        <MudPaper Class="pa-4" Elevation="2" Style="background: linear-gradient(135deg, #1a237e 0%, #4a148c 100%);">
+            <MudText Typo="Typo.h4" Style="color: white;">
+                <MudIcon Icon="@Icons.Material.Filled.Science" Class="mr-2" />
+                Model Lab
+            </MudText>
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.8);">
+                Test confidence thresholds and bet strategies before going live
+            </MudText>
+        </MudPaper>
+
+        <MudGrid>
+            <!-- Left: Confidence Analyzer -->
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-3">
+                        <MudIcon Icon="@Icons.Material.Filled.Analytics" Class="mr-1" /> Confidence Analyzer
+                    </MudText>
+                    
+                    <MudStack Spacing="2">
+                        <MudSelect T="string" @bind-Value="_betType" Label="Bet Type" Variant="Variant.Outlined">
+                            <MudSelectItem Value="@("under")">UNDER</MudSelectItem>
+                            <MudSelectItem Value="@("over")">OVER</MudSelectItem>
+                            <MudSelectItem Value="@("moneyline")">Moneyline</MudSelectItem>
+                            <MudSelectItem Value="@("spread")">Spread</MudSelectItem>
+                        </MudSelect>
+                        
+                        <MudTextField T="decimal" @bind-Value="_modelPrediction" Label="Model Prediction" 
+                                      Variant="Variant.Outlined" Placeholder="e.g., 215.5" />
+                        <MudTextField T="decimal" @bind-Value="_marketLine" Label="Market Line" 
+                                      Variant="Variant.Outlined" Placeholder="e.g., 220.5" />
+                        
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AnalyzeConfidence">
+                            Analyze
+                        </MudButton>
+                    </MudStack>
+
+                    @if (_confidenceResult != null)
+                    {
+                        <MudDivider Class="my-3" />
+                        <MudPaper Class="pa-3" Style="@GetConfidenceStyle(_confidenceResult.ConfidenceLevel)">
+                            <MudStack Spacing="1">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                    <MudText Typo="Typo.subtitle1">Confidence:</MudText>
+                                    <MudChip T="string" Color="@GetConfidenceColor(_confidenceResult.ConfidenceLevel)" Size="Size.Small">
+                                        @_confidenceResult.ConfidenceLevel.ToUpper()
+                                    </MudChip>
+                                </MudStack>
+                                <MudText>Edge: <strong>@_confidenceResult.Edge pts</strong></MudText>
+                                <MudText>Kelly Stake: <strong>@_confidenceResult.SuggestedStakePct%</strong></MudText>
+                                <MudText>Parlay: <strong>@_confidenceResult.ParlayRecommendation</strong></MudText>
+                                <MudDivider Class="my-2" />
+                                @if (_confidenceResult.ShouldBet)
+                                {
+                                    <MudAlert Severity="Severity.Success" Dense="true">✅ @_confidenceResult.Reason</MudAlert>
+                                }
+                                else
+                                {
+                                    <MudAlert Severity="Severity.Warning" Dense="true">⚠️ @_confidenceResult.Reason</MudAlert>
+                                }
+                            </MudStack>
+                        </MudPaper>
+                    }
+                </MudPaper>
+
+                <!-- Thresholds Info -->
+                <MudPaper Class="pa-4 mt-3" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-2">Asymmetric Thresholds</MudText>
+                    <MudSimpleTable Dense="true">
+                        <thead>
+                            <tr><th>Bet Type</th><th>High</th><th>Medium</th><th>Kelly Mult</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>UNDER</td><td>1.5 pts</td><td>0.75 pts</td><td>100%</td></tr>
+                            <tr><td>OVER</td><td><strong>3.0 pts</strong></td><td>2.0 pts</td><td>25%</td></tr>
+                            <tr><td>Moneyline</td><td>8%</td><td>5%</td><td>50%</td></tr>
+                            <tr><td>Spread</td><td>2 pts</td><td>1 pt</td><td>50%</td></tr>
+                        </tbody>
+                    </MudSimpleTable>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                        OVERs require 2x the edge for high confidence
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+
+            <!-- Right: Performance Tracker -->
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+                        <MudText Typo="Typo.h6">
+                            <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Class="mr-1" /> Performance by Bet Type
+                        </MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="LoadPerformance" />
+                    </MudStack>
+
+                    @if (_performance != null)
+                    {
+                        <MudSimpleTable Dense="true" Hover="true">
+                            <thead>
+                                <tr><th>Type</th><th>W-L</th><th>Win%</th><th>ROI</th><th>Status</th></tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var kvp in _performance)
+                                {
+                                    <tr>
+                                        <td>@kvp.Key.ToUpper()</td>
+                                        <td>@kvp.Value.Wins-@kvp.Value.Losses</td>
+                                        <td>@kvp.Value.WinRate%</td>
+                                        <td Style="@(kvp.Value.Roi >= 0 ? "color:#4caf50;" : "color:#f44336;")">
+                                            @(kvp.Value.Roi >= 0 ? "+" : "")@kvp.Value.Roi%
+                                        </td>
+                                        <td>@kvp.Value.Status</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+                    else
+                    {
+                        <MudText Color="Color.Secondary">No data yet. Record some bets below.</MudText>
+                    }
+                </MudPaper>
+
+                <!-- Simulate Bet -->
+                <MudPaper Class="pa-4 mt-3" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-3">Simulate Bet Result</MudText>
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End">
+                        <MudSelect T="string" @bind-Value="_simBetType" Label="Type" Dense="true" Style="width:120px;">
+                            <MudSelectItem Value="@("under")">UNDER</MudSelectItem>
+                            <MudSelectItem Value="@("over")">OVER</MudSelectItem>
+                            <MudSelectItem Value="@("moneyline")">ML</MudSelectItem>
+                        </MudSelect>
+                        <MudSelect T="bool" @bind-Value="_simWon" Label="Result" Dense="true" Style="width:100px;">
+                            <MudSelectItem Value="true">WIN</MudSelectItem>
+                            <MudSelectItem Value="false">LOSS</MudSelectItem>
+                        </MudSelect>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="RecordSimBet">
+                            Record
+                        </MudButton>
+                    </MudStack>
+                </MudPaper>
+
+                <!-- Parlay Suggestion -->
+                <MudPaper Class="pa-4 mt-3" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-3">Parlay Strategy Rules</MudText>
+                    <MudList T="string" Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">
+                            High confidence UNDERs → 4-5 leg parlays OK
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Info" IconColor="Color.Info">
+                            Mixed confidence → 2-3 leg parlays max
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Warning" IconColor="Color.Warning">
+                            Any OVERs → Straight bets only (NO parlays)
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Block" IconColor="Color.Error">
+                            Bet type below 48% win rate → AUTO-PAUSE
+                        </MudListItem>
+                    </MudList>
+                </MudPaper>
+
+                <!-- Reset Button -->
+                <MudButton Variant="Variant.Text" Color="Color.Secondary" Class="mt-2" OnClick="ResetPerformance">
+                    Reset Performance Data
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudStack>
+</MudContainer>
+
+@code {
+    // Confidence analyzer
+    private string _betType = "under";
+    private decimal _modelPrediction = 215.5m;
+    private decimal _marketLine = 220.5m;
+    private ConfidenceResult? _confidenceResult;
+
+    // Performance tracker
+    private Dictionary<string, PerfData>? _performance;
+
+    // Simulation
+    private string _simBetType = "under";
+    private bool _simWon = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPerformance();
+    }
+
+    private async Task AnalyzeConfidence()
+    {
+        try
+        {
+            var request = new
+            {
+                bet_type = _betType,
+                model_prediction = _modelPrediction,
+                market_line = _marketLine
+            };
+
+            var response = await Http.PostAsJsonAsync("http://backend:8000/lab/confidence", request);
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                _confidenceResult = new ConfidenceResult
+                {
+                    Edge = root.GetProperty("edge").GetDecimal(),
+                    ConfidenceLevel = root.GetProperty("confidence_level").GetString() ?? "low",
+                    SuggestedStakePct = root.GetProperty("suggested_stake_pct").GetDecimal(),
+                    ParlayRecommendation = root.GetProperty("parlay_recommendation").GetString() ?? "",
+                    ShouldBet = root.GetProperty("should_bet").GetBoolean(),
+                    Reason = root.GetProperty("reason").GetString() ?? ""
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadPerformance()
+    {
+        try
+        {
+            var response = await Http.GetAsync("http://backend:8000/lab/performance");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var doc = JsonDocument.Parse(json);
+                
+                _performance = new Dictionary<string, PerfData>();
+                foreach (var prop in doc.RootElement.EnumerateObject())
+                {
+                    _performance[prop.Name] = new PerfData
+                    {
+                        Wins = prop.Value.GetProperty("wins").GetInt32(),
+                        Losses = prop.Value.GetProperty("losses").GetInt32(),
+                        WinRate = prop.Value.GetProperty("win_rate").GetDecimal(),
+                        Roi = prop.Value.GetProperty("roi").GetDecimal(),
+                        Status = prop.Value.GetProperty("status").GetString() ?? ""
+                    };
+                }
+            }
+        }
+        catch { }
+    }
+
+    private async Task RecordSimBet()
+    {
+        try
+        {
+            var request = new
+            {
+                bet_type = _simBetType,
+                won = _simWon,
+                profit = _simWon ? 91m : -100m,  // Standard -110 odds
+                stake = 100m
+            };
+
+            await Http.PostAsJsonAsync("http://backend:8000/lab/record-bet", request);
+            await LoadPerformance();
+            Snackbar.Add($"Recorded {(_simWon ? "WIN" : "LOSS")} for {_simBetType.ToUpper()}", 
+                _simWon ? Severity.Success : Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ResetPerformance()
+    {
+        await Http.PostAsync("http://backend:8000/lab/reset-performance", null);
+        await LoadPerformance();
+        Snackbar.Add("Performance data reset", Severity.Info);
+    }
+
+    private string GetConfidenceStyle(string level) => level switch
+    {
+        "high" => "background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 100%); color: white;",
+        "medium" => "background: linear-gradient(135deg, #e65100 0%, #f57c00 100%); color: white;",
+        "low" => "background: linear-gradient(135deg, #b71c1c 0%, #c62828 100%); color: white;",
+        _ => "background: #424242; color: white;"
+    };
+
+    private Color GetConfidenceColor(string level) => level switch
+    {
+        "high" => Color.Success,
+        "medium" => Color.Warning,
+        "low" => Color.Error,
+        _ => Color.Default
+    };
+
+    // Models
+    private record ConfidenceResult
+    {
+        public decimal Edge { get; init; }
+        public string ConfidenceLevel { get; init; } = "";
+        public decimal SuggestedStakePct { get; init; }
+        public string ParlayRecommendation { get; init; } = "";
+        public bool ShouldBet { get; init; }
+        public string Reason { get; init; } = "";
+    }
+
+    private record PerfData
+    {
+        public int Wins { get; init; }
+        public int Losses { get; init; }
+        public decimal WinRate { get; init; }
+        public decimal Roi { get; init; }
+        public string Status { get; init; } = "";
+    }
+}

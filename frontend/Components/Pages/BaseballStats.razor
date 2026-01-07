@@ -59,19 +59,40 @@
                 </MudItem>
                 <MudItem xs="12" md="2">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadTeams"
-                               Disabled="@_isLoading" FullWidth="true" Size="Size.Large">
+                               Disabled="@_isLoading" FullWidth="true" Size="Size.Medium">
                         @if (_isLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
                         Load Teams
                     </MudButton>
                 </MudItem>
                 <MudItem xs="12" md="3">
-                    <MudButton Variant="Variant.Filled" Color="Color.Info" OnClick="LoadTeamStats"
-                               Disabled="@(_isLoading || _selectedTeam == null)" FullWidth="true" Size="Size.Large">
-                        @if (_isLoadingStats) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
-                        Load Stats
-                    </MudButton>
+                    <MudStack Row="true" Spacing="1">
+                        <MudButton Variant="Variant.Filled" Color="Color.Info" OnClick="LoadTeamStats"
+                                   Disabled="@(_isLoading || _selectedTeam == null)" Size="Size.Medium">
+                            @if (_isLoadingStats) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                            Load Stats
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="ImportDataFromR"
+                                   Disabled="@_isImporting" Size="Size.Medium">
+                            @if (_isImporting) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                            Import Data
+                        </MudButton>
+                    </MudStack>
                 </MudItem>
             </MudGrid>
+            
+            @if (!string.IsNullOrEmpty(_importStatus))
+            {
+                <MudAlert Severity="@(_importStatus.Contains("Error") ? Severity.Error : Severity.Info)" 
+                          Class="mt-3" Dense="true">@_importStatus</MudAlert>
+            }
+            
+            @if (_noDataAvailable)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mt-3">
+                    <strong>No team data found for D@_selectedDivision.</strong> 
+                    Click "Import Data" to fetch teams from the NCAA database. This may take a few minutes.
+                </MudAlert>
+            }
         </MudPaper>
         
         <!-- Stats Tabs -->
@@ -280,6 +301,9 @@
     private TeamInfo? _selectedTeam;
     private bool _isLoading = false;
     private bool _isLoadingStats = false;
+    private bool _isImporting = false;
+    private bool _noDataAvailable = false;
+    private string _importStatus = "";
     
     // Data
     private List<TeamInfo> _teams = new();
@@ -295,27 +319,107 @@
     private async Task LoadTeams()
     {
         _isLoading = true;
+        _noDataAvailable = false;
         StateHasChanged();
         
         try
         {
-            var response = await Http.GetFromJsonAsync<TeamsResponse>($"http://backend:8000/baseball/ncaa/teams?division={_selectedDivision}");
+            var response = await Http.GetFromJsonAsync<TeamsResponse>($"http://backend:8000/baseball/ncaa/teams?division={_selectedDivision}&year={_selectedYear}");
             
-            if (response?.Teams != null)
+            if (response?.Teams != null && response.Teams.Any())
             {
                 _teams = response.Teams;
                 Snackbar.Add($"Loaded {_teams.Count} D{_selectedDivision} teams", Severity.Success);
+            }
+            else
+            {
+                _teams = new();
+                _noDataAvailable = true;
             }
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error loading teams");
+            _noDataAvailable = true;
             Snackbar.Add($"Error loading teams: {ex.Message}", Severity.Error);
         }
         finally
         {
             _isLoading = false;
         }
+    }
+    
+    private async Task ImportDataFromR()
+    {
+        _isImporting = true;
+        _importStatus = $"Starting import for D{_selectedDivision}, {_selectedYear}...";
+        StateHasChanged();
+        
+        try
+        {
+            var response = await Http.PostAsync(
+                $"http://backend:8000/baseball/ncaa/import?division={_selectedDivision}&year={_selectedYear}", 
+                null);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                _importStatus = "Import started! This runs in the background. Check status below, then click 'Load Teams' when ready.";
+                Snackbar.Add("Import started in background", Severity.Success);
+                
+                // Start polling for status
+                _ = PollImportStatus();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                _importStatus = $"Error starting import: {error}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _importStatus = $"Error: {ex.Message}";
+            Snackbar.Add($"Import failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isImporting = false;
+            StateHasChanged();
+        }
+    }
+    
+    private async Task PollImportStatus()
+    {
+        for (int i = 0; i < 60; i++) // Poll for up to 5 minutes
+        {
+            await Task.Delay(5000);
+            
+            try
+            {
+                var response = await Http.GetFromJsonAsync<ImportStatusResponse>(
+                    "http://backend:8000/baseball/ncaa/status");
+                
+                if (response != null)
+                {
+                    _importStatus = $"{response.Status}: {response.Message} ({response.Progress}%)";
+                    StateHasChanged();
+                    
+                    if (response.Status == "idle" || response.Progress >= 100)
+                    {
+                        _noDataAvailable = false;
+                        await LoadTeams();
+                        break;
+                    }
+                }
+            }
+            catch { /* Ignore polling errors */ }
+        }
+    }
+    
+    private class ImportStatusResponse
+    {
+        public string Status { get; set; } = "";
+        public string Message { get; set; } = "";
+        public int Progress { get; set; }
     }
     
     private async Task LoadTeamStats()
@@ -330,7 +434,7 @@
             // Load batting
             try
             {
-                var battingResponse = await Http.GetFromJsonAsync<StatsResponse>($"http://backend:8000/baseball/ncaa/stats/{_selectedTeam.TeamId}?stat_type=batting");
+                var battingResponse = await Http.GetFromJsonAsync<StatsResponse>($"http://backend:8000/baseball/ncaa/stats/{_selectedTeam.TeamId}?stat_type=batting&year={_selectedYear}");
                 if (battingResponse?.Stats != null)
                 {
                     _battingStats = battingResponse.Stats.Select(s => new BattingPlayer
@@ -359,7 +463,7 @@
             // Load pitching
             try
             {
-                var pitchingResponse = await Http.GetFromJsonAsync<StatsResponse>($"http://backend:8000/baseball/ncaa/stats/{_selectedTeam.TeamId}?stat_type=pitching");
+                var pitchingResponse = await Http.GetFromJsonAsync<StatsResponse>($"http://backend:8000/baseball/ncaa/stats/{_selectedTeam.TeamId}?stat_type=pitching&year={_selectedYear}");
                 if (pitchingResponse?.Stats != null)
                 {
                     _pitchingStats = pitchingResponse.Stats.Select(s => new PitchingPlayer
@@ -388,7 +492,7 @@
             // Load schedule
             try
             {
-                var scheduleResponse = await Http.GetFromJsonAsync<ScheduleResponse>($"http://backend:8000/baseball/ncaa/schedule/{_selectedTeam.TeamId}");
+                var scheduleResponse = await Http.GetFromJsonAsync<ScheduleResponse>($"http://backend:8000/baseball/ncaa/schedule/{_selectedTeam.TeamId}?year={_selectedYear}");
                 if (scheduleResponse?.Games != null)
                 {
                     _schedule = scheduleResponse.Games.Select(g => new GameInfo

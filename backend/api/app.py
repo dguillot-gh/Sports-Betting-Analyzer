@@ -13,6 +13,8 @@ from api.backtest_endpoints import router as backtest_router
 from api.player_stats_endpoints import router as player_stats_router
 from api.cache_endpoints import router as cache_router
 from api.bet_tracker_endpoints import router as bet_tracker_router
+from api.model_lab_endpoints import router as model_lab_router
+from api.nascar_endpoints import router as nascar_router
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
@@ -49,6 +51,8 @@ app.include_router(backtest_router)  # Backtesting endpoints
 app.include_router(player_stats_router)  # Player stats and hit rates
 app.include_router(cache_router)  # Odds caching for late night games
 app.include_router(bet_tracker_router)  # Bet tracking
+app.include_router(model_lab_router)  # Model Lab testing sandbox
+app.include_router(nascar_router)  # NASCAR live data & schedule
 
 # Dev CORS. Tighten for production.
 app.add_middleware(
@@ -3129,7 +3133,10 @@ async def get_nfl_model_testing_predictions(
 # ==================== COLLEGE BASEBALL ENDPOINTS ====================
 
 @app.get("/baseball/ncaa/teams")
-async def get_ncaa_baseball_teams(division: int = Query(1, ge=1, le=3)):
+async def get_ncaa_baseball_teams(
+    division: int = Query(1, ge=1, le=3),
+    year: int = Query(2025, description="Season year")
+):
     """
     Get list of NCAA baseball teams for a division.
     Division: 1, 2, or 3
@@ -3153,7 +3160,7 @@ async def get_ncaa_baseball_teams(division: int = Query(1, ge=1, le=3)):
             
             try:
                 result = subprocess.run(
-                    ["Rscript", str(r_script), str(division), "2024", str(data_dir)],
+                    ["Rscript", str(r_script), str(division), str(year), str(data_dir)],
                     capture_output=True,
                     text=True,
                     timeout=120
@@ -3172,7 +3179,7 @@ async def get_ncaa_baseball_teams(division: int = Query(1, ge=1, le=3)):
             try:
                 import subprocess
                 result = subprocess.run(
-                    ["Rscript", "-e", f"library(baseballr); teams <- ncaa_teams(division={division}, year=2024); cat(jsonlite::toJSON(teams))"],
+                    ["Rscript", "-e", f"library(baseballr); teams <- ncaa_teams(division={division}, year={year}); cat(jsonlite::toJSON(teams))"],
                     capture_output=True,
                     text=True,
                     timeout=60
@@ -3207,7 +3214,11 @@ async def get_ncaa_baseball_teams(division: int = Query(1, ge=1, le=3)):
 
 
 @app.get("/baseball/ncaa/stats/{team_id}")
-async def get_ncaa_baseball_stats(team_id: int, stat_type: str = Query("batting")):
+async def get_ncaa_baseball_stats(
+    team_id: int, 
+    stat_type: str = Query("batting"),
+    year: int = Query(2025, description="Season year")
+):
     """
     Get player stats for a team.
     stat_type: 'batting' or 'pitching'
@@ -3228,7 +3239,7 @@ async def get_ncaa_baseball_stats(team_id: int, stat_type: str = Query("batting"
             try:
                 # Import specific team (4th arg)
                 subprocess.run(
-                    ["Rscript", str(r_script), "1", "2024", str(data_dir), str(team_id)],
+                    ["Rscript", str(r_script), "1", str(year), str(data_dir), str(team_id)],
                     capture_output=True,
                     timeout=60
                 )

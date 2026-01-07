@@ -14,7 +14,13 @@ logger = logging.getLogger(__name__)
 
 SCRIPT_DIR = Path(__file__).parent
 R_SCRIPT_PATH = SCRIPT_DIR / "college_baseball_importer.R"
-DATA_DIR = Path("/app/data/baseball")
+
+# Use relative path that works locally, fallback to Docker path
+_local_data_dir = SCRIPT_DIR.parent / "data" / "baseball"
+_docker_data_dir = Path("/app/data/baseball")
+DATA_DIR = _local_data_dir if _local_data_dir.exists() or not _docker_data_dir.exists() else _docker_data_dir
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 STATUS_FILE = DATA_DIR / "import_status.json"
 
 
