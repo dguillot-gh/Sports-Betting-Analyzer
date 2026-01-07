@@ -53,7 +53,7 @@ router = APIRouter(prefix="/db", tags=["database"])
 
 class ImportRequest(BaseModel):
     sport: str
-    source: str = "csv"  # 'csv', 'kaggle'
+    source: str = "csv"  # 'csv' or 'parquet'
     file_path: Optional[str] = None
 
 
@@ -170,40 +170,6 @@ async def run_csv_import(sport: str):
     """Background task to run CSV import."""
     from scripts.migrate_data import run_migration
     await run_migration(sport)
-
-
-@router.post("/import/kaggle/{sport}")
-async def import_kaggle_to_database(sport: str, dataset_id: str, background_tasks: BackgroundTasks):
-    """Download from Kaggle and import to database."""
-    # This will:
-    # 1. Download from Kaggle (using existing data_sources.py)
-    # 2. Import to PostgreSQL
-    
-    background_tasks.add_task(run_kaggle_import, sport, dataset_id)
-    
-    return {"status": "started", "message": f"Kaggle import started for {sport} from {dataset_id}"}
-
-
-async def run_kaggle_import(sport: str, dataset_id: str):
-    """Background task for Kaggle import."""
-    logger.info(f"Starting Kaggle import: {sport} from {dataset_id}")
-    
-    # Step 1: Download from Kaggle
-    from src.data_sources import KaggleDataSource
-    kaggle = KaggleDataSource()
-    
-    try:
-        # Download dataset
-        download_path = kaggle.download_dataset(dataset_id, sport)
-        logger.info(f"Downloaded to {download_path}")
-        
-        # Step 2: Import to database
-        from scripts.migrate_data import run_migration
-        await run_migration(sport)
-        
-        logger.info(f"Kaggle import complete for {sport}")
-    except Exception as e:
-        logger.error(f"Kaggle import failed: {e}")
 
 
 @router.post("/import/nascar/rda")
@@ -708,31 +674,6 @@ async def get_predictions(sport: str, limit: int = 50):
         await conn.close()
 
 
-
-# ============================================
-# NEW WORKFLOW FOR KAGGLE DATA
-# ============================================
-"""
-OLD WORKFLOW (CSV files):
-1. User clicks "Update Data" in UI
-2. Kaggle API downloads CSV to data/{sport}/
-3. Python loads CSV on each API request
-4. Memory-heavy, slow for large files
-
-NEW WORKFLOW (PostgreSQL):
-1. User clicks "Update Data" in UI
-2. Kaggle API downloads CSV to data/{sport}/
-3. POST /db/import/kaggle/{sport} called
-4. Background task imports CSV to PostgreSQL
-5. Python queries PostgreSQL (fast, indexed)
-6. CSV files can be deleted after import
-
-BENEFITS:
-- Faster queries (indexed)
-- Less memory usage
-- Concurrent access
-- Mobile-ready
-"""
 
 
 # ============================================
@@ -1377,7 +1318,7 @@ async def import_nfl_data(
     
     return {
         "status": "started",
-        "message": "NFL data import started (nflverse + Kaggle)",
+        "message": "NFL data import started (nflverse)",
         "clear_existing": clear_existing
     }
 
@@ -1427,7 +1368,7 @@ async def import_nba_data(
     clear_existing: bool = False
 ):
     """
-    Start NBA data import from hoopR and Kaggle.
+    Start NBA data import from hoopR and stats.nba.com.
     """
     # Check if already running
     if import_status["nba"]["status"] == "running":
@@ -1451,7 +1392,7 @@ async def import_nba_data(
     
     return {
         "status": "started",
-        "message": "NBA data import started (hoopR + Kaggle)",
+        "message": "NBA data import started (hoopR + stats.nba.com)",
         "clear_existing": clear_existing
     }
 

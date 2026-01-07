@@ -41,10 +41,10 @@
                             <span>Analyze Games</span>
                         }
                     </MudButton>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Warning"
-                               StartIcon="@Icons.Material.Filled.ModelTraining"
-                               OnClick="@TrainXGBoost" Disabled="@_isTraining">
-                        @(_isTraining ? "Training..." : "Train XGBoost")
+                    <MudButton Variant="Variant.Outlined" Color="Color.Info"
+                               StartIcon="@Icons.Material.Filled.Cached"
+                               OnClick="@RunCachedAnalysis" Disabled="@_isTraining">
+                        @(_isTraining ? "Caching..." : "Analyze + Cache")
                     </MudButton>
                 </MudStack>
             </MudStack>
@@ -478,27 +478,80 @@
         }
     }
 
-    private async Task TrainXGBoost()
+    private async Task RunCachedAnalysis()
     {
         _isTraining = true;
+        _error = null;
+        _games.Clear();
         StateHasChanged();
 
         try
         {
-            var response = await Http.PostAsync("http://backend:8000/odds/nba/train", null);
+            var response = await Http.PostAsync(
+                $"http://backend:8000/odds/nba/analyze-cached?sportsbook={_selectedSportsbook}&include_cached=true", 
+                null
+            );
+            
             if (response.IsSuccessStatusCode)
             {
-                Snackbar.Add("XGBoost model trained successfully!", Severity.Success);
-                await RunAnalysis(); // Refresh predictions
+                var json = await response.Content.ReadAsStringAsync();
+                var data = JsonSerializer.Deserialize<JsonElement>(json);
+                
+                _date = data.TryGetProperty("date", out var d) ? d.GetString() ?? "" : "";
+                var cachedCount = data.TryGetProperty("cached_count", out var cc) ? cc.GetInt32() : 0;
+                var freshCount = data.TryGetProperty("fresh_count", out var fc) ? fc.GetInt32() : 0;
+                
+                if (data.TryGetProperty("games", out var games))
+                {
+                    foreach (var game in games.EnumerateArray())
+                    {
+                        var gp = new GamePrediction
+                        {
+                            HomeTeam = game.TryGetProperty("home_team", out var ht) ? ht.GetString() ?? "" : "",
+                            AwayTeam = game.TryGetProperty("away_team", out var at) ? at.GetString() ?? "" : "",
+                            HomeMoneyline = game.TryGetProperty("home_moneyline", out var hm) && hm.ValueKind == JsonValueKind.Number ? hm.GetInt32() : null,
+                            AwayMoneyline = game.TryGetProperty("away_moneyline", out var am) && am.ValueKind == JsonValueKind.Number ? am.GetInt32() : null,
+                            IsCached = game.TryGetProperty("is_cached", out var ic) && ic.ValueKind == JsonValueKind.True,
+                        };
+                        
+                        if (game.TryGetProperty("simple_model", out var sm) && sm.ValueKind == JsonValueKind.Object)
+                        {
+                            gp.SimpleModel = new ModelResult
+                            {
+                                HomeWinProb = sm.TryGetProperty("home_win_probability", out var shp) && shp.ValueKind == JsonValueKind.Number ? shp.GetDouble() : null,
+                                PredictedWinner = sm.TryGetProperty("predicted_winner", out var spw) ? spw.GetString() : null,
+                                EvHome = sm.TryGetProperty("ev_home", out var seh) && seh.ValueKind == JsonValueKind.Number ? seh.GetDouble() : null,
+                                KellyHome = sm.TryGetProperty("kelly_home", out var skh) && skh.ValueKind == JsonValueKind.Number ? skh.GetDouble() : null,
+                            };
+                        }
+                        
+                        if (game.TryGetProperty("xgboost_model", out var xm) && xm.ValueKind == JsonValueKind.Object)
+                        {
+                            gp.XgbModel = new ModelResult
+                            {
+                                HomeWinProb = xm.TryGetProperty("home_win_probability", out var xhp) && xhp.ValueKind == JsonValueKind.Number ? xhp.GetDouble() : null,
+                                PredictedWinner = xm.TryGetProperty("predicted_winner", out var xpw) ? xpw.GetString() : null,
+                                EvHome = xm.TryGetProperty("ev_home", out var xeh) && xeh.ValueKind == JsonValueKind.Number ? xeh.GetDouble() : null,
+                                KellyHome = xm.TryGetProperty("kelly_home", out var xkh) && xkh.ValueKind == JsonValueKind.Number ? xkh.GetDouble() : null,
+                                Error = xm.TryGetProperty("error", out var xerr) ? xerr.GetString() : null,
+                            };
+                        }
+                        
+                        _games.Add(gp);
+                    }
+                }
+                
+                Snackbar.Add($"Analyzed {_games.Count} games ({freshCount} fresh, {cachedCount} from cache)", Severity.Success);
             }
             else
             {
-                Snackbar.Add("Training failed", Severity.Error);
+                _error = $"API Error: {response.StatusCode}";
             }
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            _error = ex.Message;
+            Logger.LogError(ex, "Error running cached analysis");
         }
         finally
         {
@@ -533,6 +586,7 @@
         public Dictionary<string, object>? HomeStats { get; set; }
         public Dictionary<string, object>? AwayStats { get; set; }
         public JsonElement? AiPredictions { get; set; }
+        public bool IsCached { get; set; } = false;
     }
 
     private class ModelResult

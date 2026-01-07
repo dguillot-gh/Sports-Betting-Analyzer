@@ -63,77 +63,6 @@ class GitHubDataSource:
         return {}
 
 
-class KaggleDataSource:
-    """Fetches datasets from Kaggle using the Kaggle API."""
-    
-    # Default credentials (fallback)
-    DEFAULT_USERNAME = "danman2901"
-    DEFAULT_KEY = "KGAT_e42c6b3e06534822adac671631ede3f7"
-    
-    def __init__(self, username: str = None, key: str = None):
-        self.username = username or os.environ.get("KAGGLE_USERNAME") or self.DEFAULT_USERNAME
-        self.key = key or os.environ.get("KAGGLE_KEY") or self.DEFAULT_KEY
-        self._setup_credentials()
-    
-    def _setup_credentials(self):
-        """Set up Kaggle credentials file if not present."""
-        kaggle_dir = Path.home() / ".kaggle"
-        kaggle_json = kaggle_dir / "kaggle.json"
-        
-        if self.username and self.key and not kaggle_json.exists():
-            kaggle_dir.mkdir(exist_ok=True)
-            kaggle_json.write_text(json.dumps({
-                "username": self.username,
-                "key": self.key
-            }))
-            try:
-                os.chmod(kaggle_json, 0o600)
-            except:
-                pass  # Windows doesn't need this
-            logger.info("Created Kaggle credentials file")
-    
-    def download_dataset(self, dataset: str, output_dir: Path) -> bool:
-        """Download a Kaggle dataset using the Kaggle Python API."""
-        try:
-            output_dir.mkdir(parents=True, exist_ok=True)
-            import kaggle
-            from kaggle.api.kaggle_api_extended import KaggleApi
-            
-            api = KaggleApi()
-            api.authenticate()
-            api.dataset_download_files(dataset, path=str(output_dir), unzip=True)
-            
-            logger.info(f"Downloaded dataset {dataset} to {output_dir}")
-            return True
-            
-        except ImportError:
-            logger.error("Kaggle package not installed. Install with: pip install kaggle")
-            return False
-        except Exception as e:
-            logger.error(f"Error downloading dataset: {e}")
-            return False
-
-    def get_last_updated(self, dataset: str) -> Optional[str]:
-        """Get the last updated timestamp for a dataset."""
-        try:
-            import kaggle
-            from kaggle.api.kaggle_api_extended import KaggleApi
-            api = KaggleApi()
-            api.authenticate()
-            
-            # Split dataset into owner/slug
-            owner, slug = dataset.split('/')
-            datasets = api.dataset_list(user=owner, search=slug)
-            
-            for d in datasets:
-                if d.ref == dataset:
-                    return str(d.last_updated)
-            return None
-        except Exception as e:
-            logger.error(f"Error checking updates for {dataset}: {e}")
-            return None
-
-
 class BaseDataUpdater:
     """Base class providing changelog functionality."""
     
@@ -176,82 +105,6 @@ class BaseDataUpdater:
             except:
                 pass
         return []
-
-
-class MultiDatasetUpdater(BaseDataUpdater):
-    """Handles updating multiple datasets (Kaggle or others) for a sport."""
-    
-    def __init__(self, data_dir: Path, datasets_config: List[Dict[str, Any]]):
-        super().__init__(data_dir)
-        self.datasets = datasets_config
-        self.kaggle_source = KaggleDataSource()
-
-    def update(self, specific_dataset_id: Optional[str] = None) -> Dict[str, Any]:
-        """Update configured datasets."""
-        results = {"success": True, "updated": [], "errors": []}
-        
-        targets = self.datasets
-        if specific_dataset_id:
-            targets = [d for d in self.datasets if d['id'] == specific_dataset_id]
-        
-        if not targets and specific_dataset_id:
-            return {"success": False, "message": "Dataset not found in configuration"}
-
-        for ds in targets:
-            dataset_id = ds['id']
-            # Create subfolder for cleanliness if updating multiple datasets, 
-            # OR dump to root if it's the primary one. 
-            # For backward compatibility, if it's the "legacy" single dataset, use root.
-            # But "legacy" usually meant 1 dataset per sport.
-            # We'll assume root for now unless we want to separate them. 
-            # Wait, if we have multiple datasets, they might overwrite each other's files.
-            # Let's use subdirectories for secondary datasets, or root for all?
-            # User wants to manage them individually.
-            # Let's put each in a folder named after the dataset slug to avoid conflicts.
-            # BUT, existing code expects files in root of data/nba.
-            # Compromise: Extract to root, user must ensure no filename clashes.
-            # OR: specific logic.
-            # Let's stick to root for now as that fits current pattern.
-            
-            if ds.get('type') == 'kaggle':
-                logger.info(f"Updating {dataset_id}...")
-                
-                # Capture state before
-                files_before = set(self.data_dir.glob("*"))
-                
-                success = self.kaggle_source.download_dataset(dataset_id, self.data_dir)
-                
-                if success:
-                    # Capture state after
-                    files_after = set(self.data_dir.glob("*"))
-                    new_files = [f.name for f in files_after - files_before]
-                    
-                    results["updated"].append(dataset_id)
-                    
-                    # Log to changelog
-                    self._append_changelog(f"Updated {dataset_id}", {
-                        "files_added": new_files,
-                        "dataset": dataset_id
-                    })
-                else:
-                    results["errors"].append(f"Failed to download {dataset_id}")
-                    results["success"] = False
-
-        return results
-
-    def check_updates(self) -> Dict[str, Any]:
-        """Check for updates for all configured datasets."""
-        updates = {}
-        for ds in self.datasets:
-            if ds.get('type') == 'kaggle':
-                remote_time = self.kaggle_source.get_last_updated(ds['id'])
-                updates[ds['id']] = {
-                    "last_updated_remote": remote_time,
-                    "update_available": True # Simple assumption: always available if we can see it, 
-                    # or compare with local stored timestamp if we had it.
-                    # We will rely on UI to compare dates or just show the date.
-                }
-        return updates
 
 
 class NASCARDataUpdater(BaseDataUpdater):
@@ -312,16 +165,15 @@ class NASCARDataUpdater(BaseDataUpdater):
                 status["files"][file_path] = {"exists": False}
         return status
 
-# Create legacy alias for backward compatibility until refactored
-class NFLDataUpdater(MultiDatasetUpdater):
-    """Legacy wrapper for NFL data updates."""
+
+class NFLDataUpdater(BaseDataUpdater):
+    """NFL data updates - now using nflverse, not Kaggle."""
+    
     def __init__(self, data_dir: Path, username=None, key=None):
-        # Config mimicking the old hardcoded style
-        config = [{"id": "tobycrabtree/nfl-scores-and-betting-data", "type": "kaggle"}]
-        super().__init__(data_dir, config)
+        super().__init__(data_dir)
     
     def get_status(self):
-        # Simple file list wrapper
+        """Get file list from data directory."""
         status = {"files": []}
         for f in self.data_dir.glob("*.csv"):
             stat = f.stat()
@@ -330,4 +182,13 @@ class NFLDataUpdater(MultiDatasetUpdater):
                 "size_bytes": stat.st_size,
                 "modified": datetime.fromtimestamp(stat.st_mtime).isoformat()
             })
+        # Also include parquet files
+        for f in self.data_dir.glob("*.parquet"):
+            stat = f.stat()
+            status["files"].append({
+                "name": f.name,
+                "size_bytes": stat.st_size,
+                "modified": datetime.fromtimestamp(stat.st_mtime).isoformat()
+            })
         return status
+

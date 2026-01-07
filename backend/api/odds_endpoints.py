@@ -390,3 +390,249 @@ async def predict_nfl_game_dual(
     from scripts.nfl_predictor import analyze_nfl_matchup_dual
     return await analyze_nfl_matchup_dual(home_team, away_team, spread, over_under, home_ml, away_ml)
 
+
+# =========== CACHE-INTEGRATED ENDPOINTS ===========
+# These endpoints auto-cache results and merge with previously cached games
+
+@router.post("/nfl/analyze-cached")
+async def analyze_nfl_with_cache(
+    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from"),
+    include_cached: bool = Query(True, description="Include previously cached games")
+):
+    """
+    Fetch today's NFL games, run predictions, cache results, and merge with any
+    previously cached games that are no longer in the live API response.
+    
+    This prevents late-night games from disappearing on page refresh.
+    """
+    from scripts.nfl_predictor import get_todays_nfl_odds, analyze_nfl_matchup_dual
+    
+    # Step 1: Get fresh odds
+    odds_data = await get_todays_nfl_odds(sportsbook)
+    
+    analyzed_games = []
+    fresh_game_ids = []
+    
+    if not odds_data.get("error") and odds_data.get("games"):
+        # Step 2: Analyze fresh games
+        for game in odds_data["games"]:
+            try:
+                prediction = await analyze_nfl_matchup_dual(
+                    home_team=game.get("home_team", ""),
+                    away_team=game.get("away_team", ""),
+                    spread=game.get("spread"),
+                    over_under=game.get("over_under"),
+                    home_ml=game.get("home_moneyline"),
+                    away_ml=game.get("away_moneyline")
+                )
+                analyzed_game = {**game, **prediction, "is_cached": False}
+                analyzed_games.append(analyzed_game)
+                
+                # Track game ID for cache exclusion
+                game_id = f"nfl_{game.get('home_team', '')}_{game.get('away_team', '')}_{game.get('game_time', '')}"
+                fresh_game_ids.append(game_id)
+                analyzed_game["id"] = game_id
+                
+            except Exception as e:
+                logger.error(f"Error analyzing NFL game: {e}")
+                analyzed_game = {**game, "prediction_error": str(e), "is_cached": False}
+                analyzed_games.append(analyzed_game)
+        
+        # Step 3: Cache the fresh results
+        try:
+            from src.odds_cache import get_cache_service
+            cache = get_cache_service()
+            
+            games_to_cache = []
+            for g in analyzed_games:
+                games_to_cache.append({
+                    "id": g.get("id"),
+                    "game_date": g.get("game_time"),
+                    "home_team": g.get("home_team"),
+                    "away_team": g.get("away_team"),
+                    "odds": {
+                        "spread": g.get("spread"),
+                        "over_under": g.get("over_under"),
+                        "home_moneyline": g.get("home_moneyline"),
+                        "away_moneyline": g.get("away_moneyline"),
+                    },
+                    "analysis": {
+                        "simple_model": g.get("simple_model"),
+                        "xgboost_model": g.get("xgboost_model"),
+                        "has_value": g.get("has_value", False),
+                    }
+                })
+            
+            await cache.store_games("nfl", games_to_cache)
+            logger.info(f"Cached {len(games_to_cache)} NFL games")
+            
+        except Exception as e:
+            logger.warning(f"Failed to cache games: {e}")
+    
+    # Step 4: Merge with cached games if requested
+    cached_count = 0
+    if include_cached:
+        try:
+            from src.odds_cache import get_cache_service
+            cache = get_cache_service()
+            
+            cached_games = await cache.get_cached_games("nfl", exclude_ids=fresh_game_ids, include_expired=True)
+            
+            for cg in cached_games:
+                # Convert cached format back to display format
+                odds_data_cached = cg.get("odds_data", {})
+                analysis_cached = cg.get("analysis", {})
+                
+                restored_game = {
+                    "id": cg.get("game_id"),
+                    "home_team": cg.get("home_team"),
+                    "away_team": cg.get("away_team"),
+                    "game_time": cg.get("game_date"),
+                    "spread": odds_data_cached.get("spread"),
+                    "over_under": odds_data_cached.get("over_under"),
+                    "home_moneyline": odds_data_cached.get("home_moneyline"),
+                    "away_moneyline": odds_data_cached.get("away_moneyline"),
+                    "simple_model": analysis_cached.get("simple_model"),
+                    "xgboost_model": analysis_cached.get("xgboost_model"),
+                    "has_value": analysis_cached.get("has_value", False),
+                    "is_cached": True,
+                    "cached_at": cg.get("fetched_at"),
+                }
+                analyzed_games.append(restored_game)
+                cached_count += 1
+                
+        except Exception as e:
+            logger.warning(f"Failed to retrieve cached games: {e}")
+    
+    return {
+        "date": odds_data.get("date"),
+        "sportsbook": sportsbook,
+        "games": analyzed_games,
+        "count": len(analyzed_games),
+        "fresh_count": len(analyzed_games) - cached_count,
+        "cached_count": cached_count,
+        "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False)),
+        "xgb_available": any(g.get("xgboost_model") and not g.get("xgboost_model", {}).get("error") for g in analyzed_games),
+    }
+
+
+@router.post("/nba/analyze-cached")
+async def analyze_nba_with_cache(
+    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from"),
+    include_cached: bool = Query(True, description="Include previously cached games")
+):
+    """
+    Fetch today's NBA games, run predictions, cache results, and merge with any
+    previously cached games that are no longer in the live API response.
+    
+    This prevents late-night games from disappearing on page refresh.
+    """
+    from scripts.nba_odds import get_todays_nba_odds
+    from scripts.nba_predictor import analyze_matchup_dual
+    
+    # Step 1: Get fresh odds
+    odds_data = await get_todays_nba_odds(sportsbook)
+    
+    analyzed_games = []
+    fresh_game_ids = []
+    
+    if not odds_data.get("error") and odds_data.get("games"):
+        # Step 2: Analyze fresh games
+        for game in odds_data["games"]:
+            try:
+                prediction = await analyze_matchup_dual(
+                    home_team=game.get("home_team", ""),
+                    away_team=game.get("away_team", ""),
+                    spread=game.get("spread"),
+                    over_under=game.get("over_under"),
+                    home_ml=game.get("home_moneyline"),
+                    away_ml=game.get("away_moneyline")
+                )
+                analyzed_game = {**game, **prediction, "is_cached": False}
+                analyzed_games.append(analyzed_game)
+                
+                game_id = f"nba_{game.get('home_team', '')}_{game.get('away_team', '')}_{game.get('game_time', '')}"
+                fresh_game_ids.append(game_id)
+                analyzed_game["id"] = game_id
+                
+            except Exception as e:
+                logger.error(f"Error analyzing NBA game: {e}")
+                analyzed_game = {**game, "prediction_error": str(e), "is_cached": False}
+                analyzed_games.append(analyzed_game)
+        
+        # Step 3: Cache the fresh results
+        try:
+            from src.odds_cache import get_cache_service
+            cache = get_cache_service()
+            
+            games_to_cache = []
+            for g in analyzed_games:
+                games_to_cache.append({
+                    "id": g.get("id"),
+                    "game_date": g.get("game_time"),
+                    "home_team": g.get("home_team"),
+                    "away_team": g.get("away_team"),
+                    "odds": {
+                        "spread": g.get("spread"),
+                        "over_under": g.get("over_under"),
+                        "home_moneyline": g.get("home_moneyline"),
+                        "away_moneyline": g.get("away_moneyline"),
+                    },
+                    "analysis": {
+                        "simple_model": g.get("simple_model"),
+                        "xgboost_model": g.get("xgboost_model"),
+                        "has_value": g.get("has_value", False),
+                    }
+                })
+            
+            await cache.store_games("nba", games_to_cache)
+            logger.info(f"Cached {len(games_to_cache)} NBA games")
+            
+        except Exception as e:
+            logger.warning(f"Failed to cache games: {e}")
+    
+    # Step 4: Merge with cached games if requested
+    cached_count = 0
+    if include_cached:
+        try:
+            from src.odds_cache import get_cache_service
+            cache = get_cache_service()
+            
+            cached_games = await cache.get_cached_games("nba", exclude_ids=fresh_game_ids, include_expired=True)
+            
+            for cg in cached_games:
+                odds_data_cached = cg.get("odds_data", {})
+                analysis_cached = cg.get("analysis", {})
+                
+                restored_game = {
+                    "id": cg.get("game_id"),
+                    "home_team": cg.get("home_team"),
+                    "away_team": cg.get("away_team"),
+                    "game_time": cg.get("game_date"),
+                    "spread": odds_data_cached.get("spread"),
+                    "over_under": odds_data_cached.get("over_under"),
+                    "home_moneyline": odds_data_cached.get("home_moneyline"),
+                    "away_moneyline": odds_data_cached.get("away_moneyline"),
+                    "simple_model": analysis_cached.get("simple_model"),
+                    "xgboost_model": analysis_cached.get("xgboost_model"),
+                    "has_value": analysis_cached.get("has_value", False),
+                    "is_cached": True,
+                    "cached_at": cg.get("fetched_at"),
+                }
+                analyzed_games.append(restored_game)
+                cached_count += 1
+                
+        except Exception as e:
+            logger.warning(f"Failed to retrieve cached games: {e}")
+    
+    return {
+        "date": odds_data.get("date"),
+        "sportsbook": sportsbook,
+        "games": analyzed_games,
+        "count": len(analyzed_games),
+        "fresh_count": len(analyzed_games) - cached_count,
+        "cached_count": cached_count,
+        "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False)),
+        "xgb_available": any(g.get("xgboost_model") and not g.get("xgboost_model", {}).get("error") for g in analyzed_games),
+    }
+

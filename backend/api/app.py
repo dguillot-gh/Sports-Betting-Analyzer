@@ -11,6 +11,7 @@ from api.odds_endpoints import router as odds_router
 from api.results_endpoints import router as results_router
 from api.backtest_endpoints import router as backtest_router
 from api.player_stats_endpoints import router as player_stats_router
+from api.cache_endpoints import router as cache_router
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
@@ -30,8 +31,8 @@ from sport_factory import SportFactory
 from simulation import SimulationEngine
 from dataset_manager import DatasetManager
 
-# Use the new MultiDatasetUpdater and others
-from data_sources import NASCARDataUpdater, NFLDataUpdater, GitHubDataSource, MultiDatasetUpdater, BaseDataUpdater
+# Use the new data updaters
+from data_sources import NASCARDataUpdater, NFLDataUpdater, GitHubDataSource, BaseDataUpdater
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -45,6 +46,7 @@ app.include_router(odds_router)  # Live odds endpoints
 app.include_router(results_router)  # Game results for syncing
 app.include_router(backtest_router)  # Backtesting endpoints
 app.include_router(player_stats_router)  # Player stats and hit rates
+app.include_router(cache_router)  # Odds caching for late night games
 
 # Dev CORS. Tighten for production.
 app.add_middleware(
@@ -1036,8 +1038,8 @@ def get_data_status():
     """
     status = {
         "nascar": {"source": "GitHub", "files": {}, "datasets": []},
-        "nfl": {"source": "Kaggle", "files": [], "datasets": []},
-        "nba": {"source": "Kaggle", "files": [], "datasets": []}
+        "nfl": {"source": "nflverse", "files": [], "datasets": []},
+        "nba": {"source": "hoopR/stats.nba.com", "files": [], "datasets": []}
     }
     
     # 1. NASCAR
@@ -1479,20 +1481,18 @@ def get_datasets(sport: str):
 
 @app.get('/data/datasets/{sport}/{dataset_id:path}/metadata')
 def get_dataset_metadata(sport: str, dataset_id: str):
-    """Get metadata for a specific dataset including Kaggle last update date."""
-    metadata = DATASET_MANAGER.get_kaggle_metadata(dataset_id)
-    update_check = DATASET_MANAGER.check_for_updates(sport, dataset_id)
-    
+    """Get metadata for a specific dataset."""
+    # Return basic info since Kaggle is deprecated
     return {
         "dataset_id": dataset_id,
-        "metadata": metadata,
-        "update_status": update_check
+        "metadata": {"sport": sport},
+        "update_status": None
     }
 
 
 class AddDatasetRequest(BaseModel):
     dataset_id: str
-    type: str = "kaggle"
+    type: str = "api"  # 'api', 'github', etc.
 
 @app.post('/data/datasets/{sport}')
 def add_dataset(sport: str, req: AddDatasetRequest):
@@ -1511,13 +1511,10 @@ def remove_dataset(sport: str, dataset_id: str):
 
 @app.post('/data/check-updates/{sport}')
 def check_updates(sport: str):
-    datasets = DATASET_MANAGER.get_datasets(sport)
-    if not datasets:
-        return {}
-        
-    updater = MultiDatasetUpdater(REPO_ROOT / 'data' / sport, datasets)
-    updates = updater.check_updates()
-    return updates
+    """Check for available data updates. Now returns basic info since Kaggle is deprecated."""
+    # Return empty since we no longer use Kaggle for update checking
+    # NFL uses nflverse (GitHub), NBA uses hoopR/stats.nba.com
+    return {"message": f"Use Import Data to fetch latest {sport} data from official sources"}
 
 @app.get('/data/history/{sport}')
 def get_history(sport: str):
@@ -1528,7 +1525,7 @@ def get_history(sport: str):
 # Unified update endpoint
 @app.post('/data/update/{sport}')
 def update_data(sport: str, dataset: Optional[str] = None):
-    # Special handling for NASCAR (GitHub) vs others (Kaggle)
+    # Special handling for NASCAR (GitHub) vs others (API-based)
     # Ideally should be unified in DatasetManager too but NASCAR is special structure
     if sport == 'nascar' and not dataset:
         try:
@@ -1541,32 +1538,12 @@ def update_data(sport: str, dataset: Optional[str] = None):
     data_dir = REPO_ROOT / 'data' / sport
     datasets = DATASET_MANAGER.get_datasets(sport)
     
-    if not datasets and sport in ['nfl', 'nba']:
-        # Fallback for "legacy" or "default" if datasets.json is empty?
-        # Maybe auto-add default if missing?
-        # For NFL: tobycrabtree/nfl-scores-and-betting-data
-        # For NBA: sumitrodatta/nba-aba-baa-stats
-        # Let's add them transparently if config is empty for smooth transition
-        default = None
-        if sport == 'nfl': default = "tobycrabtree/nfl-scores-and-betting-data"
-        if sport == 'nba': default = "sumitrodatta/nba-aba-baa-stats"
-        
-        if default:
-            DATASET_MANAGER.add_dataset(sport, default)
-            datasets = DATASET_MANAGER.get_datasets(sport)
-
-    if not datasets:
-         raise HTTPException(status_code=400, detail="No datasets configured for this sport. Please add one.")
-
-    updater = MultiDatasetUpdater(data_dir, datasets)
-    result = updater.update(specific_dataset_id=dataset)
-    
-    # Update timestamps in manager
-    if result["success"]:
-        for ds_id in result["updated"]:
-            DATASET_MANAGER.update_timestamp(sport, ds_id)
-            
-    return result
+    # For NFL/NBA, redirect to dedicated import endpoints
+    # Legacy endpoint - just return status message
+    return {
+        "success": True,
+        "message": f"Use /db/import/{sport} endpoint for full data import from official sources (nflverse, hoopR)"
+    }
 
 
 class RetrainRequest(BaseModel):

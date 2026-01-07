@@ -265,24 +265,6 @@ public class SportDataStatus
 
     [JsonPropertyName("model_accuracy")]
     public double? ModelAccuracy { get; set; }
-
-    [JsonPropertyName("datasets")]
-    public List<DatasetConfig>? Datasets { get; set; }
-}
-
-public class DatasetConfig
-{
-    [JsonPropertyName("id")]
-    public string Id { get; set; } = "";
-
-    [JsonPropertyName("type")]
-    public string Type { get; set; } = "kaggle";
-
-    [JsonPropertyName("added_at")]
-    public string? AddedAt { get; set; }
-
-    [JsonPropertyName("last_updated")]
-    public string? LastUpdated { get; set; }
 }
 
 public class DataUpdateResponse
@@ -313,6 +295,81 @@ public class RetrainResponse
 
     [JsonPropertyName("metrics")]
     public Dictionary<string, object>? Metrics { get; set; }
+}
+
+/// <summary>
+/// Response from analyze-cached endpoints (NFL/NBA odds with caching)
+/// </summary>
+public class OddsAnalysisResponse
+{
+    [JsonPropertyName("date")]
+    public string? Date { get; set; }
+
+    [JsonPropertyName("sportsbook")]
+    public string? Sportsbook { get; set; }
+
+    [JsonPropertyName("games")]
+    public List<AnalyzedGame>? Games { get; set; }
+
+    [JsonPropertyName("count")]
+    public int Count { get; set; }
+
+    [JsonPropertyName("fresh_count")]
+    public int FreshCount { get; set; }
+
+    [JsonPropertyName("cached_count")]
+    public int CachedCount { get; set; }
+
+    [JsonPropertyName("value_bets_found")]
+    public int ValueBetsFound { get; set; }
+
+    [JsonPropertyName("xgb_available")]
+    public bool XgbAvailable { get; set; }
+}
+
+public class AnalyzedGame
+{
+    [JsonPropertyName("id")]
+    public string? Id { get; set; }
+
+    [JsonPropertyName("home_team")]
+    public string? HomeTeam { get; set; }
+
+    [JsonPropertyName("away_team")]
+    public string? AwayTeam { get; set; }
+
+    [JsonPropertyName("game_time")]
+    public string? GameTime { get; set; }
+
+    [JsonPropertyName("spread")]
+    public double? Spread { get; set; }
+
+    [JsonPropertyName("over_under")]
+    public double? OverUnder { get; set; }
+
+    [JsonPropertyName("home_moneyline")]
+    public int? HomeMoneyline { get; set; }
+
+    [JsonPropertyName("away_moneyline")]
+    public int? AwayMoneyline { get; set; }
+
+    [JsonPropertyName("has_value")]
+    public bool HasValue { get; set; }
+
+    [JsonPropertyName("is_cached")]
+    public bool IsCached { get; set; }
+
+    [JsonPropertyName("cached_at")]
+    public string? CachedAt { get; set; }
+
+    [JsonPropertyName("simple_model")]
+    public Dictionary<string, object>? SimpleModel { get; set; }
+
+    [JsonPropertyName("xgboost_model")]
+    public Dictionary<string, object>? XgboostModel { get; set; }
+
+    [JsonPropertyName("prediction_error")]
+    public string? PredictionError { get; set; }
 }
 
 /// <summary>
@@ -879,54 +936,6 @@ public class PythonMLServiceClient
     }
 
     /// <summary>
-    /// Add a new dataset configuration
-    /// </summary>
-    public async Task<bool> AddDatasetAsync(string sport, string datasetId, string type = "kaggle")
-    {
-        try
-        {
-            var payload = new { dataset_id = datasetId, type = type };
-            var response = await _httpClient.PostAsJsonAsync($"/data/datasets/{sport}", payload);
-            return response.IsSuccessStatusCode;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error adding dataset {DatasetId} to {Sport}", datasetId, sport);
-            throw;
-        }
-    }
-
-    /// <summary>
-    /// Remove a dataset configuration
-    /// </summary>
-    public async Task<bool> RemoveDatasetAsync(string sport, string datasetId)
-    {
-        try
-        {
-            // Encode datasetId because it contains slashes (e.g. owner/dataset)
-            // But FastAPI path param handles it if configured correctly, or we pass it safely.
-            // Using a simple slash encoding might be tricky if the API expects path param.
-            // The API is: DELETE /data/datasets/{sport}/{dataset_id:path}
-            // So we can just append it, but URI encoding helps safely transmit special chars.
-            // However, FastAPI ":path" expects the slashes to be part of the path structure potentially.
-            // Let's rely on standard URL rules. 
-            // In request, we usually do NOT encode the slash that separates path segments, 
-            // but here "owner/dataset" IS the ID.
-            // Is it treated as one segment or two? 
-            // FastAPI with `{dataset_id:path}` accepts arbitrary slashes.
-            // So `owner/dataset` works.
-            
-            var response = await _httpClient.DeleteAsync($"/data/datasets/{sport}/{datasetId}");
-            return response.IsSuccessStatusCode;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error removing dataset {DatasetId} from {Sport}", datasetId, sport);
-            throw;
-        }
-    }
-
-    /// <summary>
     /// Run Monte Carlo simulation
     /// </summary>
     public async Task<SimulationResponse> SimulateRaceAsync(string sport, SimulationRequest request, string? series = null)
@@ -1061,6 +1070,65 @@ public class PythonMLServiceClient
         {
             _logger.LogError(ex, "Error enhancing data for {Sport}", sport);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Get NFL odds with caching - returns fresh odds plus any previously cached games
+    /// that are no longer in the live API response (e.g., late night games)
+    /// </summary>
+    public async Task<OddsAnalysisResponse?> GetNFLOddsCachedAsync(string sportsbook = "fanduel", bool includeCached = true)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsync(
+                $"/odds/nfl/analyze-cached?sportsbook={sportsbook}&include_cached={includeCached.ToString().ToLower()}", 
+                null);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<OddsAnalysisResponse>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching cached NFL odds");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Get NBA odds with caching - returns fresh odds plus any previously cached games
+    /// that are no longer in the live API response (e.g., late night games)
+    /// </summary>
+    public async Task<OddsAnalysisResponse?> GetNBAOddsCachedAsync(string sportsbook = "fanduel", bool includeCached = true)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsync(
+                $"/odds/nba/analyze-cached?sportsbook={sportsbook}&include_cached={includeCached.ToString().ToLower()}", 
+                null);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<OddsAnalysisResponse>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching cached NBA odds");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Initialize the odds cache table (run once on first deployment)
+    /// </summary>
+    public async Task<bool> InitializeOddsCacheAsync()
+    {
+        try
+        {
+            var response = await _httpClient.PostAsync("/cache/init", null);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error initializing odds cache");
+            return false;
         }
     }
 }
