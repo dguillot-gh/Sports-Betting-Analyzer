@@ -617,6 +617,7 @@
                 _legs.Clear();
                 await LoadBets();
                 await LoadStats();
+                await LoadChartData();
             }
             else
             {
@@ -651,9 +652,12 @@
                         Source = b.TryGetProperty("source", out var src) ? src.GetString() ?? "manual" : "manual"
                     });
                 }
-            }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading bets: {ex.Message}", Severity.Error);
+        }
+        StateHasChanged();
     }
 
     private async Task LoadStats()
@@ -665,7 +669,11 @@
             _losses = resp.TryGetProperty("losses", out var l) ? l.GetInt32() : 0;
             _netProfit = resp.TryGetProperty("net_profit", out var p) && p.ValueKind == JsonValueKind.Number ? p.GetDecimal() : 0;
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading stats: {ex.Message}");
+        }
+        StateHasChanged();
     }
 
     private async Task SetOutcome(int id, string outcome)
