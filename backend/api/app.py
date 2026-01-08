@@ -2873,7 +2873,7 @@ class CollegeBaseballImportRequest(BaseModel):
 @app.post('/baseball/ncaa/import')
 async def import_college_baseball(
     division: int = Query(1, description="NCAA Division (1, 2, or 3)"),
-    year: int = Query(2025, description="Season year"),
+    year: int = Query(2025, description="Season year (use 2024 for most recent completed season)"),
     team_id: Optional[int] = Query(None, description="Optional specific team ID"),
     background_tasks: BackgroundTasks = BackgroundTasks()
 ):
@@ -3104,11 +3104,12 @@ async def get_nfl_model_testing_predictions(
 @app.get("/baseball/ncaa/teams")
 async def get_ncaa_baseball_teams(
     division: int = Query(1, ge=1, le=3),
-    year: int = Query(2025, description="Season year")
+    year: Optional[int] = Query(None, description="Optional - only used if fetching fresh data from NCAA")
 ):
     """
     Get list of NCAA baseball teams for a division.
     Division: 1, 2, or 3
+    Year is optional - teams are mostly static, year only matters for fresh imports.
     """
     try:
         from scripts.college_baseball_importer import get_teams, get_import_summary
@@ -3116,12 +3117,15 @@ async def get_ncaa_baseball_teams(
         import json
         from pathlib import Path
         
+        # Default year for R calls if needed
+        fetch_year = year or 2025
+        
         # Check if teams file exists
         teams = get_teams(division)
         
         if not teams:
             # Try to fetch teams using R script
-            logger.info(f"No cached teams for D{division}, running import...")
+            logger.info(f"No cached teams for D{division}, running import with year={fetch_year}...")
             
             r_script = Path(__file__).parent.parent / "scripts" / "college_baseball_importer.R"
             data_dir = Path("/app/data/baseball")
@@ -3129,7 +3133,7 @@ async def get_ncaa_baseball_teams(
             
             try:
                 result = subprocess.run(
-                    ["Rscript", str(r_script), str(division), str(year), str(data_dir)],
+                    ["Rscript", str(r_script), str(division), str(fetch_year), str(data_dir)],
                     capture_output=True,
                     text=True,
                     timeout=120
@@ -3144,11 +3148,10 @@ async def get_ncaa_baseball_teams(
         # If still no teams, try direct baseballr call
         if not teams:
             logger.info("Falling back to direct baseballr call...")
-            # Alternative: use pybaseball if available
             try:
                 import subprocess
                 result = subprocess.run(
-                    ["Rscript", "-e", f"library(baseballr); teams <- ncaa_teams(division={division}, year={year}); cat(jsonlite::toJSON(teams))"],
+                    ["Rscript", "-e", f"library(baseballr); teams <- ncaa_teams(division={division}, year={fetch_year}); cat(jsonlite::toJSON(teams))"],
                     capture_output=True,
                     text=True,
                     timeout=60

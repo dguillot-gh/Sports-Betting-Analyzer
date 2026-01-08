@@ -31,7 +31,7 @@
             </div>
         </MudPaper>
         
-        <!-- Filters -->
+        <!-- Team Selection -->
         <MudPaper Class="pa-4" Elevation="2">
             <MudGrid Spacing="2">
                 <MudItem xs="12" md="2">
@@ -42,41 +42,26 @@
                         <MudSelectItem Value="3">Division III</MudSelectItem>
                     </MudSelect>
                 </MudItem>
-                <MudItem xs="12" md="3">
-                    <MudAutocomplete T="TeamInfo" @bind-Value="_selectedTeam" Label="Select Team" 
+                <MudItem xs="12" md="4">
+                    <MudAutocomplete T="TeamInfo" @bind-Value="_selectedTeam" Label="Search Teams" 
                                      SearchFunc="@SearchTeams" ToStringFunc="@(t => t?.TeamName ?? "")"
                                      Variant="Variant.Outlined" Dense="true"
-                                     AdornmentIcon="@Icons.Material.Filled.Search" AdornmentColor="Color.Primary" />
+                                     AdornmentIcon="@Icons.Material.Filled.Search" AdornmentColor="Color.Primary"
+                                     Placeholder="Type to search teams..." />
                 </MudItem>
-                <MudItem xs="12" md="2">
-                    <MudSelect T="int" @bind-Value="_selectedYear" Label="Year" 
-                               Variant="Variant.Outlined" Dense="true">
-                        @for (int y = DateTime.Now.Year; y >= 2015; y--)
-                        {
-                            <MudSelectItem Value="@y">@y</MudSelectItem>
-                        }
-                    </MudSelect>
-                </MudItem>
-                <MudItem xs="12" md="2">
+                <MudItem xs="12" md="3">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadTeams"
                                Disabled="@_isLoading" FullWidth="true" Size="Size.Medium">
                         @if (_isLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
-                        Load Teams
+                        @(_teams.Any() ? "Refresh Teams" : "Load Teams")
                     </MudButton>
                 </MudItem>
                 <MudItem xs="12" md="3">
-                    <MudStack Row="true" Spacing="1">
-                        <MudButton Variant="Variant.Filled" Color="Color.Info" OnClick="LoadTeamStats"
-                                   Disabled="@(_isLoading || _selectedTeam == null)" Size="Size.Medium">
-                            @if (_isLoadingStats) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
-                            Load Stats
-                        </MudButton>
-                        <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="ImportDataFromR"
-                                   Disabled="@_isImporting" Size="Size.Medium">
-                            @if (_isImporting) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
-                            Import Data
-                        </MudButton>
-                    </MudStack>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="ImportDataFromR"
+                               Disabled="@_isImporting" FullWidth="true" Size="Size.Medium">
+                        @if (_isImporting) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                        Import from NCAA
+                    </MudButton>
                 </MudItem>
             </MudGrid>
             
@@ -90,10 +75,35 @@
             {
                 <MudAlert Severity="Severity.Warning" Class="mt-3">
                     <strong>No team data found for D@_selectedDivision.</strong> 
-                    Click "Import Data" to fetch teams from the NCAA database. This may take a few minutes.
+                    Click "Import from NCAA" to fetch teams. This requires R and baseballr to be installed.
                 </MudAlert>
             }
         </MudPaper>
+        
+        <!-- Team Stats Section (shows after team is selected) -->
+        @if (_selectedTeam != null)
+        {
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="flex-wrap">
+                    <MudIcon Icon="@Icons.Material.Filled.SportsBaseball" Color="Color.Info" />
+                    <MudText Typo="Typo.h6">@_selectedTeam.TeamName</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary">@_selectedTeam.Conference</MudChip>
+                    <MudSpacer />
+                    <MudSelect T="int" @bind-Value="_selectedYear" Label="Season Year" 
+                               Variant="Variant.Outlined" Dense="true" Style="width: 120px;">
+                        @for (int y = DateTime.Now.Year; y >= 2015; y--)
+                        {
+                            <MudSelectItem Value="@y">@y</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudButton Variant="Variant.Filled" Color="Color.Info" OnClick="LoadTeamStats"
+                               Disabled="@_isLoadingStats" Size="Size.Medium">
+                        @if (_isLoadingStats) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                        Load @_selectedYear Stats
+                    </MudButton>
+                </MudStack>
+            </MudPaper>
+        }
         
         <!-- Stats Tabs -->
         @if (_battingStats.Any() || _pitchingStats.Any())
@@ -297,7 +307,7 @@
 @code {
     // State
     private int _selectedDivision = 1;
-    private int _selectedYear = DateTime.Now.Year;
+    private int _selectedYear = DateTime.Now.Month >= 3 ? DateTime.Now.Year : DateTime.Now.Year - 1; // Baseball season is spring
     private TeamInfo? _selectedTeam;
     private bool _isLoading = false;
     private bool _isLoadingStats = false;
@@ -324,7 +334,7 @@
         
         try
         {
-            var response = await Http.GetFromJsonAsync<TeamsResponse>($"http://backend:8000/baseball/ncaa/teams?division={_selectedDivision}&year={_selectedYear}");
+            var response = await Http.GetFromJsonAsync<TeamsResponse>($"http://backend:8000/baseball/ncaa/teams?division={_selectedDivision}");
             
             if (response?.Teams != null && response.Teams.Any())
             {
@@ -352,13 +362,13 @@
     private async Task ImportDataFromR()
     {
         _isImporting = true;
-        _importStatus = $"Starting import for D{_selectedDivision}, {_selectedYear}...";
+        _importStatus = $"Starting import for D{_selectedDivision}...";
         StateHasChanged();
         
         try
         {
             var response = await Http.PostAsync(
-                $"http://backend:8000/baseball/ncaa/import?division={_selectedDivision}&year={_selectedYear}", 
+                $"http://backend:8000/baseball/ncaa/import?division={_selectedDivision}", 
                 null);
             
             if (response.IsSuccessStatusCode)
