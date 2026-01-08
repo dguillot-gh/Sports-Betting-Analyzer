@@ -256,7 +256,7 @@ async def create_bet(request: CreateBetRequest):
             stake=float(row["stake"]),
             odds=row["odds"],
             potential_payout=float(row["potential_payout"]) if row["potential_payout"] else None,
-            outcome=row["outcome"],
+            outcome=row["outcome"] or "pending",
             cashout_amount=None,
             profit=None,
             game_id=row["game_id"],
