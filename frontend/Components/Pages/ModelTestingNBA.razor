@@ -348,6 +348,123 @@
                     }
                 </MudStack>
             </MudTabPanel>
+            
+            <!-- ESPN BPI Tab -->
+            <MudTabPanel Text="ESPN BPI" Icon="@Icons.Material.Filled.Analytics">
+                <MudStack Spacing="3">
+                    <MudPaper Class="pa-4" Elevation="2" Style="background: linear-gradient(135deg, #1565c0 0%, #1976d2 100%);">
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                            <div>
+                                <MudText Typo="Typo.h5" Style="color: white;">
+                                    <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Class="mr-2" />
+                                    ESPN BPI Predictions
+                                </MudText>
+                                <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.8);">
+                                    Basketball Power Index • External "Second Opinion"
+                                </MudText>
+                            </div>
+                            <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="LoadEspnData" Disabled="@_espnLoading">
+                                @(_espnLoading ? "Loading..." : "Load ESPN Data")
+                            </MudButton>
+                        </MudStack>
+                    </MudPaper>
+
+                    @if (_espnError != null)
+                    {
+                        <MudAlert Severity="Severity.Error">@_espnError</MudAlert>
+                    }
+
+                    @if (_espnLoading)
+                    {
+                        <MudProgressLinear Indeterminate="true" Color="Color.Info" />
+                    }
+                    else if (_espnGames.Any())
+                    {
+                        <MudGrid Spacing="3">
+                            @foreach (var game in _espnGames)
+                            {
+                                <MudItem xs="12" md="6" lg="4">
+                                    <MudCard Elevation="3" Style="@GetEspnCardStyle(game)">
+                                        <MudCardHeader>
+                                            <CardHeaderContent>
+                                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                                    <MudStack>
+                                                        <MudText Typo="Typo.subtitle1">@game.AwayTeam</MudText>
+                                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@game.AwayRecord</MudText>
+                                                    </MudStack>
+                                                    <MudText Typo="Typo.caption">@@</MudText>
+                                                    <MudStack>
+                                                        <MudText Typo="Typo.subtitle1">@game.HomeTeam</MudText>
+                                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@game.HomeRecord</MudText>
+                                                    </MudStack>
+                                                </MudStack>
+                                            </CardHeaderContent>
+                                            <CardHeaderActions>
+                                                <MudChip T="string" Size="Size.Small" Color="@GetEspnStatusColor(game.Status)">@game.Status</MudChip>
+                                            </CardHeaderActions>
+                                        </MudCardHeader>
+                                        <MudCardContent>
+                                            <MudStack Spacing="2">
+                                                @if (game.HasBpi)
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Win Probability (BPI)</MudText>
+                                                    <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                                        <MudChip T="string" Size="Size.Small" Color="@(game.AwayWinProb > 0.5 ? Color.Success : Color.Default)">
+                                                            @game.AwayAbbrev: @((game.AwayWinProb * 100).ToString("F0"))%
+                                                        </MudChip>
+                                                        <MudChip T="string" Size="Size.Small" Color="@(game.HomeWinProb > 0.5 ? Color.Success : Color.Default)">
+                                                            @game.HomeAbbrev: @((game.HomeWinProb * 100).ToString("F0"))%
+                                                        </MudChip>
+                                                    </MudStack>
+                                                    <MudDivider />
+                                                    <MudPaper Class="pa-2" Style="background: rgba(0,0,0,0.05);">
+                                                        <MudStack Spacing="1">
+                                                            <MudText Typo="Typo.caption" Color="Color.Secondary">Over/Under Probability</MudText>
+                                                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                                                <MudChip T="string" Size="Size.Small" 
+                                                                         Color="@(game.TotalOverProb > 0.5 ? Color.Info : Color.Secondary)">
+                                                                    @(game.TotalOverProb > 0.5 ? "OVER" : "UNDER") Favored
+                                                                </MudChip>
+                                                                <MudText>
+                                                                    <strong>@((Math.Max(game.TotalOverProb, 1 - game.TotalOverProb) * 100).ToString("F0"))%</strong>
+                                                                </MudText>
+                                                            </MudStack>
+                                                            <MudProgressLinear Value="@(game.TotalOverProb * 100)" Color="Color.Info" Size="Size.Small" />
+                                                        </MudStack>
+                                                    </MudPaper>
+                                                    <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                                        <MudText Typo="Typo.caption">Spread Cover (Home):</MudText>
+                                                        <MudText Typo="Typo.caption"><strong>@((game.SpreadCoverHomeProb * 100).ToString("F0"))%</strong></MudText>
+                                                    </MudStack>
+                                                }
+                                                else
+                                                {
+                                                    <MudAlert Severity="Severity.Info" Dense="true">BPI data not available</MudAlert>
+                                                }
+                                            </MudStack>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                            }
+                        </MudGrid>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info">
+                            Click "Load ESPN Data" to fetch ESPN's BPI predictions for today's NBA games.
+                        </MudAlert>
+                    }
+
+                    <MudPaper Class="pa-3" Elevation="1" Style="background: rgba(21, 101, 192, 0.1);">
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Info" Color="Color.Info" />
+                            <MudText Typo="Typo.caption">
+                                Data from ESPN's unofficial BPI API. Use as a "second opinion" alongside your model predictions.
+                            </MudText>
+                        </MudStack>
+                    </MudPaper>
+                </MudStack>
+            </MudTabPanel>
         </MudTabs>
     </MudStack>
 </MudContainer>
@@ -360,6 +477,11 @@
     private string _selectedSportsbook = "fanduel";
     private string _date = "";
     private List<GamePrediction> _games = new();
+    
+    // ESPN BPI state
+    private bool _espnLoading = false;
+    private string? _espnError = null;
+    private List<EspnGame> _espnGames = new();
 
     private async Task RunAnalysis()
     {
@@ -687,6 +809,100 @@
         _loadingAi = false;
         Snackbar.Add($"AI predictions loaded for all {_games.Count} games!", Severity.Success);
         StateHasChanged();
+    }
+
+    // ESPN BPI Methods
+    private async Task LoadEspnData()
+    {
+        _espnLoading = true;
+        _espnError = null;
+        _espnGames.Clear();
+        StateHasChanged();
+
+        try
+        {
+            var resp = await Http.GetAsync("http://backend:8000/espn/nba");
+            if (resp.IsSuccessStatusCode)
+            {
+                var json = await resp.Content.ReadAsStringAsync();
+                var doc = JsonDocument.Parse(json);
+                
+                if (doc.RootElement.TryGetProperty("games", out var gamesArray))
+                {
+                    foreach (var game in gamesArray.EnumerateArray())
+                    {
+                        _espnGames.Add(new EspnGame
+                        {
+                            EventId = game.GetProperty("event_id").GetString() ?? "",
+                            HomeTeam = game.GetProperty("home_team").GetString() ?? "",
+                            AwayTeam = game.GetProperty("away_team").GetString() ?? "",
+                            HomeAbbrev = game.GetProperty("home_abbrev").GetString() ?? "",
+                            AwayAbbrev = game.GetProperty("away_abbrev").GetString() ?? "",
+                            HomeRecord = game.GetProperty("home_record").GetString() ?? "",
+                            AwayRecord = game.GetProperty("away_record").GetString() ?? "",
+                            Status = game.GetProperty("status").GetString() ?? "",
+                            HomeWinProb = game.GetProperty("home_win_prob").GetDouble(),
+                            AwayWinProb = game.GetProperty("away_win_prob").GetDouble(),
+                            TotalOverProb = game.GetProperty("total_over_prob").GetDouble(),
+                            SpreadCoverHomeProb = game.GetProperty("spread_cover_home_prob").GetDouble(),
+                            HasBpi = game.GetProperty("has_bpi").GetBoolean()
+                        });
+                    }
+                }
+
+                if (_espnGames.Count == 0)
+                {
+                    _espnError = "No NBA games found in ESPN data.";
+                }
+                else
+                {
+                    Snackbar.Add($"Loaded ESPN BPI for {_espnGames.Count} games", Severity.Success);
+                }
+            }
+            else
+            {
+                _espnError = $"Failed to load ESPN data: {resp.StatusCode}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _espnError = $"Error: {ex.Message}";
+        }
+
+        _espnLoading = false;
+        StateHasChanged();
+    }
+
+    private string GetEspnCardStyle(EspnGame game)
+    {
+        if (!game.HasBpi) return "opacity: 0.7;";
+        if (game.TotalOverProb < 0.35) return "border-left: 4px solid #9c27b0;";
+        if (game.TotalOverProb > 0.65) return "border-left: 4px solid #2196f3;";
+        return "";
+    }
+
+    private Color GetEspnStatusColor(string status)
+    {
+        if (status.Contains("Final")) return Color.Success;
+        if (status.Contains("progress") || status.Contains("Half") || status.Contains("Q")) return Color.Warning;
+        return Color.Default;
+    }
+
+    private record EspnGame
+    {
+        public string EventId { get; init; } = "";
+        public string HomeTeam { get; init; } = "";
+        public string AwayTeam { get; init; } = "";
+        public string HomeAbbrev { get; init; } = "";
+        public string AwayAbbrev { get; init; } = "";
+        public string HomeRecord { get; init; } = "";
+        public string AwayRecord { get; init; } = "";
+        public string Status { get; init; } = "";
+        public double HomeWinProb { get; init; }
+        public double AwayWinProb { get; init; }
+        public double TotalOverProb { get; init; }
+        public double SpreadCoverHomeProb { get; init; }
+        public bool HasBpi { get; init; }
     }
 }
 

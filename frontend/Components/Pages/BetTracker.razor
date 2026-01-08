@@ -145,10 +145,19 @@
                 <!-- Manual Add -->
                 <MudExpansionPanels Class="mt-3">
                     <MudExpansionPanel Text="Manual Entry">
-                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End">
-                            <MudTextField T="string" @bind-Value="_manualDesc" Label="Description" Dense="true" Placeholder="Chiefs ML" />
-                            <MudTextField T="int" @bind-Value="_manualOdds" Label="Odds" Dense="true" Style="width:80px;" />
-                            <MudButton Variant="Variant.Outlined" OnClick="AddManualLeg">Add</MudButton>
+                        <MudStack Spacing="2">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End">
+                                <MudTextField T="string" @bind-Value="_manualDesc" Label="Description" Dense="true" 
+                                              Placeholder="Chiefs ML" Style="flex:2;" />
+                                <MudTextField T="int" @bind-Value="_manualOdds" Label="Odds" Dense="true" Style="width:90px;" />
+                            </MudStack>
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End">
+                                <MudTextField T="string" @bind-Value="_manualGame" Label="Game (optional)" Dense="true" 
+                                              Placeholder="Chiefs @ Bills" Style="flex:2;" />
+                                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="AddManualLeg">
+                                    <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-1" Size="Size.Small" /> Add to Slip
+                                </MudButton>
+                            </MudStack>
                         </MudStack>
                     </MudExpansionPanel>
                 </MudExpansionPanels>
@@ -366,6 +375,7 @@
     private decimal _stake = 10;
     private string _manualDesc = "";
     private int _manualOdds = -110;
+    private string _manualGame = "";  // Optional game name for tracking
     private List<Bet> _bets = new();
     private int _wins = 0, _losses = 0;
     private decimal _netProfit = 0;
@@ -537,9 +547,22 @@
     private void AddManualLeg()
     {
         if (string.IsNullOrWhiteSpace(_manualDesc)) return;
-        _legs.Add(new Leg { Description = _manualDesc, Odds = _manualOdds });
-        Snackbar.Add($"Added: {_manualDesc}", Severity.Success);
+        
+        // Create a game ID from the game name if provided
+        var gameId = !string.IsNullOrWhiteSpace(_manualGame) ? $"manual:{_manualGame.Replace(" ", "_")}" : null;
+        
+        _legs.Add(new Leg { 
+            Description = _manualDesc, 
+            Odds = _manualOdds, 
+            GameId = gameId 
+        });
+        
+        var msg = $"Added: {_manualDesc}";
+        if (!string.IsNullOrWhiteSpace(_manualGame)) msg += $" ({_manualGame})";
+        Snackbar.Add(msg, Severity.Success);
+        
         _manualDesc = "";
+        _manualGame = "";
     }
 
     private int GetParlayOdds()
@@ -585,6 +608,11 @@
                 _legs.Clear();
                 await LoadBets();
                 await LoadStats();
+            }
+            else
+            {
+                var errorBody = await resp.Content.ReadAsStringAsync();
+                Snackbar.Add($"API Error ({resp.StatusCode}): {errorBody}", Severity.Error);
             }
         }
         catch (Exception ex)

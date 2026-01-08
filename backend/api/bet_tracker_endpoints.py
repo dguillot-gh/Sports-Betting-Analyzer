@@ -14,11 +14,14 @@ from pydantic import BaseModel, Field
 
 from fastapi import APIRouter, HTTPException, Query
 
+import os
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/bets", tags=["Bet Tracker"])
 
-DATABASE_URL = "postgresql://sports_user:sportsbetting2024@postgres:5432/sports_betting"
+# Use environment variable with fallback for local development
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://sports_user:sportsbetting2024@postgres:5432/sports_betting")
 
 # ==================== Pydantic Models ====================
 
@@ -112,13 +115,15 @@ async def ensure_tables():
     
     try:
         import asyncpg
+        logger.info(f"Connecting to database: {DATABASE_URL[:50]}...")
         conn = await asyncpg.connect(DATABASE_URL)
         await conn.execute(CREATE_TABLES_SQL)
         await conn.close()
         _tables_initialized = True
-        logger.info("Bet tracker tables initialized")
+        logger.info("Bet tracker tables initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize bet tables: {e}")
+        raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
 
 
 # ==================== Helper Functions ====================
@@ -171,6 +176,29 @@ async def init_bet_tables():
     """Initialize bet tracker tables."""
     await ensure_tables()
     return {"status": "ok", "message": "Bet tracker tables ready"}
+
+
+@router.get("/health")
+async def bet_tracker_health():
+    """Check bet tracker database connectivity."""
+    try:
+        import asyncpg
+        conn = await asyncpg.connect(DATABASE_URL)
+        result = await conn.fetchval("SELECT COUNT(*) FROM bets")
+        await conn.close()
+        return {
+            "status": "healthy",
+            "database": "connected",
+            "bet_count": result,
+            "database_url": DATABASE_URL[:50] + "..."
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "database": "disconnected",
+            "error": str(e),
+            "database_url": DATABASE_URL[:50] + "..."
+        }
 
 
 @router.post("", response_model=BetResponse)
