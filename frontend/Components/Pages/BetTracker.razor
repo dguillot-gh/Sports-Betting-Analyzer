@@ -57,20 +57,20 @@
                                         @if (game.HomeML != 0)
                                         {
                                             <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
-                                                       OnClick="@(() => AddLeg($"{game.Home} ML", game.HomeML, game.GameId))">
+                                                       OnClick="@(() => AddLeg($"{game.Home} ML", game.HomeML, game.GameId, $"{game.Away} @ {game.Home}"))">
                                                 @game.Home.Split(' ').Last() @FormatOdds(game.HomeML)
                                             </MudButton>
                                             <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
-                                                       OnClick="@(() => AddLeg($"{game.Away} ML", game.AwayML, game.GameId))">
+                                                       OnClick="@(() => AddLeg($"{game.Away} ML", game.AwayML, game.GameId, $"{game.Away} @ {game.Home}"))">
                                                 @game.Away.Split(' ').Last() @FormatOdds(game.AwayML)
                                             </MudButton>
                                         }
                                         @if (game.Total > 0)
                                         {
                                             <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Tertiary"
-                                                       OnClick="@(() => AddLeg($"O {game.Total}", -110, game.GameId))">O @game.Total</MudButton>
+                                                       OnClick="@(() => AddLeg($"O {game.Total}", -110, game.GameId, $"{game.Away} @ {game.Home}"))">O @game.Total</MudButton>
                                             <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Tertiary"
-                                                       OnClick="@(() => AddLeg($"U {game.Total}", -110, game.GameId))">U @game.Total</MudButton>
+                                                       OnClick="@(() => AddLeg($"U {game.Total}", -110, game.GameId, $"{game.Away} @ {game.Home}"))">U @game.Total</MudButton>
                                         }
                                     </MudStack>
                                 </MudCardContent>
@@ -169,12 +169,18 @@
                     {
                         <MudSimpleTable Dense="true" Hover="true" Style="max-height:250px; overflow-y:auto;">
                             <thead>
-                                <tr><th>Bet</th><th>Stake</th><th>Odds</th><th>Result</th><th></th></tr>
+                                <tr><th>Type</th><th>Game</th><th>Bet</th><th>Stake</th><th>Odds</th><th>Result</th><th></th></tr>
                             </thead>
                             <tbody>
                                 @foreach (var b in _bets.Take(10))
                                 {
                                     <tr>
+                                        <td>
+                                            <MudTooltip Text="@b.Source">
+                                                <MudIcon Icon="@(b.Source == "manual" ? Icons.Material.Filled.EditNote : Icons.Material.Filled.SmartToy)" Size="Size.Small" Color="@(b.Source == "manual" ? Color.Default : Color.Primary)" />
+                                            </MudTooltip>
+                                        </td>
+                                        <td><MudText Typo="Typo.caption">@(b.GameName ?? "-")</MudText></td>
                                         <td>@b.Description</td>
                                         <td>$@b.Stake.ToString("F2")</td>
                                         <td>@FormatOdds(b.Odds)</td>
@@ -538,9 +544,9 @@
         }
     }
 
-    private void AddLeg(string desc, int odds, string gameId)
+    private void AddLeg(string desc, int odds, string gameId, string gameName)
     {
-        _legs.Add(new Leg { Description = desc, Odds = odds, GameId = gameId });
+        _legs.Add(new Leg { Description = desc, Odds = odds, GameId = gameId, GameName = gameName });
         Snackbar.Add($"Added: {desc}", Severity.Success);
     }
 
@@ -554,7 +560,8 @@
         _legs.Add(new Leg { 
             Description = _manualDesc, 
             Odds = _manualOdds, 
-            GameId = gameId 
+            GameId = gameId,
+            GameName = _manualGame
         });
         
         var msg = $"Added: {_manualDesc}";
@@ -599,6 +606,8 @@
                 stake = _stake,
                 odds = GetParlayOdds(),
                 description = _legs.Count > 1 ? $"{_legs.Count}-leg: {string.Join(", ", _legs.Select(l => l.Description))}" : _legs[0].Description,
+                game_name = _legs.Count == 1 ? _legs[0].GameName : null,
+                source = _legs.Any(l => l.GameId != null && l.GameId.StartsWith("manual")) ? "manual" : "auto",
                 legs = _legs.Select(l => new { description = l.Description, odds = l.Odds, game_id = l.GameId }).ToList()
             };
             var resp = await Http.PostAsJsonAsync("http://backend:8000/bets", req);
@@ -637,7 +646,9 @@
                         Description = b.TryGetProperty("description", out var d) ? d.GetString() ?? "" : "",
                         Stake = b.TryGetProperty("stake", out var s) && s.ValueKind == JsonValueKind.Number ? s.GetDecimal() : 0,
                         Odds = b.TryGetProperty("odds", out var o) && o.ValueKind == JsonValueKind.Number ? o.GetInt32() : 0,
-                        Outcome = b.TryGetProperty("outcome", out var oc) ? oc.GetString() ?? "pending" : "pending"
+                        Outcome = b.TryGetProperty("outcome", out var oc) ? oc.GetString() ?? "pending" : "pending",
+                        GameName = b.TryGetProperty("game_name", out var gn) ? gn.GetString() : null,
+                        Source = b.TryGetProperty("source", out var src) ? src.GetString() ?? "manual" : "manual"
                     });
                 }
             }
@@ -751,8 +762,8 @@
 
     // Simple models
     private record Game { public string GameId { get; init; } = ""; public string Home { get; init; } = ""; public string Away { get; init; } = ""; public int HomeML { get; init; } public int AwayML { get; init; } public decimal Total { get; init; } }
-    private record Leg { public string Description { get; init; } = ""; public int Odds { get; init; } public string? GameId { get; init; } }
-    private record Bet { public int Id { get; init; } public string Description { get; init; } = ""; public decimal Stake { get; init; } public int Odds { get; init; } public string Outcome { get; init; } = "pending"; }
+    private record Leg { public string Description { get; init; } = ""; public int Odds { get; init; } public string? GameId { get; init; } public string? GameName { get; init; } }
+    private record Bet { public int Id { get; init; } public string Description { get; init; } = ""; public decimal Stake { get; init; } public int Odds { get; init; } public string Outcome { get; init; } = "pending"; public string? GameName { get; init; } public string Source { get; init; } = "manual"; }
     private record DailyData { public string Date { get; init; } = ""; public decimal Profit { get; init; } public int Bets { get; init; } public int Wins { get; init; } public int Losses { get; init; } public int Cashouts { get; init; } public decimal CumulativeRoi { get; init; } }
 
     private async Task LoadChartData()

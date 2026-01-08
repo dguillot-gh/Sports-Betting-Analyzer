@@ -40,7 +40,9 @@ class CreateBetRequest(BaseModel):
     stake: float = Field(..., gt=0, description="Amount wagered")
     odds: Optional[int] = Field(None, description="American odds (for singles)")
     game_id: Optional[str] = Field(None, description="Linked game ID from cache")
+    game_name: Optional[str] = Field(None, description="Game name (e.g. Chiefs vs Bills)")
     description: Optional[str] = Field(None, description="Bet description")
+    source: str = Field("manual", description="manual or auto")
     legs: Optional[List[BetLeg]] = Field(None, description="Parlay legs")
     notes: Optional[str] = None
 
@@ -65,7 +67,9 @@ class BetResponse(BaseModel):
     cashout_amount: Optional[float]
     profit: Optional[float]
     game_id: Optional[str]
+    game_name: Optional[str]
     description: Optional[str]
+    source: str = "manual"
     notes: Optional[str]
     legs: Optional[List[dict]] = None
 
@@ -86,7 +90,9 @@ CREATE TABLE IF NOT EXISTS bets (
     cashout_amount DECIMAL(10,2),
     profit DECIMAL(10,2),
     game_id VARCHAR(100),
+    game_name VARCHAR(200),
     description VARCHAR(200),
+    source VARCHAR(20) DEFAULT 'manual',
     notes TEXT
 );
 
@@ -118,6 +124,23 @@ async def ensure_tables():
         logger.info(f"Connecting to database: {DATABASE_URL[:50]}...")
         conn = await asyncpg.connect(DATABASE_URL)
         await conn.execute(CREATE_TABLES_SQL)
+        
+        # Check and add new columns if they don't exist (migrations)
+        try:
+            # Check for game_name
+            val = await conn.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='bets' AND column_name='game_name'")
+            if not val:
+                logger.info("Adding game_name column to bets table")
+                await conn.execute("ALTER TABLE bets ADD COLUMN game_name VARCHAR(200)")
+                
+            # Check for source
+            val = await conn.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='bets' AND column_name='source'")
+            if not val:
+                logger.info("Adding source column to bets table")
+                await conn.execute("ALTER TABLE bets ADD COLUMN source VARCHAR(20) DEFAULT 'manual'")
+        except Exception as e:
+            logger.error(f"Schema migration error: {e}")
+            
         await conn.close()
         _tables_initialized = True
         logger.info("Bet tracker tables initialized successfully")
@@ -228,12 +251,12 @@ async def create_bet(request: CreateBetRequest):
     try:
         # Insert bet
         row = await conn.fetchrow("""
-            INSERT INTO bets (sport, bet_type, sportsbook, stake, odds, potential_payout, game_id, description, notes)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            INSERT INTO bets (sport, bet_type, sportsbook, stake, odds, potential_payout, game_id, game_name, description, source, notes)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING *
         """, request.sport, request.bet_type, request.sportsbook, 
             request.stake, combined_odds, potential_payout, 
-            request.game_id, description, request.notes)
+            request.game_id, request.game_name, description, request.source, request.notes)
         
         bet_id = row["id"]
         
@@ -260,7 +283,9 @@ async def create_bet(request: CreateBetRequest):
             cashout_amount=None,
             profit=None,
             game_id=row["game_id"],
+            game_name=row["game_name"],
             description=row["description"],
+            source=row["source"] or "manual",
             notes=row["notes"],
             legs=legs_data if legs_data else None
         )
@@ -335,7 +360,9 @@ async def list_bets(
                 "cashout_amount": float(row["cashout_amount"]) if row["cashout_amount"] else None,
                 "profit": float(row["profit"]) if row["profit"] else None,
                 "game_id": row["game_id"],
+                "game_name": row.get("game_name"),
                 "description": row["description"],
+                "source": row.get("source", "manual"),
                 "notes": row["notes"],
                 "legs": legs_data
             })
