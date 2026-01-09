@@ -635,22 +635,31 @@
     {
         try
         {
-            var resp = await Http.GetFromJsonAsync<JsonElement>("http://backend:8000/bets?limit=20");
-            _bets.Clear();
-            if (resp.TryGetProperty("bets", out var arr))
+            var content = await Http.GetStringAsync("http://backend:8000/bets?limit=20");
+            using var doc = JsonDocument.Parse(content);
+            if (doc.RootElement.TryGetProperty("bets", out var arr))
             {
+                _bets.Clear();
                 foreach (var b in arr.EnumerateArray())
                 {
-                    _bets.Add(new Bet
+                    try 
                     {
-                        Id = b.GetProperty("id").GetInt32(),
-                        Description = b.TryGetProperty("description", out var d) ? d.GetString() ?? "" : "",
-                        Stake = b.TryGetProperty("stake", out var s) && s.ValueKind == JsonValueKind.Number ? s.GetDecimal() : 0,
-                        Odds = b.TryGetProperty("odds", out var o) && o.ValueKind == JsonValueKind.Number ? o.GetInt32() : 0,
-                        Outcome = b.TryGetProperty("outcome", out var oc) ? oc.GetString() ?? "pending" : "pending",
-                        GameName = b.TryGetProperty("game_name", out var gn) ? gn.GetString() : null,
-                        Source = b.TryGetProperty("source", out var src) ? src.GetString() ?? "manual" : "manual"
-                    });
+                        var bet = new Bet
+                        {
+                            Id = b.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.Number ? id.GetInt32() : 0,
+                            Description = b.TryGetProperty("description", out var d) ? (d.ValueKind == JsonValueKind.String ? d.GetString() ?? "" : d.ToString()) : "",
+                            Stake = b.TryGetProperty("stake", out var s) && s.ValueKind == JsonValueKind.Number ? s.GetDecimal() : 0,
+                            Odds = b.TryGetProperty("odds", out var o) && o.ValueKind == JsonValueKind.Number ? o.GetInt32() : 0,
+                            Outcome = b.TryGetProperty("outcome", out var oc) ? (oc.ValueKind == JsonValueKind.String ? oc.GetString() ?? "pending" : "pending") : "pending",
+                            GameName = b.TryGetProperty("game_name", out var gn) ? (gn.ValueKind == JsonValueKind.String ? gn.GetString() : null) : null,
+                            Source = b.TryGetProperty("source", out var src) ? (src.ValueKind == JsonValueKind.String ? src.GetString() ?? "manual" : "manual") : "manual"
+                        };
+                        _bets.Add(bet);
+                    }
+                    catch (Exception itemEx)
+                    {
+                        Console.WriteLine($"Skipping invalid bet item: {itemEx.Message}");
+                    }
                 }
             }
         }
