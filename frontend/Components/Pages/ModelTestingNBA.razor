@@ -136,7 +136,8 @@
                                                     <tr style="background: rgba(0,0,0,0.1);">
                                                         <th></th>
                                                         <th style="text-align: center;">📊 Simple</th>
-                                                        <th style="text-align: center;">🤖 XGBoost</th>
+                                                        <th style="text-align: center;">🤖 XGB</th>
+                                                        <th style="text-align: center;">🧠 NN</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -157,6 +158,18 @@
                                                             else
                                                             {
                                                                 <MudText Typo="Typo.caption" Color="Color.Warning">Train Required</MudText>
+                                                            }
+                                                        </td>
+                                                        <td style="text-align: center;">
+                                                            @if (game.XgbModel?.NnHomeWinProb != null)
+                                                            {
+                                                                <strong style="color: #9c27b0;">
+                                                                    @(((game.XgbModel?.NnHomeWinProb ?? 0) * 100).ToString("F1"))%
+                                                                </strong>
+                                                            }
+                                                            else
+                                                            {
+                                                                <MudText Typo="Typo.caption" Color="Color.Default">—</MudText>
                                                             }
                                                         </td>
                                                     </tr>
@@ -541,6 +554,7 @@
                                 EvAway = xm.TryGetProperty("ev_away", out var xea) && xea.ValueKind == JsonValueKind.Number ? xea.GetDouble() : null,
                                 KellyHome = xm.TryGetProperty("kelly_home", out var xkh) && xkh.ValueKind == JsonValueKind.Number ? xkh.GetDouble() : null,
                                 KellyAway = xm.TryGetProperty("kelly_away", out var xka) && xka.ValueKind == JsonValueKind.Number ? xka.GetDouble() : null,
+                                NnHomeWinProb = xm.TryGetProperty("nn_home_win_probability", out var nnhp) && nnhp.ValueKind == JsonValueKind.Number ? nnhp.GetDouble() : null,
                                 Error = xm.TryGetProperty("error", out var xerr) ? xerr.GetString() : null,
                             };
                             
@@ -655,6 +669,7 @@
                                 PredictedWinner = xm.TryGetProperty("predicted_winner", out var xpw) ? xpw.GetString() : null,
                                 EvHome = xm.TryGetProperty("ev_home", out var xeh) && xeh.ValueKind == JsonValueKind.Number ? xeh.GetDouble() : null,
                                 KellyHome = xm.TryGetProperty("kelly_home", out var xkh) && xkh.ValueKind == JsonValueKind.Number ? xkh.GetDouble() : null,
+                                NnHomeWinProb = xm.TryGetProperty("nn_home_win_probability", out var nnhp) && nnhp.ValueKind == JsonValueKind.Number ? nnhp.GetDouble() : null,
                                 Error = xm.TryGetProperty("error", out var xerr) ? xerr.GetString() : null,
                             };
                         }
@@ -714,6 +729,7 @@
     private class ModelResult
     {
         public double? HomeWinProb { get; set; }
+        public double? NnHomeWinProb { get; set; }
         public string? PredictedWinner { get; set; }
         public double? EvHome { get; set; }
         public double? EvAway { get; set; }

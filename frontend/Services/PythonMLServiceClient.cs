@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -106,6 +107,9 @@ public class PredictResponse
     [JsonPropertyName("probability")]
     public double? Probability { get; set; }
 
+    [JsonPropertyName("nn_home_win_probability")]
+    public double? NnProbability { get; set; }
+
     [JsonPropertyName("confidence")]
     public string? Confidence { get; set; }
 
@@ -114,6 +118,61 @@ public class PredictResponse
 
     [JsonPropertyName("series")]
     public string? Series { get; set; }
+}
+
+public class NbaComparisonResponse
+{
+    [JsonPropertyName("home_team")]
+    public string HomeTeam { get; set; } = "";
+
+    [JsonPropertyName("away_team")]
+    public string AwayTeam { get; set; } = "";
+
+    [JsonPropertyName("models")]
+    public Dictionary<string, object> Models { get; set; } = new();
+
+    // Helper to get typed results
+    public KyleskomEnsembleResult? GetKyleskomResult()
+    {
+        if (Models.TryGetValue("kyle", out var kyleObj) && kyleObj is JsonElement el)
+        {
+            return JsonSerializer.Deserialize<KyleskomEnsembleResult>(el.GetRawText());
+        }
+        return null;
+    }
+}
+
+public class KyleskomEnsembleResult
+{
+    [JsonPropertyName("home_team")]
+    public string? HomeTeam { get; set; }
+
+    [JsonPropertyName("away_team")]
+    public string? AwayTeam { get; set; }
+
+    [JsonPropertyName("home_win_probability")]
+    public double HomeWinProbability { get; set; }
+
+    [JsonPropertyName("nn_home_win_probability")]
+    public double? NnHomeWinProbability { get; set; }
+
+    [JsonPropertyName("predicted_winner")]
+    public string? PredictedWinner { get; set; }
+
+    [JsonPropertyName("confidence")]
+    public double Confidence { get; set; }
+
+    [JsonPropertyName("ev_home")]
+    public double? HomeEv { get; set; }
+
+    [JsonPropertyName("ev_away")]
+    public double? AwayEv { get; set; }
+
+    [JsonPropertyName("kelly_home")]
+    public double? HomeKelly { get; set; }
+
+    [JsonPropertyName("kelly_away")]
+    public double? AwayKelly { get; set; }
 }
 
 public class ModelInfo
@@ -736,25 +795,6 @@ public class PythonMLServiceClient
             _logger.LogError(ex, "Error getting entities for {Sport}", sport);
             throw;
         }
-        try
-        {
-            if (!await IsHealthyAsync())
-            {
-                throw new InvalidOperationException("Python ML Service is not available");
-            }
-
-            var url = $"/{sport}/entities";
-            if (!string.IsNullOrEmpty(series))
-                url += $"?series={series}";
-
-            var response = await _httpClient.GetFromJsonAsync<List<string>>(url);
-            return response ?? new List<string>();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting entities for {Sport}", sport);
-            throw;
-        }
     }
 
     /// <summary>
@@ -1129,6 +1169,28 @@ public class PythonMLServiceClient
         {
             _logger.LogError(ex, "Error initializing odds cache");
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Compare different NBA models (XGBoost vs Neural Network)
+    /// </summary>
+    public async Task<NbaComparisonResponse?> CompareNbaModelsAsync(string homeTeam, string awayTeam, double totalLine, int? homeMl = null, int? awayMl = null)
+    {
+        try
+        {
+            var url = $"/apex/compare/nba?home_team={Uri.EscapeDataString(homeTeam)}&away_team={Uri.EscapeDataString(awayTeam)}&total_line={totalLine}";
+            if (homeMl.HasValue) url += $"&home_ml={homeMl}";
+            if (awayMl.HasValue) url += $"&away_ml={awayMl}";
+
+            var response = await _httpClient.GetAsync(url);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<NbaComparisonResponse>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error comparing NBA models for {Home} vs {Away}", homeTeam, awayTeam);
+            return null;
         }
     }
 }

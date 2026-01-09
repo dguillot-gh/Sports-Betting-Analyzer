@@ -10,7 +10,7 @@ This version EXACTLY matches their main.py and XGBoost_Runner.py methodology.
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Any
 from pathlib import Path
 
@@ -167,6 +167,19 @@ TEAM_NAME_ALIASES = {
 }
 
 
+class BoosterWrapper:
+    """Wrapper for XGBoost Booster to satisfy sklearn's CalibratedClassifierCV interface."""
+    def __init__(self, booster, num_class):
+        self.booster = booster
+        self.classes_ = np.arange(num_class)
+
+    def fit(self, X, y):
+        return self
+
+    def predict_proba(self, X):
+        return self.booster.predict(xgb.DMatrix(X))
+
+
 def normalize_team_name(team: str) -> str:
     """Normalize team name to canonical format expected by kyleskom model."""
     if team in TEAM_INDEX_CURRENT:
@@ -183,17 +196,24 @@ def normalize_team_name(team: str) -> str:
     return team
 
 
+
 class KyleskomPredictor:
     """
-    Uses kyleskom's pre-trained XGBoost models for NBA predictions.
-    This version matches their main.py, XGBoost_Runner.py, and Utils/Expected_Value.py exactly.
+    Uses kyleskom's pre-trained XGBoost AND Neural Network models.
+    Matches main.py, XGBoost_Runner.py, and NN_Runner.py methodology.
     """
     
     def __init__(self):
+        # XGBoost models
         self.xgb_ml = None
         self.xgb_ou = None
         self.xgb_ml_calibrator = None
         self.xgb_uo_calibrator = None
+        
+        # NN models
+        self.nn_ml = None
+        self.nn_ou = None
+        
         self.df = None  # Raw DataFrame from NBA API (not sorted)
         self._models_loaded = False
         self._data_loaded = False

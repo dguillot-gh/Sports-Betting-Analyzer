@@ -2,246 +2,369 @@
 @using SportsBettingAnalyzer.Services
 @using MudBlazor
 @inject BallDontLieService StatsService
+@inject PythonMLServiceClient MLService
 @inject ISnackbar Snackbar
+@inject ILogger<GameAnalysis> Logger
 
 <MudDialog>
     <DialogContent>
         <MudContainer MaxWidth="MaxWidth.Medium">
-            <MudGrid Class="mb-4">
-                <MudItem xs="12" Class="d-flex justify-center">
-                    <MudText Typo="Typo.h5">@Event.AwayTeam vs @Event.HomeTeam</MudText>
-                </MudItem>
-                <MudItem xs="12" Class="d-flex justify-center">
-                    <MudText Typo="Typo.caption">@Event.CommenceTime.ToLocalTime().ToString("f")</MudText>
-                </MudItem>
-            </MudGrid>
-
-            @if (_isLoading)
-            {
-                <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
-                <MudText Align="Align.Center">Fetching stats from BallDontLie...</MudText>
-            }
-            else if (!string.IsNullOrEmpty(_errorMessage))
-            {
-                 <MudAlert Severity="Severity.Error">@_errorMessage</MudAlert>
-            }
-            else if (_statsMissing)
-            {
-                <MudAlert Severity="Severity.Warning">Could not find stats for one or both teams.</MudAlert>
-            }
-            else
-            {
-                <MudGrid>
-                    <!-- Away Team -->
-                    <MudItem xs="4" Class="d-flex flex-column align-center">
-                        <MudText Typo="Typo.h6">@Event.AwayTeam</MudText>
-                        <MudText Typo="Typo.subtitle1">@(_awayStats?.AveragePoints.ToString("F1")) PPG</MudText>
-                         <MudText Typo="Typo.caption">Allowed: @(_awayStats?.AveragePointsAllowed.ToString("F1"))</MudText>
-                    </MudItem>
-
-                    <!-- Comparison Labels -->
-                    <MudItem xs="4" Class="d-flex flex-column align-center justify-center">
-                        <MudText Typo="Typo.body2" Class="mb-1">Points Per Game</MudText>
-                        <MudDivider Class="my-2" Width="100%" />
-                        <MudText Typo="Typo.body2" Class="mb-1">Opp. PPG</MudText>
-                        <MudDivider Class="my-2" Width="100%" />
-                         <MudText Typo="Typo.body2" Class="mb-1">Recent Form (Last 5)</MudText>
-                    </MudItem>
-
-                    <!-- Home Team -->
-                    <MudItem xs="4" Class="d-flex flex-column align-center">
-                        <MudText Typo="Typo.h6">@Event.HomeTeam</MudText>
-                        <MudText Typo="Typo.subtitle1">@(_homeStats?.AveragePoints.ToString("F1")) PPG</MudText>
-                        <MudText Typo="Typo.caption">Allowed: @(_homeStats?.AveragePointsAllowed.ToString("F1"))</MudText>
-                    </MudItem>
-                </MudGrid>
-                
-                <!-- Form Comparison -->
-                <MudGrid Class="mt-4">
-                     <MudItem xs="6" Class="d-flex justify-center gap-1">
-                        @if (_awayStats != null) {
-                            @foreach(var res in _awayStats.RecentForm) {
-                                <MudChip T="string" Color="@(res == "W" ? Color.Success : Color.Error)" Size="Size.Small" Class="mx-0">@res</MudChip>
-                            }
-                        }
-                    </MudItem>
-                    <MudItem xs="6" Class="d-flex justify-center gap-1">
-                         @if (_homeStats != null) {
-                            @foreach(var res in _homeStats.RecentForm) {
-                                <MudChip T="string" Color="@(res == "W" ? Color.Success : Color.Error)" Size="Size.Small" Class="mx-0">@res</MudChip>
-                            }
-                        }
-                    </MudItem>
-                </MudGrid>
-                
-                <!-- H2H Comparison -->
-                @if (_h2hGames.Any())
-                {
-                    <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">Head to Head (Last 5)</MudText>
-                    <MudTable Items="@_h2hGames" Dense="true" Hover="true" Striped="true" Elevation="0">
-                        <HeaderContent>
-                            <MudTh>Date</MudTh>
-                            <MudTh>Matchup</MudTh>
-                            <MudTh>Score</MudTh>
-                        </HeaderContent>
-                        <RowTemplate>
-                             <MudTd DataLabel="Date">@DateTime.Parse(context.Date).ToString("yyyy-MM-dd")</MudTd>
-                             <MudTd DataLabel="Matchup">@context.VisitorTeam.Abbreviation @@ @context.HomeTeam.Abbreviation</MudTd>
-                             <MudTd DataLabel="Score">
-                                 @if ((context.HomeTeam.Id == _homeId && context.HomeTeamScore > context.VisitorTeamScore) || 
-                                      (context.VisitorTeam.Id == _homeId && context.VisitorTeamScore > context.HomeTeamScore))
-                                 {
-                                     <MudText Color="Color.Success">@context.VisitorTeamScore - @context.HomeTeamScore</MudText>
-                                 }
-                                 else if (_homeId.HasValue) 
-                                 {
-                                      <MudText Color="Color.Error">@context.VisitorTeamScore - @context.HomeTeamScore</MudText>
-                                 }
-                                 else
-                                 {
-                                      <MudText>@context.VisitorTeamScore - @context.HomeTeamScore</MudText>
-                                 }
-                             </MudTd>
-                        </RowTemplate>
-                    </MudTable>
-                }
-                <!-- Top Performers (Last Game) -->
-                @if (_homeTopPlayers.Any() || _awayTopPlayers.Any())
-                {
-                     <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">Top Performers (Last Game)</MudText>
-                     <MudGrid>
-                        <MudItem xs="6">
-                            @foreach(var p in _awayTopPlayers)
-                            {
-                                <MudText Typo="Typo.caption" Class="d-block">@p.Player.FirstName @p.Player.LastName: <b>@p.Pts</b> pts</MudText>
-                            }
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6" Color="Color.Surface">
+                <MudTabPanel Text="Matchup Analysis" Icon="@Icons.Material.Filled.Analytics">
+                    <MudGrid Class="mb-4">
+                        <MudItem xs="12" Class="d-flex justify-center">
+                            <MudText Typo="Typo.h5">@Event.AwayTeam vs @Event.HomeTeam</MudText>
                         </MudItem>
-                        <MudItem xs="6">
-                            @foreach(var p in _homeTopPlayers)
-                            {
-                                <MudText Typo="Typo.caption" Class="d-block">@p.Player.FirstName @p.Player.LastName: <b>@p.Pts</b> pts</MudText>
-                            }
+                        <MudItem xs="12" Class="d-flex justify-center">
+                            <MudText Typo="Typo.caption">@Event.CommenceTime.ToLocalTime().ToString("f")</MudText>
                         </MudItem>
-                     </MudGrid>
-                }
-                
-                <!-- Value Analysis with Edge Meters -->
-                @if (_homeStats != null && _awayStats != null)
-                {
-                    <MudPaper Outlined="true" Class="pa-4 mt-4">
-                        <MudText Typo="Typo.h6" Class="mb-3">
-                            <MudIcon Icon="@Icons.Material.Filled.Speed" Class="mr-2" />
-                            Edge Analysis
-                        </MudText>
-                        
+                    </MudGrid>
+
+                    @if (_isLoading)
+                    {
+                        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+                        <MudText Align="Align.Center">Fetching stats from BallDontLie...</MudText>
+                    }
+                    else if (!string.IsNullOrEmpty(_errorMessage))
+                    {
+                         <MudAlert Severity="Severity.Error">@_errorMessage</MudAlert>
+                    }
+                    else if (_statsMissing)
+                    {
+                        <MudAlert Severity="Severity.Warning">Could not find stats for one or both teams.</MudAlert>
+                    }
+                    else
+                    {
                         <MudGrid>
-                            <!-- Spread Edge Meter -->
-                            <MudItem xs="12" md="6">
-                                <div class="text-center">
-                                    <MudText Typo="Typo.subtitle2" Class="mb-2">Spread Edge</MudText>
-                                    <div style="position: relative; width: 150px; height: 80px; margin: 0 auto;">
-                                        <!-- Edge Meter Arc -->
-                                        <svg viewBox="0 0 100 50" style="width: 100%; height: 100%;">
-                                            <!-- Background arc -->
-                                            <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#e0e0e0" stroke-width="8" stroke-linecap="round"/>
-                                            <!-- Value arc -->
-                                            <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" 
-                                                  stroke="@GetEdgeMeterColor(_spreadEdge)" 
-                                                  stroke-width="8" 
-                                                  stroke-linecap="round"
-                                                  stroke-dasharray="@GetEdgeDashArray(_spreadEdge)"
-                                                  stroke-dashoffset="0"/>
-                                            <!-- Center indicator -->
-                                            <line x1="50" y1="50" x2="50" y2="15" stroke="#666" stroke-width="2" opacity="0.5"/>
-                                        </svg>
-                                        <div style="position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%);">
-                                            <MudText Typo="Typo.h5" Color="@GetEdgeTextColor(_spreadEdge)">
-                                                @(_spreadEdge > 0 ? "+" : "")@_spreadEdge.ToString("F1")
-                                            </MudText>
-                                        </div>
-                                    </div>
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                        Line: @_bettingSpread.ToString("F1") | Proj: @_projectedSpread.ToString("F1")
-                                    </MudText>
-                                    <MudChip T="string" Size="Size.Small" Color="@GetEdgeChipColor(_spreadEdge)" Class="mt-1">
-                                        @GetEdgeLabel(_spreadEdge)
-                                    </MudChip>
-                                </div>
+                            <!-- Away Team -->
+                            <MudItem xs="4" Class="d-flex flex-column align-center">
+                                <MudText Typo="Typo.h6">@Event.AwayTeam</MudText>
+                                <MudText Typo="Typo.subtitle1">@(_awayStats?.AveragePoints.ToString("F1")) PPG</MudText>
+                                 <MudText Typo="Typo.caption">Allowed: @(_awayStats?.AveragePointsAllowed.ToString("F1"))</MudText>
                             </MudItem>
 
-                            <!-- Total Edge Meter -->
-                            <MudItem xs="12" md="6">
-                                <div class="text-center">
-                                    <MudText Typo="Typo.subtitle2" Class="mb-2">Total Edge</MudText>
-                                    <div style="position: relative; width: 150px; height: 80px; margin: 0 auto;">
-                                        <!-- Edge Meter Arc -->
-                                        <svg viewBox="0 0 100 50" style="width: 100%; height: 100%;">
-                                            <!-- Background arc -->
-                                            <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#e0e0e0" stroke-width="8" stroke-linecap="round"/>
-                                            <!-- Value arc -->
-                                            <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" 
-                                                  stroke="@GetEdgeMeterColor(_totalEdge)" 
-                                                  stroke-width="8" 
-                                                  stroke-linecap="round"
-                                                  stroke-dasharray="@GetEdgeDashArray(_totalEdge)"
-                                                  stroke-dashoffset="0"/>
-                                            <!-- Center indicator -->
-                                            <line x1="50" y1="50" x2="50" y2="15" stroke="#666" stroke-width="2" opacity="0.5"/>
-                                        </svg>
-                                        <div style="position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%);">
-                                            <MudText Typo="Typo.h5" Color="@GetEdgeTextColor(_totalEdge)">
-                                                @(_totalEdge > 0 ? "+" : "")@_totalEdge.ToString("F1")
-                                            </MudText>
-                                        </div>
-                                    </div>
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                        O/U: @_bettingTotal.ToString("F1") | Proj: @_projectedTotal.ToString("F1")
-                                    </MudText>
-                                    <MudChip T="string" Size="Size.Small" Color="@GetEdgeChipColor(_totalEdge)" Class="mt-1">
-                                        @(_totalEdge > 0 ? "OVER" : _totalEdge < 0 ? "UNDER" : "PUSH")
-                                    </MudChip>
-                                </div>
+                            <!-- Comparison Labels -->
+                            <MudItem xs="4" Class="d-flex flex-column align-center justify-center">
+                                <MudText Typo="Typo.body2" Class="mb-1">Points Per Game</MudText>
+                                <MudDivider Class="my-2" Width="100%" />
+                                <MudText Typo="Typo.body2" Class="mb-1">Opp. PPG</MudText>
+                                <MudDivider Class="my-2" Width="100%" />
+                                 <MudText Typo="Typo.body2" Class="mb-1">Recent Form (Last 5)</MudText>
+                            </MudItem>
+
+                            <!-- Home Team -->
+                            <MudItem xs="4" Class="d-flex flex-column align-center">
+                                <MudText Typo="Typo.h6">@Event.HomeTeam</MudText>
+                                <MudText Typo="Typo.subtitle1">@(_homeStats?.AveragePoints.ToString("F1")) PPG</MudText>
+                                <MudText Typo="Typo.caption">Allowed: @(_homeStats?.AveragePointsAllowed.ToString("F1"))</MudText>
                             </MudItem>
                         </MudGrid>
-
-                        <MudDivider Class="my-3" />
-                        <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Center">
-                            Edge = Projected - Line. Positive edge suggests value opportunity.
-                        </MudText>
-                    </MudPaper>
-                }
-            }
-            
-            <MudExpansionPanels Class="mt-4">
-                <MudExpansionPanel Text="Betting Odds Details">
-                    <MudGrid>
-                        @foreach(var book in Event.Bookmakers)
-                        {
-                            <MudItem xs="12" sm="6">
-                                <MudCard Outlined="true" Class="pa-2">
-                                     <MudText Typo="Typo.subtitle2">@book.Title</MudText>
-                                     @foreach(var market in book.Markets)
-                                     {
-                                         <div class="d-flex justify-space-between mt-1">
-                                             <MudText Typo="Typo.caption">@FormatMarketKey(market.Key)</MudText>
-                                             <div class="d-flex gap-2">
-                                                 @foreach(var outcome in market.Outcomes)
-                                                 {
-                                                     <MudText Typo="Typo.caption">
-                                                         @outcome.Name: <b>@FormatPrice(outcome.Price)</b> 
-                                                         @(outcome.Point.HasValue ? $"({(outcome.Point>0?"+":"")}{outcome.Point})" : "")
-                                                     </MudText>
-                                                 }
-                                             </div>
-                                         </div>
-                                     }
-                                </MudCard>
+                        
+                        <!-- Form Comparison -->
+                        <MudGrid Class="mt-4">
+                             <MudItem xs="6" Class="d-flex justify-center gap-1">
+                                @if (_awayStats != null) {
+                                    @foreach(var res in _awayStats.RecentForm) {
+                                        <MudChip T="string" Color="@(res == "W" ? Color.Success : Color.Error)" Size="Size.Small" Class="mx-0">@res</MudChip>
+                                    }
+                                }
                             </MudItem>
+                            <MudItem xs="6" Class="d-flex justify-center gap-1">
+                                 @if (_homeStats != null) {
+                                    @foreach(var res in _homeStats.RecentForm) {
+                                        <MudChip T="string" Color="@(res == "W" ? Color.Success : Color.Error)" Size="Size.Small" Class="mx-0">@res</MudChip>
+                                    }
+                                }
+                            </MudItem>
+                        </MudGrid>
+                        
+                        <!-- H2H Comparison -->
+                        @if (_h2hGames.Any())
+                        {
+                            <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">Head to Head (Last 5)</MudText>
+                            <MudTable Items="@_h2hGames" Dense="true" Hover="true" Striped="true" Elevation="0">
+                                <HeaderContent>
+                                    <MudTh>Date</MudTh>
+                                    <MudTh>Matchup</MudTh>
+                                    <MudTh>Score</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                     <MudTd DataLabel="Date">@DateTime.Parse(context.Date).ToString("yyyy-MM-dd")</MudTd>
+                                     <MudTd DataLabel="Matchup">@context.VisitorTeam.Abbreviation @@ @context.HomeTeam.Abbreviation</MudTd>
+                                     <MudTd DataLabel="Score">
+                                         @if ((context.HomeTeam.Id == _homeId && context.HomeTeamScore > context.VisitorTeamScore) || 
+                                              (context.VisitorTeam.Id == _homeId && context.VisitorTeamScore > context.HomeTeamScore))
+                                         {
+                                             <MudText Color="Color.Success">@context.VisitorTeamScore - @context.HomeTeamScore</MudText>
+                                         }
+                                         else if (_homeId.HasValue) 
+                                         {
+                                              <MudText Color="Color.Error">@context.VisitorTeamScore - @context.HomeTeamScore</MudText>
+                                         }
+                                         else
+                                         {
+                                              <MudText>@context.VisitorTeamScore - @context.HomeTeamScore</MudText>
+                                         }
+                                     </MudTd>
+                                </RowTemplate>
+                            </MudTable>
                         }
-                    </MudGrid>
-                </MudExpansionPanel>
-            </MudExpansionPanels>
+                        <!-- Top Performers (Last Game) -->
+                        @if (_homeTopPlayers.Any() || _awayTopPlayers.Any())
+                        {
+                             <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">Top Performers (Last Game)</MudText>
+                             <MudGrid>
+                                <MudItem xs="6">
+                                    @foreach(var p in _awayTopPlayers)
+                                    {
+                                        <MudText Typo="Typo.caption" Class="d-block">@p.Player.FirstName @p.Player.LastName: <b>@p.Pts</b> pts</MudText>
+                                    }
+                                </MudItem>
+                                <MudItem xs="6">
+                                    @foreach(var p in _homeTopPlayers)
+                                    {
+                                        <MudText Typo="Typo.caption" Class="d-block">@p.Player.FirstName @p.Player.LastName: <b>@p.Pts</b> pts</MudText>
+                                    }
+                                </MudItem>
+                             </MudGrid>
+                        }
+                        
+                        <!-- Value Analysis with Edge Meters -->
+                        @if (_homeStats != null && _awayStats != null)
+                        {
+                            <MudPaper Outlined="true" Class="pa-4 mt-4">
+                                <MudText Typo="Typo.h6" Class="mb-3">
+                                    <MudIcon Icon="@Icons.Material.Filled.Speed" Class="mr-2" />
+                                    Edge Analysis
+                                </MudText>
+                                
+                                <MudGrid>
+                                    <!-- Spread Edge Meter -->
+                                    <MudItem xs="12" md="6">
+                                        <div class="text-center">
+                                            <MudText Typo="Typo.subtitle2" Class="mb-2">Spread Edge</MudText>
+                                            <div style="position: relative; width: 150px; height: 80px; margin: 0 auto;">
+                                                <!-- Edge Meter Arc -->
+                                                <svg viewBox="0 0 100 50" style="width: 100%; height: 100%;">
+                                                    <!-- Background arc -->
+                                                    <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#e0e0e0" stroke-width="8" stroke-linecap="round"/>
+                                                    <!-- Value arc -->
+                                                    <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" 
+                                                          stroke="@GetEdgeMeterColor(_spreadEdge)" 
+                                                          stroke-width="8" 
+                                                          stroke-linecap="round"
+                                                          stroke-dasharray="@GetEdgeDashArray(_spreadEdge)"
+                                                          stroke-dashoffset="0"/>
+                                                    <!-- Center indicator -->
+                                                    <line x1="50" y1="50" x2="50" y2="15" stroke="#666" stroke-width="2" opacity="0.5"/>
+                                                </svg>
+                                                <div style="position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%);">
+                                                    <MudText Typo="Typo.h5" Color="@GetEdgeTextColor(_spreadEdge)">
+                                                        @(_spreadEdge > 0 ? "+" : "")@_spreadEdge.ToString("F1")
+                                                    </MudText>
+                                                </div>
+                                            </div>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                Line: @_bettingSpread.ToString("F1") | Proj: @_projectedSpread.ToString("F1")
+                                            </MudText>
+                                            <MudChip T="string" Size="Size.Small" Color="@GetEdgeChipColor(_spreadEdge)" Class="mt-1">
+                                                @GetEdgeLabel(_spreadEdge)
+                                            </MudChip>
+                                        </div>
+                                    </MudItem>
 
+                                    <!-- Total Edge Meter -->
+                                    <MudItem xs="12" md="6">
+                                        <div class="text-center">
+                                            <MudText Typo="Typo.subtitle2" Class="mb-2">Total Edge</MudText>
+                                            <div style="position: relative; width: 150px; height: 80px; margin: 0 auto;">
+                                                <!-- Edge Meter Arc -->
+                                                <svg viewBox="0 0 100 50" style="width: 100%; height: 100%;">
+                                                    <!-- Background arc -->
+                                                    <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#e0e0e0" stroke-width="8" stroke-linecap="round"/>
+                                                    <!-- Value arc -->
+                                                    <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" 
+                                                          stroke="@GetEdgeMeterColor(_totalEdge)" 
+                                                          stroke-width="8" 
+                                                          stroke-linecap="round"
+                                                          stroke-dasharray="@GetEdgeDashArray(_totalEdge)"
+                                                          stroke-dashoffset="0"/>
+                                                    <!-- Center indicator -->
+                                                    <line x1="50" y1="50" x2="50" y2="15" stroke="#666" stroke-width="2" opacity="0.5"/>
+                                                </svg>
+                                                <div style="position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%);">
+                                                    <MudText Typo="Typo.h5" Color="@GetEdgeTextColor(_totalEdge)">
+                                                        @(_totalEdge > 0 ? "+" : "")@_totalEdge.ToString("F1")
+                                                    </MudText>
+                                                </div>
+                                            </div>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                O/U: @_bettingTotal.ToString("F1") | Proj: @_projectedTotal.ToString("F1")
+                                            </MudText>
+                                            <MudChip T="string" Size="Size.Small" Color="@GetEdgeChipColor(_totalEdge)" Class="mt-1">
+                                                @(_totalEdge > 0 ? "OVER" : _totalEdge < 0 ? "UNDER" : "PUSH")
+                                            </MudChip>
+                                        </div>
+                                    </MudItem>
+                                </MudGrid>
+
+                                <MudDivider Class="my-3" />
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Center">
+                                    Edge = Projected - Line. Positive edge suggests value opportunity.
+                                </MudText>
+                            </MudPaper>
+                        }
+
+                        <MudExpansionPanels Class="mt-4">
+                            <MudExpansionPanel Text="Betting Odds Details">
+                                <MudGrid>
+                                    @foreach(var book in Event.Bookmakers)
+                                    {
+                                        <MudItem xs="12" sm="6">
+                                            <MudCard Outlined="true" Class="pa-2">
+                                                 <MudText Typo="Typo.subtitle2">@book.Title</MudText>
+                                                 @foreach(var market in book.Markets)
+                                                 {
+                                                     <div class="d-flex justify-space-between mt-1">
+                                                         <MudText Typo="Typo.caption">@FormatMarketKey(market.Key)</MudText>
+                                                         <div class="d-flex gap-2">
+                                                             @foreach(var outcome in market.Outcomes)
+                                                             {
+                                                                 <MudText Typo="Typo.caption">
+                                                                     @outcome.Name: <b>@FormatPrice(outcome.Price)</b> 
+                                                                     @(outcome.Point.HasValue ? $"({(outcome.Point>0?"+":"")}{outcome.Point})" : "")
+                                                                 </MudText>
+                                                             }
+                                                         </div>
+                                                     </div>
+                                                 }
+                                            </MudCard>
+                                        </MudItem>
+                                    }
+                                </MudGrid>
+                            </MudExpansionPanel>
+                        </MudExpansionPanels>
+                    }
+                </MudTabPanel>
+
+                @if (Sport.Contains("basketball"))
+                {
+                    <MudTabPanel Text="Neural Network" Icon="@Icons.Material.Filled.Memory">
+                        @if (_isEnsembleLoading)
+                        {
+                            <div class="d-flex flex-column align-center justify-center pa-12">
+                                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+                                <MudText Class="mt-4">Consulting Neural Network Models...</MudText>
+                            </div>
+                        }
+                        else if (_ensembleResult != null)
+                        {
+                            <MudPaper Elevation="0" Class="pa-4">
+                                <div class="d-flex align-center mb-6">
+                                    <MudIcon Icon="@Icons.Material.Filled.AutoGraph" Color="Color.Primary" Class="mr-2" />
+                                    <MudText Typo="Typo.h6">Ensemble Machine Learning Predictions</MudText>
+                                </div>
+
+                                <MudGrid>
+                                    <!-- XGBoost (Primary) -->
+                                    <MudItem xs="12" md="6">
+                                        <MudCard Elevation="2" Class="pa-4" Style="border-top: 4px solid #2196f3;">
+                                            <MudText Typo="Typo.subtitle2" Color="Color.Info" Class="mb-2">PRIMARY: XGBOOST</MudText>
+                                            <div class="d-flex align-end gap-2">
+                                                <MudText Typo="Typo.h3">@((_ensembleResult.HomeWinProbability * 100).ToString("F1"))%</MudText>
+                                                <MudText Typo="Typo.body2" Class="mb-2">Home Win Prob</MudText>
+                                            </div>
+                                            <MudText Typo="Typo.caption" Class="mt-2 d-block">Historical Accuracy: 68.9%</MudText>
+                                        </MudCard>
+                                    </MudItem>
+
+                                    <!-- Neural Network (Secondary) -->
+                                    <MudItem xs="12" md="6">
+                                        <MudCard Elevation="2" Class="pa-4" Style="border-top: 4px solid #9c27b0;">
+                                            <MudText Typo="Typo.subtitle2" Color="Color.Secondary" Class="mb-2">2ND OPINION: NEURAL NETWORK</MudText>
+                                            <div class="d-flex align-end gap-2">
+                                                <MudText Typo="Typo.h3">
+                                                    @(_ensembleResult.NnHomeWinProbability.HasValue ? (_ensembleResult.NnHomeWinProbability.Value * 100).ToString("F1") + "%" : "N/A")
+                                                </MudText>
+                                                <MudText Typo="Typo.body2" Class="mb-2">Home Win Prob</MudText>
+                                            </div>
+                                            <MudText Typo="Typo.caption" Class="mt-2 d-block">TensorFlow Meta-Model</MudText>
+                                        </MudCard>
+                                    </MudItem>
+
+                                    @if (_ensembleResult.NnHomeWinProbability.HasValue)
+                                    {
+                                        <MudItem xs="12">
+                                            @{
+                                                var diff = _ensembleResult.NnHomeWinProbability.Value - _ensembleResult.HomeWinProbability;
+                                                var agreement = Math.Abs(diff) < 0.05 ? "Strong Agreement" : (Math.Abs(diff) < 0.15 ? "Moderate Agreement" : "Model Discrepancy");
+                                                var alertSeverity = Math.Abs(diff) < 0.05 ? Severity.Success : (Math.Abs(diff) < 0.15 ? Severity.Info : Severity.Warning);
+                                            }
+                                            <MudAlert Severity="@alertSeverity" Variant="Variant.Filled" Class="mt-2 text-white">
+                                                <div class="d-flex align-center gap-2">
+                                                    <MudIcon Icon="@(alertSeverity == Severity.Success ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Info)" />
+                                                    <div>
+                                                        <b>@agreement:</b> The models @(Math.Abs(diff) < 0.05 ? "highly" : "") agree on this matchup. 
+                                                        Win Prob Difference: @(Math.Abs(diff) * 100).ToString("F1")%
+                                                    </div>
+                                                </div>
+                                            </MudAlert>
+                                        </MudItem>
+                                    }
+
+                                    <!-- Betting Recommendations -->
+                                    <MudItem xs="12">
+                                        <MudPaper Outlined="true" Class="pa-4 mt-2" Style="background: rgba(0,0,0,0.02); border-left: 6px solid #ff9800;">
+                                            <div class="d-flex align-center mb-2">
+                                                <MudIcon Icon="@Icons.Material.Filled.Recommend" Color="Color.Warning" Class="mr-2" />
+                                                <MudText Typo="Typo.subtitle1"><b>Betting Guidance (Ensemble-Backed)</b></MudText>
+                                            </div>
+                                            <MudGrid>
+                                                <MudItem xs="12" sm="6">
+                                                    <div class="pa-2 rounded" style="background: rgba(0,0,0,0.05)">
+                                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Expected Value (EV)</MudText>
+                                                        <div class="d-flex justify-space-between mt-1">
+                                                            <MudText Typo="Typo.body2">Home:</MudText>
+                                                            <MudText Typo="Typo.body1" Color="@(_ensembleResult.HomeEv > 0.01 ? Color.Success : Color.Default)">
+                                                                <b>@(_ensembleResult.HomeEv?.ToString("P1") ?? "N/A")</b>
+                                                            </MudText>
+                                                        </div>
+                                                        <div class="d-flex justify-space-between">
+                                                            <MudText Typo="Typo.body2">Away:</MudText>
+                                                            <MudText Typo="Typo.body1" Color="@(_ensembleResult.AwayEv > 0.01 ? Color.Success : Color.Default)">
+                                                                <b>@(_ensembleResult.AwayEv?.ToString("P1") ?? "N/A")</b>
+                                                            </MudText>
+                                                        </div>
+                                                    </div>
+                                                </MudItem>
+                                                <MudItem xs="12" sm="6">
+                                                    <div class="pa-2 rounded" style="background: rgba(0,0,0,0.05)">
+                                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Kelly Criterion (1% Cap)</MudText>
+                                                        <div class="d-flex justify-space-between mt-1">
+                                                            <MudText Typo="Typo.body2">Home Stake:</MudText>
+                                                            <MudText Typo="Typo.body1"><b>@(_ensembleResult.HomeKelly?.ToString("P2") ?? "0.00%")</b></MudText>
+                                                        </div>
+                                                        <div class="d-flex justify-space-between">
+                                                            <MudText Typo="Typo.body2">Away Stake:</MudText>
+                                                            <MudText Typo="Typo.body1"><b>@(_ensembleResult.AwayKelly?.ToString("P2") ?? "0.00%")</b></MudText>
+                                                        </div>
+                                                    </div>
+                                                </MudItem>
+                                            </MudGrid>
+                                        </MudPaper>
+                                    </MudItem>
+                                </MudGrid>
+                            </MudPaper>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Info" Class="ma-4">
+                                No ensemble data available for this game. Ensure the team names match kyleskom's dataset.
+                            </MudAlert>
+                        }
+                    </MudTabPanel>
+                }
+            </MudTabs>
         </MudContainer>
     </DialogContent>
     <DialogActions>
@@ -274,9 +397,62 @@
     private double _spreadEdge => _projectedSpread - _bettingSpread;
     private double _totalEdge => _projectedTotal - _bettingTotal;
     
+    private KyleskomEnsembleResult? _ensembleResult;
+    private bool _isEnsembleLoading = false;
+    
     protected override async Task OnInitializedAsync()
     {
         await LoadStats();
+        if (Sport.Contains("basketball"))
+        {
+            await LoadEnsembleData();
+        }
+    }
+
+    private async Task LoadEnsembleData()
+    {
+        try
+        {
+            _isEnsembleLoading = true;
+            StateHasChanged();
+
+            // Extract odds from event
+            int? homeMl = null;
+            int? awayMl = null;
+            double totalLine = 225.0;
+
+            var fd = Event.Bookmakers.FirstOrDefault(b => b.Key == "fanduel") ?? Event.Bookmakers.FirstOrDefault();
+            if (fd != null)
+            {
+                var h2h = fd.Markets.FirstOrDefault(m => m.Key == "h2h");
+                if (h2h != null)
+                {
+                    homeMl = (int?)h2h.Outcomes.FirstOrDefault(o => o.Name == Event.HomeTeam)?.Price;
+                    awayMl = (int?)h2h.Outcomes.FirstOrDefault(o => o.Name == Event.AwayTeam)?.Price;
+                }
+
+                var totals = fd.Markets.FirstOrDefault(m => m.Key == "totals");
+                if (totals != null)
+                {
+                    totalLine = totals.Outcomes.FirstOrDefault()?.Point ?? 225.0;
+                }
+            }
+
+            var resp = await MLService.CompareNbaModelsAsync(Event.HomeTeam, Event.AwayTeam, totalLine, homeMl, awayMl);
+            if (resp != null)
+            {
+                _ensembleResult = resp.GetKyleskomResult();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading ensemble data");
+        }
+        finally
+        {
+            _isEnsembleLoading = false;
+            StateHasChanged();
+        }
     }
 
     private async Task LoadStats()
