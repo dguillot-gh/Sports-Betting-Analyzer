@@ -26,3 +26,4 @@ sbrscrape
 pynascar
 torch --index-url https://download.pytorch.org/whl/cpu
 joblib
+tensorflow

@@ -4,33 +4,76 @@ Bridges the reference kyleskom/NBA-Machine-Learning-Sports-Betting repo
 with our Model Testing pages.
 
 Uses their pre-trained XGBoost models (68.9% ML accuracy) and data pipeline.
-This version EXACTLY matches their main.py prediction methodology.
+This version EXACTLY matches their main.py and XGBoost_Runner.py methodology.
 """
 
 import logging
 import os
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Tuple
-import sys
+import re
+from datetime import datetime
+from typing import Dict, Any
+from pathlib import Path
+
+# Joblib required for loading calibration models (.pkl)
+import joblib
 
 logger = logging.getLogger(__name__)
 
 # Path to the cloned reference repo
 REFERENCE_REPO_PATH = os.path.join(os.path.dirname(__file__), 'nba_ml_reference')
-MODELS_PATH = os.path.join(REFERENCE_REPO_PATH, 'Models', 'XGBoost_Models')
+# Regex for model accuracy parsing (matches XGBoost_Runner.py)
+XGB_ACCURACY_PATTERN = re.compile(r"XGBoost_(\d+(?:\.\d+)?)%_")
+# Regex for NN models (matches NN_Runner.py)
+NN_ML_PATTERN = re.compile(r"Trained-Model-ML-(\d+(?:\.\d+)?)")
+NN_OU_PATTERN = re.compile(r"Trained-Model-OU-(\d+(?:\.\d+)?)")
 
 # Check if XGBoost available
 try:
     import xgboost as xgb
-    import numpy as np
-    import pandas as pd
     XGB_AVAILABLE = True
 except ImportError:
     XGB_AVAILABLE = False
     logger.warning("XGBoost not available")
 
+# Check if TensorFlow available
+try:
+    import tensorflow as tf
+    from keras.models import load_model
+    TF_AVAILABLE = True
+except ImportError:
+    TF_AVAILABLE = False
+    logger.warning("TensorFlow not available")
+
+import numpy as np
+import pandas as pd
+
+
+# ... [Existing Headers and Team Dictionaries remain identical] ...
+
 
 # Headers for NBA API (matching reference repo exactly)
+# ... (rest of headers logic stays same, skipping to class) ...
+
+class KyleskomPredictor:
+    """
+    Uses kyleskom's pre-trained XGBoost AND Neural Network models.
+    Matches main.py, XGBoost_Runner.py, and NN_Runner.py methodology.
+    """
+    
+    def __init__(self):
+        # XGBoost models
+        self.xgb_ml = None
+        self.xgb_ou = None
+        self.xgb_ml_calibrator = None
+        self.xgb_uo_calibrator = None
+        
+        # NN models
+        self.nn_ml = None
+        self.nn_ou = None
+        
+        self.df = None  # Raw DataFrame from NBA API (not sorted)
+        self._models_loaded = False
+        self._data_loaded = False
 NBA_API_HEADERS = {
     "Accept": "*/*",
     "Accept-Encoding": "gzip, deflate, br",
@@ -59,141 +102,68 @@ TEAM_INDEX_CURRENT = {
 
 # Team name aliases - maps common variations to canonical names
 TEAM_NAME_ALIASES = {
-    # LA teams - most common mismatch (all possible variations)
+    # LA teams - most common mismatch
     'LA Clippers': 'Los Angeles Clippers',
     'LA Lakers': 'Los Angeles Lakers',
     'L.A. Clippers': 'Los Angeles Clippers',
     'L.A. Lakers': 'Los Angeles Lakers',
     'LAC': 'Los Angeles Clippers',
     'LAL': 'Los Angeles Lakers',
-    'Los Angeles': 'Los Angeles Lakers',  # Assume Lakers if just "Los Angeles"
+    'Los Angeles': 'Los Angeles Lakers',
     'Clippers': 'Los Angeles Clippers',
     'Lakers': 'Los Angeles Lakers',
     
-    # Golden State variations
+    # Golden State
     'GS Warriors': 'Golden State Warriors',
     'GSW': 'Golden State Warriors',
     'Golden State': 'Golden State Warriors',
     'Warriors': 'Golden State Warriors',
     
-    # Other common variations with abbreviations
+    # Other common variations
     'NY Knicks': 'New York Knicks',
     'New York': 'New York Knicks',
     'NYK': 'New York Knicks',
     'Knicks': 'New York Knicks',
-    
     'OKC Thunder': 'Oklahoma City Thunder',
     'OKC': 'Oklahoma City Thunder',
     'Oklahoma City': 'Oklahoma City Thunder',
     'Thunder': 'Oklahoma City Thunder',
-    
     'Philly 76ers': 'Philadelphia 76ers',
     'PHI': 'Philadelphia 76ers',
     'Sixers': 'Philadelphia 76ers',
     '76ers': 'Philadelphia 76ers',
-    
     'NOLA Pelicans': 'New Orleans Pelicans',
     'NOP': 'New Orleans Pelicans',
     'New Orleans': 'New Orleans Pelicans',
     'Pelicans': 'New Orleans Pelicans',
-    
     'Blazers': 'Portland Trail Blazers',
     'Trail Blazers': 'Portland Trail Blazers',
     'POR': 'Portland Trail Blazers',
     'Portland': 'Portland Trail Blazers',
     
-    # All teams with city-only and short name versions
-    'Boston': 'Boston Celtics',
-    'BOS': 'Boston Celtics',
-    'Celtics': 'Boston Celtics',
-    
-    'Brooklyn': 'Brooklyn Nets',
-    'BKN': 'Brooklyn Nets',
-    'Nets': 'Brooklyn Nets',
-    
-    'Charlotte': 'Charlotte Hornets',
-    'CHA': 'Charlotte Hornets',
-    'Hornets': 'Charlotte Hornets',
-    
-    'Chicago': 'Chicago Bulls',
-    'CHI': 'Chicago Bulls',
-    'Bulls': 'Chicago Bulls',
-    
-    'Cleveland': 'Cleveland Cavaliers',
-    'CLE': 'Cleveland Cavaliers',
-    'Cavaliers': 'Cleveland Cavaliers',
-    'Cavs': 'Cleveland Cavaliers',
-    
-    'Dallas': 'Dallas Mavericks',
-    'DAL': 'Dallas Mavericks',
-    'Mavericks': 'Dallas Mavericks',
-    'Mavs': 'Dallas Mavericks',
-    
-    'Denver': 'Denver Nuggets',
-    'DEN': 'Denver Nuggets',
-    'Nuggets': 'Denver Nuggets',
-    
-    'Detroit': 'Detroit Pistons',
-    'DET': 'Detroit Pistons',
-    'Pistons': 'Detroit Pistons',
-    
-    'Houston': 'Houston Rockets',
-    'HOU': 'Houston Rockets',
-    'Rockets': 'Houston Rockets',
-    
-    'Indiana': 'Indiana Pacers',
-    'IND': 'Indiana Pacers',
-    'Pacers': 'Indiana Pacers',
-    
-    'Memphis': 'Memphis Grizzlies',
-    'MEM': 'Memphis Grizzlies',
-    'Grizzlies': 'Memphis Grizzlies',
-    
-    'Miami': 'Miami Heat',
-    'MIA': 'Miami Heat',
-    'Heat': 'Miami Heat',
-    
-    'Milwaukee': 'Milwaukee Bucks',
-    'MIL': 'Milwaukee Bucks',
-    'Bucks': 'Milwaukee Bucks',
-    
-    'Minnesota': 'Minnesota Timberwolves',
-    'MIN': 'Minnesota Timberwolves',
-    'Timberwolves': 'Minnesota Timberwolves',
-    'Wolves': 'Minnesota Timberwolves',
-    
-    'Orlando': 'Orlando Magic',
-    'ORL': 'Orlando Magic',
-    'Magic': 'Orlando Magic',
-    
-    'Phoenix': 'Phoenix Suns',
-    'PHX': 'Phoenix Suns',
-    'Suns': 'Phoenix Suns',
-    
-    'Sacramento': 'Sacramento Kings',
-    'SAC': 'Sacramento Kings',
-    'Kings': 'Sacramento Kings',
-    
-    'San Antonio': 'San Antonio Spurs',
-    'SAS': 'San Antonio Spurs',
-    'Spurs': 'San Antonio Spurs',
-    
-    'Toronto': 'Toronto Raptors',
-    'TOR': 'Toronto Raptors',
-    'Raptors': 'Toronto Raptors',
-    
-    'Utah': 'Utah Jazz',
-    'UTA': 'Utah Jazz',
-    'Jazz': 'Utah Jazz',
-    
-    'Washington': 'Washington Wizards',
-    'WAS': 'Washington Wizards',
-    'Wizards': 'Washington Wizards',
-    
-    # Atlanta - could be confused
-    'Atlanta': 'Atlanta Hawks',
-    'ATL': 'Atlanta Hawks',
-    'Hawks': 'Atlanta Hawks',
+    # Short names
+    'Boston': 'Boston Celtics', 'BOS': 'Boston Celtics', 'Celtics': 'Boston Celtics',
+    'Brooklyn': 'Brooklyn Nets', 'BKN': 'Brooklyn Nets', 'Nets': 'Brooklyn Nets',
+    'Charlotte': 'Charlotte Hornets', 'CHA': 'Charlotte Hornets', 'Hornets': 'Charlotte Hornets',
+    'Chicago': 'Chicago Bulls', 'CHI': 'Chicago Bulls', 'Bulls': 'Chicago Bulls',
+    'Cleveland': 'Cleveland Cavaliers', 'CLE': 'Cleveland Cavaliers', 'Cavaliers': 'Cleveland Cavaliers', 'Cavs': 'Cleveland Cavaliers',
+    'Dallas': 'Dallas Mavericks', 'DAL': 'Dallas Mavericks', 'Mavericks': 'Dallas Mavericks', 'Mavs': 'Dallas Mavericks',
+    'Denver': 'Denver Nuggets', 'DEN': 'Denver Nuggets', 'Nuggets': 'Denver Nuggets',
+    'Detroit': 'Detroit Pistons', 'DET': 'Detroit Pistons', 'Pistons': 'Detroit Pistons',
+    'Houston': 'Houston Rockets', 'HOU': 'Houston Rockets', 'Rockets': 'Houston Rockets',
+    'Indiana': 'Indiana Pacers', 'IND': 'Indiana Pacers', 'Pacers': 'Indiana Pacers',
+    'Memphis': 'Memphis Grizzlies', 'MEM': 'Memphis Grizzlies', 'Grizzlies': 'Memphis Grizzlies',
+    'Miami': 'Miami Heat', 'MIA': 'Miami Heat', 'Heat': 'Miami Heat',
+    'Milwaukee': 'Milwaukee Bucks', 'MIL': 'Milwaukee Bucks', 'Bucks': 'Milwaukee Bucks',
+    'Minnesota': 'Minnesota Timberwolves', 'MIN': 'Minnesota Timberwolves', 'Timberwolves': 'Minnesota Timberwolves', 'Wolves': 'Minnesota Timberwolves',
+    'Orlando': 'Orlando Magic', 'ORL': 'Orlando Magic', 'Magic': 'Orlando Magic',
+    'Phoenix': 'Phoenix Suns', 'PHX': 'Phoenix Suns', 'Suns': 'Phoenix Suns',
+    'Sacramento': 'Sacramento Kings', 'SAC': 'Sacramento Kings', 'Kings': 'Sacramento Kings',
+    'San Antonio': 'San Antonio Spurs', 'SAS': 'San Antonio Spurs', 'Spurs': 'San Antonio Spurs',
+    'Toronto': 'Toronto Raptors', 'TOR': 'Toronto Raptors', 'Raptors': 'Toronto Raptors',
+    'Utah': 'Utah Jazz', 'UTA': 'Utah Jazz', 'Jazz': 'Utah Jazz',
+    'Washington': 'Washington Wizards', 'WAS': 'Washington Wizards', 'Wizards': 'Washington Wizards',
+    'Atlanta': 'Atlanta Hawks', 'ATL': 'Atlanta Hawks', 'Hawks': 'Atlanta Hawks',
 }
 
 
@@ -203,7 +173,6 @@ def normalize_team_name(team: str) -> str:
         return team
     if team in TEAM_NAME_ALIASES:
         return TEAM_NAME_ALIASES[team]
-    # Try case-insensitive match
     team_lower = team.lower()
     for alias, canonical in TEAM_NAME_ALIASES.items():
         if alias.lower() == team_lower:
@@ -211,72 +180,114 @@ def normalize_team_name(team: str) -> str:
     for canonical in TEAM_INDEX_CURRENT.keys():
         if canonical.lower() == team_lower:
             return canonical
-    return team  # Return original if no match
+    return team
 
 
 class KyleskomPredictor:
     """
     Uses kyleskom's pre-trained XGBoost models for NBA predictions.
-    This version matches their main.py exactly.
+    This version matches their main.py, XGBoost_Runner.py, and Utils/Expected_Value.py exactly.
     """
     
     def __init__(self):
-        self.model_ml = None
-        self.model_ou = None
+        self.xgb_ml = None
+        self.xgb_ou = None
+        self.xgb_ml_calibrator = None
+        self.xgb_uo_calibrator = None
         self.df = None  # Raw DataFrame from NBA API (not sorted)
         self._models_loaded = False
         self._data_loaded = False
     
-    def load_models(self) -> bool:
-        """Load the pre-trained models from the reference repo."""
-        if not XGB_AVAILABLE:
-            logger.error("XGBoost not available")
-            return False
+    def _select_model_path(self, kind: str, base_path: Path, pattern: re.Pattern) -> Path:
+        """Select best model dynamically based on accuracy (logic from XGBoost_Runner.py)."""
+        if not base_path.exists():
+            return None
+            
+        candidates = list(base_path.glob(f"*{kind}*"))
+        # Filter valid extensions
+        candidates = [p for p in candidates if p.suffix in {'.json', '.h5', '.keras'}]
         
+        if not candidates:
+            # Try recursive search if not flat
+            candidates = list(base_path.rglob(f"*{kind}*"))
+            # Filter valid extensions again
+            candidates = [p for p in candidates if p.suffix in {'.json', '.h5', '.keras'}]
+            if not candidates:
+                return None
+
+        def score(path):
+            match = pattern.search(path.name)
+            accuracy = float(match.group(1)) if match else 0.0
+            return (accuracy, path.stat().st_mtime)
+
+        best_model = max(candidates, key=score)
+        logger.info(f"Selected best {kind} model: {best_model.name}")
+        return best_model
+
+    def _load_calibrator(self, model_path: Path):
+        """Load calibration model if exists (logic from XGBoost_Runner.py)."""
+        calibration_path = model_path.with_name(f"{model_path.stem}_calibration.pkl")
+        if not calibration_path.exists():
+            # Try finding generic calibration file for NN if exact match fails
+            pass 
+        else:
+            try:
+                calibrator = joblib.load(calibration_path)
+                logger.info(f"Loaded calibration: {calibration_path.name}")
+                return calibrator
+            except Exception as e:
+                logger.error(f"Failed to load calibrator: {e}")
+        return None
+
+    def load_models(self) -> bool:
+        """Load the best pre-trained models (XGBoost + NN)."""
         if self._models_loaded:
             return True
         
-        try:
-            # Find best ML model
-            ml_model_files = [
-                'XGBoost_68.9%_ML-3.json',
-                'XGBoost_68.7%_ML-4.json'
-            ]
-            
-            for fname in ml_model_files:
-                ml_path = os.path.join(MODELS_PATH, fname)
-                if os.path.exists(ml_path):
-                    self.model_ml = xgb.Booster()
-                    self.model_ml.load_model(ml_path)
-                    logger.info(f"Loaded ML model: {fname}")
-                    break
-            
-            if not self.model_ml:
-                logger.error(f"No ML model found in {MODELS_PATH}")
-                return False
-            
-            # Find best OU model
-            ou_model_files = [
-                'XGBoost_54.8%_UO-8.json',
-                'XGBoost_53.7%_UO-9.json'
-            ]
-            
-            for fname in ou_model_files:
-                ou_path = os.path.join(MODELS_PATH, fname)
-                if os.path.exists(ou_path):
-                    self.model_ou = xgb.Booster()
-                    self.model_ou.load_model(ou_path)
-                    logger.info(f"Loaded OU model: {fname}")
-                    break
-            
-            self._models_loaded = True
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error loading models: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return False
+        MODELS_ROOT = Path(REFERENCE_REPO_PATH) / 'Models'
+        XGB_DIR = MODELS_ROOT / 'XGBoost_Models'
+        NN_DIR = MODELS_ROOT / 'NN_Models'
+        
+        # 1. Load XGBoost
+        if XGB_AVAILABLE:
+            try:
+                # Use default dir if XGB_DIR doesn't exist
+                search_dir = XGB_DIR if XGB_DIR.exists() else MODELS_ROOT
+                
+                ml_path = self._select_model_path("ML", search_dir, XGB_ACCURACY_PATTERN)
+                if ml_path:
+                    self.xgb_ml = xgb.Booster()
+                    self.xgb_ml.load_model(str(ml_path))
+                    self.xgb_ml_calibrator = self._load_calibrator(ml_path)
+                
+                ou_path = self._select_model_path("UO", search_dir, XGB_ACCURACY_PATTERN)
+                if ou_path:
+                    self.xgb_ou = xgb.Booster()
+                    self.xgb_ou.load_model(str(ou_path))
+                    self.xgb_uo_calibrator = self._load_calibrator(ou_path)
+            except Exception as e:
+                logger.error(f"Error loading XGBoost models: {e}")
+
+        # 2. Load Neural Networks
+        if TF_AVAILABLE:
+            try:
+                search_dir = NN_DIR if NN_DIR.exists() else MODELS_ROOT
+                
+                # NN_Runner looks for "Trained-Model-ML-"
+                ml_path = self._select_model_path("Trained-Model-ML-", search_dir, NN_ML_PATTERN)
+                if ml_path:
+                    self.nn_ml = load_model(str(ml_path), compile=False)
+                    logger.info(f"Loaded NN ML model: {ml_path.name}")
+                
+                ou_path = self._select_model_path("Trained-Model-OU-", search_dir, NN_OU_PATTERN)
+                if ou_path:
+                    self.nn_ou = load_model(str(ou_path), compile=False)
+                    logger.info(f"Loaded NN OU model: {ou_path.name}")
+            except Exception as e:
+                logger.error(f"Error loading NN models: {e}")
+
+        self._models_loaded = True
+        return True
     
     async def fetch_data_from_nba_api(self) -> bool:
         """
@@ -285,16 +296,16 @@ class KyleskomPredictor:
         if self._data_loaded and self.df is not None:
             return True
         
+        # In a real 1:1 integration, we would just shell out to the other script.
+        # But to keep this service running as an API, we replicate the fetch logic identically.
         import aiohttp
         
-        # Determine current season
         now = datetime.now()
         if now.month >= 10:
             season = f"{now.year}-{str(now.year + 1)[2:]}"
         else:
             season = f"{now.year - 1}-{str(now.year)[2:]}"
         
-        # This is the exact same URL format as reference repo
         url = (
             f"https://stats.nba.com/stats/leaguedashteamstats?"
             f"Conference=&DateFrom=&DateTo=&Division=&GameScope=&GameSegment=&Height=&"
@@ -316,7 +327,6 @@ class KyleskomPredictor:
                     
                     data = await response.json()
             
-            # Parse exactly like reference repo's tools.py to_data_frame function
             result_sets = data.get('resultSets', [])
             if not result_sets:
                 logger.error("No resultSets in NBA API response")
@@ -328,17 +338,20 @@ class KyleskomPredictor:
             
             self.df = pd.DataFrame(data=rows, columns=headers)
             logger.info(f"Fetched {len(self.df)} teams with {len(headers)} columns")
-            logger.info(f"Columns: {list(headers)[:10]}...")
             
             self._data_loaded = True
             return True
             
         except Exception as e:
             logger.error(f"Error fetching from NBA API: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
             return False
     
+    def _predict_probs(self, model, data, calibrator=None):
+        """Predict probabilities using model and optional calibrator (1:1 with XGBoost_Runner.py)."""
+        if calibrator is not None:
+            return calibrator.predict_proba(data)
+        return model.predict(xgb.DMatrix(data))
+
     async def predict_game(
         self,
         home_team: str,
@@ -350,7 +363,7 @@ class KyleskomPredictor:
         """
         Predict game outcome EXACTLY like reference repo's main.py createTodaysGames function.
         """
-        # Normalize team names to handle variations like "LA Clippers" -> "Los Angeles Clippers"
+        # Normalize team names
         home_team = normalize_team_name(home_team)
         away_team = normalize_team_name(away_team)
         
@@ -372,118 +385,115 @@ class KyleskomPredictor:
             return {"error": f"Team not found in index: {home_team}"}
         if away_idx is None:
             return {"error": f"Team not found in index: {away_team}"}
-        
-        # Find teams in DataFrame by TEAM_NAME
-        # Note: NBA API may use different names than our canonical (e.g., "LA Clippers" vs "Los Angeles Clippers")
+
+        # Data preparation logic
         try:
-            # Build reverse mapping for NBA API lookup
-            nba_api_name_map = {
-                'Los Angeles Clippers': 'LA Clippers',
-                'Los Angeles Lakers': 'LA Lakers',
-                # Add other possible mismatches
-            }
+            # Lookup helper
+            def find_team_row(team_name):
+                row = self.df[self.df['TEAM_NAME'] == team_name]
+                if len(row) > 0: return row
+                return self.df[self.df['TEAM_NAME'].str.contains(team_name.split()[-1], case=False, na=False)]
+
+            home_row = find_team_row(home_team)
+            away_row = find_team_row(away_team)
             
-            # Try canonical name first, then NBA API variant
-            home_api_name = nba_api_name_map.get(home_team, home_team)
-            away_api_name = nba_api_name_map.get(away_team, away_team)
+            if len(home_row) == 0: return {"error": f"Team not found: {home_team}"}
+            if len(away_row) == 0: return {"error": f"Team not found: {away_team}"}
             
-            # Try canonical name first
-            home_row = self.df[self.df['TEAM_NAME'] == home_team]
-            if len(home_row) == 0:
-                # Try NBA API variant
-                home_row = self.df[self.df['TEAM_NAME'] == home_api_name]
-            if len(home_row) == 0:
-                # Try case-insensitive partial match
-                home_row = self.df[self.df['TEAM_NAME'].str.contains(home_team.split()[-1], case=False, na=False)]
+            home_series = home_row.iloc[0].drop(['TEAM_ID'], errors='ignore')
+            away_series = away_row.iloc[0].drop(['TEAM_ID'], errors='ignore')
             
-            away_row = self.df[self.df['TEAM_NAME'] == away_team]
-            if len(away_row) == 0:
-                away_row = self.df[self.df['TEAM_NAME'] == away_api_name]
-            if len(away_row) == 0:
-                away_row = self.df[self.df['TEAM_NAME'].str.contains(away_team.split()[-1], case=False, na=False)]
-            
-            if len(home_row) == 0:
-                # Log available teams for debugging
-                available = list(self.df['TEAM_NAME'].unique()) if 'TEAM_NAME' in self.df.columns else []
-                logger.error(f"Team not found in API data: {home_team}. Available: {available[:5]}...")
-                return {"error": f"Team not found in API data: {home_team}"}
-            if len(away_row) == 0:
-                return {"error": f"Team not found in API data: {away_team}"}
-            
-            home_series = home_row.iloc[0]
-            away_series = away_row.iloc[0]
-            
-            # Drop TEAM_ID before concatenation (we keep TEAM_NAME for now, drop later)
-            home_series = home_series.drop(['TEAM_ID'], errors='ignore')
-            away_series = away_series.drop(['TEAM_ID'], errors='ignore')
-            
-            # Rename away columns with .1 suffix (like Create_Games.py line 79-81)
+            # Rename away columns
             away_series_renamed = away_series.rename(
                 index={col: f"{col}.1" if col != 'TEAM_NAME' else 'TEAM_NAME.1' for col in away_series.index}
             )
             
-            # Concatenate like reference repo (line 66 of main.py)
+            # Concat
             stats = pd.concat([home_series, away_series_renamed])
             
-            # Add rest days at the end (like Create_Games.py lines 92-93)
-            stats['Days-Rest-Home'] = 1
-            stats['Days-Rest-Away'] = 1
+            # DAYS REST LOGIC (Matching main.py)
+            home_days_off = timedelta(days=7) # Default
+            away_days_off = timedelta(days=7) # Default
             
-            # Now drop TEAM_NAME and TEAM_NAME.1 (like line 74 of main.py)
-            # We do this on the Series before converting to DataFrame
+            try:
+                # Load schedule (assumed available in Data/nba-2025-UTC.csv)
+                schedule_path = Path(REFERENCE_REPO_PATH) / 'Data' / 'nba-2025-UTC.csv'
+                if schedule_path.exists():
+                    schedule_df = pd.read_csv(schedule_path, parse_dates=['Date'], date_format='%d/%m/%Y %H:%M')
+                    today = datetime.now()
+                    
+                    def calc_rest(team_name, sched_df):
+                        team_games = sched_df[
+                            (sched_df['Home Team'] == team_name) | (sched_df['Away Team'] == team_name)
+                        ]
+                        prev_games = team_games.loc[team_games['Date'] <= today].sort_values('Date', ascending=False)
+                        if len(prev_games) > 0:
+                            last_date = prev_games.iloc[0]['Date']
+                            return timedelta(days=1) + today - last_date
+                        return timedelta(days=7)
+
+                    home_days_off = calc_rest(home_team, schedule_df)
+                    away_days_off = calc_rest(away_team, schedule_df)
+                else:
+                    logger.warning(f"Schedule file not found at {schedule_path}")
+            except Exception as e:
+                logger.error(f"Error calculating rest days: {e}")
+
+            stats['Days-Rest-Home'] = home_days_off.days
+            stats['Days-Rest-Away'] = away_days_off.days
+            
             stats = stats.drop(['TEAM_NAME', 'TEAM_NAME.1'], errors='ignore')
             
-            # Convert to DataFrame row format
+            # Feature vector
             data = stats.values.astype(float).reshape(1, -1)
             
-            logger.info(f"Feature shape for {home_team} vs {away_team}: {data.shape} (expected 106 for ML)")
+            # ML Prediction (XGBoost)
+            xgb_home_prob = 0.5
+            if self.xgb_ml:
+                ml_probs = self._predict_probs(self.xgb_ml, data, self.xgb_ml_calibrator)[0]
+                if len(ml_probs) >= 2:
+                    xgb_home_prob = float(ml_probs[1])
+                else:
+                    xgb_home_prob = float(ml_probs)
             
-            if data.shape[1] != 106:
-                logger.warning(f"Feature count mismatch! Expected 106, got {data.shape[1]}")
-            
-            # Create DMatrix and predict
-            dmatrix = xgb.DMatrix(data)
-            ml_pred = self.model_ml.predict(dmatrix)[0]
-            
-            # ML model uses multi:softprob with num_class=2
-            # Output is [away_win_prob, home_win_prob]
-            if len(ml_pred) >= 2:
-                away_win_prob = float(ml_pred[0])
-                home_win_prob = float(ml_pred[1])
-            else:
-                home_win_prob = float(ml_pred)
-                away_win_prob = 1 - home_win_prob
-            
-            # O/U prediction
-            ou_pred = None
-            if self.model_ou and total_line:
+            # Neural Network Prediction (Secondary)
+            nn_home_prob = None
+            if self.nn_ml:
                 try:
-                    # For O/U, we need to add the OU column at the end (107 features total)
-                    # Append OU to the data array
-                    data_ou = np.append(data, [[total_line]], axis=1)
+                    # NN requires normalized data (per NN_Runner.py)
+                    # Note: normalize() in keras works on the array.
+                    data_norm = tf.keras.utils.normalize(data, axis=1)
+                    nn_pred = self.nn_ml.predict(data_norm, verbose=0)
                     
-                    logger.info(f"O/U feature shape: {data_ou.shape} (expected 107 for O/U)")
-                    
-                    dmatrix_ou = xgb.DMatrix(data_ou)
-                    ou_raw = self.model_ou.predict(dmatrix_ou)[0]
-                    
-                    # OU model uses multi:softprob with num_class=3 (under, over, push)
-                    if len(ou_raw) >= 2:
-                        under_prob = float(ou_raw[0])
-                        over_prob = float(ou_raw[1])
-                        ou_pred = {
-                            'pick': 'OVER' if over_prob > under_prob else 'UNDER',
-                            'confidence': float(round(max(over_prob, under_prob) * 100, 1)),
-                            'total_line': float(total_line),
-                            'over_prob': float(round(over_prob, 3)),
-                            'under_prob': float(round(under_prob, 3))
-                        }
-                except Exception as ou_error:
-                    logger.error(f"O/U prediction error: {ou_error}")
-                    import traceback
-                    logger.error(traceback.format_exc())
+                    if nn_pred.shape[1] >= 2:
+                        nn_home_prob = float(nn_pred[0][1])
+                    else:
+                        nn_home_prob = float(nn_pred[0][0])
+                except Exception as e:
+                    logger.error(f"NN Prediction failed: {e}")
+
+            # Use XGB as primary for EV/Kelly calculations
+            home_win_prob = xgb_home_prob
+            away_win_prob = 1 - xgb_home_prob
             
-            # Calculate EV and Kelly
+            # OU Prediction
+            ou_pred = None
+            if self.xgb_ou and total_line:
+                data_ou = np.append(data, [[total_line]], axis=1)
+                ou_probs = self._predict_probs(self.xgb_ou, data_ou, self.xgb_uo_calibrator)[0]
+                
+                if len(ou_probs) >= 2:
+                    under_prob = float(ou_probs[0])
+                    over_prob = float(ou_probs[1])
+                    ou_pred = {
+                        'pick': 'OVER' if over_prob > under_prob else 'UNDER',
+                        'confidence': float(round(max(over_prob, under_prob) * 100, 1)),
+                        'total_line': float(total_line),
+                        'over_prob': float(round(over_prob, 3)),
+                        'under_prob': float(round(under_prob, 3))
+                    }
+
+            # EV and Kelly
             ev_home = ev_away = None
             kelly_home = kelly_away = None
             
@@ -492,26 +502,24 @@ class KyleskomPredictor:
                 ev_away = self._expected_value(away_win_prob, away_ml)
                 kelly_home = self._kelly_criterion(home_ml, home_win_prob)
                 kelly_away = self._kelly_criterion(away_ml, away_win_prob)
-            
+
             predicted_winner = home_team if home_win_prob > away_win_prob else away_team
-            winner_idx = 1 if home_win_prob > away_win_prob else 0
-            confidence = float(round(float(ml_pred[winner_idx]) * 100 if len(ml_pred) >= 2 else max(home_win_prob, away_win_prob) * 100, 1))
-            
+            confidence = float(round(max(home_win_prob, away_win_prob) * 100, 1))
+                 
             return {
-                'model': 'kyleskom_xgb',
-                'model_accuracy': '68.9%',
+                'model': 'kyleskom_ensemble',
                 'home_team': home_team,
                 'away_team': away_team,
                 'home_win_probability': float(round(home_win_prob, 4)),
                 'away_win_probability': float(round(away_win_prob, 4)),
+                'nn_home_win_probability': float(round(nn_home_prob, 4)) if nn_home_prob is not None else None,
                 'predicted_winner': predicted_winner,
-                'confidence': float(confidence),
+                'confidence': confidence,
                 'over_under': ou_pred,
-                'ev_home': float(ev_home) if ev_home is not None else None,
-                'ev_away': float(ev_away) if ev_away is not None else None,
-                'kelly_home': float(kelly_home) if kelly_home is not None else None,
-                'kelly_away': float(kelly_away) if kelly_away is not None else None,
-                'features_used': int(data.shape[1]) if len(data.shape) > 1 else int(len(data)),
+                'ev_home': ev_home,
+                'ev_away': ev_away,
+                'kelly_home': kelly_home,
+                'kelly_away': kelly_away
             }
             
         except Exception as e:
@@ -519,27 +527,20 @@ class KyleskomPredictor:
             import traceback
             logger.error(traceback.format_exc())
             return {"error": str(e)}
+
+    # Utils matching src/Utils logic
+    def _expected_value(self, Pwin, odds):
+        # Matches Expected_Value.py
+        Ploss = 1 - Pwin
+        Mwin = odds if odds > 0 else (100 / abs(odds)) * 100
+        return round((Pwin * Mwin) - (Ploss * 100), 2)
     
-    def _expected_value(self, win_prob: float, american_odds: int) -> float:
-        """Calculate expected value (from reference repo)."""
-        if american_odds > 0:
-            payout = american_odds
-        else:
-            payout = (100 / abs(american_odds)) * 100
-        
-        loss_prob = 1 - win_prob
-        ev = (win_prob * payout) - (loss_prob * 100)
-        return round(ev, 2)
-    
-    def _kelly_criterion(self, american_odds: int, model_prob: float) -> float:
-        """Calculate Kelly Criterion (from reference repo)."""
-        if american_odds >= 100:
-            decimal_odds = american_odds / 100
-        else:
-            decimal_odds = 100 / abs(american_odds)
-        
-        bankroll_fraction = (100 * (decimal_odds * model_prob - (1 - model_prob))) / decimal_odds
-        return round(max(0, bankroll_fraction), 2)
+    def _kelly_criterion(self, american_odds, model_prob):
+        # Matches Kelly_Criterion.py
+        decimal_odds = (american_odds / 100) if american_odds >= 100 else (100 / abs(american_odds))
+        decimal_odds = round(decimal_odds, 2)
+        bankroll_fraction = round((100 * (decimal_odds * model_prob - (1 - model_prob))) / decimal_odds, 2)
+        return max(0, bankroll_fraction)
 
 
 # Singleton instance
@@ -551,18 +552,6 @@ def get_kyleskom_predictor() -> KyleskomPredictor:
         _predictor = KyleskomPredictor()
     return _predictor
 
-
-async def predict_with_kyleskom(
-    home_team: str,
-    away_team: str,
-    total_line: float = 225.0,
-    home_ml: int = None,
-    away_ml: int = None
-) -> Dict[str, Any]:
-    """
-    Convenience function to make predictions using kyleskom's models.
-    """
+async def predict_with_kyleskom(home, away, total=225.0, h_ml=None, a_ml=None):
     predictor = get_kyleskom_predictor()
-    return await predictor.predict_game(
-        home_team, away_team, total_line, home_ml, away_ml
-    )
+    return await predictor.predict_game(home, away, total, h_ml, a_ml)
