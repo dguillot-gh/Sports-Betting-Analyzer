@@ -1,9 +1,9 @@
-# Python ML Service Dockerfile
-FROM python:3.11-slim
+# Stage 1: Build & Infrastructure
+FROM python:3.11-slim as builder
 
 WORKDIR /app
 
-# Install system dependencies including R
+# Install system build dependencies (compilers + R development headers)
 RUN apt-get update && apt-get install -y \
     curl \
     r-base \
@@ -13,33 +13,54 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install R packages for NFL simulations and college baseball
+# 1. Install R dependencies (Slowest layer - cached first)
 RUN R -e "install.packages(c('jsonlite', 'dplyr'), repos='https://cloud.r-project.org')" && \
     R -e "install.packages(c('nflseedR', 'nflreadr'), repos='https://cloud.r-project.org')" && \
     R -e "install.packages('baseballr', repos='https://cloud.r-project.org')"
 
-# Copy requirements first for caching
+# 2. Install Heavy ML dependencies (TensorFlow, Torch, XGBoost)
+# These change less frequently than regular app deps
+COPY requirements-ml.txt .
+RUN pip install --no-cache-dir -r requirements-ml.txt
+
+# 3. Install other Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source code
+# Stage 2: Final Runtime Environment
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install ONLY runtime dependencies (minimal R and system libs)
+RUN apt-get update && apt-get install -y \
+    curl \
+    r-base \
+    libcurl4 \
+    libxml2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python packages from builder
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy R libraries from builder
+COPY --from=builder /usr/local/lib/R/site-library /usr/local/lib/R/site-library
+
+# Copy application source code
+# By copying this AFTER dependencies, we ensure small code changes are nearly instant
 COPY . .
 
-# Create data directories
+# Create necessary data directories
 RUN mkdir -p data/nascar data/nba data/nfl models
 
-# Download XGBoost model files dynamically from kyleskom's GitHub repo
-# Uses Python script that scans GitHub API to get latest models
-# Adding random string to bust Docker cache and ensure fresh download every build
+# Download XGBoost model files
+# Uses Python script to fetch models; busts cache only for this specific layer
 ARG CACHEBUST=1
-RUN python scripts/download_xgb_models.py && \
-    echo "Models downloaded at: $(date)" && \
-    ls -la scripts/nba_ml_reference/Models/XGBoost_Models/
+RUN python scripts/download_xgb_models.py
 
-# Expose port
+# Environment configuration
 EXPOSE 8000
-
-# Set environment variables
 ENV PYTHONPATH=/app/src:/app/api:/app
 ENV PYTHONUNBUFFERED=1
 
@@ -47,5 +68,5 @@ ENV PYTHONUNBUFFERED=1
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Run the API
+# Start application
 CMD ["python", "-m", "uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000"]
