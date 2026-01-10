@@ -38,11 +38,22 @@ except ImportError:
 # Check if TensorFlow available
 try:
     import tensorflow as tf
-    from keras.models import load_model
+    try:
+        from tensorflow.keras.models import load_model
+    except ImportError:
+        try:
+            from keras.models import load_model
+        except ImportError:
+            # Fallback for some TF versions
+            from tensorflow.python.keras.models import load_model
     TF_AVAILABLE = True
-except ImportError:
+    logger.info("TensorFlow/Keras environment detected")
+except ImportError as e:
     TF_AVAILABLE = False
-    logger.warning("TensorFlow not available")
+    logger.warning(f"TensorFlow not available: {e}")
+except Exception as e:
+    TF_AVAILABLE = False
+    logger.error(f"Error checking TensorFlow availability: {e}")
 
 import numpy as np
 import pandas as pd
@@ -303,8 +314,13 @@ class KyleskomPredictor:
                 if ou_path:
                     self.nn_ou = load_model(str(ou_path), compile=False)
                     logger.info(f"Loaded NN OU model: {ou_path.name}")
+                
+                if not self.nn_ml and not self.nn_ou:
+                    logger.warning(f"No NN models found in {search_dir}")
             except Exception as e:
                 logger.error(f"Error loading NN models: {e}")
+        else:
+            logger.info("Skipping NN model load (TensorFlow not available)")
 
         self._models_loaded = True
         return True
