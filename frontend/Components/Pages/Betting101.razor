@@ -1,0 +1,161 @@
+@page "/betting-101"
+@using MudBlazor
+
+<PageTitle>Sports Betting 101 - Smart Betting Guide</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4 mb-8">
+    <MudText Typo="Typo.h3" Align="Align.Center" GutterBottom="true" Class="mb-6">🎓 Sports Betting 101</MudText>
+    <MudText Typo="Typo.h6" Align="Align.Center" Color="Color.Secondary" Class="mb-12">
+        Learn how to leverage math and logic to beat the sportsbooks and bet efficiently.
+    </MudText>
+
+    <MudGrid>
+        @* 1. Bankroll Management *@
+        <MudItem xs="12" md="6">
+            <MudCard Elevation="4" Class="h-100 border-l-4 border-l-primary">
+                <MudCardHeader>
+                    <CardHeaderAvatar>
+                        <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Color="Color.Primary" Size="Size.Large" />
+                    </CardHeaderAvatar>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h5">Bankroll Management</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText Typo="Typo.body1" Class="mb-4">
+                        The single most important skill in betting is **preservation of capital**. Without a bankroll, you can't place bets.
+                    </MudText>
+                    <MudList T="string">
+                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">
+                            <strong>The 1-3% Rule:</strong> Never bet more than 1-3% of your total bankroll on a single game.
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">
+                            <strong>Standardize Units:</strong> Define a "Unit" (e.g., $10 or $100) and track your profit in units, not dollars.
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Error" IconColor="Color.Error">
+                            <strong>Don't Chase:</strong> Increasing your bet size to "get even" after a loss is the fastest way to go broke.
+                        </MudListItem>
+                    </MudList>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        @* 2. Expected Value (EV+) *@
+        <MudItem xs="12" md="6">
+            <MudCard Elevation="4" Class="h-100 border-l-4 border-l-info">
+                <MudCardHeader>
+                    <CardHeaderAvatar>
+                        <MudIcon Icon="@Icons.Material.Filled.Functions" Color="Color.Info" Size="Size.Large" />
+                    </CardHeaderAvatar>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h5">Positive Expected Value (EV+)</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText Typo="Typo.body1" Class="mb-4">
+                        EV betting is when the **probability of winning** is higher than the **implied probability** of the odds.
+                    </MudText>
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4">
+                        Formula: (Win Prob * Payout) - (Loss Prob * Stake)
+                    </MudAlert>
+                    <MudText Typo="Typo.body2">
+                        If the result is positive, it's a "math win" long-term. Kyle's models (XGBoost/NN) specialize in finding these discrepancies between reality and sportsbook lines.
+                    </MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        @* 3. Understanding Odds *@
+        <MudItem xs="12" md="6">
+            <MudCard Elevation="4" Class="h-100 border-l-4 border-l-warning">
+                <MudCardHeader>
+                    <CardHeaderAvatar>
+                        <MudIcon Icon="@Icons.Material.Filled.Percent" Color="Color.Warning" Size="Size.Large" />
+                    </CardHeaderAvatar>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h5">Understanding Odds</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText Typo="Typo.body1" Class="mb-4">
+                        Odds are just probabilities in disguise.
+                    </MudText>
+                    <MudGrid>
+                        <MudItem xs="6">
+                            <MudText Typo="Typo.subtitle1"><strong>American Odds</strong></MudText>
+                            <MudText Typo="Typo.body2">-110 means bet $110 to win $100.<br/>+150 means bet $100 to win $150.</MudText>
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudText Typo="Typo.subtitle1"><strong>Implied Prob</strong></MudText>
+                            <MudText Typo="Typo.body2">-110 = 52.4% chance.<br/>+100 = 50.0% chance.<br/>+200 = 33.3% chance.</MudText>
+                        </MudItem>
+                    </MudGrid>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        @* 4. The Kelly Criterion *@
+        <MudItem xs="12" md="6">
+            <MudCard Elevation="4" Class="h-100 border-l-4 border-l-success">
+                <MudCardHeader>
+                    <CardHeaderAvatar>
+                        <MudIcon Icon="@Icons.Material.Filled.Balance" Color="Color.Success" Size="Size.Large" />
+                    </CardHeaderAvatar>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h5">The Kelly Criterion</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText Typo="Typo.body1" Class="mb-4">
+                        The Kelly Criterion is a formula used to determine the **mathematically optimal amount** to bet on a simulation.
+                    </MudText>
+                    <MudText Typo="Typo.body2" Class="mb-2 italic">"Bet more when the edge is high, bet less when the edge is low."</MudText>
+                    <MudAlert Severity="Severity.Success" Variant="Variant.Text">
+                        Our app calculates this automatically in the <strong>Live Odds</strong> pages to help you size your stakes.
+                    </MudAlert>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        @* Quick Tips Section *@
+        <MudItem xs="12">
+            <MudPaper Elevation="2" Class="pa-6 mt-4 mud-theme-dark">
+                <MudText Typo="Typo.h5" GutterBottom="true" Class="mb-4">⚡ Pro Tips for Efficiency</MudText>
+                <MudGrid>
+                    <MudItem xs="12" sm="4">
+                        <MudText Typo="Typo.subtitle1"><strong>Line Shopping</strong></MudText>
+                        <MudText Typo="Typo.body2">Always check multiple sportsbooks. Getting FanDuel at -105 vs DraftKings at -110 adds up to a huge difference over 1,000 bets.</MudText>
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudText Typo="Typo.subtitle1"><strong>Avoid the "Parlay Trap"</strong></MudText>
+                        <MudText Typo="Typo.body2">Parlays are highly profitable for books. Use them sparingly or only when every leg has positive EV (Correlation is key!).</MudText>
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudText Typo="Typo.subtitle1"><strong>Trust the Data</strong></MudText>
+                        <MudText Typo="Typo.body2">Model logic is superior to "gut feelings." If the XGBoost and Neural Network agree, it's a high-conviction signals.</MudText>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudStack Row="true" Justify="Justify.Center" Class="mt-12">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.SportsBasketball" href="/live-nba-odds" Size="Size.Large">
+            Apply to NBA
+        </MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.SportsFootball" href="/live-nfl-odds" Size="Size.Large">
+            Apply to NFL
+        </MudButton>
+    </MudStack>
+</MudContainer>
+
+<style>
+    .border-l-4 { border-left-width: 4px !important; }
+    .border-l-primary { border-left-color: var(--mud-palette-primary) !important; }
+    .border-l-info { border-left-color: var(--mud-palette-info) !important; }
+    .border-l-warning { border-left-color: var(--mud-palette-warning) !important; }
+    .border-l-success { border-left-color: var(--mud-palette-success) !important; }
+</style>
+
+@code {
+}
