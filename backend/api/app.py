@@ -16,6 +16,7 @@ from api.bet_tracker_endpoints import router as bet_tracker_router
 from api.model_lab_endpoints import router as model_lab_router
 from api.nascar_endpoints import router as nascar_router
 from api.espn_endpoints import router as espn_router
+from api.bug_tracker_endpoints import router as bug_tracker_router
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
@@ -55,6 +56,7 @@ app.include_router(bet_tracker_router)  # Bet tracking
 app.include_router(model_lab_router)  # Model Lab testing sandbox
 app.include_router(nascar_router)  # NASCAR live data & schedule
 app.include_router(espn_router)  # ESPN BPI/FPI predictions
+app.include_router(bug_tracker_router)  # Bug tracking
 
 # Dev CORS. Tighten for production.
 app.add_middleware(

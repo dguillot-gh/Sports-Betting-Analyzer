@@ -45,6 +45,14 @@ class CreateBetRequest(BaseModel):
     source: str = Field("manual", description="manual or auto")
     legs: Optional[List[BetLeg]] = Field(None, description="Parlay legs")
     notes: Optional[str] = None
+    # AI Fields
+    expected_value: Optional[float] = None
+    recommendation: Optional[str] = None
+    confidence_score: Optional[float] = None
+    team1: Optional[str] = None
+    team2: Optional[str] = None
+    player_name: Optional[str] = None
+    game_date: Optional[str] = None
 
 
 class UpdateOutcomeRequest(BaseModel):
@@ -72,6 +80,14 @@ class BetResponse(BaseModel):
     source: str = "manual"
     notes: Optional[str]
     legs: Optional[List[dict]] = None
+    # AI Fields
+    expected_value: Optional[float] = None
+    recommendation: Optional[str] = None
+    confidence_score: Optional[float] = None
+    team1: Optional[str] = None
+    team2: Optional[str] = None
+    player_name: Optional[str] = None
+    game_date: Optional[str] = None
 
 
 # ==================== SQL ====================
@@ -93,7 +109,15 @@ CREATE TABLE IF NOT EXISTS bets (
     game_name VARCHAR(200),
     description VARCHAR(200),
     source VARCHAR(20) DEFAULT 'manual',
-    notes TEXT
+    notes TEXT,
+    -- AI Fields for unification
+    expected_value DECIMAL(10,2),
+    recommendation VARCHAR(50),
+    confidence_score DECIMAL(5,2),
+    team1 VARCHAR(200),
+    team2 VARCHAR(200),
+    player_name VARCHAR(200),
+    game_date TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS bet_legs (
@@ -138,6 +162,18 @@ async def ensure_tables():
             if not val:
                 logger.info("Adding source column to bets table")
                 await conn.execute("ALTER TABLE bets ADD COLUMN source VARCHAR(20) DEFAULT 'manual'")
+
+            # Check for AI Unification columns
+            val = await conn.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='bets' AND column_name='expected_value'")
+            if not val:
+                logger.info("Adding AI unification columns to bets table")
+                await conn.execute("ALTER TABLE bets ADD COLUMN expected_value DECIMAL(10,2)")
+                await conn.execute("ALTER TABLE bets ADD COLUMN recommendation VARCHAR(50)")
+                await conn.execute("ALTER TABLE bets ADD COLUMN confidence_score DECIMAL(5,2)")
+                await conn.execute("ALTER TABLE bets ADD COLUMN team1 VARCHAR(200)")
+                await conn.execute("ALTER TABLE bets ADD COLUMN team2 VARCHAR(200)")
+                await conn.execute("ALTER TABLE bets ADD COLUMN player_name VARCHAR(200)")
+                await conn.execute("ALTER TABLE bets ADD COLUMN game_date TIMESTAMPTZ")
         except Exception as e:
             logger.error(f"Schema migration error: {e}")
             
@@ -251,12 +287,16 @@ async def create_bet(request: CreateBetRequest):
     try:
         # Insert bet
         row = await conn.fetchrow("""
-            INSERT INTO bets (sport, bet_type, sportsbook, stake, odds, potential_payout, game_id, game_name, description, source, notes)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            INSERT INTO bets (sport, bet_type, sportsbook, stake, odds, potential_payout, game_id, game_name, description, source, notes,
+                             expected_value, recommendation, confidence_score, team1, team2, player_name, game_date)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
             RETURNING *
         """, request.sport, request.bet_type, request.sportsbook, 
             request.stake, combined_odds, potential_payout, 
-            request.game_id, request.game_name, description, request.source, request.notes)
+            request.game_id, request.game_name, description, request.source, request.notes,
+            request.expected_value, request.recommendation, request.confidence_score,
+            request.team1, request.team2, request.player_name, 
+            datetime.fromisoformat(request.game_date.replace("Z", "+00:00")) if request.game_date else None)
         
         bet_id = row["id"]
         
@@ -287,7 +327,14 @@ async def create_bet(request: CreateBetRequest):
             description=row["description"],
             source=row["source"] or "manual",
             notes=row["notes"],
-            legs=legs_data if legs_data else None
+            legs=legs_data if legs_data else None,
+            expected_value=float(row["expected_value"]) if row["expected_value"] is not None else None,
+            recommendation=row["recommendation"],
+            confidence_score=float(row["confidence_score"]) if row["confidence_score"] is not None else None,
+            team1=row["team1"],
+            team2=row["team2"],
+            player_name=row["player_name"],
+            game_date=row["game_date"].isoformat() if row["game_date"] else None
         )
     finally:
         await conn.close()
@@ -364,7 +411,14 @@ async def list_bets(
                 "description": row["description"],
                 "source": row.get("source", "manual"),
                 "notes": row["notes"],
-                "legs": legs_data
+                "legs": legs_data,
+                "expected_value": float(row["expected_value"]) if row["expected_value"] is not None else None,
+                "recommendation": row["recommendation"],
+                "confidence_score": float(row["confidence_score"]) if row["confidence_score"] is not None else None,
+                "team1": row["team1"],
+                "team2": row["team2"],
+                "player_name": row["player_name"],
+                "game_date": row["game_date"].isoformat() if row["game_date"] else None
             })
         
         return {"bets": bets, "count": len(bets)}
