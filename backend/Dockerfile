@@ -55,8 +55,7 @@ COPY . .
 RUN mkdir -p data/nascar data/nba data/nfl models
 
 # Download XGBoost model files
-# Uses Python script to fetch models; busts cache only for this specific layer
-ARG CACHEBUST=1
+# Uses Python script to fetch models; runs only when copy layer changes
 RUN python scripts/download_xgb_models.py
 
 # Environment configuration
