@@ -9,7 +9,7 @@ import json
 import logging
 from datetime import datetime, date
 from decimal import Decimal
-from typing import Optional, List
+from typing import Optional, List, Union
 from pydantic import BaseModel, Field
 
 from fastapi import APIRouter, HTTPException, Query
@@ -137,6 +137,62 @@ CREATE INDEX IF NOT EXISTS idx_bets_created ON bets(created_at);
 _tables_initialized = False
 
 
+# ==================== Helper Functions ====================
+
+def to_float(value: Union[float, Decimal, int, None]) -> float:
+    """Safely convert Decimal or other numeric types to float."""
+    if value is None:
+        return 0.0
+    if isinstance(value, Decimal):
+        return float(value)
+    return float(value)
+
+
+def calculate_potential_payout(stake: Union[float, Decimal], odds: int) -> float:
+    """Calculate potential payout from American odds."""
+    stake = to_float(stake)
+    if odds > 0:
+        return stake + (stake * odds / 100)
+    else:
+        return stake + (stake * 100 / abs(odds))
+
+
+def calculate_profit(stake: Union[float, Decimal], odds: int, outcome: str, cashout_amount: Optional[Union[float, Decimal]] = None) -> float:
+    """Calculate profit based on outcome."""
+    stake = to_float(stake)
+    cashout_amount = to_float(cashout_amount) if cashout_amount is not None else None
+    
+    if outcome == "win":
+        if odds > 0:
+            return stake * odds / 100
+        else:
+            return stake * 100 / abs(odds)
+    elif outcome == "loss":
+        return -stake
+    elif outcome == "cashout" and cashout_amount is not None:
+        return cashout_amount - stake
+    return 0.0
+
+
+def calculate_parlay_odds(legs: List[BetLeg]) -> int:
+    """Calculate combined parlay odds from legs."""
+    if not legs:
+        return 0
+    
+    decimal_odds = 1.0
+    for leg in legs:
+        if leg.odds > 0:
+            decimal_odds *= (leg.odds / 100) + 1
+        else:
+            decimal_odds *= (100 / abs(leg.odds)) + 1
+    
+    # Convert back to American
+    if decimal_odds >= 2:
+        return int((decimal_odds - 1) * 100)
+    else:
+        return int(-100 / (decimal_odds - 1))
+
+
 async def ensure_tables():
     """Create tables if they don't exist."""
     global _tables_initialized
@@ -183,49 +239,6 @@ async def ensure_tables():
     except Exception as e:
         logger.error(f"Failed to initialize bet tables: {e}")
         raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
-
-
-# ==================== Helper Functions ====================
-
-def calculate_potential_payout(stake: float, odds: int) -> float:
-    """Calculate potential payout from American odds."""
-    if odds > 0:
-        return stake + (stake * odds / 100)
-    else:
-        return stake + (stake * 100 / abs(odds))
-
-
-def calculate_profit(stake: float, odds: int, outcome: str, cashout_amount: Optional[float] = None) -> float:
-    """Calculate profit based on outcome."""
-    if outcome == "win":
-        if odds > 0:
-            return stake * odds / 100
-        else:
-            return stake * 100 / abs(odds)
-    elif outcome == "loss":
-        return -stake
-    elif outcome == "cashout" and cashout_amount is not None:
-        return cashout_amount - stake
-    return 0
-
-
-def calculate_parlay_odds(legs: List[BetLeg]) -> int:
-    """Calculate combined parlay odds from legs."""
-    if not legs:
-        return 0
-    
-    decimal_odds = 1.0
-    for leg in legs:
-        if leg.odds > 0:
-            decimal_odds *= (leg.odds / 100) + 1
-        else:
-            decimal_odds *= (100 / abs(leg.odds)) + 1
-    
-    # Convert back to American
-    if decimal_odds >= 2:
-        return int((decimal_odds - 1) * 100)
-    else:
-        return int(-100 / (decimal_odds - 1))
 
 
 # ==================== Endpoints ====================
@@ -316,9 +329,9 @@ async def create_bet(request: CreateBetRequest):
             sport=row["sport"],
             bet_type=row["bet_type"],
             sportsbook=row["sportsbook"],
-            stake=float(row["stake"]),
+            stake=to_float(row["stake"]),
             odds=row["odds"],
-            potential_payout=float(row["potential_payout"]) if row["potential_payout"] else None,
+            potential_payout=to_float(row["potential_payout"]) if row["potential_payout"] else None,
             outcome=row["outcome"] or "pending",
             cashout_amount=None,
             profit=None,
@@ -328,9 +341,9 @@ async def create_bet(request: CreateBetRequest):
             source=row["source"] or "manual",
             notes=row["notes"],
             legs=legs_data if legs_data else None,
-            expected_value=float(row["expected_value"]) if row["expected_value"] is not None else None,
+            expected_value=to_float(row["expected_value"]) if row["expected_value"] is not None else None,
             recommendation=row["recommendation"],
-            confidence_score=float(row["confidence_score"]) if row["confidence_score"] is not None else None,
+            confidence_score=to_float(row["confidence_score"]) if row["confidence_score"] is not None else None,
             team1=row["team1"],
             team2=row["team2"],
             player_name=row["player_name"],
@@ -400,21 +413,21 @@ async def list_bets(
                 "sport": row["sport"],
                 "bet_type": row["bet_type"],
                 "sportsbook": row["sportsbook"],
-                "stake": float(row["stake"]),
+                "stake": to_float(row["stake"]),
                 "odds": row["odds"],
-                "potential_payout": float(row["potential_payout"]) if row["potential_payout"] else None,
+                "potential_payout": to_float(row["potential_payout"]) if row["potential_payout"] else None,
                 "outcome": row["outcome"],
-                "cashout_amount": float(row["cashout_amount"]) if row["cashout_amount"] else None,
-                "profit": float(row["profit"]) if row["profit"] else None,
+                "cashout_amount": to_float(row["cashout_amount"]) if row["cashout_amount"] else None,
+                "profit": to_float(row["profit"]) if row["profit"] else None,
                 "game_id": row["game_id"],
                 "game_name": row.get("game_name"),
                 "description": row["description"],
                 "source": row.get("source", "manual"),
                 "notes": row["notes"],
                 "legs": legs_data,
-                "expected_value": float(row["expected_value"]) if row["expected_value"] is not None else None,
+                "expected_value": to_float(row["expected_value"]) if row["expected_value"] is not None else None,
                 "recommendation": row["recommendation"],
-                "confidence_score": float(row["confidence_score"]) if row["confidence_score"] is not None else None,
+                "confidence_score": to_float(row["confidence_score"]) if row["confidence_score"] is not None else None,
                 "team1": row["team1"],
                 "team2": row["team2"],
                 "player_name": row["player_name"],
@@ -455,12 +468,12 @@ async def get_bet(bet_id: int):
             "sport": row["sport"],
             "bet_type": row["bet_type"],
             "sportsbook": row["sportsbook"],
-            "stake": float(row["stake"]),
+            "stake": to_float(row["stake"]),
             "odds": row["odds"],
-            "potential_payout": float(row["potential_payout"]) if row["potential_payout"] else None,
+            "potential_payout": to_float(row["potential_payout"]) if row["potential_payout"] else None,
             "outcome": row["outcome"],
-            "cashout_amount": float(row["cashout_amount"]) if row["cashout_amount"] else None,
-            "profit": float(row["profit"]) if row["profit"] else None,
+            "cashout_amount": to_float(row["cashout_amount"]) if row["cashout_amount"] else None,
+            "profit": to_float(row["profit"]) if row["profit"] else None,
             "game_id": row["game_id"],
             "description": row["description"],
             "notes": row["notes"],
@@ -490,10 +503,10 @@ async def update_bet_outcome(bet_id: int, request: UpdateOutcomeRequest):
         if not row:
             raise HTTPException(status_code=404, detail="Bet not found")
         
-        stake = float(row["stake"])
+        stake = row["stake"]  # Keep as Decimal for DB operations
         odds = row["odds"] or 0
         
-        # Calculate profit
+        # Calculate profit (converts to float internally)
         profit = calculate_profit(stake, odds, request.outcome, request.cashout_amount)
         
         # Update bet
@@ -570,7 +583,7 @@ async def update_bet(bet_id: int, request: UpdateBetRequest):
             return {"id": bet_id, "message": "No changes provided"}
         
         # Recalculate potential payout if stake or odds changed
-        new_stake = request.stake if request.stake is not None else float(row["stake"])
+        new_stake = request.stake if request.stake is not None else to_float(row["stake"])
         new_odds = request.odds if request.odds is not None else (int(row["odds"]) if row["odds"] else 0)
         
         if new_odds != 0:
@@ -651,6 +664,9 @@ async def get_bet_stats(
         total = row["wins"] + row["losses"]
         win_pct = (row["wins"] / total * 100) if total > 0 else 0
         
+        total_staked = to_float(row["total_staked"])
+        net_profit = to_float(row["net_profit"])
+        
         return {
             "period_days": days,
             "sport": sport or "all",
@@ -660,9 +676,9 @@ async def get_bet_stats(
             "cashouts": row["cashouts"],
             "pending": row["pending"],
             "win_percentage": round(win_pct, 1),
-            "total_staked": float(row["total_staked"]),
-            "net_profit": float(row["net_profit"]),
-            "roi": round(float(row["net_profit"]) / float(row["total_staked"]) * 100, 1) if row["total_staked"] else 0
+            "total_staked": total_staked,
+            "net_profit": net_profit,
+            "roi": round(net_profit / total_staked * 100, 1) if total_staked else 0
         }
     finally:
         await conn.close()
@@ -709,18 +725,21 @@ async def get_chart_data(
         
         # Build daily data with cumulative ROI
         daily_data = []
-        cumulative_profit = 0
-        cumulative_stake = 0
+        cumulative_profit = 0.0
+        cumulative_stake = 0.0
         
         for row in daily_rows:
-            cumulative_profit += float(row["daily_profit"])
-            cumulative_stake += float(row["daily_stake"])
+            daily_profit = to_float(row["daily_profit"])
+            daily_stake = to_float(row["daily_stake"])
+            
+            cumulative_profit += daily_profit
+            cumulative_stake += daily_stake
             cumulative_roi = (cumulative_profit / cumulative_stake * 100) if cumulative_stake > 0 else 0
             
             daily_data.append({
                 "date": row["bet_date"].isoformat(),
-                "profit": float(row["daily_profit"]),
-                "stake": float(row["daily_stake"]),
+                "profit": daily_profit,
+                "stake": daily_stake,
                 "bets": row["bet_count"],
                 "wins": row["wins"],
                 "losses": row["losses"],
@@ -748,21 +767,22 @@ async def get_chart_data(
             "wins": 0,
             "losses": 0,
             "cashouts": 0,
-            "win_profit": 0,
-            "loss_amount": 0,
-            "cashout_profit": 0
+            "win_profit": 0.0,
+            "loss_amount": 0.0,
+            "cashout_profit": 0.0
         }
         
         for row in totals_rows:
+            profit_val = to_float(row["profit"])
             if row["outcome"] == "win":
                 outcome_distribution["wins"] = row["count"]
-                outcome_distribution["win_profit"] = float(row["profit"])
+                outcome_distribution["win_profit"] = profit_val
             elif row["outcome"] == "loss":
                 outcome_distribution["losses"] = row["count"]
-                outcome_distribution["loss_amount"] = abs(float(row["profit"]))
+                outcome_distribution["loss_amount"] = abs(profit_val)
             elif row["outcome"] == "cashout":
                 outcome_distribution["cashouts"] = row["count"]
-                outcome_distribution["cashout_profit"] = float(row["profit"])
+                outcome_distribution["cashout_profit"] = profit_val
         
         return {
             "period_days": days,
