@@ -3,9 +3,20 @@ using SportsBettingAnalyzer.Services;
 using SportsBettingAnalyzer.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Components.Server;
+using Microsoft.AspNetCore.DataProtection;
 using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// --- IMMEDIATE SETUP: Data Protection ---
+// We do this first to ensure keys persist across container restarts
+var keysPath = Path.Combine(builder.Environment.ContentRootPath, "keys");
+if (!Directory.Exists(keysPath)) Directory.CreateDirectory(keysPath);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(keysPath))
+    .SetApplicationName("SportsBettingAnalyzer");
+Console.WriteLine($"[SECURITY] Data Protection keys will be stored in: {keysPath}");
+// ----------------------------------------
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
@@ -60,6 +71,8 @@ builder.Services.AddScoped<DataCollectionService>();
 builder.Services.AddScoped<BetSlipOCRService>();
 builder.Services.AddScoped<SportsDataService>();
 builder.Services.AddScoped<HistoricalDataImportService>();
+
+// (Data Protection config moved to top of file)
 
 // Add external data providers
 builder.Services.AddScoped<ESPNDataProvider>();

@@ -64,6 +64,8 @@ services:
     environment:
       - PythonApiUrl=http://backend:8000
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=sports_betting;Username=sports_user;Password=${DB_PASSWORD:-sportsbetting2024}
+    volumes:
+      - frontend_keys:/app/keys
     depends_on:
       backend:
         condition: service_healthy
@@ -125,6 +127,8 @@ volumes:
     name: sports-redis-data
   pgadmin_data:
     name: sports-pgadmin-data
+  frontend_keys:
+    name: sports-frontend-keys
 
 # ============================================
 # Network

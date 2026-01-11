@@ -86,7 +86,7 @@ namespace SportsBettingAnalyzer.Services
                     Team1 = b.Team1 ?? b.GameName?.Split(" @ ").LastOrDefault() ?? b.Description,
                     Team2 = b.Team2 ?? b.GameName?.Split(" @ ").FirstOrDefault(),
                     PlayerName = b.PlayerName,
-                    Odds = (decimal)b.Odds,
+                    Odds = (decimal)(b.Odds ?? 0),
                     BetType = b.BetType,
                     WagerAmount = (decimal)b.Stake,
                     Sport = b.Sport,
@@ -151,7 +151,7 @@ namespace SportsBettingAnalyzer.Services
             public string BetType { get; set; } = "";
             public string Outcome { get; set; } = "pending";
             public double Stake { get; set; }
-            public int Odds { get; set; }
+            public double? Odds { get; set; }
             public double? ExpectedValue { get; set; }
             public string? Recommendation { get; set; }
             public double? ConfidenceScore { get; set; }

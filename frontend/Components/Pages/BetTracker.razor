@@ -452,10 +452,10 @@
                             var odds = prop.Value;
                             if (odds.TryGetProperty(home, out var homeData) && 
                                 homeData.TryGetProperty("money_line_odds", out var hm) && hm.ValueKind == JsonValueKind.Number)
-                                homeML = hm.GetInt32();
+                                homeML = (int)Math.Round(hm.GetDouble());
                             if (odds.TryGetProperty(away, out var awayData) && 
                                 awayData.TryGetProperty("money_line_odds", out var am) && am.ValueKind == JsonValueKind.Number)
-                                awayML = am.GetInt32();
+                                awayML = (int)Math.Round(am.GetDouble());
                             if (odds.TryGetProperty("under_over_odds", out var uo) && uo.ValueKind == JsonValueKind.Number)
                                 total = uo.GetDecimal();
                             
@@ -507,9 +507,9 @@
         if (g.TryGetProperty("odds_data", out var odds) && odds.ValueKind == JsonValueKind.Object)
         {
             if (odds.TryGetProperty("home_ml", out var hm) && hm.ValueKind == JsonValueKind.Number)
-                homeML = hm.GetInt32();
+                homeML = (int)Math.Round(hm.GetDouble());
             if (odds.TryGetProperty("away_ml", out var am) && am.ValueKind == JsonValueKind.Number)
-                awayML = am.GetInt32();
+                awayML = (int)Math.Round(am.GetDouble());
             if (odds.TryGetProperty("total", out var t) && t.ValueKind == JsonValueKind.Number)
                 total = t.GetDecimal();
         }
@@ -531,9 +531,9 @@
         if (g.TryGetProperty("odds_data", out var odds) && odds.ValueKind == JsonValueKind.Object)
         {
             if (odds.TryGetProperty("home_ml", out var hm) && hm.ValueKind == JsonValueKind.Number)
-                homeML = hm.GetInt32();
+                homeML = (int)Math.Round(hm.GetDouble());
             if (odds.TryGetProperty("away_ml", out var am) && am.ValueKind == JsonValueKind.Number)
-                awayML = am.GetInt32();
+                awayML = (int)Math.Round(am.GetDouble());
             if (odds.TryGetProperty("total", out var t) && t.ValueKind == JsonValueKind.Number)
                 total = t.GetDecimal();
         }
@@ -646,10 +646,10 @@
                     {
                         var bet = new Bet
                         {
-                            Id = b.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.Number ? id.GetInt32() : 0,
+                            Id = b.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.Number ? (int)Math.Round(id.GetDouble()) : 0,
                             Description = b.TryGetProperty("description", out var d) ? (d.ValueKind == JsonValueKind.String ? d.GetString() ?? "" : d.ToString()) : "",
                             Stake = b.TryGetProperty("stake", out var s) && s.ValueKind == JsonValueKind.Number ? s.GetDecimal() : 0,
-                            Odds = b.TryGetProperty("odds", out var o) && o.ValueKind == JsonValueKind.Number ? o.GetInt32() : 0,
+                            Odds = b.TryGetProperty("odds", out var o) && o.ValueKind == JsonValueKind.Number ? (int)Math.Round(o.GetDouble()) : 0,
                             Outcome = b.TryGetProperty("outcome", out var oc) ? (oc.ValueKind == JsonValueKind.String ? oc.GetString() ?? "pending" : "pending") : "pending",
                             GameName = b.TryGetProperty("game_name", out var gn) ? (gn.ValueKind == JsonValueKind.String ? gn.GetString() : null) : null,
                             Source = b.TryGetProperty("source", out var src) ? (src.ValueKind == JsonValueKind.String ? src.GetString() ?? "manual" : "manual") : "manual"

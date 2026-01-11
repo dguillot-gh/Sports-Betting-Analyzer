@@ -660,13 +660,17 @@ async def get_db_connection():
 async def ensure_schema(conn):
     """Ensure required columns exist in database tables."""
     try:
+        # Relax overly strict unique constraint on entities (players can have same name)
+        await conn.execute("ALTER TABLE entities DROP CONSTRAINT IF EXISTS entities_sport_id_name_type_series_key")
+        await conn.execute("ALTER TABLE entities DROP CONSTRAINT IF EXISTS entities_sport_id_name_type_key")
+        
         await conn.execute("ALTER TABLE entities ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)")
         await conn.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)")
         await conn.execute("ALTER TABLE stats ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)")
         await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_hash ON entities(content_hash) WHERE content_hash IS NOT NULL")
         await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_results_hash ON results(content_hash) WHERE content_hash IS NOT NULL")
         await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_stats_hash ON stats(content_hash) WHERE content_hash IS NOT NULL")
-        logger.info("Schema setup complete - content_hash columns ready")
+        logger.info("Schema setup complete - content_hash columns ready and constraints relaxed")
     except Exception as e:
         logger.warning(f"Schema setup warning: {e}")
 
