@@ -636,3 +636,157 @@ async def analyze_nba_with_cache(
         "xgb_available": any(g.get("xgboost_model") and not g.get("xgboost_model", {}).get("error") for g in analyzed_games),
     }
 
+
+# ========================================================
+# NCAAB (Men's College Basketball) Endpoints
+# ========================================================
+
+@router.get("/ncaab")
+async def get_ncaab_odds(
+    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from"),
+):
+    """
+    Get today's NCAAB betting odds from specified sportsbook.
+    
+    Supported sportsbooks: fanduel, draftkings, betmgm, pointsbet, caesars
+    """
+    from scripts.ncaab_predictor import get_todays_ncaab_odds
+    return await get_todays_ncaab_odds(sportsbook)
+
+
+@router.post("/ncaab/predict")
+async def predict_ncaab_game(
+    home_team: str = Query(..., description="Home team name"),
+    away_team: str = Query(..., description="Away team name"),
+    spread: float = Query(None, description="Point spread"),
+    over_under: float = Query(None, description="Over/under total"),
+    home_ml: int = Query(None, description="Home team moneyline"),
+    away_ml: int = Query(None, description="Away team moneyline")
+):
+    """
+    Predict NCAAB game outcome with value bet detection.
+    """
+    from scripts.ncaab_predictor import analyze_ncaab_matchup
+    return await analyze_ncaab_matchup(home_team, away_team, spread, over_under, home_ml, away_ml)
+
+
+@router.post("/ncaab/analyze-all")
+async def analyze_all_ncaab_games(
+    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from")
+):
+    """
+    Fetch today's NCAAB games and run predictions on all of them.
+    """
+    from scripts.ncaab_predictor import get_todays_ncaab_odds, analyze_ncaab_matchup
+    
+    odds_data = await get_todays_ncaab_odds(sportsbook)
+    
+    if odds_data.get("error") or not odds_data.get("games"):
+        return odds_data
+    
+    analyzed_games = []
+    for game in odds_data["games"]:
+        try:
+            prediction = await analyze_ncaab_matchup(
+                home_team=game.get("home_team", ""),
+                away_team=game.get("away_team", ""),
+                spread=game.get("spread"),
+                over_under=game.get("over_under"),
+                home_ml=game.get("home_moneyline"),
+                away_ml=game.get("away_moneyline")
+            )
+            
+            game_data = {
+                "home_team": game.get("home_team"),
+                "away_team": game.get("away_team"),
+                "game_time": game.get("game_time"),
+                "status": game.get("status"),
+                "spread": game.get("spread"),
+                "over_under": game.get("over_under"),
+                "home_moneyline": game.get("home_moneyline"),
+                "away_moneyline": game.get("away_moneyline"),
+                "prediction": prediction,
+                "has_value": prediction.get("has_value", False),
+                "value_bets": prediction.get("value_bets", []),
+            }
+            analyzed_games.append(game_data)
+        except Exception as e:
+            logger.warning(f"Error analyzing NCAAB game {game.get('home_team')} vs {game.get('away_team')}: {e}")
+            analyzed_games.append({**game, "error": str(e)})
+    
+    return {
+        "date": odds_data.get("date"),
+        "sportsbook": sportsbook,
+        "source": odds_data.get("source"),
+        "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False)),
+    }
+
+
+
+# ========================================================
+# College Baseball Endpoints
+# ========================================================
+
+@router.get("/college-baseball")
+async def get_college_baseball_odds(
+    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from"),
+):
+    """
+    Get today's College Baseball betting odds.
+    """
+    from scripts.college_baseball_predictor import get_todays_college_baseball_odds
+    return await get_todays_college_baseball_odds(sportsbook)
+
+
+@router.post("/college-baseball/analyze-all")
+async def analyze_all_college_baseball_games(
+    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from")
+):
+    """
+    Fetch today's College Baseball games and run predictions.
+    """
+    from scripts.college_baseball_predictor import get_todays_college_baseball_odds, analyze_college_baseball_matchup
+    
+    odds_data = await get_todays_college_baseball_odds(sportsbook)
+    
+    if odds_data.get("error") or not odds_data.get("games"):
+        return odds_data
+    
+    analyzed_games = []
+    for game in odds_data["games"]:
+        try:
+            prediction = await analyze_college_baseball_matchup(
+                home_team=game.get("home_team", ""),
+                away_team=game.get("away_team", ""),
+                spread=game.get("spread"),
+                over_under=game.get("over_under"),
+                home_ml=game.get("home_moneyline"),
+                away_ml=game.get("away_moneyline")
+            )
+            
+            game_data = {
+                "home_team": game.get("home_team"),
+                "away_team": game.get("away_team"),
+                "game_time": game.get("game_time"),
+                "status": game.get("status"),
+                "spread": game.get("spread"),
+                "over_under": game.get("over_under"),
+                "home_moneyline": game.get("home_moneyline"),
+                "away_moneyline": game.get("away_moneyline"),
+                "prediction": prediction,
+                "has_value": prediction.get("has_value", False),
+                "value_bets": prediction.get("value_bets", []),
+            }
+            analyzed_games.append(game_data)
+        except Exception as e:
+            logger.warning(f"Error analyzing College Baseball game: {e}")
+            analyzed_games.append({**game, "error": str(e)})
+    
+    return {
+        "date": odds_data.get("date"),
+        "sportsbook": sportsbook,
+        "source": odds_data.get("source"),
+        "games": analyzed_games,
+        "count": len(analyzed_games),
+        "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False)),
+    }

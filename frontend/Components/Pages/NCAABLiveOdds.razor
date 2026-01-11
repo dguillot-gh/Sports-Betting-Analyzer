@@ -1,0 +1,282 @@
+@page "/ncaab-live-odds"
+@using System.Text.Json
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject ILogger<NCAABLiveOdds> Logger
+@rendermode InteractiveServer
+
+<PageTitle>NCAAB Live Odds</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+    <MudStack Spacing="4">
+        <!-- Header -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <div>
+                    <MudText Typo="Typo.h4">
+                        <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Class="mr-2" />
+                        NCAAB Live Odds
+                    </MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Men's College Basketball predictions with value detection
+                    </MudText>
+                </div>
+                <MudStack Row="true" Spacing="2">
+                    <MudSelect T="string" @bind-Value="_selectedSportsbook" Label="Sportsbook" 
+                               Variant="Variant.Outlined" Dense="true" Style="width: 150px;">
+                        <MudSelectItem Value="@("fanduel")">FanDuel</MudSelectItem>
+                        <MudSelectItem Value="@("draftkings")">DraftKings</MudSelectItem>
+                        <MudSelectItem Value="@("betmgm")">BetMGM</MudSelectItem>
+                    </MudSelect>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Refresh"
+                               OnClick="@RunAnalysis" Disabled="@_isLoading">
+                        @if (_isLoading)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            <span>Analyzing...</span>
+                        }
+                        else
+                        {
+                            <span>Analyze Games</span>
+                        }
+                    </MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+
+        @if (_error != null)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Filled">@_error</MudAlert>
+        }
+
+        <!-- Summary Stats -->
+        @if (_games.Any())
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.body1">
+                        <strong>@_games.Count</strong> games found · 
+                        <strong>@_valueBets</strong> value bets detected
+                    </MudText>
+                    <MudChip T="string" Color="Color.Info" Size="Size.Small">@_source</MudChip>
+                </MudStack>
+            </MudPaper>
+        }
+
+        <!-- Games Grid -->
+        @if (_games.Any())
+        {
+            <MudGrid Spacing="3">
+                @foreach (var game in _games)
+                {
+                    <MudItem xs="12" md="6" lg="4">
+                        <MudCard Elevation="3" Class="h-100">
+                            <MudCardHeader Style="@GetCardStyle(game)">
+                                <CardHeaderContent>
+                                    <MudText Typo="Typo.h6">@game.AwayTeam</MudText>
+                                    <MudText Typo="Typo.caption">at</MudText>
+                                    <MudText Typo="Typo.h6">@game.HomeTeam</MudText>
+                                </CardHeaderContent>
+                                <CardHeaderActions>
+                                    @if (game.HasValue)
+                                    {
+                                        <MudChip T="string" Color="Color.Success" Size="Size.Small">VALUE</MudChip>
+                                    }
+                                </CardHeaderActions>
+                            </MudCardHeader>
+                            <MudCardContent>
+                                <MudSimpleTable Dense="true" Hover="true">
+                                    <tbody>
+                                        @if (game.HomeMoneyline.HasValue && game.AwayMoneyline.HasValue)
+                                        {
+                                            <tr>
+                                                <td><strong>Moneyline</strong></td>
+                                                <td>@FormatOdds(game.HomeMoneyline) / @FormatOdds(game.AwayMoneyline)</td>
+                                            </tr>
+                                        }
+                                        @if (game.Spread.HasValue)
+                                        {
+                                            <tr>
+                                                <td><strong>Spread</strong></td>
+                                                <td>@game.Spread.Value.ToString("+0.0;-0.0")</td>
+                                            </tr>
+                                        }
+                                        @if (game.OverUnder.HasValue)
+                                        {
+                                            <tr>
+                                                <td><strong>O/U</strong></td>
+                                                <td>@game.OverUnder.Value</td>
+                                            </tr>
+                                        }
+                                        @if (game.Prediction != null)
+                                        {
+                                            <tr>
+                                                <td><strong>Winner</strong></td>
+                                                <td>@game.Prediction.PredictedWinner (@(game.Prediction.HomeWinProbability * 100):F0%)</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Predicted Total</strong></td>
+                                                <td>@game.Prediction.PredictedTotal</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                                @if (game.ValueBets.Any())
+                                {
+                                    <MudDivider Class="my-2"/>
+                                    <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                                        @foreach (var bet in game.ValueBets)
+                                        {
+                                            <MudChip T="string" Color="Color.Warning" Size="Size.Small">@bet</MudChip>
+                                        }
+                                    </MudStack>
+                                }
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+        else if (!_isLoading)
+        {
+            <MudAlert Severity="Severity.Info">
+                No NCAAB games found for today. Click "Analyze Games" to fetch live odds.
+            </MudAlert>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    private bool _isLoading = false;
+    private string? _error = null;
+    private string _selectedSportsbook = "fanduel";
+    private List<GameData> _games = new();
+    private int _valueBets = 0;
+    private string _source = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RunAnalysis();
+    }
+
+    private async Task RunAnalysis()
+    {
+        _isLoading = true;
+        _error = null;
+        _games.Clear();
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsync(
+                $"http://backend:8000/odds/ncaab/analyze-all?sportsbook={_selectedSportsbook}", 
+                null);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                _source = root.TryGetProperty("source", out var src) ? src.GetString() ?? "" : "";
+                _valueBets = root.TryGetProperty("value_bets_found", out var vb) ? vb.GetInt32() : 0;
+
+                if (root.TryGetProperty("games", out var gamesArr))
+                {
+                    foreach (var g in gamesArr.EnumerateArray())
+                    {
+                        _games.Add(ParseGame(g));
+                    }
+                }
+            }
+            else
+            {
+                _error = $"API Error: {response.StatusCode}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = $"Error: {ex.Message}";
+            Logger.LogError(ex, "Error fetching NCAAB odds");
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private GameData ParseGame(JsonElement g)
+    {
+        var game = new GameData
+        {
+            HomeTeam = g.TryGetProperty("home_team", out var h) ? h.GetString() ?? "" : "",
+            AwayTeam = g.TryGetProperty("away_team", out var a) ? a.GetString() ?? "" : "",
+            HasValue = g.TryGetProperty("has_value", out var hv) && hv.GetBoolean(),
+        };
+
+        if (g.TryGetProperty("home_moneyline", out var hml) && hml.ValueKind == JsonValueKind.Number)
+            game.HomeMoneyline = (int)Math.Round(hml.GetDouble());
+        if (g.TryGetProperty("away_moneyline", out var aml) && aml.ValueKind == JsonValueKind.Number)
+            game.AwayMoneyline = (int)Math.Round(aml.GetDouble());
+        if (g.TryGetProperty("spread", out var sp) && sp.ValueKind == JsonValueKind.Number)
+            game.Spread = sp.GetDecimal();
+        if (g.TryGetProperty("over_under", out var ou) && ou.ValueKind == JsonValueKind.Number)
+            game.OverUnder = ou.GetDecimal();
+
+        if (g.TryGetProperty("value_bets", out var vbArr) && vbArr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var vb in vbArr.EnumerateArray())
+            {
+                if (vb.GetString() is string s)
+                    game.ValueBets.Add(s);
+            }
+        }
+
+        if (g.TryGetProperty("prediction", out var pred) && pred.ValueKind == JsonValueKind.Object)
+        {
+            game.Prediction = new PredictionData
+            {
+                PredictedWinner = pred.TryGetProperty("predicted_winner", out var pw) ? pw.GetString() ?? "" : "",
+                HomeWinProbability = pred.TryGetProperty("home_win_probability", out var hwp) ? hwp.GetDouble() : 0.5,
+                PredictedTotal = pred.TryGetProperty("predicted_total", out var pt) ? pt.GetDouble() : 0,
+                Confidence = pred.TryGetProperty("confidence", out var c) ? c.GetDouble() : 0.5
+            };
+        }
+
+        return game;
+    }
+
+    private string FormatOdds(int? odds) => odds switch
+    {
+        null => "-",
+        > 0 => $"+{odds}",
+        _ => odds.ToString() ?? "-"
+    };
+
+    private string GetCardStyle(GameData game) => game.HasValue
+        ? "background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 100%); color: white;"
+        : "";
+
+    private class GameData
+    {
+        public string HomeTeam { get; set; } = "";
+        public string AwayTeam { get; set; } = "";
+        public int? HomeMoneyline { get; set; }
+        public int? AwayMoneyline { get; set; }
+        public decimal? Spread { get; set; }
+        public decimal? OverUnder { get; set; }
+        public bool HasValue { get; set; }
+        public List<string> ValueBets { get; set; } = new();
+        public PredictionData? Prediction { get; set; }
+    }
+
+    private class PredictionData
+    {
+        public string PredictedWinner { get; set; } = "";
+        public double HomeWinProbability { get; set; }
+        public double PredictedTotal { get; set; }
+        public double Confidence { get; set; }
+    }
+}

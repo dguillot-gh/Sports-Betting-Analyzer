@@ -216,7 +216,7 @@
                     </CardHeaderAvatar>
                     <CardHeaderContent>
                         <MudText Typo="Typo.h6">College Baseball</MudText>
-                        <MudText Typo="Typo.caption">baseballr (NCAA)</MudText>
+                        <MudText Typo="Typo.caption">Python + R Hybrid</MudText>
                     </CardHeaderContent>
                 </MudCardHeader>
                 <MudCardContent>
@@ -238,9 +238,16 @@
                         <MudNumericField T="int" Label="Year" @bind-Value="_baseballYear" 
                                          Variant="Variant.Outlined" Dense="true" Min="2015" Max="2030" />
                         
+                        <MudSelect T="string" Label="Data Source" @bind-Value="_baseballSource" Variant="Variant.Outlined" Dense="true">
+                            <MudSelectItem Value="@("auto")">Auto (Python first, R fallback)</MudSelectItem>
+                            <MudSelectItem Value="@("both")">Both Sources</MudSelectItem>
+                            <MudSelectItem Value="@("python")">Python Only (collegebaseball)</MudSelectItem>
+                            <MudSelectItem Value="@("r")">R Only (baseballr)</MudSelectItem>
+                        </MudSelect>
+                        
                         <MudText Typo="Typo.caption" Color="Color.Secondary">
                             <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="mr-1" />
-                            Uses baseballr to fetch rosters, batting, pitching stats
+                            Uses collegebaseball (Python) + baseballr (R) for team rosters, batting, pitching stats
                         </MudText>
                     </MudStack>
                 </MudCardContent>
@@ -260,6 +267,43 @@
                 </MudCardActions>
             </MudCard>
         </MudItem>
+        <!-- NCAAB Card -->
+        <MudItem xs="12" md="6" lg="4">
+            <MudCard Elevation="3" Class="h-100">
+                <MudCardHeader>
+                    <CardHeaderAvatar>
+                        <MudAvatar Color="Color.Primary">
+                            <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" />
+                        </MudAvatar>
+                    </CardHeaderAvatar>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">NCAA Basketball</MudText>
+                        <MudText Typo="Typo.caption">sportsdataverse (mbb)</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudStack Spacing="2">
+                        <MudText Typo="Typo.body2">
+                            <MudIcon Icon="@Icons.Material.Filled.Storage" Size="Size.Small" Class="mr-1" />
+                            Fetches historical schedules and boxscores.
+                        </MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="mr-1" />
+                            Used for O/U and Moneyline modeling.
+                        </MudText>
+                    </MudStack>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.CloudDownload"
+                               OnClick="@OpenNcaabImportDialog"
+                               Disabled="@_isSportImporting">
+                        Import History
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
     </MudGrid>
 
     <!-- Import History Section -->
@@ -577,6 +621,7 @@
     private bool _isBaseballImporting = false;
     private int _baseballDivision = 1;
     private int _baseballYear = DateTime.Now.Year;
+    private string _baseballSource = "auto";
     private BaseballImportStatus? _baseballStatus;
     private BaseballImportSummary? _baseballSummary;
     private System.Threading.Timer? _baseballPollTimer;
@@ -868,6 +913,11 @@
         _showSportImportDialog = true;
     }
     
+    private void OpenNcaabImportDialog()
+    {
+        OpenSportImportDialog("ncaab");
+    }
+    
     private void CloseSportImportDialog()
     {
         _showSportImportDialog = false;
@@ -888,10 +938,14 @@
             
             // Call the import API
             var http = HttpClientFactory.CreateClient("PythonML");
-            var response = await http.PostAsync(
-                $"/db/import/{_sportImportTarget}?clear_existing={_sportClearExisting.ToString().ToLower()}",
-                null
-            );
+            string url = $"/db/import/{_sportImportTarget}?clear_existing={_sportClearExisting.ToString().ToLower()}";
+            
+            if (_sportImportTarget == "ncaab")
+            {
+                url = "/ncaab/import";
+            }
+            
+            var response = await http.PostAsync(url, null);
             
             if (!response.IsSuccessStatusCode)
             {
@@ -998,7 +1052,7 @@
                 TimeSpan.FromSeconds(2)
             );
             
-            var response = await http.PostAsync($"http://backend:8000/baseball/ncaa/import?division={_baseballDivision}&year={_baseballYear}", null);
+            var response = await http.PostAsync($"http://backend:8000/baseball/ncaa/import?division={_baseballDivision}&year={_baseballYear}&source={_baseballSource}", null);
             
             if (response.IsSuccessStatusCode)
             {

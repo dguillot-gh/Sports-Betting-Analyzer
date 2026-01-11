@@ -503,7 +503,7 @@
         int homeML = 0, awayML = 0;
         decimal total = 0;
         
-        // Check multiple possible formats
+        // Check nested odds_data first (cached format)
         if (g.TryGetProperty("odds_data", out var odds) && odds.ValueKind == JsonValueKind.Object)
         {
             if (odds.TryGetProperty("home_ml", out var hm) && hm.ValueKind == JsonValueKind.Number)
@@ -513,6 +513,14 @@
             if (odds.TryGetProperty("total", out var t) && t.ValueKind == JsonValueKind.Number)
                 total = t.GetDecimal();
         }
+        
+        // Fallback: check top-level fields (live odds API format)
+        if (homeML == 0 && g.TryGetProperty("home_moneyline", out var hlm) && hlm.ValueKind == JsonValueKind.Number)
+            homeML = (int)Math.Round(hlm.GetDouble());
+        if (awayML == 0 && g.TryGetProperty("away_moneyline", out var alm) && alm.ValueKind == JsonValueKind.Number)
+            awayML = (int)Math.Round(alm.GetDouble());
+        if (total == 0 && g.TryGetProperty("over_under", out var ou) && ou.ValueKind == JsonValueKind.Number)
+            total = ou.GetDecimal();
         
         if (!string.IsNullOrEmpty(home) && !string.IsNullOrEmpty(away))
         {
@@ -528,6 +536,7 @@
         int homeML = 0, awayML = 0;
         decimal total = 0;
         
+        // Check nested odds_data first
         if (g.TryGetProperty("odds_data", out var odds) && odds.ValueKind == JsonValueKind.Object)
         {
             if (odds.TryGetProperty("home_ml", out var hm) && hm.ValueKind == JsonValueKind.Number)
@@ -537,6 +546,14 @@
             if (odds.TryGetProperty("total", out var t) && t.ValueKind == JsonValueKind.Number)
                 total = t.GetDecimal();
         }
+        
+        // Fallback: check top-level fields
+        if (homeML == 0 && g.TryGetProperty("home_moneyline", out var hlm) && hlm.ValueKind == JsonValueKind.Number)
+            homeML = (int)Math.Round(hlm.GetDouble());
+        if (awayML == 0 && g.TryGetProperty("away_moneyline", out var alm) && alm.ValueKind == JsonValueKind.Number)
+            awayML = (int)Math.Round(alm.GetDouble());
+        if (total == 0 && g.TryGetProperty("over_under", out var ou) && ou.ValueKind == JsonValueKind.Number)
+            total = ou.GetDecimal();
         
         if (!string.IsNullOrEmpty(home) && !string.IsNullOrEmpty(away))
         {

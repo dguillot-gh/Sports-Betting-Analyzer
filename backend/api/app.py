@@ -2877,19 +2877,20 @@ async def import_college_baseball(
     division: int = Query(1, description="NCAA Division (1, 2, or 3)"),
     year: int = Query(2025, description="Season year (use 2024 for most recent completed season)"),
     team_id: Optional[int] = Query(None, description="Optional specific team ID"),
+    source: str = Query("auto", description="Data source: auto, python, r, both"),
     background_tasks: BackgroundTasks = BackgroundTasks()
 ):
     """
-    Import college baseball data using baseballr.
+    Import college baseball data using baseballr or collegebaseball.
     Runs in background to avoid timeout.
     """
     try:
         from scripts.college_baseball_importer import run_college_baseball_import
         
-        logger.info(f"Starting college baseball import: D{division}, Year {year}")
+        logger.info(f"Starting college baseball import: D{division}, Year {year}, Source: {source}")
         
         # Run in background
-        background_tasks.add_task(run_college_baseball_import, division, year, team_id)
+        background_tasks.add_task(run_college_baseball_import, division, year, team_id, source)
         
         return {
             "status": "started", 
@@ -4144,3 +4145,13 @@ async def apex_backtest(
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.post('/ncaab/import')
+async def import_ncaab(start_year: int = Query(2018), end_year: int = Query(2025)):
+    try:
+        from scripts.ncaab_importer import import_ncaab_data
+        background_tasks.add_task(import_ncaab_data, start_year, end_year)
+        return {'status': 'started', 'message': f'Started NCAAB import {start_year}-{end_year}'}
+    except Exception as e:
+        logger.error(f'Error starting NCAAB import: {e}')
+        raise HTTPException(status_code=500, detail=str(e))
