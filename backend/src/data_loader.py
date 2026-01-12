@@ -5,18 +5,15 @@ Supports hybrid loading: Database first, CSV fallback.
 """
 from pathlib import Path
 from typing import Optional
-import pandas as pd
+# import pandas as pd  <-- Moved to local function scope
 import logging
 from sports.base import BaseSport
+from src.config import DATABASE_URL, USE_DATABASE
 
 logger = logging.getLogger(__name__)
 
-# Database configuration
-USE_DATABASE = True  # Set to False to force CSV loading
-DATABASE_URL = "postgresql://sports_user:sportsbetting2024@postgres:5432/sports_betting"
 
-
-def load_sport_data(sport: BaseSport) -> pd.DataFrame:
+def load_sport_data(sport: BaseSport) -> 'pd.DataFrame':
     """
     Load data for a given sport implementation.
     
@@ -24,6 +21,7 @@ def load_sport_data(sport: BaseSport) -> pd.DataFrame:
     1. PostgreSQL database (if available and has data)
     2. CSV files (fallback)
     """
+    import pandas as pd
     if USE_DATABASE:
         try:
             df = load_from_database(sport.name)
@@ -122,19 +120,12 @@ def load_from_database(sport_name: str) -> Optional[pd.DataFrame]:
         return None
 
 
-def chronological_split(df: pd.DataFrame, test_start_season: Optional[int] = None,
+def chronological_split(df: 'pd.DataFrame', test_start_season: Optional[int] = None,
                        time_column: str = 'schedule_season') -> tuple:
     """
     Split dataframe chronologically by season.
-
-    Args:
-        df: DataFrame to split
-        test_start_season: Season year where test set starts
-        time_column: Column name containing season/year information
-
-    Returns:
-        Tuple of (train_df, test_df, test_start_season)
     """
+    import pandas as pd
     # Try multiple possible time column names
     possible_columns = [time_column, 'season', 'year', 'schedule_season']
     actual_column = None

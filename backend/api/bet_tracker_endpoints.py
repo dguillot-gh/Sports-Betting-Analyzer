@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/bets", tags=["Bet Tracker"])
 
 # Use environment variable with fallback for local development
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://sports_user:sportsbetting2024@postgres:5432/sports_betting")
+from src.config import DATABASE_URL
 
 # ==================== Pydantic Models ====================
 
@@ -152,9 +152,9 @@ def calculate_potential_payout(stake: Union[float, Decimal], odds: int) -> float
     """Calculate potential payout from American odds."""
     stake = to_float(stake)
     if odds > 0:
-        return stake + (stake * odds / 100)
+        return float(stake) + (float(stake) * float(odds) / 100.0)
     else:
-        return stake + (stake * 100 / abs(odds))
+        return float(stake) + (float(stake) * 100.0 / float(abs(odds)))
 
 
 def calculate_profit(stake: Union[float, Decimal], odds: int, outcome: str, cashout_amount: Optional[Union[float, Decimal]] = None) -> float:
@@ -164,9 +164,9 @@ def calculate_profit(stake: Union[float, Decimal], odds: int, outcome: str, cash
     
     if outcome == "win":
         if odds > 0:
-            return stake * odds / 100
+            return float(stake) * float(odds) / 100.0
         else:
-            return stake * 100 / abs(odds)
+            return float(stake) * 100.0 / float(abs(odds))
     elif outcome == "loss":
         return -stake
     elif outcome == "cashout" and cashout_amount is not None:

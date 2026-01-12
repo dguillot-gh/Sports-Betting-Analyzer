@@ -30,7 +30,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Database connection string
-DATABASE_URL = "postgresql://sports_user:sportsbetting2024@postgres:5432/sports_betting"
+from src.config import DATABASE_URL
 
 # Data directories
 DATA_DIR = Path("/app/data")

@@ -8,8 +8,8 @@ Add these endpoints to app.py for database import functionality.
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
-import asyncpg
-import pandas as pd
+# import asyncpg  <-- Moved to local function scope
+# import pandas as pd  <-- Moved to local function scope
 import json
 from pathlib import Path
 from datetime import datetime
@@ -18,7 +18,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Database URL
-DATABASE_URL = "postgresql://sports_user:sportsbetting2024@postgres:5432/sports_betting"
+from src.config import DATABASE_URL
 
 # Import status tracking (in-memory for background task progress)
 import_status = {
@@ -76,6 +76,7 @@ class ImportStatus(BaseModel):
 async def get_db_connection():
     """Get database connection."""
     try:
+        import asyncpg
         return await asyncpg.connect(DATABASE_URL)
     except Exception as e:
         logger.error(f"Database connection failed: {e}")
@@ -169,6 +170,7 @@ async def import_csv_to_database(sport: str, background_tasks: BackgroundTasks):
 async def run_csv_import(sport: str):
     """Background task to run CSV import."""
     from scripts.migrate_data import run_migration
+    # No direct asyncpg or pandas usage here, run_migration handles its own.
     await run_migration(sport)
 
 
@@ -231,6 +233,7 @@ async def run_rda_import(series: str, year_start: int, year_end: int, clear_exis
     logger.info(f"Starting RDA import: series={series}, years={year_start}-{year_end}, clear={clear_existing}")
     
     try:
+        import asyncpg # Local import
         if clear_existing:
             import_status["nascar_rda"]["progress"].append("Clearing existing data...")
             # Clear existing NASCAR data
@@ -1333,6 +1336,7 @@ async def run_nfl_import(clear_existing: bool):
     """Background task for NFL import."""
     try:
         from scripts.nfl_importer import import_all_nfl
+        # No direct asyncpg or pandas usage here, import_all_nfl handles its own.
         
         def progress_callback(msg):
             import_status["nfl"]["progress"].append(msg)
@@ -1407,6 +1411,7 @@ async def run_nba_import(clear_existing: bool):
     """Background task for NBA import."""
     try:
         from scripts.nba_importer import import_all_nba
+        # No direct asyncpg or pandas usage here, import_all_nba handles its own.
         
         def progress_callback(msg):
             import_status["nba"]["progress"].append(msg)

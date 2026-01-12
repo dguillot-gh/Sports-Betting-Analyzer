@@ -4,6 +4,14 @@ import logging
 import json
 from typing import Dict, Any, Optional
 from datetime import datetime
+
+# Monkeypatch for Python 3.13 compatibility with google-genai
+import collections
+import collections.abc
+for name in ['MutableSet', 'MutableMapping', 'Mapping', 'Iterable', 'Callable']:
+    if not hasattr(collections, name):
+        setattr(collections, name, getattr(collections.abc, name))
+
 from google import genai
 from google.genai import types
 
@@ -50,21 +58,24 @@ class QuotaManager:
 
 quota_manager = QuotaManager()
 
+from src.config import GEMINI_API_KEY
+
 class GeminiPredictor:
     """
     Leverages Google Gemini 1.5 Flash for rapid sports analysis using the new google-genai SDK.
     """
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or "AIzaSyC0V9bWXsK-OsQ0Cb2yct3K3bkEd5ej5Ys"
+        # Prioritize passed key, then centralized config
+        self.api_key = api_key or GEMINI_API_KEY
         self.client = None
-        self.model_id = 'gemini-1.5-flash-latest'
+        self.model_id = 'gemini-flash-latest'
         
         if self.api_key:
             try:
-                # Use v1 stable
+                # Use v1beta for better model compatibility
                 self.client = genai.Client(
                     api_key=self.api_key,
-                    http_options={'api_version': 'v1'}
+                    http_options={'api_version': 'v1beta'}
                 )
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini client: {e}")
@@ -79,8 +90,8 @@ class GeminiPredictor:
         try:
             prompt = self._build_prompt(sport, home_team, away_team, stats)
             
-            # Simplified generate_content call
-            response = self.client.models.generate_content(
+            # Simplified generate_content call (using async)
+            response = await self.client.aio.models.generate_content(
                 model=self.model_id,
                 contents=f"Respond strictly in JSON format. Sports analysis: {prompt}"
             )

@@ -19,7 +19,7 @@ import asyncpg
 
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = "postgresql://sports_user:sportsbetting2024@postgres:5432/sports_betting"
+from src.config import DATABASE_URL
 
 # Track if table has been initialized this session
 _table_initialized = False

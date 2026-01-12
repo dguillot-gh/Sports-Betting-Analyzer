@@ -8,7 +8,7 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/bugs", tags=["Bug Tracker"])
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://sports_user:sportsbetting2024@postgres:5432/sports_betting")
+from src.config import DATABASE_URL
 
 # ==================== Models ====================
 

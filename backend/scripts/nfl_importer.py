@@ -24,13 +24,13 @@ import gc  # Garbage collection for memory management
 import requests
 from pathlib import Path
 from datetime import datetime
-import pandas as pd
-import asyncpg
+# import pandas as pd  <-- Moved to local function scope
+# import asyncpg  <-- Moved to local function scope
 
 logger = logging.getLogger(__name__)
 
 # Database URL
-DATABASE_URL = "postgresql://sports_user:sportsbetting2024@postgres:5432/sports_betting"
+from src.config import DATABASE_URL
 
 # nflverse GitHub data sources
 NFLVERSE_BASE = "https://github.com/nflverse/nflverse-data/releases/download"
@@ -201,6 +201,7 @@ async def download_nflverse(progress_callback=None):
                     # Fallback: Direct HTTP download of combined rosters
                     logger.warning("Neither nflreadpy nor nfl_data_py installed, using direct HTTP download for rosters")
                     roster_dfs = []
+                    import pandas as pd
                     for year in IMPORT_YEARS:
                         try:
                             url = f"{NFLVERSE_BASE}/rosters/roster_{year}.parquet"
@@ -301,6 +302,7 @@ async def download_comprehensive_nflverse(progress_callback=None) -> dict:
     
     for year in range(2012, 2025):
         try:
+            import pandas as pd
             url = SNAP_COUNTS_BASE.format(year=year)
             response = requests.get(url, timeout=60)
             if response.status_code == 200:
@@ -487,6 +489,7 @@ async def import_pbp_2025(conn, sport_id: int, player_map: dict, progress_callba
     
     for i, rds_file in enumerate(rds_files):
         try:
+            import pandas as pd
             if progress_callback and i % 20 == 0:
                 progress_callback(f"Processing game {i+1}/{len(rds_files)}: {rds_file.name}...")
             
@@ -654,6 +657,7 @@ async def import_pbp_2025(conn, sport_id: int, player_map: dict, progress_callba
 
 async def get_db_connection():
     """Get database connection."""
+    import asyncpg
     return await asyncpg.connect(DATABASE_URL)
 
 

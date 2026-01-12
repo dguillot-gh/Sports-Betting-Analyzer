@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Database connection pool
 _pool: Optional[asyncpg.Pool] = None
 
-DATABASE_URL = "postgresql://sports_user:sportsbetting2024@postgres:5432/sports_betting"
+from src.config import DATABASE_URL
 
 
 async def get_pool() -> asyncpg.Pool:

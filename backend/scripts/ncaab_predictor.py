@@ -41,7 +41,7 @@ class NCAABPredictor:
         self._team_stats_cache: Dict[str, Dict] = {}
         self.stats_df = None
         self.schedule_df = None
-        self._load_data()
+        # self._load_data()  <-- Refactored to lazy load in get_team_stats
         
     def _load_data(self):
         """Load historical stats from Parquet files if available."""
@@ -69,6 +69,10 @@ class NCAABPredictor:
         """
         if team_name in self._team_stats_cache:
             return self._team_stats_cache[team_name]
+            
+        # Lazy load data on first request
+        if self.stats_df is None:
+            self._load_data()
             
         stats = {
             'ppg': 72.0, 'oppg': 72.0, 

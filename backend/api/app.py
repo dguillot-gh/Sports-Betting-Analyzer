@@ -21,8 +21,8 @@ from api.dashboard_endpoints import router as dashboard_router
 from api.ai_endpoints import router as ai_router
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-import pandas as pd
-import joblib
+# import pandas as pd  <-- Moved to local function scope
+# import joblib     <-- Moved to local function scope
 import yaml
 import logging
 
@@ -108,6 +108,7 @@ def get_schema(sport: str, series: Optional[str] = None):
     Returns categorical/numeric features and available targets.
     """
     try:
+        import pandas as pd
         s, _ = SportFactory.get_sport(sport, series)
         df = load_sport_data(s)
         
@@ -276,6 +277,7 @@ def get_data(sport: str, series: Optional[str] = None, limit: int = 100, skip: i
              season_min: Optional[int] = None, season_max: Optional[int] = None,
              track_type: Optional[str] = None, driver: Optional[str] = None):
     try:
+        import pandas as pd
         s, _ = SportFactory.get_sport(sport, series)
         df = load_sport_data(s)
         
@@ -425,6 +427,7 @@ def predict(sport: str, task: str, payload: dict, series: Optional[str] = None):
             model = MODEL_CACHE.get(key)
             
         if model is None:
+            import joblib
             path = model_paths(sport, label, task)
             if not path.exists():
                 raise HTTPException(status_code=404, detail=f"No trained {task} model for {sport} series '{label}'. Train first.")
@@ -440,6 +443,7 @@ def predict(sport: str, task: str, payload: dict, series: Optional[str] = None):
         features = payload.get('features', payload)
         row = {c: features.get(c, None) for c in cols}
         
+        import pandas as pd
         X = pd.DataFrame([row], columns=cols)
 
         pred = model.predict(X)[0]
@@ -497,12 +501,14 @@ async def predict_batch(sport: str, task: str, series: Optional[str] = None, fil
             raise HTTPException(status_code=404, detail=f'No trained {task} model found. Train first.')
 
         try:
+            import joblib
             model = joblib.load(model_path)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f'Failed to load model: {e}')
 
         # Read CSV
         try:
+            import pandas as pd
             df = pd.read_csv(file.file)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f'Invalid CSV file: {e}')
@@ -531,6 +537,7 @@ async def predict_batch(sport: str, task: str, series: Optional[str] = None, fil
                 pass
 
         for i, pred in enumerate(preds):
+            import pandas as pd
             row_result = df.iloc[i].to_dict()
             # Clean up NaN values for JSON
             row_result = {k: (None if pd.isna(v) else v) for k, v in row_result.items()}
@@ -556,6 +563,7 @@ def get_feature_values(sport: str, series: Optional[str] = None):
     Get unique values for categorical features to populate UI dropdowns.
     """
     try:
+        import pandas as pd
         s, _ = SportFactory.get_sport(sport, series)
 
         # Load data to get unique values
@@ -590,6 +598,7 @@ def get_driver_mappings(sport: str, series: Optional[str] = None):
     Get mapping of drivers to their most recent/frequent team and manufacturer.
     """
     try:
+        import pandas as pd
         s, _ = SportFactory.get_sport(sport, series)
         df = load_sport_data(s)
         

@@ -37,7 +37,7 @@ except ImportError:
     logger.warning("pyreadr not installed. Run: pip install pyreadr")
 
 # Database connection string
-DATABASE_URL = "postgresql://sports_user:sportsbetting2024@postgres:5432/sports_betting"
+from src.config import DATABASE_URL
 
 # Data directory
 DATA_DIR = Path("/app/data/nascar/raw")

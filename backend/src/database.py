@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = "postgresql://sports_user:sportsbetting2024@postgres:5432/sports_betting"
+from src.config import DATABASE_URL
 
 # Global pool instance
 _pool: Optional[asyncpg.Pool] = None
