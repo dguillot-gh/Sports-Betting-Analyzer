@@ -216,16 +216,18 @@ class NBAXGBTrainer:
             matrix.append(row)
         return np.array(matrix, dtype=np.float32)
     
-    def train(self, epochs: int = 500) -> Dict[str, float]:
+    def train(self, epochs: int = 500, output_dir: str = MODELS_DIR, callback=None) -> Dict[str, float]:
         """
         Train XGBoost models for moneyline and over/under.
         Uses TimeSeriesSplit cross-validation to prevent data leaking.
         Returns accuracy metrics.
         """
         if not XGB_AVAILABLE:
+            if callback: callback("XGBoost not installed", 0)
             return {"error": "XGBoost not installed"}
         
-        logger.info("Starting XGBoost training with TimeSeriesSplit...")
+        logger.info(f"Starting XGBoost training... Output: {output_dir}")
+        if callback: callback("Loading training data...", 5)
         
         # Load data (already sorted by date)
         features, win_labels, totals = self._load_training_data()
@@ -242,6 +244,7 @@ class NBAXGBTrainer:
         ou_maes = []
         
         logger.info(f"Running 5-fold TimeSeriesSplit cross-validation on {len(X)} samples...")
+        if callback: callback(f"Running 5-fold CV on {len(X)} samples...", 10)
         
         for fold, (train_idx, test_idx) in enumerate(tscv.split(X)):
             X_train, X_test = X[train_idx], X[test_idx]
@@ -259,6 +262,7 @@ class NBAXGBTrainer:
                 'eval_metric': 'logloss'
             }
             
+            # Use custom callback for per-fold logging if needed
             model_ml = xgb.train(params_ml, dtrain_ml, epochs // 5)  # Fewer epochs per fold
             
             # Evaluate ML model
@@ -284,13 +288,17 @@ class NBAXGBTrainer:
             fold_mae = np.abs(preds_ou - y_total_test).mean()
             ou_maes.append(fold_mae)
             
-            logger.info(f"Fold {fold + 1}: ML accuracy={fold_accuracy:.2%}, OU MAE={fold_mae:.1f}")
+            msg = f"Fold {fold + 1}: ML accuracy={fold_accuracy:.2%}, OU MAE={fold_mae:.1f}"
+            logger.info(msg)
+            if callback: callback(msg, 10 + (fold + 1) * 15)
         
         # Average cross-validation scores
         cv_ml_accuracy = np.mean(ml_accuracies)
         cv_ou_mae = np.mean(ou_maes)
         
-        logger.info(f"CV Results: ML accuracy={cv_ml_accuracy:.2%} (±{np.std(ml_accuracies):.2%}), OU MAE={cv_ou_mae:.1f}")
+        msg = f"CV Results: ML accuracy={cv_ml_accuracy:.2%} (±{np.std(ml_accuracies):.2%}), OU MAE={cv_ou_mae:.1f}"
+        logger.info(msg)
+        if callback: callback(msg, 90)
         
         # Now train final model on ALL data for production use
         logger.info("Training final model on full dataset...")
@@ -313,8 +321,9 @@ class NBAXGBTrainer:
         self.model_ou = xgb.train(params_ou, dtrain_ou_full, epochs)
         
         # Save models
-        self.model_ml.save_model(f"{MODELS_DIR}/xgb_moneyline.json")
-        self.model_ou.save_model(f"{MODELS_DIR}/xgb_overunder.json")
+        os.makedirs(output_dir, exist_ok=True)
+        self.model_ml.save_model(f"{output_dir}/xgb_moneyline.json")
+        self.model_ou.save_model(f"{output_dir}/xgb_overunder.json")
         
         # Save metadata with CV results
         metadata = {
@@ -329,33 +338,35 @@ class NBAXGBTrainer:
             "cv_method": "TimeSeriesSplit",
             "features": self.feature_names
         }
-        with open(f"{MODELS_DIR}/training_metadata.json", "w") as f:
+        with open(f"{output_dir}/training_metadata.json", "w") as f:
             json.dump(metadata, f, indent=2)
         
         logger.info(f"Training complete: CV ML accuracy={cv_ml_accuracy:.2%}, CV OU MAE={cv_ou_mae:.1f}")
+        
+        if callback: callback("Training complete.", 100)
         
         return {
             "ml_accuracy": round(cv_ml_accuracy * 100, 1),
             "ou_mae": round(cv_ou_mae, 1),
             "samples_trained": len(X),
             "cv_folds": 5,
-            "model_path": MODELS_DIR
+            "model_path": output_dir
         }
     
-    def load_models(self) -> bool:
+    def load_models(self, model_dir: str = MODELS_DIR) -> bool:
         """Load trained models from disk."""
         if not XGB_AVAILABLE:
             return False
         
-        ml_path = f"{MODELS_DIR}/xgb_moneyline.json"
-        ou_path = f"{MODELS_DIR}/xgb_overunder.json"
+        ml_path = f"{model_dir}/xgb_moneyline.json"
+        ou_path = f"{model_dir}/xgb_overunder.json"
         
         if os.path.exists(ml_path) and os.path.exists(ou_path):
             self.model_ml = xgb.Booster()
             self.model_ml.load_model(ml_path)
             self.model_ou = xgb.Booster()
             self.model_ou.load_model(ou_path)
-            logger.info("Loaded trained XGBoost models")
+            logger.info(f"Loaded trained XGBoost models from {model_dir}")
             return True
         return False
     

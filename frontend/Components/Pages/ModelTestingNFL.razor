@@ -352,6 +352,96 @@
                         </MudStack>
                     </MudPaper>
                 </MudStack>
+                </MudStack>
+            </MudTabPanel>
+
+            <!-- AI Predictions Tab -->
+            <MudTabPanel Text="AI Predictions" Icon="@Icons.Material.Filled.Psychology">
+                <MudStack Spacing="3">
+                    <MudAlert Severity="Severity.Info" Dense="true">
+                        <strong>NFL Intelligence:</strong> Multi-engine analysis + Google Gemini Insights.
+                    </MudAlert>
+                    
+                    @if (_games.Any())
+                    {
+                        <MudGrid Spacing="3">
+                            @foreach (var game in _games)
+                            {
+                                <MudItem xs="12" md="6">
+                                    <MudCard Elevation="3">
+                                        <MudCardHeader Style="background: linear-gradient(135deg, #1a237e 0%, #0d47a1 100%);">
+                                            <CardHeaderContent>
+                                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                                    <MudText Typo="Typo.h6" Style="color: white;">@game.AwayTeam @@ @game.HomeTeam</MudText>
+                                                </MudStack>
+                                            </CardHeaderContent>
+                                        </MudCardHeader>
+                                        <MudCardContent>
+                                            <div class="mt-2">
+                                                @if (game.GeminiAnalysis == null)
+                                                {
+                                                    <MudButton Variant="Variant.Filled" Color="Color.Secondary" 
+                                                               StartIcon="@Icons.Material.Filled.AutoFixHigh" 
+                                                               OnClick="@(() => GetGeminiAnalysis(game))" Disabled="@game.IsGeneratingAi">
+                                                        @if (game.IsGeneratingAi)
+                                                        {
+                                                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                                            <span>Generating AI Analysis...</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span>Run AI Advisor</span>
+                                                        }
+                                                    </MudButton>
+                                                }
+                                                else
+                                                {
+                                                    <!-- Engine Summary -->
+                                                    <MudSimpleTable Dense="true" Hover="true" Class="mb-3">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Engine</th>
+                                                                <th style="text-align: center;">Home Win %</th>
+                                                                <th style="text-align: center;">Pred Score</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            @foreach (var engine in game.GeminiAnalysis.Engines)
+                                                            {
+                                                                <tr>
+                                                                    <td>@engine.Key</td>
+                                                                    <td style="text-align: center;">@((engine.Value.HomeWinProb * 100).ToString("F1"))%</td>
+                                                                    <td style="text-align: center;">@engine.Value.AwayScore - @engine.Value.HomeScore</td>
+                                                                </tr>
+                                                            }
+                                                        </tbody>
+                                                    </MudSimpleTable>
+
+                                                    <!-- Gemini Rationale -->
+                                                    <MudPaper Class="pa-3" Style="background: rgba(156, 39, 176, 0.05); border-left: 4px solid #9c27b0;">
+                                                        <MudText Typo="Typo.subtitle2" Color="Color.Secondary">
+                                                            <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Small" Class="mr-1" /> Gemini Rationale
+                                                        </MudText>
+                                                        <MudText Typo="Typo.body2" Class="italic mt-1">"@game.GeminiAnalysis.LlmInsight?.Rationale"</MudText>
+                                                        <MudText Typo="Typo.caption" Class="mt-2" Style="display: block;">
+                                                            <strong>Key Factor:</strong> @game.GeminiAnalysis.LlmInsight?.KeyFactor
+                                                        </MudText>
+                                                    </MudPaper>
+                                                }
+                                            </div>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                            }
+                        </MudGrid>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info">
+                            Load NFL games from the "Games" tab first.
+                        </MudAlert>
+                    }
+                </MudStack>
             </MudTabPanel>
         </MudTabs>
     </MudStack>
@@ -622,6 +712,8 @@
         public ModelResult? XgbModel { get; set; }
         public Dictionary<string, object>? HomeStats { get; set; }
         public Dictionary<string, object>? AwayStats { get; set; }
+        public PythonMLServiceClient.AiAnalysisReport? GeminiAnalysis { get; set; }
+        public bool IsGeneratingAi { get; set; }
         public bool IsCached { get; set; } = false;
     }
 
@@ -742,6 +834,34 @@
         public double TotalOverProb { get; init; }
         public double SpreadCoverHomeProb { get; init; }
         public bool HasFpi { get; init; }
+    }
+
+    private async Task GetGeminiAnalysis(GamePrediction game)
+    {
+        game.IsGeneratingAi = true;
+        StateHasChanged();
+        
+        try
+        {
+            var homeStats = JsonSerializer.Serialize(game.HomeStats);
+            var awayStats = JsonSerializer.Serialize(game.AwayStats);
+            
+            var result = await MLServiceClient.GetAiAnalysisAsync("nfl", game.HomeTeam, game.AwayTeam, homeStats, awayStats);
+            if (result != null)
+            {
+                game.GeminiAnalysis = result;
+                Snackbar.Add($"Gemini analysis complete for {game.HomeTeam}", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Gemini Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            game.IsGeneratingAi = false;
+            StateHasChanged();
+        }
     }
 }
 

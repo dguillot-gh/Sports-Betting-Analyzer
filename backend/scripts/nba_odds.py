@@ -81,6 +81,67 @@ async def get_todays_nba_odds(sportsbook: str = "fanduel") -> Dict[str, Any]:
                 logger.warning(f"Error parsing game: {e}")
                 continue
         
+            except Exception as e:
+                logger.warning(f"Error parsing game: {e}")
+                continue
+        
+        # -------------------------------------------------------------------------
+        # [EXPERIMENTAL] Add Experimental Neural Net predictions if model exists
+        # This is purely additive and does not affect existing odds/data
+        # -------------------------------------------------------------------------
+        try:
+            import os
+            import asyncio
+            from scripts.nba_ai_integration import get_all_predictions
+            from scripts.kyleskom_adapter import get_kyleskom_predictor
+            
+            exp_model_path = "models/nba/experimental"
+            # We look for ANY files in the experimental folder as a signal that the lab is "active"
+            if os.path.exists(exp_model_path) and any(os.listdir(exp_model_path)):
+                
+                # Fetch stats (reusing kyleskom adapter's cache)
+                kp = get_kyleskom_predictor()
+                if await kp.fetch_data_from_nba_api():
+                    stats_df = kp.df
+                    
+                    for game in games:
+                        try:
+                            # Map teams to stats
+                            def get_stats_dict(name):
+                                row = stats_df[stats_df['TEAM_NAME'] == name]
+                                if row.empty:
+                                    row = stats_df[stats_df['TEAM_NAME'].str.contains(name.split()[-1], case=False, na=False)]
+                                if not row.empty:
+                                    # Convert pandas Series to dict
+                                    return row.iloc[0].to_dict()
+                                return {}
+
+                            h_stats = get_stats_dict(game['home_team'])
+                            a_stats = get_stats_dict(game['away_team'])
+                            
+                            if h_stats and a_stats:
+                                # Get all 5 engines (Baseline, Linear, Tree, MLP, Ensemble)
+                                ai_result = get_all_predictions(
+                                    game['home_team'], 
+                                    game['away_team'], 
+                                    h_stats, 
+                                    a_stats
+                                )
+                                
+                                # We specifically pick the MLP (Neural Network) for this experimental column
+                                if "predictions" in ai_result and "MLP" in ai_result["predictions"]:
+                                    pred = ai_result["predictions"]["MLP"]
+                                    game['experimental_prediction'] = {
+                                        "home_win_probability": pred.get("home_win_prob"),
+                                        "predicted_total": pred.get("home_score", 0) + pred.get("away_score", 0)
+                                    }
+                        except Exception:
+                            pass
+                                
+        except Exception as e:
+            logger.error(f"Failed to attach experimental predictions: {e}")
+            pass
+            
         return {
             "date": str(today),
             "sportsbook": sportsbook,

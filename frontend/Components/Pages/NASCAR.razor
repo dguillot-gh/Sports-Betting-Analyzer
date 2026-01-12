@@ -331,10 +331,44 @@
                                     <MudText Typo="Typo.h6">@(_nextRace.RestrictorPlate ? "Superspeedway" : "Standard")</MudText>
                                 </MudPaper>
                                 <MudPaper Class="pa-3 flex-1" Style="background: #f5f5f5;">
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Stage Laps</MudText>
-                                    <MudText Typo="Typo.h6">@_nextRace.Stage1Laps / @_nextRace.Stage2Laps / @_nextRace.Stage3Laps</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">AI Advisor</MudText>
+                                    @if (_nextRace.GeminiAnalysis == null)
+                                    {
+                                        <MudButton Variant="Variant.Filled" Color="Color.Secondary" Size="Size.Small"
+                                                   StartIcon="@Icons.Material.Filled.AutoFixHigh"
+                                                   OnClick="@(() => GetGeminiAnalysis(_nextRace))" Disabled="@_nextRace.IsAnalyzing">
+                                            @if (_nextRace.IsAnalyzing)
+                                            {
+                                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                                <span>Analyzing...</span>
+                                            }
+                                            else
+                                            {
+                                                <span>Get Rationale</span>
+                                            }
+                                        </MudButton>
+                                    }
+                                    else
+                                    {
+                                        <MudChip T="string" Color="Color.Secondary" Size="Size.Small" Icon="@Icons.Material.Filled.Psychology">
+                                            Ready
+                                        </MudChip>
+                                    }
                                 </MudPaper>
                             </MudStack>
+
+                            @if (_nextRace.GeminiAnalysis != null)
+                            {
+                                <MudPaper Class="pa-3 mt-3" Style="background: rgba(156, 39, 176, 0.05); border-left: 4px solid #9c27b0;">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">
+                                        <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Small" Class="mr-1" /> Gemini Track Insights
+                                    </MudText>
+                                    <MudText Typo="Typo.body2" Class="italic mt-1">"@_nextRace.GeminiAnalysis.LlmInsight?.Rationale"</MudText>
+                                    <MudText Typo="Typo.caption" Class="mt-2" Style="display: block;">
+                                        <strong>Winning Factor:</strong> @_nextRace.GeminiAnalysis.LlmInsight?.KeyFactor
+                                    </MudText>
+                                </MudPaper>
+                            }
                         </MudPaper>
 
                         <!-- Track History -->
@@ -838,6 +872,8 @@
         public bool RestrictorPlate { get; set; }
         public string MarginOfVictory { get; set; } = "";
         public double AverageSpeed { get; set; }
+        public PythonMLServiceClient.AiAnalysisReport? GeminiAnalysis { get; set; }
+        public bool IsAnalyzing { get; set; }
     }
 
     public class LiveFeedData
@@ -1021,6 +1057,34 @@
         catch (Exception ex)
         {
             Snackbar.Add($"Failed to load stats: {ex.Message}", Severity.Error);
+        }
+    }
+
+    [Inject] private PythonMLServiceClient MLServiceClient { get; set; } = default!;
+
+    private async Task GetGeminiAnalysis(RaceInfo race)
+    {
+        race.IsAnalyzing = true;
+        StateHasChanged();
+
+        try
+        {
+            // For NASCAR, we pass race and track as the "matchup"
+            var result = await MLServiceClient.GetAiAnalysisAsync("nascar", race.TrackName, race.RaceName);
+            if (result != null)
+            {
+                race.GeminiAnalysis = result;
+                Snackbar.Add("Gemini track analysis complete!", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Gemini Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            race.IsAnalyzing = false;
+            StateHasChanged();
         }
     }
 }

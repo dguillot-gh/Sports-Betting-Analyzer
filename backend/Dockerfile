@@ -18,14 +18,15 @@ RUN R -e "install.packages(c('jsonlite', 'dplyr'), repos='https://cloud.r-projec
     R -e "install.packages(c('nflseedR', 'nflreadr'), repos='https://cloud.r-project.org')" && \
     R -e "install.packages('baseballr', repos='https://cloud.r-project.org')"
 
-# 2. Install Heavy ML dependencies (TensorFlow, Torch, XGBoost)
-# These change less frequently than regular app deps
-COPY requirements-ml.txt .
-RUN pip install --no-cache-dir -r requirements-ml.txt
+# 2. Install Heavy ML dependencies (Optimized Layering)
+# We increment these separately so a failure in one doesn't lose progress on the others.
+RUN pip install --no-cache-dir --default-timeout=1000 torch --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir --default-timeout=1000 tensorflow
+RUN pip install --no-cache-dir --default-timeout=1000 xgboost
 
 # 3. Install other Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --default-timeout=1000 -r requirements.txt
 
 # Stage 2: Final Runtime Environment
 FROM python:3.11-slim

@@ -191,6 +191,87 @@ public class ModelInfo
 
     [JsonPropertyName("last_updated")]
     public double LastUpdated { get; set; }
+
+    [JsonPropertyName("accuracy")]
+    public double? Accuracy { get; set; }
+
+    [JsonPropertyName("roi")]
+    public double? Roi { get; set; }
+}
+
+public class DashboardModelSummary
+{
+    [JsonPropertyName("sport")]
+    public string Sport { get; set; } = "";
+
+    [JsonPropertyName("series")]
+    public string Series { get; set; } = "";
+
+    [JsonPropertyName("task")]
+    public string Task { get; set; } = "";
+
+    [JsonPropertyName("accuracy")]
+    public double Accuracy { get; set; }
+
+    [JsonPropertyName("roi")]
+    public double Roi { get; set; }
+
+    [JsonPropertyName("last_updated")]
+    public double LastUpdated { get; set; }
+}
+
+public class AiAnalysisReport
+{
+    [JsonPropertyName("sport")]
+    public string Sport { get; set; } = "";
+
+    [JsonPropertyName("matchup")]
+    public string Matchup { get; set; } = "";
+
+    [JsonPropertyName("engines")]
+    public Dictionary<string, AiEnginePrediction> Engines { get; set; } = new();
+
+    [JsonPropertyName("llm_insight")]
+    public LlmInsight? LlmInsight { get; set; }
+}
+
+public class AiEnginePrediction
+{
+    [JsonPropertyName("home_win_prob")]
+    public double HomeWinProb { get; set; }
+
+    [JsonPropertyName("home_score")]
+    public double HomeScore { get; set; }
+
+    [JsonPropertyName("away_score")]
+    public double AwayScore { get; set; }
+}
+
+public class LlmInsight
+{
+    [JsonPropertyName("winner")]
+    public string Winner { get; set; } = "";
+
+    [JsonPropertyName("confidence")]
+    public int Confidence { get; set; }
+
+    [JsonPropertyName("rationale")]
+    public string Rationale { get; set; } = "";
+
+    [JsonPropertyName("key_factor")]
+    public string KeyFactor { get; set; } = "";
+}
+
+public class AiQuota
+{
+    [JsonPropertyName("used")]
+    public int Used { get; set; }
+
+    [JsonPropertyName("limit")]
+    public int Limit { get; set; }
+
+    [JsonPropertyName("remaining")]
+    public int Remaining { get; set; }
 }
 
 public class ProfileData
@@ -1079,6 +1160,63 @@ public class PythonMLServiceClient
         {
             _logger.LogError(ex, "Error retraining model for {Sport}", sport);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Get summary metrics for all models (used on dashboard)
+    /// </summary>
+    public async Task<List<DashboardModelSummary>> GetModelSummaryAsync()
+    {
+        try
+        {
+            if (!await IsHealthyAsync()) return new List<DashboardModelSummary>();
+            var response = await _httpClient.GetFromJsonAsync<List<DashboardModelSummary>>("/dashboard/model-summary");
+            return response ?? new List<DashboardModelSummary>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting model summary");
+            return new List<DashboardModelSummary>();
+        }
+    }
+
+    /// <summary>
+    /// Get unified AI analysis (Multi-engine + LLM)
+    /// </summary>
+    public async Task<AiAnalysisReport?> GetAiAnalysisAsync(string sport, string homeTeam, string awayTeam, string? homeStatsJson = null, string? awayStatsJson = null)
+    {
+        try
+        {
+            if (!await IsHealthyAsync()) return null;
+            var url = $"/ai/analyze?sport={sport}&home_team={Uri.EscapeDataString(homeTeam)}&away_team={Uri.EscapeDataString(awayTeam)}";
+            if (!string.IsNullOrEmpty(homeStatsJson)) url += $"&home_stats={Uri.EscapeDataString(homeStatsJson)}";
+            if (!string.IsNullOrEmpty(awayStatsJson)) url += $"&away_stats={Uri.EscapeDataString(awayStatsJson)}";
+
+            var response = await _httpClient.PostAsync(url, null);
+            return await response.Content.ReadFromJsonAsync<AiAnalysisReport>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting AI analysis");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Get current Gemini AI quota status
+    /// </summary>
+    public async Task<AiQuota?> GetAiQuotaAsync()
+    {
+        try
+        {
+            if (!await IsHealthyAsync()) return null;
+            return await _httpClient.GetFromJsonAsync<AiQuota>("/ai/quota");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting AI quota");
+            return null;
         }
     }
 

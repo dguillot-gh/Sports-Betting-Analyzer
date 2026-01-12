@@ -24,6 +24,14 @@
             <MudChip T="string" Icon="@Icons.Material.Filled.CheckCircle" Color="@(_isBackendHealthy ? Color.Success : Color.Error)">
                 System: @(_isBackendHealthy ? "Online" : "Connecting...")
             </MudChip>
+            @if (_quota != null)
+            {
+                <MudChip T="string" Color="@(_quota.Remaining > 100 ? Color.Success : Color.Warning)" 
+                         Variant="Variant.Text" Icon="@Icons.Material.Filled.AutoFixHigh" 
+                         Size="Size.Medium" Class="ml-2">
+                    Gemini AI: @_quota.Remaining / @_quota.Limit
+                </MudChip>
+            }
         </MudItem>
     </MudGrid>
 
@@ -163,6 +171,81 @@
                     </MudItem>
                 </MudGrid>
             </MudPaper>
+
+            <MudPaper Elevation="2" Class="pa-6 mt-6">
+                <MudText Typo="Typo.h6" GutterBottom="true" Class="d-flex align-center">
+                    <MudIcon Icon="@Icons.Material.Filled.Lightbulb" Color="Color.Warning" Class="mr-2" /> AI Advisor Insights
+                </MudText>
+                @if (_latestInsight != null)
+                {
+                    <MudCard Elevation="0" Outlined="true" Class="mt-2 pa-4">
+                        <MudText Typo="Typo.subtitle1"><strong>@_latestInsight.Matchup</strong></MudText>
+                        <MudText Typo="Typo.body2" Class="mt-1 italic">"@(_latestInsight.LlmInsight?.Rationale)"</MudText>
+                        <div class="d-flex align-center mt-2">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">
+                                Confidence: @(_latestInsight.LlmInsight?.Confidence)%
+                            </MudChip>
+                            <MudText Typo="Typo.caption" Class="ml-2">Key: @(_latestInsight.LlmInsight?.KeyFactor)</MudText>
+                        </div>
+                    </MudCard>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">Get a deep AI analysis for today's top-rated value pick.</MudText>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.AutoFixHigh" OnClick="@AnalyzeHomeTopPick" 
+                               Disabled="@(_isPicksLoading || _isAiProcessing || !_topPicks.Any())">
+                        @if (_isAiProcessing)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            <span>Consulting Gemini...</span>
+                        }
+                        else
+                        {
+                            <span>Analyze Today's Top Pick</span>
+                        }
+                    </MudButton>
+                }
+            </MudPaper>
+
+            <MudPaper Elevation="2" Class="pa-6 mt-6">
+                <MudText Typo="Typo.h6" GutterBottom="true" Class="d-flex align-center">
+                    <MudIcon Icon="@Icons.Material.Filled.AutoGraph" Color="Color.Secondary" Class="mr-2" /> Model Intelligence
+                </MudText>
+                @if (_isModelsLoading)
+                {
+                    <MudProgressLinear Color="Color.Secondary" Indeterminate="true" Class="my-4" />
+                }
+                else if (_modelSummary.Any())
+                {
+                    <MudTable Items="@_modelSummary" Dense="true" Hover="true" Elevation="0" Class="mt-2">
+                        <HeaderContent>
+                            <MudTh>Sport/Model</MudTh>
+                            <MudTh>Task</MudTh>
+                            <MudTh>Acc %</MudTh>
+                            <MudTh>Status</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>
+                                <MudText Typo="Typo.body2"><strong>@context.Sport.ToUpper()</strong> - @context.Series</MudText>
+                            </MudTd>
+                            <MudTd>@context.Task</MudTd>
+                            <MudTd>
+                                <MudText Color="@(context.Accuracy > 0.6 ? Color.Success : Color.Info)">
+                                    @((context.Accuracy * 100).ToString("F1"))%
+                                </MudText>
+                            </MudTd>
+                            <MudTd>
+                                <MudChip T="string" Size="Size.Small" Color="@(context.Accuracy > 0.55 ? Color.Success : Color.Default)" Variant="Variant.Text">OPTIMIZED</MudChip>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">No trained models found yet.</MudText>
+                }
+            </MudPaper>
         </MudItem>
 
         @* Right Column: Bet Slip Analyzer *@
@@ -285,12 +368,60 @@
     private bool _isProcessing = false;
     private string _errorMessage = string.Empty;
     private IBrowserFile? _selectedFile;
+    private List<PythonMLServiceClient.DashboardModelSummary> _modelSummary = new();
+    private bool _isModelsLoading = true;
+    private PythonMLServiceClient.AiQuota? _quota;
+    private PythonMLServiceClient.AiAnalysisReport? _latestInsight;
+    private bool _isAiProcessing = false;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadAnalytics();
         await LoadTopPicks();
+        await LoadModelSummary();
+        await LoadAiQuota();
         _isBackendHealthy = await MLServiceClient.IsHealthyAsync();
+    }
+
+    private async Task AnalyzeHomeTopPick()
+    {
+        if (!_topPicks.Any()) return;
+        
+        _isAiProcessing = true;
+        StateHasChanged();
+        
+        try
+        {
+            var pick = _topPicks.First();
+            _latestInsight = await MLServiceClient.GetAiAnalysisAsync(pick.Sport.ToLower(), pick.HomeTeam, pick.AwayTeam);
+            await LoadAiQuota(); // Refresh quota chip
+        }
+        catch (Exception) { }
+        finally
+        {
+            _isAiProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadAiQuota()
+    {
+        try 
+        {
+            _quota = await MLServiceClient.GetAiQuotaAsync();
+        }
+        catch (Exception) { }
+    }
+
+    private async Task LoadModelSummary()
+    {
+        _isModelsLoading = true;
+        try
+        {
+            _modelSummary = await MLServiceClient.GetModelSummaryAsync();
+        }
+        catch (Exception) { }
+        finally { _isModelsLoading = false; }
     }
 
     private async Task LoadAnalytics()

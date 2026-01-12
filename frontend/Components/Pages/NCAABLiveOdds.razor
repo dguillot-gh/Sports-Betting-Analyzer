@@ -122,16 +122,35 @@
                                         }
                                     </tbody>
                                 </MudSimpleTable>
-                                @if (game.ValueBets.Any())
-                                {
-                                    <MudDivider Class="my-2"/>
-                                    <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
-                                        @foreach (var bet in game.ValueBets)
-                                        {
-                                            <MudChip T="string" Color="Color.Warning" Size="Size.Small">@bet</MudChip>
-                                        }
                                     </MudStack>
                                 }
+
+                                <MudDivider Class="my-2" />
+                                <div class="mt-2">
+                                    @if (game.GeminiAnalysis == null)
+                                    {
+                                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Size="Size.Small"
+                                                   StartIcon="@Icons.Material.Filled.AutoFixHigh"
+                                                   OnClick="@(() => GetGeminiAnalysis(game))" Disabled="@game.IsAnalyzing">
+                                            @if (game.IsAnalyzing)
+                                            {
+                                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                                <span>Analyzing...</span>
+                                            }
+                                            else
+                                            {
+                                                <span>AI Rationale</span>
+                                            }
+                                        </MudButton>
+                                    }
+                                    else
+                                    {
+                                        <MudPaper Class="pa-2 mt-1" Style="background: rgba(156, 39, 176, 0.05); border-left: 3px solid #9c27b0;">
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary"><strong>Gemini Insight:</strong></MudText>
+                                            <MudText Typo="Typo.body2" Class="italic mt-1" Style="font-size: 0.8rem;">"@game.GeminiAnalysis.LlmInsight?.Rationale"</MudText>
+                                        </MudPaper>
+                                    }
+                                </div>
                             </MudCardContent>
                         </MudCard>
                     </MudItem>
@@ -270,6 +289,8 @@
         public bool HasValue { get; set; }
         public List<string> ValueBets { get; set; } = new();
         public PredictionData? Prediction { get; set; }
+        public PythonMLServiceClient.AiAnalysisReport? GeminiAnalysis { get; set; }
+        public bool IsAnalyzing { get; set; }
     }
 
     private class PredictionData
@@ -278,5 +299,32 @@
         public double HomeWinProbability { get; set; }
         public double PredictedTotal { get; set; }
         public double Confidence { get; set; }
+    }
+
+    [Inject] private PythonMLServiceClient MLServiceClient { get; set; } = default!;
+
+    private async Task GetGeminiAnalysis(GameData game)
+    {
+        game.IsAnalyzing = true;
+        StateHasChanged();
+
+        try
+        {
+            var result = await MLServiceClient.GetAiAnalysisAsync("ncaab", game.HomeTeam, game.AwayTeam);
+            if (result != null)
+            {
+                game.GeminiAnalysis = result;
+                Snackbar.Add($"Gemini insight loaded for {game.HomeTeam}", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Gemini Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            game.IsAnalyzing = false;
+            StateHasChanged();
+        }
     }
 }

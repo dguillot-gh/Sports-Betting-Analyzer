@@ -390,7 +390,8 @@ def get_integration_status() -> Dict[str, Any]:
 def run_nba_ai_training(
     model_type: str = "all",
     train_season: str = "2023-2024",
-    test_season: str = "2024-2025"
+    test_season: str = "2024-2025",
+    output_dir: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Run NBA_AI model training.
@@ -439,8 +440,8 @@ def run_nba_ai_training(
         env["DATABASE_PATH"] = str(db_path)
         
         # Create models directory if needed
-        models_dir = NBA_AI_REPO_PATH / "models"
-        models_dir.mkdir(exist_ok=True)
+        models_dir = Path(output_dir) if output_dir else NBA_AI_REPO_PATH / "models"
+        models_dir.mkdir(exist_ok=True, parents=True)
         
         # Run training command
         cmd = [
@@ -489,6 +490,58 @@ def run_nba_ai_training(
     results["duration_seconds"] = (end_time - start_time).total_seconds()
     
     return results
+
+
+def train_nba_nn_wrapper(job: Any):
+    """
+    Wrapper for TrainingOrchestrator to run NBA Neural Network training.
+    
+    Args:
+        job: TrainingJob instance
+    """
+    import os
+    from datetime import datetime
+    
+    # 1. Prepare isolated directory
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    experiment_dir = f"models/experiments/nba/{timestamp}_{job.id}"
+    os.makedirs(experiment_dir, exist_ok=True)
+    job.output_model_path = experiment_dir
+    
+    job.log(f"Starting isolated NN training in: {experiment_dir}")
+    job.log("Integration: Using NBA_AI repository pipeline (MLP model)")
+    
+    # 2. Run training
+    # For now, we use the predefined run_nba_ai_training function
+    # Note: This is an MLP (Neural Network) model in the context of NBA_AI
+    try:
+        # We override the output_dir to our isolated experiment dir
+        result = run_nba_ai_training(
+            model_type="MLP", 
+            train_season=job.config.get("train_season", "2023-2024"),
+            test_season=job.config.get("test_season", "2024-2025"),
+            output_dir=experiment_dir
+        )
+        
+        # Mapping results
+        if result["status"] == "completed":
+            # Copy models to experiment dir if they were saved elsewhere
+            # Actually run_nba_ai_training uses output_dir in cmd
+            # We need to make sure run_nba_ai_training accepts it or we move them
+            job.log("NN Training completed successfully.")
+            job.progress = 100.0
+            
+            # Record metrics if available
+            if "results" in result:
+                job.metrics["accuracy"] = [result["results"].get("accuracy", 0)]
+                job.metrics["loss"] = [result["results"].get("mae", 0)]
+        else:
+            job.log(f"NN Training failed: {result.get('error', 'Unknown error')}")
+            raise Exception(result.get("error", "Training failed"))
+            
+    except Exception as e:
+        job.log(f"Wrapper error: {str(e)}")
+        raise e
 
 
 if __name__ == "__main__":

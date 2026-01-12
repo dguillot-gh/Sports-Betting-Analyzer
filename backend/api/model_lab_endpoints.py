@@ -1,198 +1,83 @@
-"""
-Model Lab API Endpoints
-=======================
-Testing sandbox for confidence scoring and bet type analysis.
-"""
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, BackgroundTasks
+from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
-import logging
 
-from src.confidence_scoring import (
-    calculate_confidence,
-    calculate_asymmetric_kelly,
-    get_parlay_suggestion,
-    BetTypePerformance
-)
+from scripts.training_orchestrator import get_orchestrator
 
-logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/lab", tags=["Model Lab"])
+router = APIRouter(prefix="/lab", tags=["model_lab"])
 
-# In-memory performance tracker for testing
-_performance_tracker = BetTypePerformance()
+class TrainingConfig(BaseModel):
+    model_type: str = "xgboost"
+    epochs: int = 500
+    learning_rate: float = 0.05
+    features: List[str] = []
 
+@router.post("/train/{sport}")
+async def start_training(sport: str, config: TrainingConfig):
+    """Start a new isolated training job."""
+    orchestrator = get_orchestrator()
+    job_id = orchestrator.start_job(sport, config.model_type, config.dict())
+    return {"job_id": job_id, "status": "started"}
 
-class ConfidenceRequest(BaseModel):
-    bet_type: str  # over, under, moneyline, spread
-    model_prediction: float
-    market_line: float
-    model_probability: Optional[float] = None
+@router.get("/jobs")
+async def list_jobs():
+    """List all training jobs."""
+    orchestrator = get_orchestrator()
+    return orchestrator.list_jobs()
 
-
-class KellyRequest(BaseModel):
-    bet_type: str
-    win_probability: float
-    american_odds: int
-    bankroll: float = 1000.0
-
-
-class ParlayLeg(BaseModel):
-    bet_type: str
-    confidence: str  # high, medium, low
-
-
-class ParlayRequest(BaseModel):
-    legs: List[ParlayLeg]
-
-
-class RecordBetRequest(BaseModel):
-    bet_type: str
-    won: bool
-    profit: float
-    stake: float
-
-
-@router.post("/confidence")
-async def analyze_confidence(request: ConfidenceRequest):
-    """
-    Analyze a bet's confidence level with asymmetric thresholds.
-    
-    - UNDERs: 1.5pt edge = high confidence
-    - OVERs: 3.0pt edge = high confidence (higher bar)
-    """
-    try:
-        result = calculate_confidence(
-            bet_type=request.bet_type,
-            model_prediction=request.model_prediction,
-            market_line=request.market_line,
-            model_probability=request.model_probability
-        )
-        return {
-            "bet_type": result.bet_type,
-            "edge": result.edge,
-            "confidence_level": result.confidence_level,
-            "kelly_fraction": result.kelly_fraction,
-            "suggested_stake_pct": result.suggested_stake_pct,
-            "parlay_recommendation": result.parlay_recommendation,
-            "should_bet": result.should_bet,
-            "reason": result.reason
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/kelly")
-async def calculate_kelly(request: KellyRequest):
-    """
-    Calculate asymmetric Kelly bet size.
-    
-    - OVERs: Quarter Kelly
-    - UNDERs: 3/4 Kelly
-    - Others: Half Kelly
-    """
-    try:
-        return calculate_asymmetric_kelly(
-            bet_type=request.bet_type,
-            win_probability=request.win_probability,
-            american_odds=request.american_odds,
-            bankroll=request.bankroll
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/parlay-suggestion")
-async def suggest_parlay(request: ParlayRequest):
-    """
-    Get parlay strategy recommendation based on legs.
-    
-    Rules:
-    - High confidence UNDERs: 4-5 leg parlays OK
-    - Mixed: 2-3 leg max  
-    - Any OVERs: No parlays, straight bets only
-    """
-    try:
-        legs = [{"bet_type": l.bet_type, "confidence": l.confidence} for l in request.legs]
-        return get_parlay_suggestion(legs)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/record-bet")
-async def record_bet(request: RecordBetRequest):
-    """Record a bet result for performance tracking."""
-    try:
-        _performance_tracker.record_bet(
-            bet_type=request.bet_type,
-            won=request.won,
-            profit=request.profit,
-            stake=request.stake
-        )
-        can_bet, reason = _performance_tracker.should_bet(request.bet_type)
-        return {
-            "recorded": True,
-            "bet_type": request.bet_type,
-            "can_continue_betting": can_bet,
-            "status": reason
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/performance")
-async def get_performance():
-    """Get performance summary by bet type."""
-    return _performance_tracker.get_summary()
-
-
-@router.post("/reset-performance")
-async def reset_performance():
-    """Reset performance tracker (for testing)."""
-    global _performance_tracker
-    _performance_tracker = BetTypePerformance()
-    return {"reset": True}
-
-
-@router.get("/thresholds")
-async def get_thresholds():
-    """Get current confidence thresholds."""
-    from src.confidence_scoring import THRESHOLDS, PARLAY_RULES
-    return {
-        "thresholds": THRESHOLDS,
-        "parlay_rules": {str(k): v for k, v in PARLAY_RULES.items()}
-    }
-
-
-@router.post("/batch-analyze")
-async def batch_analyze(predictions: List[ConfidenceRequest]):
-    """Analyze multiple predictions at once."""
-    results = []
-    for pred in predictions:
-        result = calculate_confidence(
-            bet_type=pred.bet_type,
-            model_prediction=pred.model_prediction,
-            market_line=pred.market_line,
-            model_probability=pred.model_probability
-        )
-        results.append({
-            "bet_type": result.bet_type,
-            "edge": result.edge,
-            "confidence_level": result.confidence_level,
-            "should_bet": result.should_bet,
-            "parlay_recommendation": result.parlay_recommendation
-        })
-    
-    # Summary
-    bettable = [r for r in results if r["should_bet"]]
+@router.get("/jobs/{job_id}")
+async def get_job_details(job_id: str):
+    """Get detailed status, logs, and metrics for a job."""
+    orchestrator = get_orchestrator()
+    job = orchestrator.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
     
     return {
-        "predictions": results,
-        "summary": {
-            "total": len(results),
-            "bettable": len(bettable),
-            "skip": len(results) - len(bettable),
-            "under_high": sum(1 for r in results if r["bet_type"] == "under" and r["confidence_level"] == "high"),
-            "over_high": sum(1 for r in results if r["bet_type"] == "over" and r["confidence_level"] == "high")
-        }
+        "id": job.id,
+        "sport": job.sport,
+        "status": job.status,
+        "progress": job.progress,
+        "logs": job.logs,
+        "metrics": job.metrics,
+        "output_path": job.output_model_path,
+        "error": job.error,
+        "start_time": job.start_time,
+        "end_time": job.end_time
     }
+
+@router.post("/promote/{job_id}")
+async def promote_job(job_id: str):
+    """Promote a job's trained model to the active 'Experimental' slot."""
+    orchestrator = get_orchestrator()
+    job = orchestrator.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    if job.status != "completed":
+        raise HTTPException(status_code=400, detail="Only completed jobs can be promoted")
+        
+    if not job.output_model_path:
+        raise HTTPException(status_code=400, detail="Job has no output path")
+        
+    import shutil
+    import os
+    
+    # Target directory for active experimental models
+    target_dir = f"models/{job.sport}/experimental"
+    os.makedirs(target_dir, exist_ok=True)
+    
+    source_dir = job.output_model_path
+    
+    try:
+        # Copy all JSON models
+        copied_files = []
+        for filename in os.listdir(source_dir):
+            if filename.endswith(".json"):
+                 shutil.copy2(f"{source_dir}/{filename}", f"{target_dir}/{filename}")
+                 copied_files.append(filename)
+                 
+        return {"status": "promoted", "files": copied_files, "target": target_dir}
+    except Exception as e:
+         raise HTTPException(status_code=500, detail=f"Failed to promote model: {e}")

@@ -137,7 +137,7 @@
                                                         <th></th>
                                                         <th style="text-align: center;">📊 Simple</th>
                                                         <th style="text-align: center;">🤖 XGB</th>
-                                                        <th style="text-align: center;">🧠 NN</th>
+                                                        <th style="text-align: center;">🧪 Exp (NN)</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -161,10 +161,10 @@
                                                             }
                                                         </td>
                                                         <td style="text-align: center;">
-                                                            @if (game.XgbModel?.NnHomeWinProb != null)
+                                                            @if (game.ExperimentalModel?.HomeWinProb != null)
                                                             {
                                                                 <strong style="color: #9c27b0;">
-                                                                    @(((game.XgbModel?.NnHomeWinProb ?? 0) * 100).ToString("F1"))%
+                                                                    @(((game.ExperimentalModel.HomeWinProb ?? 0) * 100).ToString("F1"))%
                                                                 </strong>
                                                             }
                                                             else
@@ -181,6 +181,9 @@
                                                         <td style="text-align: center; color: #2196f3;">
                                                             @(game.XgbModel?.PredictedWinner ?? "—")
                                                         </td>
+                                                        <td style="text-align: center; color: #9c27b0;">
+                                                            @(game.ExperimentalModel?.PredictedWinner ?? "—")
+                                                        </td>
                                                     </tr>
                                                     <tr>
                                                         <td><MudText Typo="Typo.caption">EV (Home)</MudText></td>
@@ -194,6 +197,7 @@
                                                                 @(game.XgbModel?.EvHome?.ToString("+0.00;-0.00") ?? "—")
                                                             </span>
                                                         </td>
+                                                        <td style="text-align: center;">—</td>
                                                     </tr>
                                                     <tr>
                                                         <td><MudText Typo="Typo.caption">Kelly %</MudText></td>
@@ -203,17 +207,27 @@
                                                         <td style="text-align: center;">
                                                             @(game.XgbModel?.KellyHome?.ToString("F1") ?? "—")%
                                                         </td>
+                                                        <td style="text-align: center;">—</td>
                                                     </tr>
-                                                    @if (game.XgbModel?.OverUnder != null)
+                                                    @if (game.XgbModel?.OverUnder != null || game.ExperimentalModel?.OverUnder != null)
                                                     {
                                                         <tr>
-                                                            <td><MudText Typo="Typo.caption">O/U Pick</MudText></td>
+                                                            <td><MudText Typo="Typo.caption">Total / OU</MudText></td>
                                                             <td style="text-align: center;">—</td>
                                                             <td style="text-align: center;">
-                                                                <MudChip T="string" Size="Size.Small" 
-                                                                         Color="@(game.XgbModel.OverUnder.Pick == "OVER" ? Color.Info : Color.Secondary)">
-                                                                    @game.XgbModel.OverUnder.Pick @game.XgbModel.OverUnder.TotalLine (@(game.XgbModel.OverUnder.Confidence)%)
-                                                                </MudChip>
+                                                                @if (game.XgbModel?.OverUnder != null){
+                                                                    <MudChip T="string" Size="Size.Small" 
+                                                                            Color="@(game.XgbModel.OverUnder.Pick == "OVER" ? Color.Info : Color.Secondary)">
+                                                                        @game.XgbModel.OverUnder.Pick @game.XgbModel.OverUnder.TotalLine
+                                                                    </MudChip>
+                                                                }
+                                                            </td>
+                                                            <td style="text-align: center;">
+                                                                 @if (game.ExperimentalModel?.OverUnder != null){
+                                                                     <MudChip T="string" Size="Size.Small" Color="Color.Tertiary">
+                                                                        Pred: @game.ExperimentalModel.OverUnder.TotalLine.ToString("F1")
+                                                                     </MudChip>
+                                                                 }
                                                             </td>
                                                         </tr>
                                                     }
@@ -336,16 +350,41 @@
                                                         }
                                                     </tbody>
                                                 </MudSimpleTable>
-                                                @if (game.AiPredictions.Value.TryGetProperty("consensus", out var consensus))
-                                                {
-                                                    <MudStack Row="true" Justify="Justify.Center" Class="mt-3">
-                                                        <MudChip T="string" Size="Size.Medium" 
-                                                                 Color="@(consensus.TryGetProperty("confidence", out var conf) && conf.GetString() == "high" ? Color.Success : Color.Warning)">
-                                                            🎯 Consensus: @(consensus.TryGetProperty("pick", out var pick) ? (pick.GetString() == "Home" ? game.HomeTeam : game.AwayTeam) : "—")
-                                                            (@(consensus.TryGetProperty("home_win_prob", out var prob) ? (prob.GetDouble() * 100).ToString("F0") : "—")%)
-                                                        </MudChip>
                                                     </MudStack>
                                                 }
+
+                                                <MudDivider Class="my-3" />
+                                                
+                                                <div class="mt-2">
+                                                    @if (game.GeminiAnalysis == null)
+                                                    {
+                                                        <MudButton Variant="Variant.Filled" Color="Color.Secondary" 
+                                                                   StartIcon="@Icons.Material.Filled.AutoFixHigh" Size="Size.Small"
+                                                                   OnClick="@(() => GetGeminiAnalysis(game))" Disabled="@game.IsGeneratingAi">
+                                                            @if (game.IsGeneratingAi)
+                                                            {
+                                                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                                                <span>Generating...</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span>Get AI Rationale</span>
+                                                            }
+                                                        </MudButton>
+                                                    }
+                                                    else
+                                                    {
+                                                        <MudPaper Class="pa-3 mt-2" Style="background: rgba(156, 39, 176, 0.05); border-left: 4px solid #9c27b0;">
+                                                            <MudText Typo="Typo.subtitle2" Color="Color.Secondary">
+                                                                <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Small" Class="mr-1" /> AI Insight
+                                                            </MudText>
+                                                            <MudText Typo="Typo.body2" Class="italic mt-1">"@game.GeminiAnalysis.LlmInsight?.Rationale"</MudText>
+                                                            <MudText Typo="Typo.caption" Class="mt-2" Style="display: block;">
+                                                                <strong>Key Factor:</strong> @game.GeminiAnalysis.LlmInsight?.KeyFactor
+                                                            </MudText>
+                                                        </MudPaper>
+                                                    }
+                                                </div>
                                             }
                                         </MudCardContent>
                                     </MudCard>
@@ -592,28 +631,44 @@
                             }
                         }
                         
-                        _games.Add(gp);
+                                
+                            // Parse (Experimental)
+                            if (game.TryGetProperty("experimental_prediction", out var ep) && ep.ValueKind == JsonValueKind.Object)
+                            {
+                                gp.ExperimentalModel = new ModelResult
+                                {
+                                    HomeWinProb = ep.TryGetProperty("home_win_probability", out var ehp) && ehp.ValueKind == JsonValueKind.Number ? ehp.GetDouble() : null,
+                                    // Use > 0.5 for winner
+                                    PredictedWinner = (ep.TryGetProperty("home_win_probability", out var p) && p.GetDouble() > 0.5) ? gp.HomeTeam : gp.AwayTeam,
+                                };
+                                if (ep.TryGetProperty("predicted_total", out var ept) && ept.ValueKind == JsonValueKind.Number)
+                                {
+                                    gp.ExperimentalModel.OverUnder = new OverUnderPick { TotalLine = ept.GetDouble(), Pick = "Pred" };
+                                }
+                            }
+                            
+                            _games.Add(gp);
+                        }
                     }
+                    
+                    Snackbar.Add($"Analyzed {_games.Count} games", Severity.Success);
                 }
-                
-                Snackbar.Add($"Analyzed {_games.Count} games", Severity.Success);
+                else
+                {
+                    _error = $"API Error: {response.StatusCode}";
+                }
             }
-            else
+            catch (Exception ex)
             {
-                _error = $"API Error: {response.StatusCode}";
+                _error = ex.Message;
+                Logger.LogError(ex, "Error analyzing games");
+            }
+            finally
+            {
+                _isLoading = false;
             }
         }
-        catch (Exception ex)
-        {
-            _error = ex.Message;
-            Logger.LogError(ex, "Error analyzing games");
-        }
-        finally
-        {
-            _isLoading = false;
-        }
-    }
-
+        
     private async Task RunCachedAnalysis()
     {
         _isTraining = true;
@@ -674,6 +729,20 @@
                             };
                         }
                         
+                        // Parse (Experimental)
+                        if (game.TryGetProperty("experimental_prediction", out var ep) && ep.ValueKind == JsonValueKind.Object)
+                        {
+                            gp.ExperimentalModel = new ModelResult
+                            {
+                                HomeWinProb = ep.TryGetProperty("home_win_probability", out var ehp) && ehp.ValueKind == JsonValueKind.Number ? ehp.GetDouble() : null,
+                                PredictedWinner = (ep.TryGetProperty("home_win_probability", out var p) && p.GetDouble() > 0.5) ? gp.HomeTeam : gp.AwayTeam,
+                            };
+                            if (ep.TryGetProperty("predicted_total", out var ept) && ept.ValueKind == JsonValueKind.Number)
+                            {
+                                gp.ExperimentalModel.OverUnder = new OverUnderPick { TotalLine = ept.GetDouble(), Pick = "Pred" };
+                            }
+                        }
+                        
                         _games.Add(gp);
                     }
                 }
@@ -696,22 +765,6 @@
         }
     }
 
-    private string FormatOdds(int? odds)
-    {
-        if (!odds.HasValue) return "N/A";
-        return odds.Value > 0 ? $"+{odds.Value}" : odds.Value.ToString();
-    }
-
-    private string FormatPercent(object? value)
-    {
-        if (value == null) return "—";
-        if (double.TryParse(value.ToString(), out var d))
-        {
-            return d > 1 ? $"{d:F1}%" : $"{d * 100:F1}%";
-        }
-        return value.ToString() ?? "—";
-    }
-
     private class GamePrediction
     {
         public string HomeTeam { get; set; } = "";
@@ -720,9 +773,12 @@
         public int? AwayMoneyline { get; set; }
         public ModelResult? SimpleModel { get; set; }
         public ModelResult? XgbModel { get; set; }
+        public ModelResult? ExperimentalModel { get; set; } // [NEW]
         public Dictionary<string, object>? HomeStats { get; set; }
         public Dictionary<string, object>? AwayStats { get; set; }
         public JsonElement? AiPredictions { get; set; }
+        public PythonMLServiceClient.AiAnalysisReport? GeminiAnalysis { get; set; }
+        public bool IsGeneratingAi { get; set; }
         public bool IsCached { get; set; } = false;
     }
 
@@ -825,6 +881,35 @@
         _loadingAi = false;
         Snackbar.Add($"AI predictions loaded for all {_games.Count} games!", Severity.Success);
         StateHasChanged();
+    }
+
+    private async Task GetGeminiAnalysis(GamePrediction game)
+    {
+        game.IsGeneratingAi = true;
+        StateHasChanged();
+        
+        try
+        {
+            // Prepare stats for Gemini
+            var homeStats = JsonSerializer.Serialize(game.HomeStats);
+            var awayStats = JsonSerializer.Serialize(game.AwayStats);
+            
+            var result = await MLServiceClient.GetAiAnalysisAsync("nba", game.HomeTeam, game.AwayTeam, homeStats, awayStats);
+            if (result != null)
+            {
+                game.GeminiAnalysis = result;
+                Snackbar.Add($"Gemini analysis complete for {game.HomeTeam}", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Gemini Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            game.IsGeneratingAi = false;
+            StateHasChanged();
+        }
     }
 
     // ESPN BPI Methods
