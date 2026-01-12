@@ -22,7 +22,9 @@ from datetime import datetime
 # Add NBA_AI repo to Python path
 NBA_AI_REPO_PATH = Path(__file__).parent.parent / "nba_ai_repo"
 if str(NBA_AI_REPO_PATH) not in sys.path:
-    sys.path.insert(0, str(NBA_AI_REPO_PATH))
+    # Use insert(1) to avoid overriding local scripts but allow it to override shared packages if needed
+    # However, to avoid shadowing 'src', we'll use a more direct import for the predictor
+    sys.path.insert(1, str(NBA_AI_REPO_PATH))
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +77,15 @@ def get_nba_ai_predictions(
     """
     try:
         # Import the baseline predictor directly (doesn't need database)
-        from src.predictions.prediction_engines.baseline_predictor import BaselinePredictor
+        # Use importlib to avoid 'src' namespace conflict with backend/src
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "nba_ai_baseline", 
+            str(NBA_AI_REPO_PATH / "src" / "predictions" / "prediction_engines" / "baseline_predictor.py")
+        )
+        nba_ai_baseline = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(nba_ai_baseline)
+        BaselinePredictor = nba_ai_baseline.BaselinePredictor
         
         # Create predictor instance
         predictor = BaselinePredictor()

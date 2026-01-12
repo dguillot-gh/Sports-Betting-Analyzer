@@ -57,11 +57,14 @@ class GeminiPredictor:
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or "AIzaSyC0V9bWXsK-OsQ0Cb2yct3K3bkEd5ej5Ys"
         self.client = None
-        self.model_id = 'gemini-1.5-flash'
+        self.model_id = 'gemini-1.5-flash-latest'
         
         if self.api_key:
             try:
-                self.client = genai.Client(api_key=self.api_key)
+                self.client = genai.Client(
+                    api_key=self.api_key,
+                    http_options={'api_version': 'v1'}
+                )
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini client: {e}")
 
