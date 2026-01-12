@@ -4,7 +4,8 @@ import logging
 import json
 from typing import Dict, Any, Optional
 from datetime import datetime
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 logger = logging.getLogger(__name__)
 
@@ -51,16 +52,16 @@ quota_manager = QuotaManager()
 
 class GeminiPredictor:
     """
-    Leverages Google Gemini 1.5 Flash for rapid sports analysis.
+    Leverages Google Gemini 1.5 Flash for rapid sports analysis using the new google-genai SDK.
     """
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or "AIzaSyC0V9bWXsK-OsQ0Cb2yct3K3bkEd5ej5Ys"
-        self.model = None
+        self.client = None
+        self.model_id = 'gemini-1.5-flash'
         
         if self.api_key:
             try:
-                genai.configure(api_key=self.api_key)
-                self.model = genai.GenerativeModel('gemini-1.5-flash')
+                self.client = genai.Client(api_key=self.api_key)
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini client: {e}")
 
@@ -68,16 +69,17 @@ class GeminiPredictor:
         """
         Generates a second-opinion prediction and rationale using Gemini.
         """
-        if not self.model:
+        if not self.client:
             return self._get_mock_insight(sport, home_team, away_team, stats)
 
         try:
             prompt = self._build_prompt(sport, home_team, away_team, stats)
             
-            # Gemini 1.5 Flash is fast and allows structured JSON via prompt engineering
-            response = self.model.generate_content(
-                f"Give me a JSON response for this sports analysis: {prompt}",
-                generation_config=genai.types.GenerationConfig(
+            # Using the new SDK's generate_content
+            response = self.client.models.generate_content(
+                model=self.model_id,
+                contents=f"Give me a JSON response for this sports analysis: {prompt}",
+                config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                 )
             )

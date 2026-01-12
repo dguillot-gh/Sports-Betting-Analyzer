@@ -25,4 +25,4 @@ sbrscrape
 pynascar
 joblib
 collegebaseball @ git+https://github.com/nathanblumenfeld/collegebaseball
-google-generativeai
+google-genai
