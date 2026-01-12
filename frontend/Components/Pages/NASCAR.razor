@@ -218,6 +218,83 @@
                 }
             </MudTabPanel>
 
+            <!-- Live Odds Tab -->
+            <MudTabPanel Text="Live Odds" Icon="@Icons.Material.Filled.Timeline">
+                <MudStack Spacing="3">
+                    <MudPaper Class="pa-3" Style="background: linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%);">
+                        <MudText Typo="Typo.h6" Style="color: white;">
+                            <MudIcon Icon="@Icons.Material.Filled.Timeline" Class="mr-2" />
+                            AI Live Odds
+                        </MudText>
+                        <MudText Style="color: rgba(255,255,255,0.7);">
+                            Real-time win probabilities calculated by XGBoost
+                        </MudText>
+                    </MudPaper>
+
+                    @if (_predictions.Any())
+                    {
+                        <MudTable Items="@_predictions" Dense="true" Hover="true" Striped="true" Filter="new Func<LiveOddsPrediction,bool>(FilterPredictions)">
+                            <ToolBarContent>
+                                <MudText Typo="Typo.h6">Race Predictions: @_predictions.First().TrackName</MudText>
+                                <MudSpacer />
+                                <MudTextField @bind-Value="_predictionSearch" Placeholder="Search driver..." Adornment="Adornment.Start" 
+                                              AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
+                            </ToolBarContent>
+                            <HeaderContent>
+                                <MudTh>Rank</MudTh>
+                                <MudTh>Driver</MudTh>
+                                <MudTh>Win Prob</MudTh>
+                                <MudTh>Projected Finish</MudTh>
+                                <MudTh>Confidence</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Rank">
+                                    <MudChip T="string" Color="@(context.Rank <= 5 ? Color.Warning : Color.Default)" Size="Size.Small">
+                                        #@context.Rank
+                                    </MudChip>
+                                </MudTd>
+                                <MudTd DataLabel="Driver">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center">
+                                        <MudAvatar Size="Size.Small" Color="Color.Dark" Class="mr-2">@context.CarNumber</MudAvatar>
+                                        <MudText>@context.DriverName</MudText>
+                                    </MudStack>
+                                </MudTd>
+                                <MudTd DataLabel="Win Prob">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                        <MudProgressLinear Color="Color.Success" Value="@(context.WinProbability * 1000)" Max="100" Class="my-2" Style="width: 100px;" />
+                                        <MudText>@((context.WinProbability * 100).ToString("F1"))%</MudText>
+                                    </MudStack>
+                                </MudTd>
+                                <MudTd DataLabel="Projected Finish">
+                                    P @context.ProjectedFinish.ToString("F1")
+                                </MudTd>
+                                <MudTd DataLabel="Confidence">
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" 
+                                             Color="@(context.Confidence == "High" ? Color.Success : Color.Warning)">
+                                        @context.Confidence
+                                    </MudChip>
+                                </MudTd>
+                            </RowTemplate>
+                            <PagerContent>
+                                <MudTablePager />
+                            </PagerContent>
+                        </MudTable>
+                    }
+                    else if (_loadingPredictions)
+                    {
+                        <MudProgressLinear Color="Color.Success" Indeterminate="true" />
+                        <MudText Align="Align.Center">Calculating probabilities...</MudText>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info">
+                            No predictions available. Ensure a race is scheduled or select a different series.
+                            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="LoadPredictions" Class="ml-2">Load Odds</MudButton>
+                        </MudAlert>
+                    }
+                </MudStack>
+            </MudTabPanel>
+
             <!-- Schedule Tab -->
             <MudTabPanel Text="Schedule" Icon="@Icons.Material.Filled.CalendarMonth">
                 <MudStack Spacing="3">
@@ -1058,6 +1135,80 @@
         {
             Snackbar.Add($"Failed to load stats: {ex.Message}", Severity.Error);
         }
+    }
+
+    // Live Odds logic
+    private List<LiveOddsPrediction> _predictions = new();
+    private bool _loadingPredictions = false;
+    private string _predictionSearch = "";
+
+    public class LiveOddsPrediction
+    {
+        public int Rank { get; set; }
+        public string DriverName { get; set; } = "";
+        public string CarNumber { get; set; } = "";
+        public double WinProbability { get; set; }
+        public double ProjectedFinish { get; set; }
+        public string Confidence { get; set; } = "Low";
+        public string TrackName { get; set; } = "";
+    }
+    
+    public class PredictionResponse
+    {
+        public int RaceId { get; set; }
+        public string TrackName { get; set; } = "";
+        public List<LiveOddsPrediction> Predictions { get; set; } = new();
+    }
+
+    private bool FilterPredictions(LiveOddsPrediction p)
+    {
+        if (string.IsNullOrWhiteSpace(_predictionSearch)) return true;
+        return p.DriverName.Contains(_predictionSearch, StringComparison.OrdinalIgnoreCase) ||
+               p.CarNumber.Contains(_predictionSearch, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task LoadPredictions()
+    {
+        if (_nextRace == null)
+        {
+            Snackbar.Add("No upcoming race found to predict.", Severity.Warning);
+            return;
+        }
+
+        _loadingPredictions = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.GetAsync($"http://backend:8000/nascar/predictions/{_nextRace.RaceId}");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<PredictionResponse>(json, 
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                
+                _predictions = result?.Predictions ?? new();
+                foreach(var p in _predictions) p.TrackName = result?.TrackName ?? "";
+            }
+            else
+            {
+                 Snackbar.Add("Failed to load predictions.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading predictions: {ex.Message}", Severity.Error);
+        }
+        
+        _loadingPredictions = false;
+        StateHasChanged();
+    }
+
+    // Call this when tab activates or race loads
+    private async Task OnTabChanged(int index)
+    {
+        // Index 2 is Live Odds (Live=0, Schedule=1, Odds=2)
+         /* Implementation depends on binding, but we can also trigger from a button */
     }
 
     [Inject] private PythonMLServiceClient MLServiceClient { get; set; } = default!;

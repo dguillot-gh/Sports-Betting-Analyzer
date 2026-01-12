@@ -600,3 +600,75 @@ async def get_driver_race_stats(
         "stats": stats.to_dict(orient="records")
     }
 
+
+# ============================================
+# LIVE ODDS - AI Predictions
+# ============================================
+
+from scripts.nascar_ai_integration import get_nascar_ai_predictions
+from src.sports.nascar import NASCARSport
+
+@router.get("/predictions/{race_id}")
+async def get_race_predictions(race_id: int):
+    """
+    Get live AI predictions for ALL drivers in a race.
+    Returns: Sorted list of drivers by Win Probability.
+    """
+    try:
+        # 1. Fetch Race Details to get Track Name
+        details = await get_race_details(race_id, year=2026)
+        track_name = details.get("track_name", "Unknown Track")
+        
+        # 2. Get Roster (Active drivers for 2026)
+        sport = NASCARSport()
+        roster = sport.get_roster(year=2026)
+        
+        # 3. Generate Predictions
+        predictions = []
+        for driver in roster:
+            name = driver.get("driver", "Unknown")
+            stats = sport.get_entity_stats(name)
+            
+            # Predict
+            pred = get_nascar_ai_predictions(
+                driver_name=name,
+                track_name=track_name,
+                driver_stats=stats,
+                track_type="Intermediate"  # Ideally lookup from track metadata
+            )
+            
+            # Extract key metrics
+            engines = pred.get("engines", {})
+            ml_model = engines.get("XGBoostClassifier", {})
+            fallback = engines.get("TrackBaseline", {})
+            
+            # Prefer model, fallback to baseline
+            win_prob = ml_model.get("win_prob") or fallback.get("win_prob", 0.0)
+            proj_finish = engines.get("XGBoostRegressor", {}).get("predicted_finish") or fallback.get("predicted_finish", 20.0)
+            
+            predictions.append({
+                "driver_name": name,
+                "car_number": driver.get("number", "00"),
+                "win_probability": win_prob,
+                "projected_finish": proj_finish,
+                "engines": engines,
+                "confidence": ml_model.get("confidence", "Low")
+            })
+            
+        # 4. Sort by Win Probability (Desc)
+        predictions.sort(key=lambda x: x["win_probability"], reverse=True)
+        
+        # Assign ranks
+        for i, p in enumerate(predictions):
+            p["rank"] = i + 1
+            
+        return {
+            "race_id": race_id,
+            "track_name": track_name,
+            "prediction_count": len(predictions),
+            "predictions": predictions
+        }
+        
+    except Exception as e:
+        print(f"Prediction error: {e}")
+        return {"error": str(e)}
