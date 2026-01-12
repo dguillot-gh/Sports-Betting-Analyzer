@@ -60,7 +60,7 @@ class GeminiPredictor:
         if self.api_key:
             try:
                 genai.configure(api_key=self.api_key)
-                self.model = genai.GenerativeModel('gemini-1.5-flash-latest')
+                self.model = genai.GenerativeModel('gemini-1.5-flash')
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini client: {e}")
 
