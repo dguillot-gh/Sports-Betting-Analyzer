@@ -115,7 +115,7 @@
                                 </td>
                                 <td>@race.ScheduledLaps</td>
                                 <td>
-                                    @if (isPast && race.WinnerDriverId > 0)
+                                    @if (isPast && (race.WinnerDriverId ?? 0) > 0)
                                     {
                                         <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">
                                             Complete
@@ -483,14 +483,14 @@
     public class RaceInfo
     {
         public int RaceNumber { get; set; }
-        public int RaceId { get; set; }
-        public int SeriesId { get; set; }
+        public int? RaceId { get; set; }
+        public int? SeriesId { get; set; }
         public string RaceName { get; set; } = "";
         public string TrackName { get; set; } = "";
         public DateTime RaceDate { get; set; }
-        public int ScheduledLaps { get; set; }
-        public int WinnerDriverId { get; set; }
-        public bool RestrictorPlate { get; set; }
+        public int? ScheduledLaps { get; set; }
+        public int? WinnerDriverId { get; set; }
+        public bool? RestrictorPlate { get; set; }
     }
 
     public class PredictionResponse
