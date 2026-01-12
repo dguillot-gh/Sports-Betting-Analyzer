@@ -607,12 +607,17 @@ async def get_driver_race_stats(
 
 from scripts.nascar_ai_integration import get_nascar_ai_predictions
 from src.sports.nascar import NASCARSport
+from services.nascar_odds_service import NascarOddsService
+
+# Initialize odds service
+_odds_service = NascarOddsService()
 
 @router.get("/predictions/{race_id}")
 async def get_race_predictions(race_id: int):
     """
     Get live AI predictions for ALL drivers in a race.
     Returns: Sorted list of drivers by Win Probability.
+    Now includes Market Odds from The Odds API.
     """
     try:
         # 1. Fetch Race Details to get Track Name
@@ -623,7 +628,11 @@ async def get_race_predictions(race_id: int):
         sport = NASCARSport()
         roster = sport.get_roster(year=2026)
         
-        # 3. Generate Predictions
+        # 3. Prefetch Market Odds (Optimization)
+        # We fetch all odds once, then lookup per driver
+        await _odds_service.get_live_odds()
+        
+        # 4. Generate Predictions & Merge Odds
         predictions = []
         for driver in roster:
             name = driver.get("driver", "Unknown")
@@ -646,16 +655,20 @@ async def get_race_predictions(race_id: int):
             win_prob = ml_model.get("win_prob") or fallback.get("win_prob", 0.0)
             proj_finish = engines.get("XGBoostRegressor", {}).get("predicted_finish") or fallback.get("predicted_finish", 20.0)
             
+            # Lookup Market Odds
+            market_odds = await _odds_service.get_driver_odds(name)
+            
             predictions.append({
                 "driver_name": name,
                 "car_number": driver.get("number", "00"),
                 "win_probability": win_prob,
                 "projected_finish": proj_finish,
+                "market_odds": market_odds or "N/A",  # New Field
                 "engines": engines,
                 "confidence": ml_model.get("confidence", "Low")
             })
             
-        # 4. Sort by Win Probability (Desc)
+        # 5. Sort by Win Probability (Desc)
         predictions.sort(key=lambda x: x["win_probability"], reverse=True)
         
         # Assign ranks

@@ -16,3 +16,7 @@ GEMINI_API_KEY = os.getenv(
 # Application settings
 USE_DATABASE = os.getenv("USE_DATABASE", "true").lower() == "true"
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+# The Odds API configuration
+# Free usage up to 500 requests per month
+ODDS_API_KEY = os.getenv("ODDS_API_KEY", "")

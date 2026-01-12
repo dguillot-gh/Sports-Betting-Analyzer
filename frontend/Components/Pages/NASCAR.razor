@@ -265,8 +265,19 @@
                                         <MudText>@((context.WinProbability * 100).ToString("F1"))%</MudText>
                                     </MudStack>
                                 </MudTd>
+
                                 <MudTd DataLabel="Projected Finish">
                                     P @context.ProjectedFinish.ToString("F1")
+                                </MudTd>
+                                <MudTd DataLabel="Vegas Odds">
+                                    @if(context.MarketOdds != "N/A")
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">@context.MarketOdds</MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">--</MudText>
+                                    }
                                 </MudTd>
                                 <MudTd DataLabel="Confidence">
                                     <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" 
@@ -1149,6 +1160,7 @@
         public string CarNumber { get; set; } = "";
         public double WinProbability { get; set; }
         public double ProjectedFinish { get; set; }
+        public string MarketOdds { get; set; } = "N/A";
         public string Confidence { get; set; } = "Low";
         public string TrackName { get; set; } = "";
     }
