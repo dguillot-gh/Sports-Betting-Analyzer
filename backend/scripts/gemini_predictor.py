@@ -57,13 +57,14 @@ class GeminiPredictor:
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or "AIzaSyC0V9bWXsK-OsQ0Cb2yct3K3bkEd5ej5Ys"
         self.client = None
-        self.model_id = 'gemini-1.5-flash-latest'
+        self.model_id = 'gemini-1.5-flash'
         
         if self.api_key:
             try:
+                # Use v1 stable
                 self.client = genai.Client(
                     api_key=self.api_key,
-                    http_options={'api_version': 'v1beta'}
+                    http_options={'api_version': 'v1'}
                 )
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini client: {e}")
@@ -78,17 +79,24 @@ class GeminiPredictor:
         try:
             prompt = self._build_prompt(sport, home_team, away_team, stats)
             
-            # Using the new SDK's generate_content
+            # Simplified generate_content call
             response = self.client.models.generate_content(
                 model=self.model_id,
-                contents=f"Give me a JSON response for this sports analysis: {prompt}",
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                )
+                contents=f"Respond strictly in JSON format. Sports analysis: {prompt}"
             )
             
             quota_manager.increment()
-            return json.loads(response.text)
+            
+            # Robust JSON parsing (strip markdown backticks if present)
+            text = response.text.strip()
+            if text.startswith("```"):
+                # Find first { and last }
+                start = text.find("{")
+                end = text.rfind("}")
+                if start != -1 and end != -1:
+                    text = text[start:end+1]
+            
+            return json.loads(text)
         except Exception as e:
             logger.error(f"Gemini LLM error: {e}")
             return self._get_mock_insight(sport, home_team, away_team, stats)
