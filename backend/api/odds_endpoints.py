@@ -718,6 +718,8 @@ async def analyze_all_ncaab_games(
         "date": odds_data.get("date"),
         "sportsbook": sportsbook,
         "source": odds_data.get("source"),
+        "games": analyzed_games,
+        "count": len(analyzed_games),
         "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False)),
     }
 

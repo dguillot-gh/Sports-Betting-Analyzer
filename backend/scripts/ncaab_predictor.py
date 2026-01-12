@@ -139,6 +139,9 @@ class NCAABPredictor:
                         
             except Exception as e:
                 logger.warning(f"Error calculating stats for {team_name}: {e}")
+        
+        # Always return stats dictionary, even if default
+        return stats
 
     
     def predict_game(self, home_team: str, away_team: str, 
