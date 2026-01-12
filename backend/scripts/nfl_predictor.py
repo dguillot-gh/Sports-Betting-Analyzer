@@ -277,7 +277,8 @@ async def get_todays_nfl_odds(sportsbook: str = "fanduel") -> Dict[str, Any]:
     }
     
     # Try The Odds API first (more reliable for live games)
-    odds_api_key = os.environ.get("ODDS_API_KEY", "4aee54c212eef472437166704a960985")
+    from src.config import ODDS_API_KEY
+    odds_api_key = ODDS_API_KEY
     
     if odds_api_key:
         try:

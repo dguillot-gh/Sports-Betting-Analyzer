@@ -131,7 +131,8 @@ async def get_todays_college_baseball_odds(sportsbook: str = "fanduel") -> Dict[
     Fetch today's College Baseball odds from The Odds API.
     """
     today = date.today()
-    odds_api_key = os.environ.get("ODDS_API_KEY", "4aee54c212eef472437166704a960985")
+    from src.config import ODDS_API_KEY
+    odds_api_key = ODDS_API_KEY
     
     if odds_api_key:
         try:

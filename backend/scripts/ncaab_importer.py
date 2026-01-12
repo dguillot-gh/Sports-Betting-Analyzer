@@ -30,18 +30,55 @@ async def import_ncaab_data(start_year: int = 2018, end_year: int = 2025):
     try:
         # 1. Schedule Data
         logger.info("Fetching schedules...")
-        df_schedule = mbb_loaders.load_mbb_schedule(seasons=seasons)
-        if not df_schedule.empty:
+        
+        all_schedules = []
+        for season in seasons:
+            try:
+                logger.info(f"Loading schedule for {season}...")
+                df = mbb_loaders.load_mbb_schedule(seasons=[season])
+                
+                # Check if it's Polars and convert
+                if hasattr(df, "to_pandas"):
+                    df = df.to_pandas()
+                
+                if not df.empty:
+                    all_schedules.append(df)
+            except Exception as e:
+                logger.warning(f"Failed to load schedule for {season}: {e}")
+
+        if all_schedules:
+            # Concatenate all seasons
+            df_schedule = pd.concat(all_schedules, ignore_index=True)
+            
             schedule_path = DATA_DIR / "ncaab_schedule_history.parquet"
-            df_schedule.write_parquet(schedule_path)
+            df_schedule.to_parquet(schedule_path)
             logger.info(f"Saved {len(df_schedule)} games to {schedule_path}")
         
         # 2. Team Boxscores (Stats)
+        # 2. Team Boxscores (Stats)
         logger.info("Fetching team boxscores...")
-        df_box = mbb_loaders.load_mbb_team_boxscore(seasons=seasons)
-        if not df_box.empty:
+        
+        all_boxscores = []
+        for season in seasons:
+            try:
+                logger.info(f"Loading boxscores for {season}...")
+                df = mbb_loaders.load_mbb_team_boxscore(seasons=[season])
+                
+                # Check if it's Polars and convert
+                if hasattr(df, "to_pandas"):
+                    df = df.to_pandas()
+
+                if not df.empty:
+                    all_boxscores.append(df)
+            except Exception as e:
+                logger.warning(f"Failed to load {season}: {e}")
+
+        if all_boxscores:
+            # Concatenate all seasons, filling missing columns with NaN to handle width mismatches
+            df_box = pd.concat(all_boxscores, ignore_index=True)
+            
             box_path = DATA_DIR / "ncaab_team_box_history.parquet"
-            df_box.write_parquet(box_path)
+            df_box.to_parquet(box_path) # Use to_parquet instead of write_parquet (polars vs pandas? mbb returns pandas)
             logger.info(f"Saved {len(df_box)} boxscores to {box_path}")
             
         return {
