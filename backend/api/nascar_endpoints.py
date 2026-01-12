@@ -121,7 +121,7 @@ async def get_schedule(
 
 
 @router.get("/race/{race_id}")
-async def get_race_details(race_id: int, year: int = 2025, series: int = 1):
+async def get_race_details(race_id: int, year: int = 2026, series: int = 1):
     """
     Get detailed information for a specific race.
     Includes weekend schedule, qualifying, and race data.

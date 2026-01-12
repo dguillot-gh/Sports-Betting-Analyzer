@@ -113,6 +113,30 @@ class GeminiPredictor:
             return self._get_mock_insight(sport, home_team, away_team, stats)
 
     def _build_prompt(self, sport: str, home_team: str, away_team: str, stats: Dict[str, Any]) -> str:
+        prompt_metrics = """
+        "winner": (Predicted Team Name or Driver Name),
+        "confidence": (0-100),
+        "rationale": (Concise 2-sentence explanation),
+        "key_factor": (Single most important factor/stat)
+        """
+        
+        if sport.lower() == "nascar":
+             # "home_team" maps to track_name, "stats['home']" maps to driver_stats
+             return f"""
+             Sport: NASCAR
+             Track: {home_team}
+             Driver: {away_team}
+             
+             Driver Stats (at this track/type):
+             - Driver Rating: {stats.get('home', {}).get('avg_driver_rating', 'N/A')}
+             - Avg Finish (Track): {stats.get('home', {}).get('avg_finish_at_track', 'N/A')}
+             - Speed Rank: {stats.get('home', {}).get('avg_speed_rank', 'N/A')}
+             - Recent Momentum: {stats.get('home', {}).get('recent_avg_finish', 'N/A')}
+             
+             Please provide a JSON object with evaluation of this driver's chances:
+             {prompt_metrics}
+             """
+
         return f"""
         Sport: {sport}
         Matchup: {away_team} at {home_team}
@@ -121,18 +145,23 @@ class GeminiPredictor:
         Available Stats (Away): {json.dumps(stats.get('away', {}), indent=2)}
         
         Please provide a JSON object with:
-        "winner": (Predicted Team Name),
-        "confidence": (0-100),
-        "rationale": (Concise 2-sentence explanation),
-        "key_factor": (Single most important factor/stat)
+        {prompt_metrics}
         """
 
     def _get_mock_insight(self, sport: str, home_team: str, away_team: str, stats: Dict[str, Any]) -> Dict[str, Any]:
+        winner = home_team
+        reason = f"Traditional statistical filters suggest {home_team} holds the advantage based on home court/field efficiency."
+        
+        if sport.lower() == "nascar":
+            # For NASCAR, "winner" is actually just an endorsement of the driver's performance
+            winner = away_team # Driver name
+            reason = f"Historical metrics at {home_team} indicate {away_team} is a strong contender for a top finish."
+            
         return {
-            "winner": home_team,
+            "winner": winner,
             "confidence": 55,
-            "rationale": f"Gemini insight unavailable. Traditional statistical filters suggest {home_team} holds the advantage based on home court/field efficiency.",
-            "key_factor": "Home Field Advantage",
+            "rationale": f"Gemini insight unavailable. {reason}",
+            "key_factor": "Historical Trend",
             "is_mock": True
         }
 

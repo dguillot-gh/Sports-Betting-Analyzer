@@ -10,9 +10,9 @@ def generate_static_data():
     containing active entities and historical data.
     """
     base_dir = Path(__file__).parent
-    # Read from mllearning/data/nascar/raw (where .rda files are)
-    raw_dir = base_dir / 'mllearning' / 'data' / 'nascar' / 'raw'
-    # Output to data/nascar (where NASCAR sport class expects it)
+    # Read from data/nascar/raw (correct path relative to backend root)
+    raw_dir = base_dir / 'data' / 'nascar' / 'raw'
+    # Output to data/nascar
     output_dir = base_dir / 'data' / 'nascar'
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / 'nascar_data.json'
@@ -21,7 +21,7 @@ def generate_static_data():
     rda_files = sorted(raw_dir.glob('*.rda'))
     
     if not rda_files:
-        print("No .rda files found!")
+        print(f"No .rda files found in {raw_dir}!")
         return
 
     frames = []
@@ -90,8 +90,9 @@ def generate_static_data():
             
     df['driver'] = df['driver'].fillna('Unknown').astype(str)
 
-    # --- Active Entities Logic (2024-2025) ---
-    active_df = df[df['year_num'] >= 2024]
+    # --- Active Entities Logic (2025-2026) ---
+    # Include both 2025 and 2026 as "active" for roster purposes
+    active_df = df[df['year_num'] >= 2025]
     
     # Categorize teams by series
     active_teams_by_series = {}
@@ -128,16 +129,16 @@ def generate_static_data():
             make = latest_entry['Make'] if 'Make' in latest_entry else latest_entry.get('make', 'Unknown')
             
             # Count races by year
-            races_2024 = len(driver_df[driver_df['year_num'] == 2024])
             races_2025 = len(driver_df[driver_df['year_num'] == 2025])
+            races_2026 = len(driver_df[driver_df['year_num'] == 2026])
             total_races = len(driver_df)
             
             driver_roster.append({
                 'name': str(driver_name),
                 'team': str(team),
                 'manufacturer': str(make),
-                'races_2024': int(races_2024),
                 'races_2025': int(races_2025),
+                'races_2026': int(races_2026),
                 'total_races': int(total_races)
             })
         
