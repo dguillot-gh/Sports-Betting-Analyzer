@@ -350,9 +350,7 @@
                                                         }
                                                     </tbody>
                                                 </MudSimpleTable>
-                                                    </MudStack>
-                                                }
-
+                                                
                                                 <MudDivider Class="my-3" />
                                                 
                                                 <div class="mt-2">
@@ -777,7 +775,7 @@
         public Dictionary<string, object>? HomeStats { get; set; }
         public Dictionary<string, object>? AwayStats { get; set; }
         public JsonElement? AiPredictions { get; set; }
-        public PythonMLServiceClient.AiAnalysisReport? GeminiAnalysis { get; set; }
+        public AiAnalysisReport? GeminiAnalysis { get; set; }
         public bool IsGeneratingAi { get; set; }
         public bool IsCached { get; set; } = false;
     }

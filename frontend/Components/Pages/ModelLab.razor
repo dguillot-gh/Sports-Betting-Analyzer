@@ -67,7 +67,7 @@
                              <MudTd DataLabel="ID">@context.id.Substring(0, 8)</MudTd>
                              <MudTd DataLabel="Sport">@context.sport</MudTd>
                              <MudTd DataLabel="Status">
-                                 <MudChip Color="@GetStatusColor(context.status)" Size="Size.Small">@context.status</MudChip>
+                                 <MudChip T="string" Color="@GetStatusColor(context.status)" Size="Size.Small">@context.status</MudChip>
                              </MudTd>
                              <MudTd DataLabel="Progress">
                                  <MudProgressLinear Value="@context.progress" Color="Color.Success" Class="my-3" />

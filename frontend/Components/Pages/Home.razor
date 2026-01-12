@@ -368,10 +368,9 @@
     private bool _isProcessing = false;
     private string _errorMessage = string.Empty;
     private IBrowserFile? _selectedFile;
-    private List<PythonMLServiceClient.DashboardModelSummary> _modelSummary = new();
-    private bool _isModelsLoading = true;
-    private PythonMLServiceClient.AiQuota? _quota;
-    private PythonMLServiceClient.AiAnalysisReport? _latestInsight;
+    private List<DashboardModelSummary> _modelSummary = new();
+    private AiQuota? _quota;
+    private AiAnalysisReport? _latestInsight;
     private bool _isAiProcessing = false;
 
     protected override async Task OnInitializedAsync()

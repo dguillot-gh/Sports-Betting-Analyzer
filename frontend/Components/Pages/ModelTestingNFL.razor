@@ -352,7 +352,6 @@
                         </MudStack>
                     </MudPaper>
                 </MudStack>
-                </MudStack>
             </MudTabPanel>
 
             <!-- AI Predictions Tab -->
@@ -712,7 +711,7 @@
         public ModelResult? XgbModel { get; set; }
         public Dictionary<string, object>? HomeStats { get; set; }
         public Dictionary<string, object>? AwayStats { get; set; }
-        public PythonMLServiceClient.AiAnalysisReport? GeminiAnalysis { get; set; }
+        public AiAnalysisReport? GeminiAnalysis { get; set; }
         public bool IsGeneratingAi { get; set; }
         public bool IsCached { get; set; } = false;
     }

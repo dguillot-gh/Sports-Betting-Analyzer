@@ -122,8 +122,16 @@
                                         }
                                     </tbody>
                                 </MudSimpleTable>
-                                    </MudStack>
-                                }
+                                     @if (game.ValueBets.Any())
+                                    {
+                                        <MudDivider Class="my-2"/>
+                                        <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                                            @foreach (var bet in game.ValueBets)
+                                            {
+                                                <MudChip T="string" Color="Color.Warning" Size="Size.Small">@bet</MudChip>
+                                            }
+                                        </MudStack>
+                                    }
 
                                 <MudDivider Class="my-2" />
                                 <div class="mt-2">
@@ -289,7 +297,7 @@
         public bool HasValue { get; set; }
         public List<string> ValueBets { get; set; } = new();
         public PredictionData? Prediction { get; set; }
-        public PythonMLServiceClient.AiAnalysisReport? GeminiAnalysis { get; set; }
+        public AiAnalysisReport? GeminiAnalysis { get; set; }
         public bool IsAnalyzing { get; set; }
     }
 
