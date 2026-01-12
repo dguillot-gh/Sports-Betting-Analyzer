@@ -63,7 +63,7 @@ class GeminiPredictor:
             try:
                 self.client = genai.Client(
                     api_key=self.api_key,
-                    http_options={'api_version': 'v1'}
+                    http_options={'api_version': 'v1beta'}
                 )
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini client: {e}")
