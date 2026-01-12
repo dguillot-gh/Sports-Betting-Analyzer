@@ -19,4 +19,4 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # The Odds API configuration
 # Free usage up to 500 requests per month
-ODDS_API_KEY = os.getenv("ODDS_API_KEY", "")
+ODDS_API_KEY = os.getenv("ODDS_API_KEY", "4aee54c212eef472437166704a960985")
