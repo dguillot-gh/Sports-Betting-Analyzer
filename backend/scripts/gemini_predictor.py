@@ -57,7 +57,7 @@ class GeminiPredictor:
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or "AIzaSyC0V9bWXsK-OsQ0Cb2yct3K3bkEd5ej5Ys"
         self.client = None
-        self.model_id = 'gemini-1.5-flash'
+        self.model_id = 'gemini-1.5-flash-latest'
         
         if self.api_key:
             try:
