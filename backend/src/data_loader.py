@@ -36,7 +36,7 @@ def load_sport_data(sport: BaseSport) -> 'pd.DataFrame':
     return sport.load_data()
 
 
-def load_from_database(sport_name: str) -> Optional[pd.DataFrame]:
+def load_from_database(sport_name: str) -> Optional['pd.DataFrame']:
     """
     Load sport data from PostgreSQL database.
     
