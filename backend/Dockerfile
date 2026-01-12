@@ -6,6 +6,7 @@ WORKDIR /app
 # Install system build dependencies (compilers + R development headers)
 RUN apt-get update && apt-get install -y \
     curl \
+    git \
     r-base \
     r-base-dev \
     libcurl4-openssl-dev \
