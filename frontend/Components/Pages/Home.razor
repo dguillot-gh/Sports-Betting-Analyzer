@@ -369,6 +369,7 @@
     private string _errorMessage = string.Empty;
     private IBrowserFile? _selectedFile;
     private List<DashboardModelSummary> _modelSummary = new();
+    private bool _isModelsLoading = true;
     private AiQuota? _quota;
     private AiAnalysisReport? _latestInsight;
     private bool _isAiProcessing = false;

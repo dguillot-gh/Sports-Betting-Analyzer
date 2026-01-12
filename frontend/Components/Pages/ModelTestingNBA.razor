@@ -4,6 +4,7 @@
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject ILogger<ModelTestingNBA> Logger
+@inject PythonMLServiceClient MLServiceClient
 
 <PageTitle>NBA Model Testing</PageTitle>
 
@@ -1003,5 +1004,11 @@
         public double SpreadCoverHomeProb { get; init; }
         public bool HasBpi { get; init; }
     }
+    private string FormatOdds(int? odds) => odds switch
+    {
+        null => "-",
+        > 0 => $"+{odds}",
+        _ => odds.ToString() ?? "-"
+    };
 }
 
