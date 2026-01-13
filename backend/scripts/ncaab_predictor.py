@@ -86,14 +86,23 @@ class NCAABPredictor:
                 # We assume stats_df is a pandas DataFrame here (read_parquet returns pandas)
                 
                 # Normalize names for matching
-                team_clean = team_name.lower().replace(" state", " st").replace(" university", "")
+                # Remove common suffixes and standardize "state/st"
+                def normalize(n):
+                    return n.lower().replace(" state", " st").replace(" university", "").strip()
                 
-                # Check for direct match first
+                name_norm = normalize(team_name)
+                
+                # 1. Try exact match on display name
                 team_df = self.stats_df[self.stats_df['team_display_name'].str.lower() == team_name.lower()]
                 
+                # 2. Try match on normalized display name
                 if team_df.empty:
-                    # Try 'contains'
-                    team_df = self.stats_df[self.stats_df['team_display_name'].str.lower().str.contains(team_clean, regex=False)]
+                    team_df = self.stats_df[self.stats_df['team_display_name'].apply(normalize) == name_norm]
+                
+                # 3. Try "contains" match on original name or parts of it
+                if team_df.empty:
+                    # Sort by season to get newest first in case of multiple matches
+                    team_df = self.stats_df[self.stats_df['team_display_name'].str.lower().str.contains(team_name.lower(), regex=False)]
                 
                 if not team_df.empty:
                     # Use only the most recent season available in data
