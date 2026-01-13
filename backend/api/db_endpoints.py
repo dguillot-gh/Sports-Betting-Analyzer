@@ -5,7 +5,7 @@ Database Import API Endpoints
 Add these endpoints to app.py for database import functionality.
 """
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional, List
 # import asyncpg  <-- Moved to local function scope
@@ -39,6 +39,14 @@ import_status = {
         "error": None
     },
     "nba": {
+        "status": "idle",
+        "started_at": None,
+        "completed_at": None,
+        "progress": [],
+        "result": None,
+        "error": None
+    },
+    "ncaab": {
         "status": "idle",
         "started_at": None,
         "completed_at": None,
@@ -285,6 +293,59 @@ async def run_rda_import(series: str, year_start: int, year_end: int, clear_exis
         import_status["nascar_rda"]["progress"].append(f"❌ Error: {e}")
         logger.error(f"RDA import failed: {e}")
         raise
+        
+@router.post("/import/ncaab")
+async def import_ncaab(background_tasks: BackgroundTasks, start_year: int = Query(2018), end_year: int = Query(2025)):
+    """Start NCAAB data import in the background."""
+    import_status["ncaab"] = {
+        "status": "running",
+        "started_at": datetime.now().isoformat(),
+        "completed_at": None,
+        "progress": [f"Import started for {start_year}-{end_year}"],
+        "result": None,
+        "error": None
+    }
+    
+    background_tasks.add_task(run_ncaab_import, start_year, end_year)
+    
+    return {
+        "status": "started",
+        "message": f"NCAAB import started for {start_year}-{end_year}",
+        "years": f"{start_year}-{end_year}"
+    }
+
+
+@router.get("/import/ncaab/status")
+async def get_ncaab_import_status():
+    """Get the current status of NCAAB import."""
+    return import_status["ncaab"]
+
+
+async def run_ncaab_import(start_year: int, end_year: int):
+    """Background task to run NCAAB import via R script."""
+    try:
+        from scripts.ncaab_importer import import_ncaab_data
+        
+        import_status["ncaab"]["progress"].append("Calling hybrid NCAAB importer (hoopR)...")
+        result = await import_ncaab_data(start_year, end_year)
+        
+        if result.get("success"):
+            import_status["ncaab"]["status"] = "completed"
+            import_status["ncaab"]["result"] = result
+            import_status["ncaab"]["progress"].append("✅ Import complete!")
+        else:
+            import_status["ncaab"]["status"] = "failed"
+            import_status["ncaab"]["error"] = result.get("error")
+            import_status["ncaab"]["progress"].append(f"❌ Error: {result.get('error')}")
+            
+    except Exception as e:
+        import_status["ncaab"]["status"] = "failed"
+        import_status["ncaab"]["completed_at"] = datetime.now().isoformat()
+        import_status["ncaab"]["error"] = str(e)
+        import_status["ncaab"]["progress"].append(f"❌ Critical Error: {e}")
+        logger.error(f"NCAAB import failed: {e}")
+    finally:
+        import_status["ncaab"]["completed_at"] = datetime.now().isoformat()
 
 
 @router.delete("/clear/{sport}")

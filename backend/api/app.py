@@ -4,6 +4,7 @@ import sys
 import json
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
+from datetime import datetime
 
 # Monkeypatch for Python 3.13 compatibility
 import collections
@@ -13,7 +14,7 @@ for name in ['MutableSet', 'MutableMapping', 'Mapping', 'Iterable', 'Callable', 
         setattr(collections, name, getattr(collections.abc, name))
 
 from api.log_capture import setup_log_capture, get_logs, LOG_BUFFER
-from api.db_endpoints import router as db_router
+from api.db_endpoints import router as db_router, import_status, run_ncaab_import
 from api.odds_endpoints import router as odds_router
 from api.results_endpoints import router as results_router
 from api.backtest_endpoints import router as backtest_router
@@ -4167,11 +4168,15 @@ async def apex_backtest(
 
 
 @app.post('/ncaab/import')
-async def import_ncaab(background_tasks: BackgroundTasks, start_year: int = Query(2018), end_year: int = Query(2025)):
-    try:
-        from scripts.ncaab_importer import import_ncaab_data
-        background_tasks.add_task(import_ncaab_data, start_year, end_year)
-        return {'status': 'started', 'message': f'Started NCAAB import {start_year}-{end_year}'}
-    except Exception as e:
-        logger.error(f'Error starting NCAAB import: {e}')
-        raise HTTPException(status_code=500, detail=str(e))
+async def import_ncaab_root(background_tasks: BackgroundTasks, start_year: int = Query(2018), end_year: int = Query(2025)):
+    """Backend compatibility mirrored endpoint for NCAAB import."""
+    import_status["ncaab"] = {
+        "status": "running",
+        "started_at": datetime.now().isoformat(),
+        "completed_at": None,
+        "progress": [f"Import started for {start_year}-{end_year}"],
+        "result": None,
+        "error": None
+    }
+    background_tasks.add_task(run_ncaab_import, start_year, end_year)
+    return {'status': 'started', 'message': f'Started NCAAB import {start_year}-{end_year}'}
