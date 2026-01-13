@@ -1,6 +1,6 @@
 """
 NCAAB Importer - Historical Data Download
-Uses sportsdataverse (mbb) to fetch schedule and boxscore data.
+Uses hoopR (via Rscript) to fetch schedule and boxscore data.
 """
 
 import logging
@@ -8,7 +8,6 @@ import asyncio
 from pathlib import Path
 from datetime import datetime
 import pandas as pd
-import sportsdataverse.mbb as mbb_loaders
 
 logger = logging.getLogger(__name__)
 

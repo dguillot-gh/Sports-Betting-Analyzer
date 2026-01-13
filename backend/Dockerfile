@@ -14,10 +14,8 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 1. Install R dependencies (Slowest layer - cached first)
-RUN R -e "install.packages(c('jsonlite', 'dplyr'), repos='https://cloud.r-project.org')" && \
-    R -e "install.packages(c('nflseedR', 'nflreadr'), repos='https://cloud.r-project.org')" && \
-    R -e "install.packages(c('baseballr', 'hoopR', 'arrow'), repos='https://cloud.r-project.org')"
+# 1. Install R dependencies (Using Posit Binary Repo to skip compilation)
+RUN R -e "options(repos = c(CRAN = 'https://packagemanager.posit.co/cran/__linux__/bookworm/latest')); install.packages(c('jsonlite', 'dplyr', 'nflseedR', 'nflreadr', 'baseballr', 'hoopR', 'arrow'))"
 
 # 2. Install Heavy ML dependencies (Disabled for faster builds - using fallback logic)
 # RUN pip install --no-cache-dir --default-timeout=1000 torch --index-url https://download.pytorch.org/whl/cpu
