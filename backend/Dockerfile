@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y \
 # 1. Install R dependencies (Slowest layer - cached first)
 RUN R -e "install.packages(c('jsonlite', 'dplyr'), repos='https://cloud.r-project.org')" && \
     R -e "install.packages(c('nflseedR', 'nflreadr'), repos='https://cloud.r-project.org')" && \
-    R -e "install.packages(c('baseballr', 'hoopR'), repos='https://cloud.r-project.org')"
+    R -e "install.packages(c('baseballr', 'hoopR', 'arrow'), repos='https://cloud.r-project.org')"
 
 # 2. Install Heavy ML dependencies (Disabled for faster builds - using fallback logic)
 # RUN pip install --no-cache-dir --default-timeout=1000 torch --index-url https://download.pytorch.org/whl/cpu
