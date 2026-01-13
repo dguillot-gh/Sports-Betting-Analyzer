@@ -80,7 +80,7 @@ class GeminiPredictor:
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini client: {e}")
 
-    async def get_insight(self, sport: str, home_team: str, away_team: str, stats: Dict[str, Any]) -> Dict[str, Any]:
+    async def get_insight(self, sport: str, home_team: str, away_team: str, stats: Dict[str, Any], game_date: Optional[str] = None) -> Dict[str, Any]:
         """
         Generates a second-opinion prediction and rationale using Gemini.
         """
@@ -88,12 +88,18 @@ class GeminiPredictor:
             return self._get_mock_insight(sport, home_team, away_team, stats)
 
         try:
-            prompt = self._build_prompt(sport, home_team, away_team, stats)
+            prompt = self._build_prompt(sport, home_team, away_team, stats, game_date)
             
+            # Configure tools for Google Search grounding to get real-time info (like injuries)
+            config = types.GenerateContentConfig(
+                tools=[types.Tool(google_search_retrieval=types.GoogleSearchRetrieval())]
+            )
+
             # Simplified generate_content call (using async)
             response = await self.client.aio.models.generate_content(
                 model=self.model_id,
-                contents=f"Respond strictly in JSON format. Sports analysis: {prompt}"
+                contents=f"Respond strictly in JSON format. Today is {datetime.now().strftime('%Y-%m-%d')}. Sports analysis: {prompt}",
+                config=config
             )
             
             quota_manager.increment()
@@ -112,41 +118,102 @@ class GeminiPredictor:
             logger.error(f"Gemini LLM error: {e}")
             return self._get_mock_insight(sport, home_team, away_team, stats)
 
-    def _build_prompt(self, sport: str, home_team: str, away_team: str, stats: Dict[str, Any]) -> str:
+    def _build_prompt(self, sport: str, home_team: str, away_team: str, stats: Dict[str, Any], game_date: Optional[str] = None) -> str:
+        date_str = game_date or datetime.now().strftime("%Y-%m-%d")
+        sport_upper = sport.upper()
+        
+        # 1. Extract Betting Context if available from stats
+        home_metrics = stats.get('home', {})
+        away_metrics = stats.get('away', {})
+        
+        ml_home = stats.get('home_ml') or home_metrics.get('moneyline') or "N/A"
+        ml_away = stats.get('away_ml') or away_metrics.get('moneyline') or "N/A"
+        spread = stats.get('spread') or home_metrics.get('spread') or "N/A"
+        ov_un = stats.get('over_under') or "N/A"
+
+        # 2. Sport-Specific Priorities
+        priorities = ""
+        if sport_upper == "NBA":
+            priorities = """
+            - Pace (possessions per game) and how it affects scoring volume
+            - Offensive rating vs defensive rating mismatches
+            - Usage rate changes caused by injuries or rotation absences
+            - Half-court offense vs transition efficiency
+            - Bench depth, rotation compression, and minute distribution
+            """
+        elif sport_upper == "NFL":
+            priorities = """
+            - Quarterback availability and protection
+            - Offensive line and secondary injuries
+            - Run/pass balance and expected game script
+            - Red zone efficiency and turnover volatility
+            - Weather conditions and outdoor stadium impact when applicable
+            """
+        elif sport_upper == "NASCAR":
+            priorities = """
+            - Track type and historical performance at this venue
+            - Driver and team form over recent races
+            - Qualifying position and starting grid advantage
+            - Pit crew efficiency and strategic tendencies
+            - Long-run speed vs short-run speed
+            - Caution probability and stage racing dynamics
+            """
+        elif sport_upper == "NCAAB":
+            priorities = """
+            - Adjusted tempo and possession control
+            - Offensive execution vs defensive pressure
+            - Experience vs youth in lineups
+            - Home-court advantage intensity
+            - Coaching style, rotation depth, and substitution patterns
+            - Turnover rate and free-throw reliance
+            """
+        elif "BASEBALL" in sport_upper:
+            priorities = """
+            - Starting pitcher availability, pitch limits, and recent workload
+            - Bullpen depth and recent usage
+            - Offensive splits (home vs away)
+            - Defensive efficiency and error rates
+            - Weather conditions (wind, temperature)
+            - Ballpark run environment and dimensions
+            """
+
+        # 3. Master Prompt Template
+        master_prompt = f"""
+        You are a professional sports betting analyst explaining market expectations. Analyze the following matchup:
+        League: {sport_upper}
+        Game Date: {date_str}
+        Away Team/Driver: {away_team}
+        Home Team/Track: {home_team}
+        Moneyline: {away_team} {ml_away}, {home_team} {ml_home}
+        Spread: {spread}
+        Over/Under: {ov_un}
+
+        Prioritize these factors for {sport_upper}:
+        {priorities}
+
+        Explain why the market favors one team over the other and why the projected Over/Under is set at this number.
+        Your analysis MUST include:
+        1. Market Rationale (Bookmaker perspective, win probability)
+        2. Injury Impact (Critical: Search for LATEST injury reports for {date_str}. Mention specific key players by name and their specific injury, e.g., 'Cade Cunningham (wrist)'). 
+        3. Matchup Dynamics (Structural advantages, schematic impact of injuries)
+        4. Game Environment & Total (O/U explanation, pace, tendencies)
+        5. Situational Factors (Home/Away, rest, travel, recent form)
+        6. Summary (Concise tie-together explaining why this team is favored and why the total is priced where it is)
+
+        Response Guidelines:
+        - Avoid generic commentary. Use realistic on-field/on-court factors.
+        - Ensure injuries are current for {date_str}, NOT old data.
+        """
+
+        # 4. JSON Schema instruction
         prompt_metrics = """
         "winner": (Predicted Team Name or Driver Name),
         "confidence": (0-100),
-        "rationale": (Concise 2-sentence explanation),
-        "key_factor": (Single most important factor/stat)
+        "rationale": (Provide the full detailed 6-point analysis here as a single string),
+        "key_factor": (The single most important factor, e.g., 'Cade Cunningham Injury')
         """
         
-        if sport.lower() == "nascar":
-             # "home_team" maps to track_name, "stats['home']" maps to driver_stats
-             return f"""
-             Sport: NASCAR
-             Track: {home_team}
-             Driver: {away_team}
-             
-             Driver Stats (at this track/type):
-             - Driver Rating: {stats.get('home', {}).get('avg_driver_rating', 'N/A')}
-             - Avg Finish (Track): {stats.get('home', {}).get('avg_finish_at_track', 'N/A')}
-             - Speed Rank: {stats.get('home', {}).get('avg_speed_rank', 'N/A')}
-             - Recent Momentum: {stats.get('home', {}).get('recent_avg_finish', 'N/A')}
-             
-             Please provide a JSON object with evaluation of this driver's chances:
-             {prompt_metrics}
-             """
-
-        return f"""
-        Sport: {sport}
-        Matchup: {away_team} at {home_team}
-        
-        Available Stats (Home): {json.dumps(stats.get('home', {}), indent=2)}
-        Available Stats (Away): {json.dumps(stats.get('away', {}), indent=2)}
-        
-        Please provide a JSON object with:
-        {prompt_metrics}
-        """
+        return f"{master_prompt}\n\nPlease provide a JSON object with:\n{prompt_metrics}"
 
     def _get_mock_insight(self, sport: str, home_team: str, away_team: str, stats: Dict[str, Any]) -> Dict[str, Any]:
         winner = home_team

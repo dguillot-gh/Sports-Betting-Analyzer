@@ -518,6 +518,7 @@ public class AnalyzedGame
 public class PythonMLServiceClient
 {
     private readonly HttpClient _httpClient;
+    public HttpClient HttpClient => _httpClient;
     private readonly ILogger<PythonMLServiceClient> _logger;
     private readonly PythonMLOptions _options;
     private bool _isHealthy = false;

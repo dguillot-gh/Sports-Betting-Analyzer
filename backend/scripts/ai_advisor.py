@@ -44,7 +44,7 @@ class AIAdvisor:
         # 2. Get LLM Insight (Gemini)
         try:
             gemini = get_gemini_predictor()
-            results["llm_insight"] = await gemini.get_insight(sport, home_team, away_team, stats)
+            results["llm_insight"] = await gemini.get_insight(sport, home_team, away_team, stats, game_date=results["timestamp"])
         except Exception as e:
             logger.error(f"Error getting Gemini insight: {e}")
 
