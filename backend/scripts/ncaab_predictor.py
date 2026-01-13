@@ -81,9 +81,15 @@ class NCAABPredictor:
                     if app_data.exists():
                         logger.info(f"Contents of /app/data: {os.listdir('/app/data')}")
                     else:
-                        logger.warning(f"/app/data does not exist in container!")
+                        logger.warning(f"/app/data does not exist in container! Creating fallback...")
+                        app_data.mkdir(parents=True, exist_ok=True)
                 except Exception as debug_ex:
                     logger.error(f"Failed to list /app/data: {debug_ex}")
+                
+                # Fallback: create the directory to avoid further "not found" errors, 
+                # though it will be empty until data is imported or mounted.
+                DATA_DIR = Path("/app/data/ncaab")
+                DATA_DIR.mkdir(parents=True, exist_ok=True)
                 return
 
             box_path = DATA_DIR / "ncaab_team_box_history.parquet"

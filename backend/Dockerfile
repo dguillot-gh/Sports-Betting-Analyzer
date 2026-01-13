@@ -54,7 +54,7 @@ COPY --from=builder /usr/local/lib/R/site-library /usr/local/lib/R/site-library
 COPY . .
 
 # Create necessary data directories
-RUN mkdir -p data/nascar data/nba data/nfl models
+RUN mkdir -p data/nascar data/nba data/nfl data/ncaab data/baseball models
 
 # Download XGBoost model files
 # Uses Python script to fetch models; runs only when copy layer changes
