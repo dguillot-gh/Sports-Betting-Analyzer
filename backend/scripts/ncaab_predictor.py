@@ -80,7 +80,14 @@ class NCAABPredictor:
                     app_data = Path("/app/data")
                     if app_data.exists():
                         logger.info(f"Contents of /app/data: {os.listdir('/app/data')}")
+                    
+                    backend_ncaab = Path("/app/backend/data/ncaab")
+                    if backend_ncaab.exists():
+                        logger.info(f"Contents of /app/backend/data/ncaab: {os.listdir('/app/backend/data/ncaab')}")
                     else:
+                        logger.warning(f"/app/backend/data/ncaab does not exist!")
+                        
+                    if not app_data.exists():
                         logger.warning(f"/app/data does not exist in container! Creating fallback...")
                         app_data.mkdir(parents=True, exist_ok=True)
                 except Exception as debug_ex:

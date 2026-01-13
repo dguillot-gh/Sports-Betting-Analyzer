@@ -12,8 +12,13 @@ import sportsdataverse.mbb as mbb_loaders
 
 logger = logging.getLogger(__name__)
 
-# Use relative path that works locally, fallback to Docker path
+import subprocess
+import os
+
 SCRIPT_DIR = Path(__file__).parent
+R_SCRIPT_PATH = SCRIPT_DIR / "ncaab_importer.R"
+
+# Use relative path that works locally, fallback to Docker path
 _local_data_dir = SCRIPT_DIR.parent / "data" / "ncaab"
 _docker_data_dir = Path("/app/data/ncaab")
 DATA_DIR = _local_data_dir if _local_data_dir.exists() or not _docker_data_dir.exists() else _docker_data_dir
@@ -21,74 +26,47 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 async def import_ncaab_data(start_year: int = 2018, end_year: int = 2025):
     """
-    Import NCAAB data for a range of years.
+    Import NCAAB data using hoopR (R script) to avoid sportsdataverse version crashes.
     """
-    logger.info(f"Starting NCAAB import for {start_year}-{end_year}")
-    
-    seasons = range(start_year, end_year + 1)
+    logger.info(f"Starting hybrid NCAAB import for {start_year}-{end_year}")
     
     try:
-        # 1. Schedule Data
-        logger.info("Fetching schedules...")
+        # Construct command
+        cmd = [
+            "Rscript",
+            str(R_SCRIPT_PATH),
+            str(start_year),
+            str(end_year),
+            str(DATA_DIR)
+        ]
         
-        all_schedules = []
-        for season in seasons:
-            try:
-                logger.info(f"Loading schedule for {season}...")
-                df = mbb_loaders.load_mbb_schedule(seasons=[season])
-                
-                # Check if it's Polars and convert
-                if hasattr(df, "to_pandas"):
-                    df = df.to_pandas()
-                
-                if not df.empty:
-                    all_schedules.append(df)
-            except Exception as e:
-                logger.warning(f"Failed to load schedule for {season}: {e}")
-
-        if all_schedules:
-            # Concatenate all seasons
-            df_schedule = pd.concat(all_schedules, ignore_index=True)
-            
-            schedule_path = DATA_DIR / "ncaab_schedule_history.parquet"
-            df_schedule.to_parquet(schedule_path)
-            logger.info(f"Saved {len(df_schedule)} games to {schedule_path}")
+        logger.info(f"Running R command: {' '.join(cmd)}")
         
-        # 2. Team Boxscores (Stats)
-        # 2. Team Boxscores (Stats)
-        logger.info("Fetching team boxscores...")
+        # Run process
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
         
-        all_boxscores = []
-        for season in seasons:
-            try:
-                logger.info(f"Loading boxscores for {season}...")
-                df = mbb_loaders.load_mbb_team_boxscore(seasons=[season])
-                
-                # Check if it's Polars and convert
-                if hasattr(df, "to_pandas"):
-                    df = df.to_pandas()
+        stdout, stderr = await process.communicate()
+        
+        if stdout:
+            logger.info(f"R Output: {stdout.decode().strip()}")
+        if stderr:
+             logger.warning(f"R Stderr: {stderr.decode().strip()}")
+             
+        if process.returncode != 0:
+            return {"success": False, "error": f"R script failed with code {process.returncode}"}
 
-                if not df.empty:
-                    all_boxscores.append(df)
-            except Exception as e:
-                logger.warning(f"Failed to load {season}: {e}")
-
-        if all_boxscores:
-            # Concatenate all seasons, filling missing columns with NaN to handle width mismatches
-            df_box = pd.concat(all_boxscores, ignore_index=True)
-            
-            box_path = DATA_DIR / "ncaab_team_box_history.parquet"
-            df_box.to_parquet(box_path) # Use to_parquet instead of write_parquet (polars vs pandas? mbb returns pandas)
-            logger.info(f"Saved {len(df_box)} boxscores to {box_path}")
-            
         return {
             "success": True,
-            "message": f"Imported {len(df_schedule)} games and {len(df_box)} boxscores.",
-            "seasons": list(seasons)
+            "message": f"Imported NCAAB data via hoopR for {start_year}-{end_year}.",
+            "data_dir": str(DATA_DIR)
         }
         
     except Exception as e:
-        logger.error(f"Error importing NCAAB data: {e}")
+        logger.error(f"Error in hybrid NCAAB import: {e}")
         return {"success": False, "error": str(e)}
 
 if __name__ == "__main__":
