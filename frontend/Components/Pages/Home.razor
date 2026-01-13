@@ -24,14 +24,7 @@
             <MudChip T="string" Icon="@Icons.Material.Filled.CheckCircle" Color="@(_isBackendHealthy ? Color.Success : Color.Error)">
                 System: @(_isBackendHealthy ? "Online" : "Connecting...")
             </MudChip>
-            @if (_quota != null)
-            {
-                <MudChip T="string" Color="@(_quota.Remaining > 100 ? Color.Success : Color.Warning)" 
-                         Variant="Variant.Text" Icon="@Icons.Material.Filled.AutoFixHigh" 
-                         Size="Size.Medium" Class="ml-2">
-                    Gemini AI: @_quota.Remaining / @_quota.Limit
-                </MudChip>
-            }
+            <ApiQuotaTracker />
         </MudItem>
     </MudGrid>
 
@@ -370,7 +363,6 @@
     private IBrowserFile? _selectedFile;
     private List<DashboardModelSummary> _modelSummary = new();
     private bool _isModelsLoading = true;
-    private AiQuota? _quota;
     private AiAnalysisReport? _latestInsight;
     private bool _isAiProcessing = false;
 
@@ -379,7 +371,6 @@
         await LoadAnalytics();
         await LoadTopPicks();
         await LoadModelSummary();
-        await LoadAiQuota();
         _isBackendHealthy = await MLServiceClient.IsHealthyAsync();
     }
 
@@ -394,7 +385,6 @@
         {
             var pick = _topPicks.First();
             _latestInsight = await MLServiceClient.GetAiAnalysisAsync(pick.Sport.ToLower(), pick.HomeTeam, pick.AwayTeam);
-            await LoadAiQuota(); // Refresh quota chip
         }
         catch (Exception) { }
         finally
@@ -402,15 +392,6 @@
             _isAiProcessing = false;
             StateHasChanged();
         }
-    }
-
-    private async Task LoadAiQuota()
-    {
-        try 
-        {
-            _quota = await MLServiceClient.GetAiQuotaAsync();
-        }
-        catch (Exception) { }
     }
 
     private async Task LoadModelSummary()

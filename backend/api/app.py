@@ -5,6 +5,13 @@ import json
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 
+# Monkeypatch for Python 3.13 compatibility
+import collections
+import collections.abc
+for name in ['MutableSet', 'MutableMapping', 'Mapping', 'Iterable', 'Callable', 'Sequence']:
+    if not hasattr(collections, name):
+        setattr(collections, name, getattr(collections.abc, name))
+
 from api.log_capture import setup_log_capture, get_logs, LOG_BUFFER
 from api.db_endpoints import router as db_router
 from api.odds_endpoints import router as odds_router

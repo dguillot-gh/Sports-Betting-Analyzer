@@ -50,6 +50,8 @@
             <MudAlert Severity="Severity.Error" Variant="Variant.Filled">@_error</MudAlert>
         }
 
+        <ApiQuotaTracker />
+
         <!-- Summary Stats -->
         @if (_games.Any())
         {

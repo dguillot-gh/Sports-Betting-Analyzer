@@ -1,0 +1,80 @@
+@using System.Timers
+@implements IDisposable
+@inject PythonMLServiceClient MLServiceClient
+@inject OddsService OddsService
+@inject BallDontLieService BDLService
+
+<div class="d-flex flex-wrap gap-2 mb-4 align-center">
+    @if (_geminiQuota != null)
+    {
+        <MudTooltip Text="Gemini AI Daily Quota (Free Tier)">
+            <MudChip T="string" Icon="@Icons.Material.Filled.AutoAwesome" 
+                     Color="@(_geminiQuota.Remaining > 100 ? Color.Success : _geminiQuota.Remaining > 20 ? Color.Warning : Color.Error)" 
+                     Variant="Variant.Filled" Size="Size.Small">
+                AI: @_geminiQuota.Remaining / @_geminiQuota.Limit
+            </MudChip>
+        </MudTooltip>
+    }
+
+    @if (OddsService.LastQuotaUsage.RequestsRemaining > 0 || OddsService.LastQuotaUsage.RequestsUsed > 0)
+    {
+        <MudTooltip Text="The Odds API Monthly Quota">
+            <MudChip T="string" Icon="@Icons.Material.Filled.AttachMoney" 
+                     Color="@(OddsService.LastQuotaUsage.RequestsRemaining > 100 ? Color.Info : Color.Warning)" 
+                     Variant="Variant.Filled" Size="Size.Small">
+                Odds: @OddsService.LastQuotaUsage.RequestsRemaining remaining
+            </MudChip>
+        </MudTooltip>
+    }
+
+    @if (BDLService.LastQuotaUsage.RequestsRemaining > 0 || BDLService.LastQuotaUsage.RequestsLast > 0)
+    {
+        <MudTooltip Text="Ball Don't Lie API Rate Limit">
+            <MudChip T="string" Icon="@Icons.Material.Filled.SportsBasketball" 
+                     Color="@(BDLService.LastQuotaUsage.RequestsRemaining > 10 ? Color.Surface : Color.Error)" 
+                     Variant="Variant.Text" Size="Size.Small">
+                BDL: @BDLService.LastQuotaUsage.RequestsRemaining / @BDLService.LastQuotaUsage.RequestsLast
+            </MudChip>
+        </MudTooltip>
+    }
+</div>
+
+@code {
+    private AiQuota? _geminiQuota;
+    private Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshQuota();
+        
+        // Setup timer for periodic refresh (every 15 seconds)
+        _timer = new Timer(15000);
+        _timer.Elapsed += async (sender, e) => await InvokeAsync(async () => {
+            await RefreshQuota();
+            StateHasChanged();
+        });
+        _timer.AutoReset = true;
+        _timer.Enabled = true;
+    }
+
+    private async Task RefreshQuota()
+    {
+        try
+        {
+            _geminiQuota = await MLServiceClient.GetAiQuotaAsync();
+        }
+        catch (Exception)
+        {
+            // Silently fail for quota UI
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_timer != null)
+        {
+            _timer.Stop();
+            _timer.Dispose();
+        }
+    }
+}

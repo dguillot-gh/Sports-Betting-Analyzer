@@ -10,6 +10,13 @@ from typing import Dict, List, Any, Optional
 import math
 from pathlib import Path
 
+# Monkeypatch for Python 3.13 compatibility
+import collections
+import collections.abc
+for name in ['MutableSet', 'MutableMapping', 'Mapping', 'Iterable', 'Callable', 'Sequence']:
+    if not hasattr(collections, name):
+        setattr(collections, name, getattr(collections.abc, name))
+
 logger = logging.getLogger(__name__)
 
 # Map sportsbook names to Odds API format
@@ -47,18 +54,34 @@ class NCAABPredictor:
         """Load historical stats from Parquet files if available."""
         try:
             import pandas as pd
-            # Use relative path that works locally
-            SCRIPT_DIR = Path(__file__).parent
-            _local_data_dir = SCRIPT_DIR.parent / "data" / "ncaab"
-            _docker_data_dir = Path("/app/data/ncaab")
-            DATA_DIR = _local_data_dir if _local_data_dir.exists() or not _docker_data_dir.exists() else _docker_data_dir
+            # Use absolute path detection
+            SCRIPT_DIR = Path(__file__).parent.absolute()
+            BACKEND_ROOT = SCRIPT_DIR.parent
             
+            # Try multiple possible locations for data
+            possible_paths = [
+                BACKEND_ROOT / "data" / "ncaab",
+                Path.cwd() / "backend" / "data" / "ncaab",
+                Path.cwd() / "data" / "ncaab",
+                Path("/app/data/ncaab")
+            ]
+            
+            DATA_DIR = None
+            for p in possible_paths:
+                if p.exists():
+                    DATA_DIR = p
+                    break
+            
+            if not DATA_DIR:
+                logger.error(f"NCAAB data directory not found. Tried paths: {[str(p) for p in possible_paths]}")
+                return
+
             box_path = DATA_DIR / "ncaab_team_box_history.parquet"
             if box_path.exists():
                 self.stats_df = pd.read_parquet(box_path)
-                logger.info(f"Loaded {len(self.stats_df)} NCAAB stats rows")
+                logger.info(f"Loaded {len(self.stats_df)} NCAAB stats rows from {box_path}")
             else:
-                logger.warning("NCAAB stats file not found, using heuristics")
+                logger.warning(f"NCAAB stats file not found at {box_path}")
                 
         except Exception as e:
             logger.error(f"Error loading NCAAB data: {e}")
@@ -74,21 +97,19 @@ class NCAABPredictor:
         if self.stats_df is None:
             self._load_data()
             
+        # Default stats - using 73.0 to match dataset mean (73.0 * 2 = 146.0)
         stats = {
-            'ppg': 72.0, 'oppg': 72.0, 
-            'pace': 70.0, 'off_efficiency': 1.03, 'def_efficiency': 1.03,
-            'win_pct': 0.5
+            'ppg': 73.0, 'oppg': 73.0, 
+            'pace': 70.0, 'off_efficiency': 1.015, 'def_efficiency': 1.015,
+            'win_pct': 0.5,
+            'is_default': True
         }
 
         if self.stats_df is not None and not self.stats_df.empty:
             try:
-                # Filter for team (case-insensitive fuzzy match)
-                # We assume stats_df is a pandas DataFrame here (read_parquet returns pandas)
-                
                 # Normalize names for matching
-                # Remove common suffixes and standardize "state/st"
                 def normalize(n):
-                    return n.lower().replace(" state", " st").replace(" university", "").strip()
+                    return n.lower().replace(" state", " st").replace(" university", "").replace(";", "").strip()
                 
                 name_norm = normalize(team_name)
                 
@@ -99,24 +120,29 @@ class NCAABPredictor:
                 if team_df.empty:
                     team_df = self.stats_df[self.stats_df['team_display_name'].apply(normalize) == name_norm]
                 
-                # 3. Try "contains" match on original name or parts of it
+                # 3. Try "contains" match
                 if team_df.empty:
-                    # Sort by season to get newest first in case of multiple matches
                     team_df = self.stats_df[self.stats_df['team_display_name'].str.lower().str.contains(team_name.lower(), regex=False)]
                 
+                # 4. Try normalized "contains"
+                if team_df.empty:
+                     # Use team_name parts (e.g. "Duke" from "Duke Blue Devils")
+                     parts = team_name.split()
+                     if parts:
+                         main_part = parts[0].lower()
+                         team_df = self.stats_df[self.stats_df['team_display_name'].str.lower().str.contains(main_part, regex=False)]
+
                 if not team_df.empty:
                     # Use only the most recent season available in data
                     max_season = team_df['season'].max()
                     team_df = team_df[team_df['season'] == max_season]
                     
-                    if len(team_df) > 3:  # Only if we have decent sample
+                    if len(team_df) >= 1: # Even 1 game is better than default
                         games = len(team_df)
                         ppg = team_df['team_score'].mean()
                         oppg = team_df['opponent_team_score'].mean()
                         
-                        # Estimate Possessions: FGA + 0.44*FTA + TO - ORB
-                        # Check availability of advanced stats columns
-                        # Use defaults if columns missing (though we verified they exist in 2025)
+                        # Estimate Possessions
                         if 'field_goals_attempted' in team_df.columns:
                             fga = team_df['field_goals_attempted'].mean()
                             fta = team_df['free_throws_attempted'].mean()
@@ -124,10 +150,10 @@ class NCAABPredictor:
                             orb = team_df['offensive_rebounds'].mean()
                             
                             possessions = fga + (0.44 * fta) + to - orb
-                            pace = possessions # per game
+                            pace = max(60, min(85, possessions))
                             
-                            off_eff = ppg / possessions if possessions > 0 else 1.0
-                            def_eff = oppg / possessions if possessions > 0 else 1.0
+                            off_eff = ppg / possessions if possessions > 0 else 1.015
+                            def_eff = oppg / possessions if possessions > 0 else 1.015
                         else:
                             pace = 70.0
                             off_eff = ppg / 70.0
@@ -145,10 +171,16 @@ class NCAABPredictor:
                             'def_efficiency': float(def_eff),
                             'win_pct': float(win_pct),
                             'data_games': games,
-                            'season': int(max_season)
+                            'season': int(max_season),
+                            'is_default': False
                         }
+                        logger.info(f"Matched {team_name} to {len(team_df)} games from season {max_season}")
                         self._team_stats_cache[team_name] = stats
                         return stats
+                    else:
+                        logger.warning(f"Found match for {team_name} but no games in recent season")
+                else:
+                    logger.warning(f"No NCAAB stats found for team: {team_name}")
                         
             except Exception as e:
                 logger.warning(f"Error calculating stats for {team_name}: {e}")
