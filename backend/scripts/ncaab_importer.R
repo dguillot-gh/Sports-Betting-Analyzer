@@ -38,7 +38,7 @@ for (year in start_year:end_year) {
   
   # 2. Boxscores
   tryCatch({
-    box <- hoopR::load_mbb_team_boxscore(seasons = year)
+    box <- hoopR::load_mbb_team_box(seasons = year)
     if (nrow(box) > 0) {
       all_boxscores[[as.character(year)]] <- box
     }
@@ -57,6 +57,39 @@ if (length(all_schedules) > 0) {
 
 if (length(all_boxscores) > 0) {
   df_box <- bind_rows(all_boxscores)
+  
+  # Data Cleaning for Python Predictor
+  # 1. Split combined strings like "10-25" into separate columns if they exist
+  if ("field_goals_made_field_goals_attempted" %in% names(df_box)) {
+    df_box <- df_box %>%
+      mutate(
+        field_goals_made = as.numeric(sub("-.*", "", field_goals_made_field_goals_attempted)),
+        field_goals_attempted = as.numeric(sub(".*-", "", field_goals_made_field_goals_attempted))
+      )
+  }
+  
+  if ("free_throws_made_free_throws_attempted" %in% names(df_box)) {
+    df_box <- df_box %>%
+      mutate(
+        free_throws_made = as.numeric(sub("-.*", "", free_throws_made_free_throws_attempted)),
+        free_throws_attempted = as.numeric(sub(".*-", "", free_throws_made_free_throws_attempted))
+      )
+  }
+  
+  # 2. Ensure team_score and opponent_team_score exist
+  # If they are named differently in this version of hoopR, map them
+  if (!"team_score" %in% names(df_box) && "score" %in% names(df_box)) {
+     df_box$team_score <- df_box$score
+  }
+  
+  # 4. Ensure other stats are numeric
+  stat_cols <- c("turnovers", "offensive_rebounds", "total_rebounds", "team_score", "opponent_team_score")
+  for (col in stat_cols) {
+    if (col %in% names(df_box)) {
+      df_box[[col]] <- as.numeric(df_box[[col]])
+    }
+  }
+
   box_path <- file.path(data_dir, "ncaab_team_box_history.parquet")
   arrow::write_parquet(df_box, box_path)
   cat(paste0("Saved ", nrow(df_box), " boxscores to ", box_path, "\n"))
