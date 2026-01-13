@@ -203,13 +203,15 @@ class GeminiPredictor:
         Response Guidelines:
         - Avoid generic commentary. Use realistic on-field/on-court factors.
         - Ensure injuries are current for {date_str}, NOT old data.
+        - **FORMATTING**: Use Markdown extensively for readability. Use '###' for section headers, bullet points for lists, and **bold text** for player names or key metrics. 
+        - **SPACING**: Use double newlines (\\n\\n) between sections to avoid a "wall of text".
         """
 
         # 4. JSON Schema instruction
         prompt_metrics = """
         "winner": (Predicted Team Name or Driver Name),
         "confidence": (0-100),
-        "rationale": (Provide the full detailed 6-point analysis here as a single string),
+        "rationale": (Provide the full detailed 6-point analysis here. Use ### headers for each point, bullet points, and bold emphasis. Format as a single string containing valid Markdown with double newlines between sections),
         "key_factor": (The single most important factor, e.g., 'Cade Cunningham Injury')
         """
         

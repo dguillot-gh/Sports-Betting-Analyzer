@@ -4167,7 +4167,7 @@ async def apex_backtest(
 
 
 @app.post('/ncaab/import')
-async def import_ncaab(start_year: int = Query(2018), end_year: int = Query(2025)):
+async def import_ncaab(background_tasks: BackgroundTasks, start_year: int = Query(2018), end_year: int = Query(2025)):
     try:
         from scripts.ncaab_importer import import_ncaab_data
         background_tasks.add_task(import_ncaab_data, start_year, end_year)
