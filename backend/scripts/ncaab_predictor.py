@@ -60,10 +60,10 @@ class NCAABPredictor:
             
             # Try multiple possible locations for data
             possible_paths = [
-                BACKEND_ROOT / "data" / "ncaab",
-                Path.cwd() / "backend" / "data" / "ncaab",
-                Path.cwd() / "data" / "ncaab",
-                Path("/app/data/ncaab")
+                BACKEND_ROOT / "data" / "ncaab",      # Standard Docker: /app/data/ncaab
+                Path.cwd() / "data" / "ncaab",        # Alternate Docker
+                Path.cwd() / "backend" / "data" / "ncaab", # Local Dev
+                Path("/app/data/ncaab")               # Explicit Docker
             ]
             
             DATA_DIR = None
@@ -73,7 +73,17 @@ class NCAABPredictor:
                     break
             
             if not DATA_DIR:
-                logger.error(f"NCAAB data directory not found. Tried paths: {[str(p) for p in possible_paths]}")
+                # Advanced Debugging
+                logger.error(f"NCAAB data directory NOT found. Searched: {[str(p) for p in possible_paths]}")
+                # Log what IS there
+                try:
+                    app_data = Path("/app/data")
+                    if app_data.exists():
+                        logger.info(f"Contents of /app/data: {os.listdir('/app/data')}")
+                    else:
+                        logger.warning(f"/app/data does not exist in container!")
+                except Exception as debug_ex:
+                    logger.error(f"Failed to list /app/data: {debug_ex}")
                 return
 
             box_path = DATA_DIR / "ncaab_team_box_history.parquet"
@@ -82,6 +92,10 @@ class NCAABPredictor:
                 logger.info(f"Loaded {len(self.stats_df)} NCAAB stats rows from {box_path}")
             else:
                 logger.warning(f"NCAAB stats file not found at {box_path}")
+                # List files in DATA_DIR for debugging
+                try:
+                    logger.info(f"Contents of {DATA_DIR}: {os.listdir(DATA_DIR)}")
+                except: pass
                 
         except Exception as e:
             logger.error(f"Error loading NCAAB data: {e}")

@@ -92,7 +92,7 @@ class GeminiPredictor:
             
             # Configure tools for Google Search grounding to get real-time info (like injuries)
             config = types.GenerateContentConfig(
-                tools=[types.Tool(google_search_retrieval=types.GoogleSearchRetrieval())]
+                tools=[types.Tool(google_search=types.GoogleSearch())]
             )
 
             # Simplified generate_content call (using async)
