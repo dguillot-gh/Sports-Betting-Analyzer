@@ -113,7 +113,34 @@ class GeminiPredictor:
                 if start != -1 and end != -1:
                     text = text[start:end+1]
             
-            return json.loads(text)
+            result = json.loads(text)
+            
+            # Post-process rationale for frontend rendering
+            if 'rationale' in result and isinstance(result['rationale'], str):
+                rationale = result['rationale']
+                
+                # 1. Convert ### headers to bold sections with line breaks
+                import re
+                rationale = re.sub(r'###\s*(\d+\.\s*)?([^\n]+)', r'<br><b>\2</b><br>', rationale)
+                
+                # 2. Convert double newlines to paragraph breaks
+                rationale = rationale.replace('\\n\\n', '<br><br>')
+                rationale = rationale.replace('\n\n', '<br><br>')
+                
+                # 3. Convert single newlines to line breaks
+                rationale = rationale.replace('\\n', '<br>')
+                rationale = rationale.replace('\n', '<br>')
+                
+                # 4. Convert **bold** to HTML bold
+                rationale = re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', rationale)
+                
+                # 5. Convert bullet points
+                rationale = rationale.replace('- ', '<br>• ')
+                rationale = rationale.replace('* ', '<br>• ')
+                
+                result['rationale'] = rationale
+            
+            return result
         except Exception as e:
             logger.error(f"Gemini LLM error: {e}")
             return self._get_mock_insight(sport, home_team, away_team, stats)
