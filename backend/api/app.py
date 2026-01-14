@@ -27,6 +27,7 @@ from api.espn_endpoints import router as espn_router
 from api.bug_tracker_endpoints import router as bug_tracker_router
 from api.dashboard_endpoints import router as dashboard_router
 from api.ai_endpoints import router as ai_router
+from api.ncaab_endpoints import router as ncaab_router
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 # import pandas as pd  <-- Moved to local function scope
@@ -69,6 +70,7 @@ app.include_router(espn_router)  # ESPN BPI/FPI predictions
 app.include_router(bug_tracker_router)  # Bug tracking
 app.include_router(dashboard_router)  # Dashboard metrics summary
 app.include_router(ai_router)  # Unified AI Advisor (Multi-engine + LLM)
+app.include_router(ncaab_router)  # NCAAB Trends
 
 # Dev CORS. Tighten for production.
 app.add_middleware(
