@@ -116,12 +116,12 @@ class GeminiPredictor:
             result = json.loads(text)
             
             # Post-process rationale for frontend rendering
-                # 1. Cleaning cleanup (just handle basic newlines if any remain)
-                if isinstance(rationale, str):
-                   # Ensure it's treated as a string, no major regex needed if LLM outputs HTML
-                   pass
-                
-                result['rationale'] = rationale
+            rationale = result.get('rationale')
+            if isinstance(rationale, str):
+                # Ensure it's treated as a string, no major regex needed if LLM outputs HTML
+                pass
+            
+            result['rationale'] = rationale
             
             return result
         except Exception as e:
