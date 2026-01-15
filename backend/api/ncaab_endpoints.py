@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/trends/ncaab", tags=["NCAAB Trends"])
 
+
 @router.post("/train")
 async def train_model(background_tasks: BackgroundTasks):
     """
@@ -34,6 +35,21 @@ async def train_model(background_tasks: BackgroundTasks):
     except Exception as e:
         logger.error(f"Error starting NCAAB training: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/backtest")
+async def run_backtest_endpoint():
+    """
+    Run a quick backtest on recent data and return the report.
+    For this version, we run it synchronously as it's fast (~1-2s for 1 season).
+    """
+    try:
+        from scripts.backtest_ncaab import run_backtest
+        report = run_backtest(season_filter=True)
+        return report
+    except Exception as e:
+        logger.error(f"Error running backtest: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 class HitRateResult(BaseModel):
     team: str
