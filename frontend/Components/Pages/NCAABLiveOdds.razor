@@ -66,6 +66,66 @@
             </MudPaper>
         }
 
+        <MudDivider Class="my-4" />
+        
+        <MudText Typo="Typo.h6" Class="mb-2">Model Management</MudText>
+        <MudPaper Class="pa-4" Elevation="2">
+            <div class="d-flex align-center gap-4">
+                <MudButton Variant="Variant.Filled" Color="Color.Tertiary" StartIcon="@Icons.Material.Filled.ModelTraining" 
+                           OnClick="TrainNcaabModel" Disabled="@_isTraining">
+                    @if(_isTraining) {
+                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                        <MudText Class="ms-2">Training...</MudText>
+                    } else {
+                        <MudText>Train XGBoost Model</MudText>
+                    }
+                </MudButton>
+                @if(_trainingMessage != null)
+                {
+                    <MudText Color="Color.Info">@_trainingMessage</MudText>
+                }
+                
+                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.History" 
+                           OnClick="RunBacktest" Disabled="@_isBacktesting">
+                    @if(_isBacktesting) {
+                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                        <MudText Class="ms-2">Running...</MudText>
+                    } else {
+                        <MudText>Run Backtest (2023-24)</MudText>
+                    }
+                </MudButton>
+            </div>
+            
+            @if(_backtestReport != null)
+            {
+                <MudCard Class="mt-4 pa-4" Elevation="3" Style="background: rgba(33, 150, 243, 0.05);">
+                    <MudText Typo="Typo.h6">Backtest Results (Season 2023-24)</MudText>
+                    <div class="d-flex flex-wrap gap-4 mt-2">
+                        <MudPaper Class="pa-3 d-flex flex-column align-center" Width="120px">
+                            <MudText Typo="Typo.caption">ROI</MudText>
+                            <MudText Typo="Typo.h5" Color="@(_backtestReport.RoiPercent > 0 ? Color.Success : Color.Error)">
+                                @_backtestReport.RoiPercent%
+                            </MudText>
+                        </MudPaper>
+                        <MudPaper Class="pa-3 d-flex flex-column align-center" Width="120px">
+                            <MudText Typo="Typo.caption">Units Won</MudText>
+                            <MudText Typo="Typo.h5" Color="@(_backtestReport.UnitsWon > 0 ? Color.Success : Color.Error)">
+                                @_backtestReport.UnitsWon
+                            </MudText>
+                        </MudPaper>
+                        <MudPaper Class="pa-3 d-flex flex-column align-center" Width="120px">
+                            <MudText Typo="Typo.caption">Hit Rate</MudText>
+                            <MudText Typo="Typo.h5">@(_backtestReport.HitRate * 100)%</MudText>
+                        </MudPaper>
+                        <MudPaper Class="pa-3 d-flex flex-column align-center" Width="120px">
+                            <MudText Typo="Typo.caption">Bets</MudText>
+                            <MudText Typo="Typo.h5">@_backtestReport.BetsPlaced</MudText>
+                        </MudPaper>
+                    </div>
+                </MudCard>
+            }
+        </MudPaper>
+
         <!-- Games Grid -->
         @if (_games.Any())
         {
@@ -155,10 +215,33 @@
                                     }
                                     else
                                     {
-                                        <MudPaper Class="pa-2 mt-1" Style="background: rgba(156, 39, 176, 0.05); border-left: 3px solid #9c27b0;">
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary"><strong>Gemini Insight:</strong></MudText>
-                                            <MudText Typo="Typo.body2" Class="italic mt-1" Style="font-size: 0.8rem;">"@game.GeminiAnalysis.LlmInsight?.Rationale"</MudText>
-                                        </MudPaper>
+                                        <div class="mt-2">
+                                            @if (game.GeminiAnalysis.Engines != null && game.GeminiAnalysis.Engines.ContainsKey("XGBoost (ML)") 
+                                                 && game.GeminiAnalysis.Engines["XGBoost (ML)"] is AiEnginePrediction xgb)
+                                            {
+                                                var prob = xgb.HomeWinProb;
+                                                <div class="mb-2 pa-2 rounded" style="background: rgba(81, 45, 168, 0.1); border-left: 3px solid #512da8;">
+                                                    <div class="d-flex justify-space-between align-center">
+                                                        <MudText Typo="Typo.caption"><strong>XGBoost Win Prob:</strong></MudText>
+                                                        <MudText Typo="Typo.caption" Color="@(prob > 0.5 ? Color.Success : Color.Error)"><strong>@prob.ToString("P0")</strong></MudText>
+                                                    </div>
+                                                    <MudProgressLinear Color="@(prob > 0.5 ? Color.Success : Color.Error)" Value="@(prob * 100)" Size="Size.Small" />
+                                                    
+                                                    @if (xgb.Explanation.HasValue)
+                                                    {
+                                                        var expl = xgb.Explanation.Value;
+                                                        <MudText Typo="Typo.caption" Class="mt-1 d-block" Style="font-size: 0.7rem;">
+                                                            Factors: @(string.Join(", ", expl.GetProperty("top_features").EnumerateArray().Take(3).Select(f => f.GetProperty("feature").GetString())))
+                                                        </MudText>
+                                                    }
+                                                </div>
+                                            }
+
+                                            <MudPaper Class="pa-2 mt-1" Style="background: rgba(156, 39, 176, 0.05); border-left: 3px solid #9c27b0;">
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary"><strong>AI Rationale:</strong></MudText>
+                                                <MudText Typo="Typo.body2" Class="italic mt-1" Style="font-size: 0.8rem;">"@game.GeminiAnalysis.LlmInsight?.Rationale"</MudText>
+                                            </MudPaper>
+                                        </div>
                                     }
                                 </div>
                             </MudCardContent>
@@ -233,6 +316,61 @@
         {
             _isLoading = false;
             StateHasChanged();
+        }
+    }
+
+    // Training State
+    private bool _isTraining = false;
+    private string? _trainingMessage;
+
+    private async Task TrainNcaabModel()
+    {
+        _isTraining = true;
+        _trainingMessage = "Training started in background...";
+        try
+        {
+            await MLServiceClient.TrainNcaabModelAsync();
+            Snackbar.Add("Training started! The model will be updated shortly.", Severity.Success);
+            _trainingMessage = "Training triggered successfully.";
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Training failed: {ex.Message}", Severity.Error);
+            _trainingMessage = "Training failed.";
+        }
+        finally
+        {
+            _isTraining = false;
+        }
+    }
+
+    // Backtest State
+    private bool _isBacktesting = false;
+    private BacktestReport? _backtestReport;
+
+    private async Task RunBacktest()
+    {
+        _isBacktesting = true;
+        _backtestReport = null;
+        try
+        {
+            _backtestReport = await MLServiceClient.BacktestNcaabAsync();
+            if (_backtestReport != null)
+            {
+                Snackbar.Add($"Backtest Complete! ROI: {_backtestReport.RoiPercent}%", Severity.Success);
+            }
+            else
+            {
+                 Snackbar.Add("Backtest failed or returned no data.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Backtest Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isBacktesting = false;
         }
     }
 

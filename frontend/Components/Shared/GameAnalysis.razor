@@ -364,6 +364,79 @@
                         }
                     </MudTabPanel>
                 }
+
+                <MudTabPanel Text="AI Insight" Icon="@Icons.Material.Filled.SmartToy" OnClick="LoadAiAnalysis">
+                    @if (_isAiLoading)
+                    {
+                         <div class="d-flex flex-column align-center pa-8">
+                            <MudProgressCircular Color="Color.Tertiary" Indeterminate="true" Class="mb-4" />
+                            <MudText>Generating AI Analysis...</MudText>
+                        </div>
+                    }
+                    else if (_aiAnalysis != null)
+                    {
+                        <!-- XGBoost / ML Engine Display -->
+                        @if (_aiAnalysis.Engines != null && _aiAnalysis.Engines.ContainsKey("XGBoost (ML)") 
+                             && _aiAnalysis.Engines["XGBoost (ML)"] is AiEnginePrediction xgb)
+                        {
+                            var prob = xgb.HomeWinProb;
+                            var desc = xgb.Description;
+                            
+                            <MudCard Elevation="4" Class="pa-4 mb-4 mud-theme-primary" Style="background-color: #512da8; color: white;">
+                                <div class="d-flex justify-space-between align-center">
+                                    <div>
+                                        <MudText Typo="Typo.h6">XGBoost Prediction</MudText>
+                                        <MudText Typo="Typo.caption">@desc</MudText>
+                                    </div>
+                                    <MudChip T="string" Color="@(prob > 0.5 ? Color.Success : Color.Error)" Variant="Variant.Filled">
+                                        Home Win: @prob.ToString("P1")
+                                    </MudChip>
+                                </div>
+                                <MudProgressLinear Color="@(prob > 0.5 ? Color.Success : Color.Error)" Value="@(prob * 100)" Size="Size.Large" Class="mt-2" />
+                                
+                                <!-- SHAP Explanations -->
+                                @if (xgb.Explanation.HasValue)
+                                {
+                                    var expl = xgb.Explanation.Value;
+                                    <MudText Typo="Typo.subtitle2" Class="mt-3 mb-1">Top 5 Influential Factors (SHAP)</MudText>
+                                    <MudList T="string" Dense="true">
+                                        @foreach (var feature in expl.GetProperty("top_features").EnumerateArray())
+                                        {
+                                            var name = feature.GetProperty("feature").GetString();
+                                            var impact = feature.GetProperty("impact").GetString(); // "Pos" or "Neg"
+                                            var val = feature.GetProperty("shap_value").GetDouble();
+                                            var color = impact == "Pos" ? Color.Success : Color.Error;
+                                            var icon = impact == "Pos" ? Icons.Material.Filled.ArrowUpward : Icons.Material.Filled.ArrowDownward;
+                                            
+                                            <MudListItem Icon="@icon" IconColor="@color">
+                                                <div class="d-flex justify-space-between" style="color: white;">
+                                                    <MudText Typo="Typo.body2">@name</MudText>
+                                                    <MudText Typo="Typo.caption" style="@($"color: {(impact == "Pos" ? "#4caf50" : "#f44336")}")">@(val > 0 ? "+" : "")@val.ToString("F3")</MudText>
+                                                </div>
+                                            </MudListItem>
+                                        }
+                                    </MudList>
+                                }
+                            </MudCard>
+                        }
+
+                        <!-- Gemini LLM Insight -->
+                        @if (_aiAnalysis.LlmInsight != null)
+                        {
+                            <MudCard Elevation="3" Class="pa-4 mb-4" Style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);">
+                                <div class="d-flex justify-space-between align-center mb-2">
+                                     <MudText Typo="Typo.h5" Color="Color.Primary" Style="font-weight: 800;">AI PREDICTION: @_aiAnalysis.LlmInsight.Winner</MudText>
+                                     <MudChip T="string" Color="Color.Tertiary">Confidence: @_aiAnalysis.LlmInsight.Confidence%</MudChip>
+                                </div>
+                                <MudText Typo="Typo.subtitle1" Class="mb-2"><b>Key Factor:</b> @_aiAnalysis.LlmInsight.KeyFactor</MudText>
+                                <MudDivider Class="my-2"/>
+                                <div class="markdown-body" style="font-family: 'Roboto', sans-serif; line-height: 1.6;">
+                                    @((MarkupString)_aiAnalysis.LlmInsight.Rationale)
+                                </div>
+                            </MudCard>
+                        }
+                    }
+                </MudTabPanel>
             </MudTabs>
         </MudContainer>
     </DialogContent>
@@ -400,6 +473,32 @@
     private KyleskomEnsembleResult? _ensembleResult;
     private bool _isEnsembleLoading = false;
     
+    private AiAnalysisReport? _aiAnalysis;
+    private bool _isAiLoading = false;
+
+    private async Task LoadAiAnalysis()
+    {
+        if (_aiAnalysis != null) return;
+
+        try
+        {
+            _isAiLoading = true;
+            StateHasChanged();
+
+            _aiAnalysis = await MLService.GetAiAnalysisAsync(Sport, Event.HomeTeam, Event.AwayTeam);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading AI analysis");
+            Snackbar.Add("Failed to load AI analysis", Severity.Error);
+        }
+        finally
+        {
+            _isAiLoading = false;
+            StateHasChanged();
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         await LoadStats();

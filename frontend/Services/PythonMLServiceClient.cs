@@ -245,6 +245,12 @@ public class AiEnginePrediction
 
     [JsonPropertyName("away_score")]
     public double AwayScore { get; set; }
+
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
+    [JsonPropertyName("explanation")]
+    public JsonElement? Explanation { get; set; }
 }
 
 public class LlmInsight
@@ -260,6 +266,99 @@ public class LlmInsight
 
     [JsonPropertyName("key_factor")]
     public string KeyFactor { get; set; } = "";
+}
+
+public class BacktestReport
+{
+    [JsonPropertyName("total_games")]
+    public int TotalGames { get; set; }
+
+    [JsonPropertyName("bets_placed")]
+    public int BetsPlaced { get; set; }
+
+    [JsonPropertyName("wins")]
+    public int Wins { get; set; }
+
+    [JsonPropertyName("losses")]
+    public int Losses { get; set; }
+
+    [JsonPropertyName("hit_rate")]
+    public double HitRate { get; set; }
+
+    [JsonPropertyName("units_won")]
+    public double UnitsWon { get; set; }
+
+    [JsonPropertyName("roi_percent")]
+    public double RoiPercent { get; set; }
+}
+
+public class EspnResponse
+{
+    [JsonPropertyName("sport")]
+    public string Sport { get; set; } = "";
+
+    [JsonPropertyName("source")]
+    public string Source { get; set; } = "";
+
+    [JsonPropertyName("games")]
+    public List<EspnGame> Games { get; set; } = new();
+}
+
+public class EspnGame
+{
+    [JsonPropertyName("event_id")]
+    public string EventId { get; set; } = "";
+
+    [JsonPropertyName("home_team")]
+    public string HomeTeam { get; set; } = "";
+
+    [JsonPropertyName("away_team")]
+    public string AwayTeam { get; set; } = "";
+
+    [JsonPropertyName("home_rank")]
+    public object? HomeRank { get; set; }
+
+    [JsonPropertyName("away_rank")]
+    public object? AwayRank { get; set; }
+
+    [JsonPropertyName("home_win_prob")]
+    public double HomeWinProb { get; set; }
+
+    [JsonPropertyName("away_win_prob")]
+    public double AwayWinProb { get; set; }
+
+    [JsonPropertyName("home_score")]
+    public double HomeScore { get; set; }
+
+    [JsonPropertyName("away_score")]
+    public double AwayScore { get; set; }
+
+    [JsonPropertyName("spread")]
+    public string Spread { get; set; } = "";
+
+    [JsonPropertyName("over_under")]
+    public string OverUnder { get; set; } = "";
+
+    [JsonPropertyName("game_time")]
+    public string GameTime { get; set; } = "";
+}
+
+public class MatchupAnalysisResult
+{
+    [JsonPropertyName("matchup")]
+    public string Matchup { get; set; } = "";
+
+    [JsonPropertyName("home_team")]
+    public string HomeTeam { get; set; } = "";
+
+    [JsonPropertyName("away_team")]
+    public string AwayTeam { get; set; } = "";
+
+    [JsonPropertyName("prediction")]
+    public PredictResponse? Prediction { get; set; }
+
+    [JsonPropertyName("timestamp")]
+    public string Timestamp { get; set; } = "";
 }
 
 public class AiQuota
@@ -696,6 +795,84 @@ public class PythonMLServiceClient
         {
             _logger.LogError(ex, "Error predicting for {Sport} {Task}", sport, task);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Trigger retraining of the NCAAB model
+    /// </summary>
+    public async Task TrainNcaabModelAsync()
+    {
+        try
+        {
+            if (!await IsHealthyAsync())
+            {
+                throw new InvalidOperationException("Python ML Service is not available");
+            }
+
+            var response = await _httpClient.PostAsync("/trends/ncaab/train", null);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error training NCAAB model");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Run NCAAB Backtest
+    /// </summary>
+    public async Task<BacktestReport?> BacktestNcaabAsync()
+    {
+        try
+        {
+            if (!await IsHealthyAsync())
+                return null;
+                
+            var response = await _httpClient.PostAsync("/trends/ncaab/backtest", null);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<BacktestReport>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error running NCAAB backtest");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Perform full analysis of a matchup
+    /// </summary>
+    public async Task<MatchupAnalysisResult?> AnalyzeMatchupAsync(string sport, string homeTeam, string awayTeam)
+    {
+        try
+        {
+            if (!await IsHealthyAsync()) return null;
+            var url = $"/analysis/matchup?sport={sport}&home_team={Uri.EscapeDataString(homeTeam)}&away_team={Uri.EscapeDataString(awayTeam)}";
+            return await _httpClient.GetFromJsonAsync<MatchupAnalysisResult>(url);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error analyzing matchup: {Home} @ {Away}", homeTeam, awayTeam);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Get ESPN predictions for a sport
+    /// </summary>
+    public async Task<EspnResponse?> GetEspnPredictionsAsync(string sport)
+    {
+        try
+        {
+            if (!await IsHealthyAsync()) return null;
+            return await _httpClient.GetFromJsonAsync<EspnResponse>($"/trends/{sport}/predictions");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting ESPN predictions for {Sport}", sport);
+            return null;
         }
     }
 
