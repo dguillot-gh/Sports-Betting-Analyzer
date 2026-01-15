@@ -1,21 +1,39 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import pandas as pd
 from datetime import datetime
+import logging
 
 # Import predictor to reuse data loading logic
 # Assuming scripts is in path or relative import
 try:
     from scripts.ncaab_predictor import NCAABPredictor
+    from scripts.train_ncaab_model import train as train_ncaab
 except ImportError:
     # Fallback for different path structures
     import sys
     from pathlib import Path
     sys.path.append(str(Path(__file__).resolve().parents[2]))
     from scripts.ncaab_predictor import NCAABPredictor
+    from scripts.train_ncaab_model import train as train_ncaab
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/trends/ncaab", tags=["NCAAB Trends"])
+
+@router.post("/train")
+async def train_model(background_tasks: BackgroundTasks):
+    """
+    Trigger retraining of the NCAAB XGBoost model.
+    Runs in the background.
+    """
+    try:
+        background_tasks.add_task(train_ncaab)
+        return {"status": "accepted", "message": "NCAAB model training started in background."}
+    except Exception as e:
+        logger.error(f"Error starting NCAAB training: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 class HitRateResult(BaseModel):
     team: str

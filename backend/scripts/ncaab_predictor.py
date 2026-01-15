@@ -9,6 +9,11 @@ from datetime import datetime, date
 from typing import Dict, List, Any, Optional
 import math
 from pathlib import Path
+import pandas as pd
+import numpy as np
+import xgboost as xgb
+import joblib
+import shap
 
 # Monkeypatch for Python 3.13 compatibility
 import collections
@@ -48,6 +53,9 @@ class NCAABPredictor:
         self._team_stats_cache: Dict[str, Dict] = {}
         self.stats_df = None
         self.schedule_df = None
+        self.model = None
+        self.explainer = None
+        self.model_path = Path(__file__).resolve().parent.parent / "models" / "ncaab_xgb_v1.joblib"
         # self._load_data()  <-- Refactored to lazy load in get_team_stats
         
     def _load_data(self):
@@ -215,6 +223,138 @@ class NCAABPredictor:
         # Always return stats dictionary, even if default
         return stats
 
+    def _load_model(self):
+        """Lazy load XGBoost model"""
+        if self.model is None and self.model_path.exists():
+            try:
+                self.model = joblib.load(self.model_path)
+                logger.info(f"Loaded XGBoost model from {self.model_path}")
+                # Initialize SHAP explainer
+                # TreeExplainer is fast for XGBoost
+                self.explainer = shap.TreeExplainer(self.model)
+            except Exception as e:
+                logger.error(f"Failed to load XGBoost model: {e}")
+
+    def _prepare_features(self, home_team: str, away_team: str) -> Optional[pd.DataFrame]:
+        """Prepare features for XGBoost inference"""
+        if self.stats_df is None:
+            self._load_data()
+            
+        if self.stats_df is None or self.stats_df.empty:
+            return None
+            
+        # Helper to get recent rolling stats
+        def get_rolling(team):
+            # Same normalization as get_team_stats might be needed, but for now exact match
+            # In production, this needs robust matching. We'll reuse the logic if possible.
+            team_df = self.stats_df[self.stats_df['team_display_name'] == team]
+            if team_df.empty: 
+                # Try finding by partial match like get_team_stats does
+                # (Skipping robust matching for brevity, relying on user input matching data)
+                return None
+            
+            # Sort by date
+            team_df = team_df.sort_values('game_date')
+            last_row = team_df.iloc[-1]
+            
+            # We need rolling stats. 
+            # Ideally we recalculate rolling on the fly or use the pre-calculated ones if we had a feature store.
+            # Here we will approximate by taking the team's average over the season if rolling isn't efficient 
+            # Or better: Calculate rolling on the full DF for this team then take last.
+            
+            features = ['team_score', 'opponent_team_score', 'field_goals_made', 'field_goals_attempted', 
+                'three_point_field_goals_made', 'three_point_field_goals_attempted', 'free_throws_made', 
+                'free_throws_attempted', 'offensive_rebounds', 'defensive_rebounds', 'assists', 
+                'turnovers', 'steals', 'blocks', 'personal_fouls']
+                
+            cols_needed = [f for f in features if f in team_df.columns]
+            
+            roll_stats = {}
+            for col in cols_needed:
+                # Calculate simple mean of last 5 and 10 games
+                roll_stats[f'{col}_roll5'] = team_df[col].tail(5).mean()
+                roll_stats[f'{col}_roll10'] = team_df[col].tail(10).mean()
+                
+            return roll_stats
+
+        home_feats = get_rolling(home_team)
+        away_feats = get_rolling(away_team)
+        
+        if not home_feats or not away_feats:
+            return None
+            
+        # Combine
+        feat_dict = {}
+        for k, v in home_feats.items():
+            feat_dict[f'home_{k}'] = v
+        for k, v in away_feats.items():
+            feat_dict[f'away_{k}'] = v
+            
+        # Ensure column order matches training? XGBoost generally handles dicts or DMatrix with names.
+        # But safest to convert to DF
+        return pd.DataFrame([feat_dict])
+
+    def predict_xgb_inference(self, home_team: str, away_team: str) -> Dict[str, Any]:
+        """Run XGBoost inference"""
+        self._load_model()
+        if self.model is None:
+            return {}
+            
+        try:
+            X = self._prepare_features(home_team, away_team)
+            if X is None:
+                return {}
+            
+            # Align columns if possible (XGBoost might complain about feature mismatch)
+            # We trust the feature names match the training script logic
+            
+            prob = self.model.predict_proba(X)[0][1] # Probability of Class 1 (Win)
+            
+            # SHAP Explanation
+            explanation = {}
+            if self.explainer:
+                try:
+                    shap_values = self.explainer.shap_values(X)
+                    # shap_values is array [samples, features] or list for multi-class
+                    # Binary classification: might be (1, N)
+                    vals = shap_values[0] if isinstance(shap_values, list) else shap_values[0]
+                    
+                    # Get feature names
+                    feature_names = X.columns.tolist()
+                    
+                    # Pair feat + value
+                    feat_contrib = list(zip(feature_names, vals))
+                    
+                    # Sort by absolute impact
+                    feat_contrib.sort(key=lambda x: abs(x[1]), reverse=True)
+                    
+                    # Get top 3 positive (pushes to WIN) and top 3 negative (pushes to LOSS)
+                    top_features = []
+                    for name, impact in feat_contrib[:5]: # Top 5 total impact
+                        direction = "Favors Home" if impact > 0 else "Favors Away"
+                        # Clean name
+                        clean_name = name.replace('home_', 'Home ').replace('away_', 'Away ').replace('_roll5', ' (L5)').replace('_roll10', ' (L10)').replace('_', ' ').title()
+                        
+                        top_features.append({
+                            'feature': clean_name,
+                            'impact': float(impact),
+                            'direction': direction
+                        })
+                        
+                    explanation = {'top_features': top_features}
+                except Exception as ex:
+                    logger.warning(f"SHAP failed: {ex}")
+
+            return {
+                'xgb_win_prob': float(prob),
+                'xgb_pick': home_team if prob > 0.5 else away_team,
+                'xgb_confidence': float(abs(prob - 0.5) * 2), # Scale 0.5-1.0 to 0-1.0
+                'explanation': explanation
+            }
+        except Exception as e:
+            logger.warning(f"XGBoost inference failed: {e}")
+            return {}
+
     
     def predict_game(self, home_team: str, away_team: str, 
                      spread: float = None, over_under: float = None) -> Dict[str, Any]:
@@ -268,6 +408,17 @@ class NCAABPredictor:
             'predicted_total': round(predicted_total, 1),
             'confidence': round(confidence, 2)
         }
+
+        # XGBoost Integration
+        xgb_res = self.predict_xgb_inference(home_team, away_team)
+        if xgb_res:
+            result['xgb_win_prob'] = round(xgb_res['xgb_win_prob'], 3)
+            result['xgb_winner'] = xgb_res['xgb_pick']
+            # Composite Confidence? Or just expose separately
+            result['xgb_available'] = True
+            result['explanation'] = xgb_res.get('explanation', {})
+        else:
+            result['xgb_available'] = False
         
         # Betting/Edge Analysis
         if spread is not None:

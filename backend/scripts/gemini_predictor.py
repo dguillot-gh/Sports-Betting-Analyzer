@@ -116,27 +116,10 @@ class GeminiPredictor:
             result = json.loads(text)
             
             # Post-process rationale for frontend rendering
-            if 'rationale' in result and isinstance(result['rationale'], str):
-                rationale = result['rationale']
-                
-                # 1. Convert ### headers to bold sections with line breaks
-                import re
-                rationale = re.sub(r'###\s*(\d+\.\s*)?([^\n]+)', r'<br><b>\2</b><br>', rationale)
-                
-                # 2. Convert double newlines to paragraph breaks
-                rationale = rationale.replace('\\n\\n', '<br><br>')
-                rationale = rationale.replace('\n\n', '<br><br>')
-                
-                # 3. Convert single newlines to line breaks
-                rationale = rationale.replace('\\n', '<br>')
-                rationale = rationale.replace('\n', '<br>')
-                
-                # 4. Convert **bold** to HTML bold
-                rationale = re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', rationale)
-                
-                # 5. Convert bullet points
-                rationale = rationale.replace('- ', '<br>• ')
-                rationale = rationale.replace('* ', '<br>• ')
+                # 1. Cleaning cleanup (just handle basic newlines if any remain)
+                if isinstance(rationale, str):
+                   # Ensure it's treated as a string, no major regex needed if LLM outputs HTML
+                   pass
                 
                 result['rationale'] = rationale
             
@@ -149,7 +132,7 @@ class GeminiPredictor:
         date_str = game_date or datetime.now().strftime("%Y-%m-%d")
         sport_upper = sport.upper()
         
-        # 1. Extract Betting Context if available from stats
+        # 1. Extract Betting Context
         home_metrics = stats.get('home', {})
         away_metrics = stats.get('away', {})
         
@@ -221,17 +204,22 @@ class GeminiPredictor:
         Explain why the market favors one team over the other and why the projected Over/Under is set at this number.
         Your analysis MUST include:
         1. Market Rationale (Bookmaker perspective, win probability)
-        2. Injury Impact (Critical: Search for LATEST injury reports for {date_str}. Mention specific key players by name and their specific injury, e.g., 'Cade Cunningham (wrist)'). 
+        2. Injury Impact (Critical: Search for LATEST injury reports for {date_str}. Mention specific key players by name and their specific injury). 
         3. Matchup Dynamics (Structural advantages, schematic impact of injuries)
         4. Game Environment & Total (O/U explanation, pace, tendencies)
         5. Situational Factors (Home/Away, rest, travel, recent form)
-        6. Summary (Concise tie-together explaining why this team is favored and why the total is priced where it is)
+        6. Summary (Concise tie-together explaining why this team is favored)
 
         Response Guidelines:
         - Avoid generic commentary. Use realistic on-field/on-court factors.
-        - Ensure injuries are current for {date_str}, NOT old data.
-        - **FORMATTING**: Use Markdown extensively for readability. Use '###' for section headers, bullet points for lists, and **bold text** for player names or key metrics. 
-        - **SPACING**: Use double newlines (\\n\\n) between sections to avoid a "wall of text".
+        - Ensure injuries are current for {date_str}.
+        - **FORMATTING**: Provide the 'rationale' field as a **Raw HTML** string. 
+          - Use <h4> for section headers.
+          - Use <ul>Combined with <li> for lists.
+          - Use <b> for bold text.
+          - Use <br> for line breaks between paragraphs.
+          - Do NOT use Markdown (no #, no *, no -).
+          - Make it visually clean and easy to read in a web view.
         """
 
         # 4. JSON Schema instruction

@@ -1,10 +1,27 @@
 
 import logging
-import math
 from datetime import datetime
 from typing import Dict, Any, List
 
+# Use the established Predictor
+try:
+    from scripts.ncaab_predictor import NCAABPredictor
+except ImportError:
+    import sys
+    from pathlib import Path
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+    from scripts.ncaab_predictor import NCAABPredictor
+
 logger = logging.getLogger(__name__)
+
+# Global instance for caching
+_predictor = None
+
+def get_ncaab_predictor():
+    global _predictor
+    if _predictor is None:
+        _predictor = NCAABPredictor()
+    return _predictor
 
 def get_ncaab_ai_predictions(
     home_team: str,
@@ -13,74 +30,98 @@ def get_ncaab_ai_predictions(
     away_stats: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
-    NCAAB multi-engine prediction logic.
+    NCAAB multi-engine prediction logic using the real NCAABPredictor.
+    Returns:
+       - Heuristic Model (Baseline)
+       - XGBoost Model (Advanced)
+       - SHAP Explanations
     """
     engines = {}
     
-    # 1. Baseline (Simple Adjusted PPG)
-    h_ppg = float(home_stats.get("pts_per_game", 75))
-    a_ppg = float(away_stats.get("pts_per_game", 72))
-    h_opp = float(home_stats.get("opp_pts_per_game", 70))
-    a_opp = float(away_stats.get("opp_pts_per_game", 71))
-    
-    # Home court in college is huge (~3.5 pts)
-    h_score = (h_ppg + a_opp) / 2 + 3.5
-    a_score = (a_ppg + h_opp) / 2
-    
-    engines["Baseline"] = {
-        "home_score": round(h_score, 1),
-        "away_score": round(a_score, 1),
-        "home_win_prob": round(1 / (1 + math.exp(-(h_score - a_score) / 4)), 3)
-    }
-    
-    # 2. Linear (Shooting/Rebounding weight)
-    h_fg = float(home_stats.get("fg_pct", 0.45))
-    a_fg = float(away_stats.get("fg_pct", 0.44))
-    h_reb = float(home_stats.get("reb_per_game", 35))
-    a_reb = float(away_stats.get("reb_per_game", 34))
-    
-    h_score_l = h_score + (h_fg - 0.44) * 20 + (h_reb - a_reb) * 0.2
-    a_score_l = a_score + (a_fg - 0.44) * 20
-    
-    engines["Linear"] = {
-        "home_score": round(h_score_l, 1),
-        "away_score": round(a_score_l, 1),
-        "home_win_prob": round(1 / (1 + math.exp(-(h_score_l - a_score_l) / 4.1)), 3)
-    }
-    
-    # 3. Tree (Tournament Rank / SOS priority)
-    h_rank = int(home_stats.get("rank", 50))
-    a_rank = int(away_stats.get("rank", 50))
-    
-    # Lower rank is better
-    h_score_t = h_score_l - (h_rank - 50) * 0.1
-    a_score_t = a_score_l - (a_rank - 50) * 0.1
-    
-    engines["Tree"] = {
-        "home_score": round(h_score_t, 1),
-        "away_score": round(a_score_t, 1),
-        "home_win_prob": round(1 / (1 + math.exp(-(h_score_t - a_score_t) / 4.2)), 3)
-    }
-    
-    # 4. MLP (Deep non-linear interaction)
-    # Neural net usually captures variables like "High Pace vs Slow Pace"
-    h_pace = float(home_stats.get("pace", 70))
-    a_pace = float(away_stats.get("pace", 70))
-    pace_factor = (h_pace + a_pace) / 140
-    
-    h_score_n = h_score_t * pace_factor
-    a_score_n = a_score_t * pace_factor
-    
-    engines["MLP"] = {
-        "home_score": round(h_score_n, 1),
-        "away_score": round(a_score_n, 1),
-        "home_win_prob": round(1 / (1 + math.exp(-(h_score_n - a_score_n) / 3.8)), 3)
-    }
+    try:
+        predictor = get_ncaab_predictor()
+        
+        # 1. Run Prediction (Handling data loading internally if needed)
+        # Note: predictor expects standardized names. We might need to handle loose matching if coming from unknown source.
+        # But usually 'home_team' and 'away_team' from frontend are clean enough or normalized there.
+        
+        # We pass 0 spread/total just to get the raw probabilities
+        pred_result = predictor.predict_game(home_team, away_team)
+        
+        if "error" in pred_result:
+            # Fallback if team not found or data missing
+            logger.warning(f"NCAAB Predictor error for {home_team} vs {away_team}: {pred_result['error']}")
+            return _fallback_logic(home_team, away_team, home_stats, away_stats)
+
+        # 2. Extract Heuristic Engine
+        # The predictor returns 'home_win_probability' from the heuristic logic
+        h_prob_heur = pred_result.get("home_win_probability", 0.5)
+        
+        engines["Heuristic (Stats)"] = {
+            "home_score": pred_result.get("predicted_score_home", 0),
+            "away_score": pred_result.get("predicted_score_away", 0),
+            "home_win_prob": round(h_prob_heur, 3),
+            "confidence": "Medium",
+            "description": "Based on Adjusted Efficiency & Pace"
+        }
+        
+        # 3. Extract XGBoost Engine
+        # If available (might be None if model file missing)
+        if pred_result.get("xgb_win_prob") is not None:
+            xgb_prob = pred_result["xgb_win_prob"]
+            engines["XGBoost (ML)"] = {
+                "home_win_prob": round(xgb_prob, 3),
+                "confidence": "High" if abs(xgb_prob - 0.5) > 0.15 else "Low",
+                "description": "Gradient Boosting on Rolling Stats (L5/L10)"
+            }
+            
+            # Add SHAP explanations if present
+            if "explanation" in pred_result and pred_result["explanation"]:
+                engines["XGBoost (ML)"]["explanation"] = pred_result["explanation"]
+        
+    except Exception as e:
+        logger.error(f"Error in NCAAB AI integration: {e}")
+        return _fallback_logic(home_team, away_team, home_stats, away_stats)
     
     return {
         "timestamp": datetime.now().isoformat(),
         "home_team": home_team,
         "away_team": away_team,
         "engines": engines,
-        "best_pick": "Home" if engines["MLP"]["home_win_prob"] > 0.5 else "Away"
+        "best_pick": _determine_best_pick(engines)
+    }
+
+def _determine_best_pick(engines):
+    # Prefer XGBoost if available, else Heuristic
+    if "XGBoost (ML)" in engines:
+        prob = engines["XGBoost (ML)"]["home_win_prob"]
+        return "Home" if prob > 0.5 else "Away"
+    elif "Heuristic (Stats)" in engines:
+        prob = engines["Heuristic (Stats)"]["home_win_prob"]
+        return "Home" if prob > 0.5 else "Away"
+    return "Unknown"
+
+def _fallback_logic(home_team, away_team, home_stats, away_stats):
+    """Original simple logic as fallback"""
+    import math
+    h_ppg = float(home_stats.get("pts_per_game", 75))
+    a_ppg = float(away_stats.get("pts_per_game", 72))
+    h_opp = float(home_stats.get("opp_pts_per_game", 70))
+    a_opp = float(away_stats.get("opp_pts_per_game", 71))
+    
+    h_score = (h_ppg + a_opp) / 2 + 3.5
+    a_score = (a_ppg + h_opp) / 2
+    
+    return {
+        "timestamp": datetime.now().isoformat(),
+        "home_team": home_team,
+        "away_team": away_team,
+        "engines": {
+            "Baseline (Fallback)": {
+                "home_score": round(h_score, 1),
+                "away_score": round(a_score, 1),
+                "home_win_prob": round(1 / (1 + math.exp(-(h_score - a_score) / 4)), 3)
+            }
+        },
+        "best_pick": "Home" if h_score > a_score else "Away"
     }
