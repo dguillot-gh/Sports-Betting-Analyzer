@@ -9,6 +9,7 @@ Uses their pre-trained XGBoost models (68.9% ML accuracy) and data pipeline.
 import logging
 import os
 import re
+import asyncio
 import sys
 import json
 import traceback
@@ -18,6 +19,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
+import aiohttp
 
 logger = logging.getLogger(__name__)
 
@@ -64,9 +66,12 @@ except ImportError:
     ONNX_AVAILABLE = False
     logger.warning("ONNX Runtime not available")
 
-# Headers for NBA API
+# Enhanced Headers for NBA API to avoid blocks
 NBA_API_HEADERS = {
     "Accept": "*/*",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Connection": "keep-alive",
     "Origin": "https://www.nba.com",
     "Referer": "https://www.nba.com/",
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -113,6 +118,7 @@ class KyleskomPredictor:
         self.df = None
         self._models_loaded = False
         self._data_loaded = False
+        self._lock = asyncio.Lock()
 
     def _select_model_path(self, kind: str, base_path: Path, pattern: re.Pattern, suffix: str = ".json") -> Optional[Path]:
         if not base_path.exists(): return None
@@ -176,32 +182,47 @@ class KyleskomPredictor:
             return calibrator.predict_proba(data)
         return model.predict(xgb.DMatrix(data))
 
-    async def fetch_data_from_nba_api(self) -> bool:
-        if self._data_loaded and self.df is not None: return True
-        import aiohttp
-        now = datetime.now()
-        season = f"{now.year}-{str(now.year + 1)[2:]}" if now.month >= 10 else f"{now.year - 1}-{str(now.year)[2:]}"
-        url = f"https://stats.nba.com/stats/leaguedashteamstats?Conference=&DateFrom=&DateTo=&Division=&GameScope=&GameSegment=&Height=&ISTRound=&LastNGames=0&LeagueID=00&Location=&MeasureType=Base&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=PerGame&Period=0&PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=N&Season={season}&SeasonSegment=&SeasonType=Regular%20Season&ShotClockRange=&StarterBench=&TeamID=0&TwoWay=0&VsConference=&VsDivision="
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=NBA_API_HEADERS, timeout=30) as response:
-                    if response.status != 200: 
-                        logger.warning(f"NBA API Fetch returned HTTP {response.status}")
-                        return False
-                    data = await response.json()
+    async def fetch_data_from_nba_api(self, retry_count=2) -> bool:
+        async with self._lock:
+            if self._data_loaded: return True # Already attempted (success or fail)
             
-            result_sets = data.get('resultSets', [])
-            if not result_sets: return False
+            now = datetime.now()
+            season = f"{now.year}-{str(now.year + 1)[2:]}" if now.month >= 10 else f"{now.year - 1}-{str(now.year)[2:]}"
+            url = f"https://stats.nba.com/stats/leaguedashteamstats?Conference=&DateFrom=&DateTo=&Division=&GameScope=&GameSegment=&Height=&ISTRound=&LastNGames=0&LeagueID=00&Location=&MeasureType=Base&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=PerGame&Period=0&PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=N&Season={season}&SeasonSegment=&SeasonType=Regular%20Season&ShotClockRange=&StarterBench=&TeamID=0&TwoWay=0&VsConference=&VsDivision="
             
-            rows = result_sets[0]['rowSet']
-            headers = result_sets[0]['headers']
-            self.df = pd.DataFrame(data=rows, columns=headers)
-            self._data_loaded = True
-            return True
-        except Exception as e:
-            logger.error(f"NBA API Fetch error: {e}")
-            logger.error(traceback.format_exc())
-            return False
+            logger.info(f"Kyleskom adapter starting NBA API fetch for season {season}")
+            
+            success = False
+            for attempt in range(retry_count):
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        # Use a smaller timeout for the first attempt 
+                        timeout = 10 if attempt == 0 else 20
+                        async with session.get(url, headers=NBA_API_HEADERS, timeout=timeout) as response:
+                            if response.status == 200:
+                                data = await response.json()
+                                result_sets = data.get('resultSets', [])
+                                if not result_sets: 
+                                    logger.warning("NBA API returned 200 but empty resultSets")
+                                    continue
+                                
+                                rows = result_sets[0]['rowSet']
+                                headers = result_sets[0]['headers']
+                                self.df = pd.DataFrame(data=rows, columns=headers)
+                                success = True
+                                logger.info(f"Kyleskom adapter successfully fetched {len(self.df)} teams from NBA API")
+                                break
+                            else:
+                                logger.warning(f"NBA API Fetch attempt {attempt+1} failed with HTTP {response.status}")
+                except Exception as e:
+                    logger.error(f"NBA API Fetch attempt {attempt+1} error: {e}")
+                
+                if not success and attempt < retry_count - 1:
+                    await asyncio.sleep(1) # Short backoff
+            
+            # Mark as attempted so we don't block subsequent games in the same request loop
+            self._data_loaded = True 
+            return success
 
     async def predict_game(self, home_team: str, away_team: str, total_line: float = 225.0, home_ml: int = None, away_ml: int = None) -> Dict[str, Any]:
         home_team, away_team = normalize_team_name(home_team), normalize_team_name(away_team)
@@ -209,13 +230,13 @@ class KyleskomPredictor:
         # Load models
         if not self._models_loaded: self.load_models()
         
-        # Fetch data
+        # Fetch data (will use lock inside to avoid duplicate hits)
         if not self._data_loaded: await self.fetch_data_from_nba_api()
 
         # If still no data, we cannot proceed with this specific model
         if self.df is None:
-            logger.warning(f"Returning error for {home_team} vs {away_team}: No team stats available (API failed)")
-            return {"error": "Could not fetch current NBA team stats for kyleskom models."}
+            # Avoid logging this for EVERY game if the API is known to be down
+            return {"error": "NBA team stats unavailable (API fetch failed)."}
 
         try:
             def find_row(name):
