@@ -11,6 +11,7 @@ import os
 import re
 import sys
 import json
+import traceback
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 from pathlib import Path
@@ -68,7 +69,7 @@ NBA_API_HEADERS = {
     "Accept": "*/*",
     "Origin": "https://www.nba.com",
     "Referer": "https://www.nba.com/",
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0.1 Safari/605.1.15"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 
 # Team name mapping
@@ -128,7 +129,6 @@ class KyleskomPredictor:
         calibration_path = model_path.with_name(f"{model_path.stem}_calibration.pkl")
         if calibration_path.exists():
             try:
-                # joblib.load is vulnerable to BoosterWrapper mismatch; handled at module level
                 calibrator = joblib.load(calibration_path)
                 logger.info(f"Loaded calibration: {calibration_path.name}")
                 return calibrator
@@ -185,35 +185,54 @@ class KyleskomPredictor:
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, headers=NBA_API_HEADERS, timeout=30) as response:
-                    if response.status != 200: return False
+                    if response.status != 200: 
+                        logger.warning(f"NBA API Fetch returned HTTP {response.status}")
+                        return False
                     data = await response.json()
-            rows = data['resultSets'][0]['rowSet']
-            headers = data['resultSets'][0]['headers']
+            
+            result_sets = data.get('resultSets', [])
+            if not result_sets: return False
+            
+            rows = result_sets[0]['rowSet']
+            headers = result_sets[0]['headers']
             self.df = pd.DataFrame(data=rows, columns=headers)
             self._data_loaded = True
             return True
         except Exception as e:
             logger.error(f"NBA API Fetch error: {e}")
+            logger.error(traceback.format_exc())
             return False
 
     async def predict_game(self, home_team: str, away_team: str, total_line: float = 225.0, home_ml: int = None, away_ml: int = None) -> Dict[str, Any]:
         home_team, away_team = normalize_team_name(home_team), normalize_team_name(away_team)
+        
+        # Load models
         if not self._models_loaded: self.load_models()
+        
+        # Fetch data
         if not self._data_loaded: await self.fetch_data_from_nba_api()
+
+        # If still no data, we cannot proceed with this specific model
+        if self.df is None:
+            logger.warning(f"Returning error for {home_team} vs {away_team}: No team stats available (API failed)")
+            return {"error": "Could not fetch current NBA team stats for kyleskom models."}
 
         try:
             def find_row(name):
                 r = self.df[self.df['TEAM_NAME'] == name]
-                return r if len(r) > 0 else self.df[self.df['TEAM_NAME'].str.contains(name.split()[-1], case=False, na=False)]
+                if len(r) > 0: return r
+                # Fallback to suffix match
+                return self.df[self.df['TEAM_NAME'].str.contains(name.split()[-1], case=False, na=False)]
 
             h_row, a_row = find_row(home_team), find_row(away_team)
-            if len(h_row) == 0 or len(a_row) == 0: return {"error": f"Stats missing for {home_team} or {away_team}"}
+            if len(h_row) == 0 or len(a_row) == 0: 
+                return {"error": f"Stats missing for {home_team} or {away_team}"}
 
             h_stats = h_row.iloc[0].drop(['TEAM_ID', 'TEAM_NAME'], errors='ignore')
             a_stats = a_row.iloc[0].drop(['TEAM_ID', 'TEAM_NAME'], errors='ignore').rename(lambda x: f"{x}.1")
             stats = pd.concat([h_stats, a_stats])
             
-            # Rest days (re-implement basic version to avoid crash)
+            # Rest days (simplified default)
             stats['Days-Rest-Home'], stats['Days-Rest-Away'] = 2.0, 2.0
             data = stats.values.astype(float).reshape(1, -1)
             
@@ -239,6 +258,7 @@ class KyleskomPredictor:
             # O/U Prediction
             ou_pred = None
             if self.xgb_ou and total_line:
+                # Inject total_line after internal stats (104 columns in kyleskom model)
                 data_ou = np.insert(data, 104, total_line, axis=1)
                 ou_res = self._predict_probs(self.xgb_ou, data_ou, self.xgb_ou_calibrator)[0]
                 if len(ou_res) >= 2:
@@ -267,7 +287,8 @@ class KyleskomPredictor:
                 'kelly_home': self._kelly_criterion(home_ml, home_win_prob) if home_ml else None
             }
         except Exception as e:
-            logger.error(f"Prediction Crash: {e}", exc_info=True)
+            logger.error(f"Kyleskom Prediction Crash for {home_team} vs {away_team}: {e}")
+            logger.error(traceback.format_exc())
             return {"error": str(e)}
 
     def _expected_value(self, Pwin, odds):
