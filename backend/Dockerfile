@@ -23,7 +23,7 @@ RUN R -e "options(repos = c(CRAN = 'https://packagemanager.posit.co/cran/__linux
 # 2. Install Build dependencies for ONNX conversion
 # Note: These are heavy but are discarded in Stage 2
 # We pin numpy exactly to 1.26.4 to avoid breaking TensorFlow (which doesn't support NumPy 2.x yet)
-RUN pip install --no-cache-dir "numpy==1.26.4" "tensorflow<2.16" "tf2onnx<1.15" onnx xgboost
+RUN pip install --no-cache-dir "numpy==1.26.4" "tensorflow<2.16" "tf2onnx<1.16" "onnx<1.16" "ml_dtypes<0.4.0" xgboost
 
 # 3. Download and Convert Models
 COPY scripts/download_xgb_models.py scripts/convert_to_onnx.py ./scripts/
