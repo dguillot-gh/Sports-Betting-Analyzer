@@ -224,13 +224,14 @@ class KyleskomPredictor:
             return None
             
         candidates = list(base_path.glob(f"*{suffix}"))
+        if not candidates:
+            # Fallback: try recursive if not found in root
+            candidates = list(base_path.glob(f"**/*{suffix}"))
+            
         candidates = [c for c in candidates if kind in c.name and pattern.search(c.name)]
         
         if not candidates:
-            # Try recursive search if not flat
-            candidates = [p for p in candidates if p.suffix in {'.json', '.h5', '.keras'}]
-            if not candidates:
-                return None
+            return None
 
         def score(path):
             match = pattern.search(path.name)
@@ -240,6 +241,22 @@ class KyleskomPredictor:
         best_model = max(candidates, key=score)
         logger.info(f"Selected best {kind} model: {best_model.name}")
         return best_model
+
+    def _predict_probs(self, model, data, calibrator=None):
+        """Helper to get calibrated probabilities."""
+        if not XGB_AVAILABLE:
+            return None
+        
+        dmatrix = xgb.DMatrix(data)
+        probs = model.predict(dmatrix)
+        
+        if calibrator:
+            try:
+                # IsotonicRegression or LogisticRegression calibrator
+                probs = calibrator.predict_proba(probs)
+            except Exception as e:
+                logger.debug(f"Calibration failed: {e}")
+        return probs
 
     def _load_calibrator(self, model_path: Path):
         """Load calibration model if exists (logic from XGBoost_Runner.py)."""
