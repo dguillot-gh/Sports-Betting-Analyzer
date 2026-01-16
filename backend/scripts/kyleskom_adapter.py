@@ -16,12 +16,20 @@ import traceback
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 from pathlib import Path
+from types import SimpleNamespace
 import joblib
 import numpy as np
 import pandas as pd
 import aiohttp
 
 logger = logging.getLogger(__name__)
+
+# For Sklearn compatibility (needed for tags in 1.6+)
+try:
+    from sklearn.base import BaseEstimator, ClassifierMixin
+    SKLEARN_BASE_AVAILABLE = True
+except ImportError:
+    SKLEARN_BASE_AVAILABLE = False
 
 # Path to the cloned reference repo
 REFERENCE_REPO_PATH = os.path.join(os.path.dirname(__file__), 'nba_ml_reference')
@@ -31,22 +39,69 @@ XGB_ACCURACY_PATTERN = re.compile(r"XGBoost_(\d+(?:\.\d+)?)%_")
 NN_ML_PATTERN = re.compile(r"Trained-Model-ML-(\d+(?:\.\d+)?)")
 NN_OU_PATTERN = re.compile(r"Trained-Model-OU-(\d+(?:\.\d+)?)")
 
-# --- BoosterWrapper Fix for Joblib/Pickle ---
-class BoosterWrapper:
-    """Wrapper for XGBoost Booster to satisfy sklearn's CalibratedClassifierCV interface."""
-    def __init__(self, booster, num_class):
+# --- BoosterWrapper Fix for Joblib/Pickle & Sklearn 1.6+ ---
+base_classes = (BaseEstimator, ClassifierMixin) if SKLEARN_BASE_AVAILABLE else (object,)
+
+class BoosterWrapper(*base_classes):
+    """
+    Wrapper for XGBoost Booster to satisfy sklearn's CalibratedClassifierCV interface.
+    Explicitly set as classifier for Sklearn 1.6+ compatibility.
+    """
+    _estimator_type = "classifier"
+
+    def __init__(self, booster=None, num_class=2):
         self.booster = booster
-        self.classes_ = np.arange(num_class)
-    def fit(self, X, y): return self
+        self.num_class = num_class
+        try:
+            self.classes_ = np.arange(num_class)
+        except Exception:
+            self.classes_ = np.array([0, 1])
+        
+    def fit(self, X, y): 
+        # Already fitted model
+        return self
+        
     def predict_proba(self, X):
         import xgboost as xgb
-        return self.booster.predict(xgb.DMatrix(X))
+        # Ensure we use DMatrix for booster
+        dmat = xgb.DMatrix(X)
+        return self.booster.predict(dmat)
+    
+    # Sklearn boilerplate for parameters
+    def get_params(self, deep=True):
+        return {"booster": self.booster, "num_class": self.num_class}
+    
+    def set_params(self, **parameters):
+        for parameter, value in parameters.items():
+            setattr(self, parameter, value)
+        if hasattr(self, 'num_class'):
+            self.classes_ = np.arange(self.num_class)
+        return self
+
+    def __sklearn_tags__(self):
+        """Standardize tags for Sklearn 1.6+ to ensure it's seen as a classifier."""
+        return SimpleNamespace(
+            estimator_type="classifier",
+            classifier_tags=SimpleNamespace(pos_label=None),
+            regressor_tags=None,
+            transformer_tags=None,
+            target_tags=SimpleNamespace(single_output=True, required=False),
+            input_tags=SimpleNamespace(
+                two_d_array=True, one_d_array=False, three_d_array=False,
+                sparse=False, categorical=False, string=False, dict=False,
+                pairwise=False, allow_nan=False, positive_only=False
+            ),
+            array_api_support=False,
+            no_validation=False,
+            non_deterministic=False,
+            requires_fit=True,
+            _skip_test=False
+        )
 
 # Handle the case where joblib expects BoosterWrapper in __main__ (uvicorn)
 try:
     import __main__
-    if not hasattr(__main__, 'BoosterWrapper'):
-        __main__.BoosterWrapper = BoosterWrapper
+    __main__.BoosterWrapper = BoosterWrapper
 except Exception:
     pass
 
@@ -66,7 +121,7 @@ except ImportError:
     ONNX_AVAILABLE = False
     logger.warning("ONNX Runtime not available")
 
-# Headers for NBA API - matched to simple model which we know works
+# Headers for NBA API
 NBA_API_HEADERS = {
     "Accept": "*/*",
     "Origin": "https://www.nba.com",
@@ -181,10 +236,7 @@ class KyleskomPredictor:
 
     async def fetch_data_from_nba_api(self, retry_count=2) -> bool:
         async with self._lock:
-            # 1. Check if already loaded in this instance
             if self.df is not None: return True
-            
-            # 2. Check Shared Cache (populated by model_testing_predictor)
             try:
                 from scripts.nba_cache import get_nba_df
                 cached_df = get_nba_df()
@@ -196,14 +248,13 @@ class KyleskomPredictor:
             except Exception as e:
                 logger.warning(f"Error checking shared cache: {e}")
 
-            # 3. Fallback to direct API if cache is unavailable
-            if self._data_loaded: return True # Already attempted
+            if self._data_loaded: return True 
             
             now = datetime.now()
             season = f"{now.year}-{str(now.year + 1)[2:]}" if now.month >= 10 else f"{now.year - 1}-{str(now.year)[2:]}"
             url = f"https://stats.nba.com/stats/leaguedashteamstats?Conference=&DateFrom=&DateTo=&Division=&GameScope=&GameSegment=&Height=&ISTRound=&LastNGames=0&LeagueID=00&Location=&MeasureType=Base&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=PerGame&Period=0&PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=N&Season={season}&SeasonSegment=&SeasonType=Regular%20Season&ShotClockRange=&StarterBench=&TeamID=0&TwoWay=0&VsConference=&VsDivision="
             
-            logger.info(f"Kyleskom adapter starting direct NBA API fetch for season {season} (Cache miss)")
+            logger.info(f"Kyleskom adapter starting direct NBA API fetch for season {season}")
             
             success = False
             for attempt in range(retry_count):
@@ -218,16 +269,15 @@ class KyleskomPredictor:
                                     rows = result_sets[0]['rowSet']
                                     headers = result_sets[0]['headers']
                                     self.df = pd.DataFrame(data=rows, columns=headers)
-                                    # Also update shared cache for others
                                     from scripts.nba_cache import set_nba_df
                                     set_nba_df(self.df)
                                     success = True
-                                    logger.info(f"Kyleskom adapter successfully fetched {len(self.df)} teams from NBA API")
+                                    logger.info(f"Kyleskom adapter fetched {len(self.df)} teams")
                                     break
                             else:
-                                logger.warning(f"NBA API Fetch attempt {attempt+1} failed with HTTP {response.status}")
+                                logger.warning(f"NBA API status {response.status}")
                 except Exception as e:
-                    logger.error(f"NBA API Fetch attempt {attempt+1} error: {e}")
+                    logger.error(f"NBA API Fetch error: {e}")
                 
                 if not success and attempt < retry_count - 1:
                     await asyncio.sleep(1)
@@ -237,43 +287,37 @@ class KyleskomPredictor:
 
     async def predict_game(self, home_team: str, away_team: str, total_line: float = 225.0, home_ml: int = None, away_ml: int = None) -> Dict[str, Any]:
         home_team, away_team = normalize_team_name(home_team), normalize_team_name(away_team)
-        
-        # Load models
         if not self._models_loaded: self.load_models()
-        
-        # Fetch data
         if self.df is None: await self.fetch_data_from_nba_api()
-
-        if self.df is None:
-            return {"error": "NBA team stats unavailable (API fetch failed)."}
+        if self.df is None: return {"error": "NBA team stats unavailable (API fetch failed)."}
 
         try:
             def find_row(name):
                 r = self.df[self.df['TEAM_NAME'] == name]
                 if len(r) > 0: return r
-                # Fallback to suffix match
                 return self.df[self.df['TEAM_NAME'].str.contains(name.split()[-1], case=False, na=False)]
 
             h_row, a_row = find_row(home_team), find_row(away_team)
-            if len(h_row) == 0 or len(a_row) == 0: 
-                return {"error": f"Stats missing for {home_team} or {away_team}"}
+            if len(h_row) == 0 or len(a_row) == 0: return {"error": f"Stats missing for {home_team} or {away_team}"}
 
             h_stats = h_row.iloc[0].drop(['TEAM_ID', 'TEAM_NAME'], errors='ignore')
             a_stats = a_row.iloc[0].drop(['TEAM_ID', 'TEAM_NAME'], errors='ignore').rename(lambda x: f"{x}.1")
             stats = pd.concat([h_stats, a_stats])
-            
-            # Rest days (simplified default)
             stats['Days-Rest-Home'], stats['Days-Rest-Away'] = 2.0, 2.0
             data = stats.values.astype(float).reshape(1, -1)
             
-            # XGB Prediction
             xgb_home_prob = 0.5
+            xgb_error = None
             if self.xgb_ml:
-                res = self._predict_probs(self.xgb_ml, data, self.xgb_ml_calibrator)[0]
-                xgb_home_prob = float(res[1]) if len(res) >= 2 else float(res)
+                try:
+                    res = self._predict_probs(self.xgb_ml, data, self.xgb_ml_calibrator)[0]
+                    xgb_home_prob = float(res[1]) if len(res) >= 2 else float(res[0])
+                except Exception as e:
+                    xgb_error = str(e)
+                    logger.error(f"XGB Prediction failed: {e}")
 
-            # NN Prediction (ONNX)
             nn_home_prob = None
+            nn_error = None
             if self.nn_ml:
                 try:
                     input_data = data.astype(np.float32)
@@ -283,21 +327,27 @@ class KyleskomPredictor:
                     nn_res = self.nn_ml.run(None, {input_name: data_norm})[0]
                     nn_home_prob = float(nn_res[0][1]) if nn_res.shape[1] >= 2 else float(nn_res[0][0])
                 except Exception as e:
-                    logger.error(f"NN ML Prediction failed: {e}")
+                    nn_error = str(e)
+                    logger.error(f"NN Prediction failed: {e}")
 
-            # O/U Prediction
             ou_pred = None
             if self.xgb_ou and total_line:
-                data_ou = np.insert(data, 104, total_line, axis=1)
-                ou_res = self._predict_probs(self.xgb_ou, data_ou, self.xgb_ou_calibrator)[0]
-                if len(ou_res) >= 2:
-                    ou_pred = {
-                        'pick': 'OVER' if ou_res[1] > ou_res[0] else 'UNDER',
-                        'confidence': float(round(max(ou_res) * 100, 1)),
-                        'total_line': float(total_line),
-                        'over_prob': float(round(ou_res[1], 3)),
-                        'under_prob': float(round(ou_res[0], 3))
-                    }
+                try:
+                    data_ou = np.insert(data, 104, total_line, axis=1)
+                    ou_res = self._predict_probs(self.xgb_ou, data_ou, self.xgb_ou_calibrator)[0]
+                    if len(ou_res) >= 2:
+                        ou_pred = {
+                            'pick': 'OVER' if ou_res[1] > ou_res[0] else 'UNDER',
+                            'confidence': float(round(max(ou_res) * 100, 1)),
+                            'total_line': float(total_line),
+                            'over_prob': float(round(ou_res[1], 3)),
+                            'under_prob': float(round(ou_res[0], 3))
+                        }
+                except Exception as e:
+                    logger.error(f"O/U Prediction failed: {e}")
+
+            if xgb_error and (nn_error or self.nn_ml is None):
+                return {"error": f"ML engines failed: XGB({xgb_error})"}
 
             home_win_prob = xgb_home_prob
             away_win_prob = 1 - home_win_prob
@@ -313,11 +363,11 @@ class KyleskomPredictor:
                 'over_under': ou_pred,
                 'ev_home': self._expected_value(home_win_prob, home_ml) if home_ml else None,
                 'ev_away': self._expected_value(away_win_prob, away_ml) if away_ml else None,
-                'kelly_home': self._kelly_criterion(home_ml, home_win_prob) if home_ml else None
+                'kelly_home': self._kelly_criterion(home_ml, home_win_prob) if home_ml else None,
+                'xgb_error': xgb_error, 'nn_error': nn_error
             }
         except Exception as e:
-            logger.error(f"Kyleskom Prediction Crash for {home_team} vs {away_team}: {e}")
-            logger.error(traceback.format_exc())
+            logger.error(f"Kyleskom Orchestration Crash: {e}")
             return {"error": str(e)}
 
     def _expected_value(self, Pwin, odds):
