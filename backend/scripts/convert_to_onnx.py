@@ -4,6 +4,11 @@ from pathlib import Path
 
 # Try to import heavy dependencies (only needed during conversion)
 try:
+    import numpy as np
+    # Monkey-patch np.object for compatibility with newer numpy versions and older tf2onnx
+    if not hasattr(np, "object"):
+        np.object = object
+        
     import tensorflow as tf
     import tf2onnx
     import onnx

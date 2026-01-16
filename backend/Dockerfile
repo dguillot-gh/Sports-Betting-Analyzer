@@ -22,7 +22,7 @@ RUN R -e "options(repos = c(CRAN = 'https://packagemanager.posit.co/cran/__linux
 
 # 2. Install Build dependencies for ONNX conversion
 # Note: These are heavy but are discarded in Stage 2
-RUN pip install --no-cache-dir --default-timeout=1000 tensorflow tf2onnx onnx
+RUN pip install --no-cache-dir --default-timeout=1000 tensorflow tf2onnx onnx "numpy<1.24"
 RUN pip install --no-cache-dir --default-timeout=1000 xgboost
 
 # 3. Download and Convert Models
