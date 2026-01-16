@@ -66,15 +66,12 @@ except ImportError:
     ONNX_AVAILABLE = False
     logger.warning("ONNX Runtime not available")
 
-# Enhanced Headers for NBA API to avoid blocks
+# Headers for NBA API - matched to simple model which we know works
 NBA_API_HEADERS = {
     "Accept": "*/*",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Connection": "keep-alive",
     "Origin": "https://www.nba.com",
     "Referer": "https://www.nba.com/",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 }
 
 # Team name mapping
@@ -184,43 +181,57 @@ class KyleskomPredictor:
 
     async def fetch_data_from_nba_api(self, retry_count=2) -> bool:
         async with self._lock:
-            if self._data_loaded: return True # Already attempted (success or fail)
+            # 1. Check if already loaded in this instance
+            if self.df is not None: return True
+            
+            # 2. Check Shared Cache (populated by model_testing_predictor)
+            try:
+                from scripts.nba_cache import get_nba_df
+                cached_df = get_nba_df()
+                if cached_df is not None:
+                    self.df = cached_df
+                    self._data_loaded = True
+                    logger.info("Kyleskom adapter using shared NBA data cache")
+                    return True
+            except Exception as e:
+                logger.warning(f"Error checking shared cache: {e}")
+
+            # 3. Fallback to direct API if cache is unavailable
+            if self._data_loaded: return True # Already attempted
             
             now = datetime.now()
             season = f"{now.year}-{str(now.year + 1)[2:]}" if now.month >= 10 else f"{now.year - 1}-{str(now.year)[2:]}"
             url = f"https://stats.nba.com/stats/leaguedashteamstats?Conference=&DateFrom=&DateTo=&Division=&GameScope=&GameSegment=&Height=&ISTRound=&LastNGames=0&LeagueID=00&Location=&MeasureType=Base&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=PerGame&Period=0&PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=N&Season={season}&SeasonSegment=&SeasonType=Regular%20Season&ShotClockRange=&StarterBench=&TeamID=0&TwoWay=0&VsConference=&VsDivision="
             
-            logger.info(f"Kyleskom adapter starting NBA API fetch for season {season}")
+            logger.info(f"Kyleskom adapter starting direct NBA API fetch for season {season} (Cache miss)")
             
             success = False
             for attempt in range(retry_count):
                 try:
                     async with aiohttp.ClientSession() as session:
-                        # Use a smaller timeout for the first attempt 
                         timeout = 10 if attempt == 0 else 20
                         async with session.get(url, headers=NBA_API_HEADERS, timeout=timeout) as response:
                             if response.status == 200:
                                 data = await response.json()
                                 result_sets = data.get('resultSets', [])
-                                if not result_sets: 
-                                    logger.warning("NBA API returned 200 but empty resultSets")
-                                    continue
-                                
-                                rows = result_sets[0]['rowSet']
-                                headers = result_sets[0]['headers']
-                                self.df = pd.DataFrame(data=rows, columns=headers)
-                                success = True
-                                logger.info(f"Kyleskom adapter successfully fetched {len(self.df)} teams from NBA API")
-                                break
+                                if result_sets:
+                                    rows = result_sets[0]['rowSet']
+                                    headers = result_sets[0]['headers']
+                                    self.df = pd.DataFrame(data=rows, columns=headers)
+                                    # Also update shared cache for others
+                                    from scripts.nba_cache import set_nba_df
+                                    set_nba_df(self.df)
+                                    success = True
+                                    logger.info(f"Kyleskom adapter successfully fetched {len(self.df)} teams from NBA API")
+                                    break
                             else:
                                 logger.warning(f"NBA API Fetch attempt {attempt+1} failed with HTTP {response.status}")
                 except Exception as e:
                     logger.error(f"NBA API Fetch attempt {attempt+1} error: {e}")
                 
                 if not success and attempt < retry_count - 1:
-                    await asyncio.sleep(1) # Short backoff
+                    await asyncio.sleep(1)
             
-            # Mark as attempted so we don't block subsequent games in the same request loop
             self._data_loaded = True 
             return success
 
@@ -230,12 +241,10 @@ class KyleskomPredictor:
         # Load models
         if not self._models_loaded: self.load_models()
         
-        # Fetch data (will use lock inside to avoid duplicate hits)
-        if not self._data_loaded: await self.fetch_data_from_nba_api()
+        # Fetch data
+        if self.df is None: await self.fetch_data_from_nba_api()
 
-        # If still no data, we cannot proceed with this specific model
         if self.df is None:
-            # Avoid logging this for EVERY game if the API is known to be down
             return {"error": "NBA team stats unavailable (API fetch failed)."}
 
         try:
@@ -279,7 +288,6 @@ class KyleskomPredictor:
             # O/U Prediction
             ou_pred = None
             if self.xgb_ou and total_line:
-                # Inject total_line after internal stats (104 columns in kyleskom model)
                 data_ou = np.insert(data, 104, total_line, axis=1)
                 ou_res = self._predict_probs(self.xgb_ou, data_ou, self.xgb_ou_calibrator)[0]
                 if len(ou_res) >= 2:

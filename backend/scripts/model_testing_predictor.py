@@ -103,6 +103,15 @@ async def fetch_nba_team_stats_from_api() -> Dict[str, Dict]:
         headers = team_data.get('headers', [])
         rows = team_data.get('rowSet', [])
         
+        # Populate shared cache for kyleskom adapter
+        try:
+            from scripts.nba_cache import set_nba_df
+            import pandas as pd
+            df = pd.DataFrame(data=rows, columns=headers)
+            set_nba_df(df)
+        except Exception as e:
+            logger.warning(f"Failed to populate shared NBA cache: {e}")
+
         # Convert to dict keyed by team name
         team_stats = {}
         for row in rows:
