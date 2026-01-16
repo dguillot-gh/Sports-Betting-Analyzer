@@ -15,6 +15,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # 1. Install R dependencies (Using Posit Binary Repo to skip compilation)
+# Force arrow to use precompiled binaries and skip long C++ compilation
+ENV LIBARROW_BINARY=true
+ENV NOT_CRAN=true
 RUN R -e "options(repos = c(CRAN = 'https://packagemanager.posit.co/cran/__linux__/bookworm/latest')); install.packages(c('jsonlite', 'dplyr', 'nflseedR', 'nflreadr', 'baseballr', 'hoopR', 'arrow'))"
 
 # 2. Install Build dependencies for ONNX conversion
