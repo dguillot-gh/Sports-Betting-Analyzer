@@ -35,25 +35,14 @@ except ImportError:
     XGB_AVAILABLE = False
     logger.warning("XGBoost not available")
 
-# Check if TensorFlow available
+# Check if ONNX Runtime available
 try:
-    import tensorflow as tf
-    try:
-        from tensorflow.keras.models import load_model
-    except ImportError:
-        try:
-            from keras.models import load_model
-        except ImportError:
-            # Fallback for some TF versions
-            from tensorflow.python.keras.models import load_model
-    TF_AVAILABLE = True
-    logger.info("TensorFlow/Keras environment detected")
-except ImportError as e:
-    TF_AVAILABLE = False
-    logger.warning(f"TensorFlow not available: {e}")
-except Exception as e:
-    TF_AVAILABLE = False
-    logger.error(f"Error checking TensorFlow availability: {e}")
+    import onnxruntime as ort
+    ONNX_AVAILABLE = True
+    logger.info("ONNX Runtime environment detected")
+except ImportError:
+    ONNX_AVAILABLE = False
+    logger.warning("ONNX Runtime not available")
 
 import numpy as np
 import pandas as pd
@@ -229,19 +218,16 @@ class KyleskomPredictor:
         self._models_loaded = False
         self._data_loaded = False
     
-    def _select_model_path(self, kind: str, base_path: Path, pattern: re.Pattern) -> Path:
-        """Select best model dynamically based on accuracy (logic from XGBoost_Runner.py)."""
+    def _select_model_path(self, kind: str, base_path: Path, pattern: re.Pattern, suffix: str = ".json") -> Path:
+        """Find the best model by parsing accuracy from filename (1:1 with reference runner)."""
         if not base_path.exists():
             return None
             
-        candidates = list(base_path.glob(f"*{kind}*"))
-        # Filter valid extensions
-        candidates = [p for p in candidates if p.suffix in {'.json', '.h5', '.keras'}]
+        candidates = list(base_path.glob(f"*{suffix}"))
+        candidates = [c for c in candidates if kind in c.name and pattern.search(c.name)]
         
         if not candidates:
             # Try recursive search if not flat
-            candidates = list(base_path.rglob(f"*{kind}*"))
-            # Filter valid extensions again
             candidates = [p for p in candidates if p.suffix in {'.json', '.h5', '.keras'}]
             if not candidates:
                 return None
@@ -299,28 +285,28 @@ class KyleskomPredictor:
             except Exception as e:
                 logger.error(f"Error loading XGBoost models: {e}")
 
-        # 2. Load Neural Networks
-        if TF_AVAILABLE:
+        # 2. Load Neural Networks (ONNX)
+        if ONNX_AVAILABLE:
             try:
                 search_dir = NN_DIR if NN_DIR.exists() else MODELS_ROOT
                 
-                # NN_Runner looks for "Trained-Model-ML-"
-                ml_path = self._select_model_path("Trained-Model-ML-", search_dir, NN_ML_PATTERN)
+                # Locate ONNX models
+                ml_path = self._select_model_path("Trained-Model-ML-", search_dir, NN_ML_PATTERN, suffix=".onnx")
                 if ml_path:
-                    self.nn_ml = load_model(str(ml_path), compile=False)
-                    logger.info(f"Loaded NN ML model: {ml_path.name}")
+                    self.nn_ml = ort.InferenceSession(str(ml_path))
+                    logger.info(f"Loaded NN ML model (ONNX): {ml_path.name}")
                 
-                ou_path = self._select_model_path("Trained-Model-OU-", search_dir, NN_OU_PATTERN)
+                ou_path = self._select_model_path("Trained-Model-OU-", search_dir, NN_OU_PATTERN, suffix=".onnx")
                 if ou_path:
-                    self.nn_ou = load_model(str(ou_path), compile=False)
-                    logger.info(f"Loaded NN OU model: {ou_path.name}")
+                    self.nn_ou = ort.InferenceSession(str(ou_path))
+                    logger.info(f"Loaded NN OU model (ONNX): {ou_path.name}")
                 
                 if not self.nn_ml and not self.nn_ou:
-                    logger.warning(f"No NN models found in {search_dir}")
+                    logger.warning(f"No ONNX NN models found in {search_dir}")
             except Exception as e:
-                logger.error(f"Error loading NN models: {e}")
+                logger.error(f"Error loading ONNX models: {e}")
         else:
-            logger.info("Skipping NN model load (TensorFlow not available)")
+            logger.info("Skipping NN model load (ONNX Runtime not available)")
 
         self._models_loaded = True
         return True
@@ -492,21 +478,33 @@ class KyleskomPredictor:
                 else:
                     xgb_home_prob = float(ml_probs)
             
-            # Neural Network Prediction (Secondary)
+            # Neural Network Prediction (Secondary - ONNX)
             nn_home_prob = None
+            if self.nn_ou_sessions_active: # Logic check for session
+                 pass 
+            
             if self.nn_ml:
                 try:
-                    # NN requires normalized data (per NN_Runner.py)
-                    # Note: normalize() in keras works on the array.
-                    data_norm = tf.keras.utils.normalize(data, axis=1)
-                    nn_pred = self.nn_ml.predict(data_norm, verbose=0)
+                    # ONNX expects float32
+                    input_data = data.astype(np.float32)
+                    
+                    # Normalize manually if needed, or if the model was trained with normalized data
+                    # Note: Many onnx-converted models already expect the normalized range or handle it
+                    # In kyleskom's repo, NN_Runner uses tf.keras.utils.normalize
+                    # We replicate simple l2 normalization: x / norm(x)
+                    norm = np.linalg.norm(input_data, axis=1, keepdims=True)
+                    data_norm = input_data / (norm + 1e-7)
+                    
+                    # Run Session
+                    input_name = self.nn_ml.get_inputs()[0].name
+                    nn_pred = self.nn_ml.run(None, {input_name: data_norm})[0]
                     
                     if nn_pred.shape[1] >= 2:
                         nn_home_prob = float(nn_pred[0][1])
                     else:
                         nn_home_prob = float(nn_pred[0][0])
                 except Exception as e:
-                    logger.error(f"NN Prediction failed: {e}")
+                    logger.error(f"NN ML Prediction failed: {e}")
 
             # Use XGB as primary for EV/Kelly calculations
             home_win_prob = xgb_home_prob
@@ -515,7 +513,9 @@ class KyleskomPredictor:
             # OU Prediction
             ou_pred = None
             if self.xgb_ou and total_line:
-                data_ou = np.append(data, [[total_line]], axis=1)
+                # Correct feature order for O/U model: [Stats (104)] + [Total Line (1)] + [Rest Days (2)]
+                # Currently 'data' is [Stats (104)] + [Rest Days (2)], so we insert at 104
+                data_ou = np.insert(data, 104, total_line, axis=1)
                 ou_probs = self._predict_probs(self.xgb_ou, data_ou, self.xgb_uo_calibrator)[0]
                 
                 if len(ou_probs) >= 2:

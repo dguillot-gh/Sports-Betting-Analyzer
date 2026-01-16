@@ -16,8 +16,8 @@ async def test_adapter():
         return
     
     print("[OK] Models loaded successfully")
-    print(f"  ML model: {predictor.model_ml}")
-    print(f"  O/U model: {predictor.model_ou}")
+    print(f"  ML model: {predictor.xgb_ml}")
+    print(f"  O/U model: {predictor.xgb_ou}")
     
     # Fetch NBA data
     success = await predictor.fetch_data_from_nba_api()
