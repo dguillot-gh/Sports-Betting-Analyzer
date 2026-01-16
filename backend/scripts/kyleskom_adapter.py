@@ -333,6 +333,9 @@ class KyleskomPredictor:
             ou_pred = None
             if self.xgb_ou and total_line:
                 try:
+                    # Realign: The model expects 107 features. 
+                    # Training data order: [Stats(104), OU(1), Rest(2)]
+                    # Current data has [Stats(104), Rest(2)]. We must insert OU at index 104.
                     data_ou = np.insert(data, 104, total_line, axis=1)
                     ou_res = self._predict_probs(self.xgb_ou, data_ou, self.xgb_ou_calibrator)[0]
                     if len(ou_res) >= 2:
