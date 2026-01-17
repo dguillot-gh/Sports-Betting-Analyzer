@@ -100,6 +100,38 @@ def diagnose():
         
         if actual_len == expected_len:
             print("SUCCESS: Feature Count Matches Model (107).")
+            
+            # 4. Final Verification: Run actual prediction
+            print("\n--- MODEL PREDICTION VERIFICATION ---")
+            try:
+                import xgboost as xgb
+                from scripts.kyleskom_adapter import KyleskomPredictor
+                
+                kp = KyleskomPredictor()
+                kp.load_models()
+                
+                if not kp.xgb_ou:
+                    print("Error: O/U Model (xgb_ou) could not be loaded.")
+                else:
+                    dmat = xgb.DMatrix(data_ou)
+                    # Use calibrator if adapter uses it
+                    res = kp._predict_probs(kp.xgb_ou, data_ou, kp.xgb_ou_calibrator)[0]
+                    prob_under = float(res[0])
+                    prob_over = float(res[1]) if len(res) > 1 else 1.0 - prob_under
+                    pick = "OVER" if prob_over > prob_under else "UNDER"
+                    
+                    print(f"Matchup: {h_row['TEAM_NAME']} vs {a_row['TEAM_NAME']}")
+                    print(f"Total Line: {total_line}")
+                    print(f"Prob(Under): {prob_under:.4f}")
+                    print(f"Prob(Over): {prob_over:.4f}")
+                    print(f"FINAL PICK: {pick}")
+                    
+                    if pick == "UNDER" and total_line == 225.0:
+                        print("\nRESULT: SUCCESS! Model correctly predicts UNDER with this data.")
+                    else:
+                        print("\nRESULT: Warning - Model still predicts OVER. Inspecting data values...")
+            except Exception as e:
+                print(f"Prediction Error: {e}")
         else:
             print(f"FAILURE: Feature Count Mismatch. Expected 107, Got {actual_len}")
             
