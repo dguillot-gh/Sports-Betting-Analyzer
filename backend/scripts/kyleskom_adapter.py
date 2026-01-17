@@ -150,6 +150,16 @@ TEAM_NAME_ALIASES = {
     'NOLA Pelicans': 'New Orleans Pelicans', 'Trail Blazers': 'Portland Trail Blazers',
 }
 
+NBA_STATS_COLS = [
+    'GP', 'W', 'L', 'W_PCT', 'MIN', 'FGM', 'FGA', 'FG_PCT', 'FG3M', 'FG3A', 'FG3_PCT',
+    'FTM', 'FTA', 'FT_PCT', 'OREB', 'DREB', 'REB', 'AST', 'TOV', 'STL', 'BLK', 'BLKA',
+    'PF', 'PFD', 'PTS', 'PLUS_MINUS', 'GP_RANK', 'W_RANK', 'L_RANK', 'W_PCT_RANK',
+    'MIN_RANK', 'FGM_RANK', 'FGA_RANK', 'FG_PCT_RANK', 'FG3M_RANK', 'FG3A_RANK',
+    'FG3_PCT_RANK', 'FTM_RANK', 'FTA_RANK', 'FT_PCT_RANK', 'OREB_RANK', 'DREB_RANK',
+    'REB_RANK', 'AST_RANK', 'TOV_RANK', 'STL_RANK', 'BLK_RANK', 'BLKA_RANK', 'PF_RANK',
+    'PFD_RANK', 'PTS_RANK', 'PLUS_MINUS_RANK'
+]
+
 def normalize_team_name(team: str) -> str:
     if team in TEAM_INDEX_CURRENT: return team
     if team in TEAM_NAME_ALIASES: return TEAM_NAME_ALIASES[team]
@@ -320,11 +330,22 @@ class KyleskomPredictor:
             h_row, a_row = find_row(home_team), find_row(away_team)
             if len(h_row) == 0 or len(a_row) == 0: return {"error": f"Stats missing for {home_team} or {away_team}"}
 
-            h_stats = h_row.iloc[0].drop(['TEAM_ID', 'TEAM_NAME'], errors='ignore')
-            a_stats = a_row.iloc[0].drop(['TEAM_ID', 'TEAM_NAME'], errors='ignore').rename(lambda x: f"{x}.1")
+            # Align features by selecting EXACT 52 columns used during training
+            # This prevents shifted indices if the API adds extra columns like CFID
+            try:
+                h_stats = h_row.iloc[0][NBA_STATS_COLS]
+                a_stats = a_row.iloc[0][NBA_STATS_COLS].rename(lambda x: f"{x}.1")
+            except KeyError as e:
+                # Fallback to slice if columns missing, but log error
+                logger.error(f"Stat columns missing in API response: {e}")
+                h_stats = h_row.iloc[0].drop(['TEAM_ID', 'TEAM_NAME'], errors='ignore').iloc[:52]
+                a_stats = a_row.iloc[0].drop(['TEAM_ID', 'TEAM_NAME'], errors='ignore').iloc[:52]
+
             stats = pd.concat([h_stats, a_stats])
             stats['Days-Rest-Home'], stats['Days-Rest-Away'] = 2.0, 2.0
             data = stats.values.astype(float).reshape(1, -1)
+            
+            logger.debug(f"Matches for {home_team} vs {away_team}, Feature shape: {data.shape}")
             
             xgb_home_prob = 0.5
             xgb_error = None
@@ -336,19 +357,9 @@ class KyleskomPredictor:
                     xgb_error = str(e)
                     logger.error(f"XGB Prediction failed: {e}")
 
+            # NN models disabled as per user instruction to focus on stable XGBoost
             nn_home_prob = None
             nn_error = None
-            if self.nn_ml:
-                try:
-                    input_data = data.astype(np.float32)
-                    norm = np.linalg.norm(input_data, axis=1, keepdims=True)
-                    data_norm = input_data / (norm + 1e-7)
-                    input_name = self.nn_ml.get_inputs()[0].name
-                    nn_res = self.nn_ml.run(None, {input_name: data_norm})[0]
-                    nn_home_prob = float(nn_res[0][1]) if nn_res.shape[1] >= 2 else float(nn_res[0][0])
-                except Exception as e:
-                    nn_error = str(e)
-                    logger.error(f"NN Prediction failed: {e}")
 
             ou_pred = None
             if self.xgb_ou and total_line:
@@ -356,16 +367,20 @@ class KyleskomPredictor:
                     # Realign: The model expects 107 features. 
                     # Training data order: [Stats(104), OU(1), Rest(2)]
                     # Current data has [Stats(104), Rest(2)]. We must insert OU at index 104.
-                    data_ou = np.insert(data, 104, total_line, axis=1)
-                    ou_res = self._predict_probs(self.xgb_ou, data_ou, self.xgb_ou_calibrator)[0]
-                    if len(ou_res) >= 2:
-                        ou_pred = {
-                            'pick': 'OVER' if ou_res[1] > ou_res[0] else 'UNDER',
-                            'confidence': float(round(max(ou_res) * 100, 1)),
-                            'total_line': float(total_line),
-                            'over_prob': float(round(ou_res[1], 3)),
-                            'under_prob': float(round(ou_res[0], 3))
-                        }
+                    if data.shape[1] == 106:
+                        data_ou = np.insert(data, 104, total_line, axis=1)
+                        ou_res = self._predict_probs(self.xgb_ou, data_ou, self.xgb_ou_calibrator)[0]
+                        
+                        logger.info(f"O/U Debug for {home_team}/{away_team}: Line={total_line}, Probs={ou_res}")
+
+                        if len(ou_res) >= 2:
+                            ou_pred = {
+                                'pick': 'OVER' if ou_res[1] > ou_res[0] else 'UNDER',
+                                'confidence': float(round(max(ou_res) * 100, 1)),
+                                'total_line': float(total_line),
+                                'over_prob': float(round(ou_res[1], 3)),
+                                'under_prob': float(round(ou_res[0], 3))
+                            }
                 except Exception as e:
                     logger.error(f"O/U Prediction failed: {e}")
 

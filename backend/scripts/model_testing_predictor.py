@@ -62,7 +62,7 @@ NBA_TEAM_STATS_URL = (
     "Conference=&DateFrom=&DateTo=&Division=&GameScope=&GameSegment=&Height=&"
     "ISTRound=&LastNGames=0&LeagueID=00&Location=&MeasureType=Base&Month=0&"
     "OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=PerGame&Period=0&"
-    "PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=N&Season={season}&"
+    "PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=Y&Season={season}&"
     "SeasonSegment=&SeasonType=Regular%20Season&ShotClockRange=&StarterBench=&"
     "TeamID=0&TwoWay=0&VsConference=&VsDivision="
 )
