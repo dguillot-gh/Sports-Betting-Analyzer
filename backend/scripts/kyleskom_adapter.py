@@ -354,8 +354,15 @@ class KyleskomPredictor:
             h_row, a_row = find_row(home_team), find_row(away_team)
             if len(h_row) == 0 or len(a_row) == 0: return {"error": f"Stats missing for {home_team} or {away_team}"}
 
-            h_stats = h_row.iloc[0].drop(['TEAM_ID', 'TEAM_NAME'], errors='ignore')
-            a_stats = a_row.iloc[0].drop(['TEAM_ID', 'TEAM_NAME'], errors='ignore').rename(lambda x: f"{x}.1")
+            # Ensure exactly 52 stats per team to match training data indices
+            # Drop non-stat columns and slice to the standard 52 features (GP through PLUS_MINUS_RANK)
+            h_raw = h_row.iloc[0].drop(['TEAM_ID', 'TEAM_NAME'], errors='ignore')
+            a_raw = a_row.iloc[0].drop(['TEAM_ID', 'TEAM_NAME'], errors='ignore')
+            
+            # Slice to exactly 52 to avoid API-added columns like CFID
+            h_stats = h_raw.iloc[:52]
+            a_stats = a_raw.iloc[:52].rename(lambda x: f"{x}.1")
+            
             stats = pd.concat([h_stats, a_stats])
             stats['Days-Rest-Home'], stats['Days-Rest-Away'] = 2.0, 2.0
             data = stats.values.astype(float).reshape(1, -1)
