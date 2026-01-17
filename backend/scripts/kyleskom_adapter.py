@@ -191,7 +191,11 @@ class KyleskomPredictor:
                 logger.info(f"Loaded calibration: {calibration_path.name}")
                 return calibrator
             except Exception as e:
-                logger.error(f"Failed to load calibrator: {e}")
+                # Capture version mismatch specifically
+                if "InconsistentVersionWarning" in str(e) or "version mismatch" in str(e).lower():
+                    logger.warning(f"Calibration version mismatch: {e}. Model will use raw probabilities.")
+                else:
+                    logger.error(f"Failed to load calibrator: {e}")
         return None
 
     def load_models(self) -> bool:
@@ -231,7 +235,18 @@ class KyleskomPredictor:
 
     def _predict_probs(self, model, data, calibrator=None):
         if calibrator:
-            return calibrator.predict_proba(data)
+            try:
+                probs = calibrator.predict_proba(data)
+                # Check if calibrator returned nan or zeros (common on mismatch)
+                if np.isnan(probs).any() or np.all(probs == 0):
+                    logger.warning("Calibrator returned invalid values. Falling back to raw probabilities.")
+                else:
+                    return probs
+            except Exception as e:
+                logger.warning(f"Calibration prediction failed ({e}). Falling back to raw.")
+        
+        # Fallback to raw Booster probabilities
+        import xgboost as xgb
         return model.predict(xgb.DMatrix(data))
 
     async def fetch_data_from_nba_api(self, retry_count=2) -> bool:
