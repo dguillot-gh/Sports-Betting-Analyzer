@@ -249,26 +249,9 @@ class KyleskomPredictor:
             except Exception as e:
                 logger.error(f"Error loading XGBoost: {e}")
 
-        if ONNX_AVAILABLE:
-            try:
-                search_dir = NN_DIR if NN_DIR.exists() else MODELS_ROOT
-                ml_path = self._select_model_path("Trained-Model-ML-", search_dir, NN_ML_PATTERN, suffix=".onnx")
-                if ml_path:
-                    logger.info(f"Loading NN ML: {ml_path.name}")
-                    self.nn_ml = ort.InferenceSession(str(ml_path))
-                else:
-                    logger.warning("NN ML model not found (.onnx)")
-
-                ou_path = self._select_model_path("Trained-Model-OU-", search_dir, NN_OU_PATTERN, suffix=".onnx")
-                if ou_path:
-                    logger.info(f"Loading NN OU: {ou_path.name}")
-                    self.nn_ou = ort.InferenceSession(str(ou_path))
-                else:
-                    logger.warning("NN OU model not found (.onnx)")
-            except Exception as e:
-                logger.error(f"Error loading ONNX: {e}")
-        else:
-            logger.warning("ONNX Runtime NOT available - NN models skipped")
+        # NN models disabled as per user instruction to focus on stable XGBoost
+        self.nn_ml = None
+        self.nn_ou = None
 
         self._models_loaded = True
         return True
@@ -367,6 +350,8 @@ class KyleskomPredictor:
             stats['Days-Rest-Home'], stats['Days-Rest-Away'] = 2.0, 2.0
             data = stats.values.astype(float).reshape(1, -1)
             
+            logger.debug(f"Predicting for {home_team} vs {away_team}, Feature shape: {data.shape}")
+
             xgb_home_prob = 0.5
             xgb_error = None
             if self.xgb_ml:
@@ -377,41 +362,30 @@ class KyleskomPredictor:
                     xgb_error = str(e)
                     logger.error(f"XGB Prediction failed: {e}")
 
-            nn_home_prob = None
-            nn_error = None
-            if self.nn_ml:
-                try:
-                    input_data = data.astype(np.float32)
-                    norm = np.linalg.norm(input_data, axis=1, keepdims=True)
-                    data_norm = input_data / (norm + 1e-7)
-                    input_name = self.nn_ml.get_inputs()[0].name
-                    nn_res = self.nn_ml.run(None, {input_name: data_norm})[0]
-                    nn_home_prob = float(nn_res[0][1]) if nn_res.shape[1] >= 2 else float(nn_res[0][0])
-                except Exception as e:
-                    nn_error = str(e)
-                    logger.error(f"NN Prediction failed: {e}")
-
             ou_pred = None
             if self.xgb_ou and total_line:
                 try:
-                    # Realign: The model expects 107 features. 
+                    # The model expects 107 features. 
                     # Training data order: [Stats(104), OU(1), Rest(2)]
-                    # Current data has [Stats(104), Rest(2)]. We must insert OU at index 104.
-                    data_ou = np.insert(data, 104, total_line, axis=1)
-                    ou_res = self._predict_probs(self.xgb_ou, data_ou, self.xgb_ou_calibrator)[0]
-                    if len(ou_res) >= 2:
-                        ou_pred = {
-                            'pick': 'OVER' if ou_res[1] > ou_res[0] else 'UNDER',
-                            'confidence': float(round(max(ou_res) * 100, 1)),
-                            'total_line': float(total_line),
-                            'over_prob': float(round(ou_res[1], 3)),
-                            'under_prob': float(round(ou_res[0], 3))
-                        }
+                    # data has [Stats(104), Rest(2)]. We insert OU at index 104.
+                    if data.shape[1] == 106:
+                        data_ou = np.insert(data, 104, total_line, axis=1)
+                        ou_res = self._predict_probs(self.xgb_ou, data_ou, self.xgb_ou_calibrator)[0]
+                        if len(ou_res) >= 2:
+                            ou_pred = {
+                                'pick': 'OVER' if ou_res[1] > ou_res[0] else 'UNDER',
+                                'confidence': float(round(max(ou_res) * 100, 1)),
+                                'total_line': float(total_line),
+                                'over_prob': float(round(ou_res[1], 3)),
+                                'under_prob': float(round(ou_res[0], 3))
+                            }
+                    else:
+                        logger.error(f"Feature shape mismatch for O/U: {data.shape[1]} (expected 106 before OU insertion)")
                 except Exception as e:
                     logger.error(f"O/U Prediction failed: {e}")
 
-            if xgb_error and (nn_error or self.nn_ml is None):
-                return {"error": f"ML engines failed: XGB({xgb_error})"}
+            if xgb_error:
+                return {"error": f"XGB engine failed: {xgb_error}"}
 
             home_win_prob = xgb_home_prob
             away_win_prob = 1 - home_win_prob
