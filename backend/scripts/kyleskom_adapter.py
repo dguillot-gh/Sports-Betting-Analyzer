@@ -189,30 +189,34 @@ class KyleskomPredictor:
         logger.info(f"Selected best model for '{kind}': {best.name}")
         return best
 
-    def _load_calibrator(self, calibration_path: Path):
-        if calibration_path.exists():
-            try:
-                # Calibrators in kyleskom repo are usually in separate .joblib files
-                # The model file is .json, calibrator is typically .joblib
-                calib_file = calibration_path.with_suffix('.joblib')
-                if not calib_file.exists():
-                    # Fallback: maybe it's the exact same path?
-                    calib_file = calibration_path
+    def _load_calibrator(self, model_path: Path):
+        try:
+            # Check for _calibration.pkl in the same folder (observed in logs)
+            cal_path = model_path.with_name(model_path.stem + "_calibration.pkl")
+            if not cal_path.exists():
+                # Fallback to sibling "Calibrators" folder with .joblib (original logic)
+                cal_dir = model_path.parent.parent / "Calibrators"
+                cal_path = cal_dir / (model_path.stem + ".joblib")
                 
-                with warnings.catch_warnings(record=True) as w:
-                    warnings.simplefilter("always")
-                    calibrator = joblib.load(calib_file)
-                    
-                    for row in w:
-                        if "InconsistentVersionWarning" in str(row.message):
-                            logger.warning(f"Calibration version mismatch detected for {calibration_path.name}. Falling back to raw probabilities.")
-                            return None
-                            
-                logger.info(f"Loaded calibration: {calibration_path.name}")
-                return calibrator
-            except Exception as e:
-                logger.error(f"Failed to load calibrator: {e}")
-        return None
+            if cal_path.exists():
+                import joblib
+                try:
+                    with warnings.catch_warnings(record=True) as w:
+                        warnings.simplefilter("always")
+                        calibrator = joblib.load(cal_path)
+                        for row in w:
+                            if "InconsistentVersionWarning" in str(row.message):
+                                logger.warning(f"Calibration version mismatch detected for {cal_path.name}. Falling back to raw probabilities.")
+                                return None
+                    logger.info(f"Loaded calibration: {cal_path.name}")
+                    return calibrator
+                except Exception as e:
+                    logger.warning(f"Error loading calibrator {cal_path.name}: {e}")
+                    return None
+            return None
+        except Exception as e:
+            logger.error(f"Failed to load calibrator: {e}")
+            return None
 
     def load_models(self) -> bool:
         if self._models_loaded: return True
@@ -406,20 +410,30 @@ class KyleskomPredictor:
             home_win_prob = xgb_home_prob
             away_win_prob = 1 - home_win_prob
             
-            return {
+            predicted_winner = home_team if home_win_prob > 0.5 else away_team
+            avg_conf = float(round(max(home_win_prob, away_win_prob) * 100, 1))
+            home_ev = self._expected_value(home_win_prob, home_ml) if home_ml else None
+            away_ev = self._expected_value(away_win_prob, away_ml) if away_ml else None
+            home_kelly = self._kelly_criterion(home_ml, home_win_prob) if home_ml else None
+            away_kelly = self._kelly_criterion(away_ml, away_win_prob) if away_ml else None
+            
+            result = {
                 'model': 'kyleskom_ensemble',
                 'home_team': home_team, 'away_team': away_team,
                 'home_win_probability': float(round(home_win_prob, 4)),
                 'away_win_probability': float(round(away_win_prob, 4)),
                 'nn_home_win_probability': float(round(nn_home_prob, 4)) if nn_home_prob is not None else None,
-                'predicted_winner': home_team if home_win_prob > 0.5 else away_team,
-                'confidence': float(round(max(home_win_prob, away_win_prob) * 100, 1)),
+                'predicted_winner': predicted_winner,
+                'confidence': avg_conf,
                 'over_under': ou_pred,
-                'ev_home': self._expected_value(home_win_prob, home_ml) if home_ml else None,
-                'ev_away': self._expected_value(away_win_prob, away_ml) if away_ml else None,
-                'kelly_home': self._kelly_criterion(home_ml, home_win_prob) if home_ml else None,
+                'home_ev': home_ev,
+                'away_ev': away_ev,
+                'home_kelly': home_kelly,
+                'away_kelly': away_kelly,
                 'xgb_error': xgb_error, 'nn_error': nn_error
             }
+            logger.info(f"NBA Prediction Result: Winner={predicted_winner}, XGB Home={home_win_prob:.1%}, NN Home={result['nn_home_win_probability']:.1% if result['nn_home_win_probability'] else 'N/A'}")
+            return result
         except Exception as e:
             logger.error(f"Kyleskom Orchestration Crash: {e}")
             return {"error": str(e)}
