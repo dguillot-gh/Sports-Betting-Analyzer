@@ -227,6 +227,7 @@ class KyleskomPredictor:
         NN_DIR = MODELS_ROOT / 'NN_Models'
         
         logger.info(f"Loading Kyleskom models from {MODELS_ROOT}")
+        logger.info(f"ONNX Status: {'Available' if ONNX_AVAILABLE else 'NOT AVAILABLE'}")
         
         if XGB_AVAILABLE:
             try:

@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     libcurl4-openssl-dev \
     libssl-dev \
     libxml2-dev \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # 1. Install R dependencies (Using Posit Binary Repo to skip compilation)
@@ -54,6 +55,7 @@ RUN apt-get update && apt-get install -y \
     r-base \
     libcurl4 \
     libxml2 \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Python packages from builder
