@@ -109,6 +109,7 @@ async def fetch_nba_team_stats_from_api() -> Dict[str, Dict]:
             import pandas as pd
             df = pd.DataFrame(data=rows, columns=headers)
             set_nba_df(df)
+            logger.info(f"Cached NBA stats with {len(df.columns)} columns. Sample: {list(df.columns[:5])} ... {list(df.columns[-5:])}")
         except Exception as e:
             logger.warning(f"Failed to populate shared NBA cache: {e}")
 
