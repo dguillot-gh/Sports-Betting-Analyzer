@@ -26,18 +26,12 @@ RUN R -e "options(repos = c(CRAN = 'https://packagemanager.posit.co/cran/__linux
 # We pin numpy exactly to 1.26.4 to avoid breaking TensorFlow (which doesn't support NumPy 2.x yet)
 RUN pip install --no-cache-dir "numpy==1.26.4" "tensorflow<2.16" "tf2onnx<1.16" "onnx<1.16" "ml_dtypes<0.4.0" xgboost
 
-# 3. Download and Convert Models
-COPY scripts/download_xgb_models.py scripts/convert_to_onnx.py ./scripts/
-# We need the directory structure before running scripts
+# 3. Download Models (XGBoosst models)
+COPY scripts/download_xgb_models.py ./scripts/
+# Copy the entire nba_ml_reference directory
 COPY scripts/nba_ml_reference ./scripts/nba_ml_reference
-# Ensure directories exist
 RUN mkdir -p scripts/nba_ml_reference/Models/XGBoost_Models scripts/nba_ml_reference/Models/NN_Models scripts/nba_ml_reference/Data
-
-# Run model preparation (Downloads XGBoosst models and converts Keras to ONNX)
-RUN echo "Starting model preparation..." && \
-    python scripts/download_xgb_models.py && \
-    python scripts/convert_to_onnx.py && \
-    echo "Model preparation complete."
+RUN python scripts/download_xgb_models.py
 
 # 4. Install other Python dependencies
 COPY requirements.txt .
@@ -73,6 +67,11 @@ COPY --from=builder /app/scripts/nba_ml_reference /app/scripts/nba_ml_reference
 
 # Create necessary data directories
 RUN mkdir -p data/nascar data/nba data/nfl data/ncaab data/baseball models
+
+# Convert Models to ONNX (Keras to ONNX)
+RUN echo "Starting ONNX Conversion..." && \
+    python scripts/convert_to_onnx.py && \
+    echo "ONNX Conversion complete."
 
 # Environment configuration
 EXPOSE 8000
