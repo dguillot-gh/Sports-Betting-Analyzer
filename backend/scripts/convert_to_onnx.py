@@ -16,7 +16,8 @@ try:
 except ImportError:
     TF_AVAILABLE = False
 
-MODELS_DIR = Path("scripts/nba_ml_reference/Models/NN_Models")
+BASE_DIR = Path(__file__).resolve().parent
+MODELS_DIR = BASE_DIR / "nba_ml_reference" / "Models" / "NN_Models"
 
 def convert_keras_to_onnx(model_path):
     print(f"Converting {model_path.name} to ONNX...")
