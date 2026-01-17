@@ -285,7 +285,7 @@ class KyleskomPredictor:
             self._data_loaded = True 
             return success
 
-    async def predict_game(self, home_team: str, away_team: str, total_line: float = 225.0, home_ml: int = None, away_ml: int = None) -> Dict[str, Any]:
+    async def predict_game(self, home_team: str, away_team: str, total_line: float = None, home_ml: int = None, away_ml: int = None) -> Dict[str, Any]:
         home_team, away_team = normalize_team_name(home_team), normalize_team_name(away_team)
         if not self._models_loaded: self.load_models()
         if self.df is None: await self.fetch_data_from_nba_api()
@@ -386,5 +386,5 @@ def get_kyleskom_predictor() -> KyleskomPredictor:
     if _predictor is None: _predictor = KyleskomPredictor()
     return _predictor
 
-async def predict_with_kyleskom(home, away, total=225.0, h_ml=None, a_ml=None):
+async def predict_with_kyleskom(home, away, total=None, h_ml=None, a_ml=None):
     return await get_kyleskom_predictor().predict_game(home, away, total, h_ml, a_ml)

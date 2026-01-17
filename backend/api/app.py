@@ -4068,9 +4068,9 @@ async def apex_status():
 async def apex_compare_nba(
     home_team: str = Query(..., description="Home team name"),
     away_team: str = Query(..., description="Away team name"),
-    total_line: float = Query(225.0, description="O/U line"),
-    home_ml: int = Query(None, description="Home moneyline odds"),
-    away_ml: int = Query(None, description="Away moneyline odds")
+    total_line: Optional[float] = Query(None, description="O/U line"),
+    home_ml: Optional[int] = Query(None, description="Home moneyline odds"),
+    away_ml: Optional[int] = Query(None, description="Away moneyline odds")
 ):
     """Compare all 3 models (Simple, Kyle, Apex) for NBA prediction."""
     try:
