@@ -62,7 +62,7 @@ NBA_TEAM_STATS_URL = (
     "Conference=&DateFrom=&DateTo=&Division=&GameScope=&GameSegment=&Height=&"
     "ISTRound=&LastNGames=0&LeagueID=00&Location=&MeasureType=Base&Month=0&"
     "OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=PerGame&Period=0&"
-    "PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=Y&Season={season}&"
+    "PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=N&Season={season}&"
     "SeasonSegment=&SeasonType=Regular%20Season&ShotClockRange=&StarterBench=&"
     "TeamID=0&TwoWay=0&VsConference=&VsDivision="
 )
@@ -109,7 +109,6 @@ async def fetch_nba_team_stats_from_api() -> Dict[str, Dict]:
             import pandas as pd
             df = pd.DataFrame(data=rows, columns=headers)
             set_nba_df(df)
-            logger.info(f"Cached NBA stats with {len(df.columns)} columns. Sample: {list(df.columns[:5])} ... {list(df.columns[-5:])}")
         except Exception as e:
             logger.warning(f"Failed to populate shared NBA cache: {e}")
 
