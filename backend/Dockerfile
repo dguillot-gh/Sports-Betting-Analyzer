@@ -28,14 +28,17 @@ RUN pip install --no-cache-dir "numpy==1.26.4" "tensorflow<2.16" "tf2onnx<1.16" 
 # 3. Download and Convert Models
 COPY scripts/download_xgb_models.py scripts/convert_to_onnx.py ./scripts/
 # We need the directory structure before running scripts
-# Copy the entire nba_ml_reference directory (includes Models, src, etc.)
 COPY scripts/nba_ml_reference ./scripts/nba_ml_reference
-# Ensure directories exist (in case they were empty/missing in source)
+# Ensure directories exist
 RUN mkdir -p scripts/nba_ml_reference/Models/XGBoost_Models scripts/nba_ml_reference/Models/NN_Models scripts/nba_ml_reference/Data
-RUN python scripts/download_xgb_models.py
-RUN python scripts/convert_to_onnx.py
 
-# 3. Install other Python dependencies
+# Run model preparation (Downloads XGBoosst models and converts Keras to ONNX)
+RUN echo "Starting model preparation..." && \
+    python scripts/download_xgb_models.py && \
+    python scripts/convert_to_onnx.py && \
+    echo "Model preparation complete."
+
+# 4. Install other Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 RUN pip install --no-cache-dir --default-timeout=1000 -r requirements.txt
@@ -68,10 +71,6 @@ COPY --from=builder /app/scripts/nba_ml_reference /app/scripts/nba_ml_reference
 
 # Create necessary data directories
 RUN mkdir -p data/nascar data/nba data/nfl data/ncaab data/baseball models
-
-# Download XGBoost model files
-# Uses Python script to fetch models; runs only when copy layer changes
-RUN python scripts/download_xgb_models.py
 
 # Environment configuration
 EXPOSE 8000
