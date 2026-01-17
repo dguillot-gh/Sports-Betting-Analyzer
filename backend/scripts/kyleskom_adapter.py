@@ -21,6 +21,7 @@ import joblib
 import numpy as np
 import pandas as pd
 import aiohttp
+import warnings
 
 logger = logging.getLogger(__name__)
 
@@ -183,19 +184,23 @@ class KyleskomPredictor:
             return (float(match.group(1)) if match else 0.0, path.stat().st_mtime)
         return max(candidates, key=score)
 
-    def _load_calibrator(self, model_path: Path):
-        calibration_path = model_path.with_name(f"{model_path.stem}_calibration.pkl")
+    def _load_calibrator(self, calibration_path: Path):
         if calibration_path.exists():
             try:
-                calibrator = joblib.load(calibration_path)
+                # Catch version mismatch warnings and treat them as failures
+                with warnings.catch_warnings(record=True) as w:
+                    warnings.simplefilter("always")
+                    calibrator = joblib.load(calibration_path)
+                    
+                    for row in w:
+                        if "InconsistentVersionWarning" in str(row.message):
+                            logger.warning(f"Calibration version mismatch detected for {calibration_path.name}. Falling back to raw probabilities.")
+                            return None
+                            
                 logger.info(f"Loaded calibration: {calibration_path.name}")
                 return calibrator
             except Exception as e:
-                # Capture version mismatch specifically
-                if "InconsistentVersionWarning" in str(e) or "version mismatch" in str(e).lower():
-                    logger.warning(f"Calibration version mismatch: {e}. Model will use raw probabilities.")
-                else:
-                    logger.error(f"Failed to load calibrator: {e}")
+                logger.error(f"Failed to load calibrator: {e}")
         return None
 
     def load_models(self) -> bool:
