@@ -28,8 +28,10 @@ RUN pip install --no-cache-dir "numpy==1.26.4" "tensorflow<2.16" "tf2onnx<1.16" 
 # 3. Download and Convert Models
 COPY scripts/download_xgb_models.py scripts/convert_to_onnx.py ./scripts/
 # We need the directory structure before running scripts
+# Copy the entire nba_ml_reference directory (includes Models, src, etc.)
+COPY scripts/nba_ml_reference ./scripts/nba_ml_reference
+# Ensure directories exist (in case they were empty/missing in source)
 RUN mkdir -p scripts/nba_ml_reference/Models/XGBoost_Models scripts/nba_ml_reference/Models/NN_Models scripts/nba_ml_reference/Data
-COPY scripts/nba_ml_reference/Models/NN_Models ./scripts/nba_ml_reference/Models/NN_Models
 RUN python scripts/download_xgb_models.py
 RUN python scripts/convert_to_onnx.py
 
