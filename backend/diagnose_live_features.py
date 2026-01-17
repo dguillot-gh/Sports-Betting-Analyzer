@@ -120,7 +120,7 @@ def diagnose():
                     
                     for test_line in [200.0, 215.0, 225.0, 235.0, 250.0]:
                         # Re-create vector with different line
-                        vec_sweep = np.insert(base_vec, 104, test_line, axis=1)
+                        vec_sweep = np.insert(data_vec, 104, test_line, axis=1)
                         res = kp._predict_probs(kp.xgb_ou, vec_sweep, kp.xgb_ou_calibrator)[0]
                         
                         p_u = float(res[0])
