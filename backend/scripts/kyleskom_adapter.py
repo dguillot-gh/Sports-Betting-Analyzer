@@ -402,7 +402,6 @@ class KyleskomPredictor:
                 'home_team': home_team, 'away_team': away_team,
                 'home_win_probability': float(round(home_win_prob, 4)),
                 'away_win_probability': float(round(away_win_prob, 4)),
-                'nn_home_win_probability': float(round(nn_home_prob, 4)) if nn_home_prob is not None else None,
                 'predicted_winner': predicted_winner,
                 'confidence': avg_conf,
                 'over_under': ou_pred,
@@ -410,7 +409,7 @@ class KyleskomPredictor:
                 'ev_away': away_ev,
                 'kelly_home': home_kelly,
                 'kelly_away': away_kelly,
-                'xgb_error': xgb_error, 'nn_error': nn_error
+                'xgb_error': xgb_error
             }
             logger.info(f"NBA Prediction Result: Winner={predicted_winner}, XGB Home={home_win_prob:.1%}")
             return result
