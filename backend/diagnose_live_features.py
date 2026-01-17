@@ -113,23 +113,26 @@ def diagnose():
                 if not kp.xgb_ou:
                     print("Error: O/U Model (xgb_ou) could not be loaded.")
                 else:
-                    dmat = xgb.DMatrix(data_ou)
-                    # Use calibrator if adapter uses it
-                    res = kp._predict_probs(kp.xgb_ou, data_ou, kp.xgb_ou_calibrator)[0]
-                    prob_under = float(res[0])
-                    prob_over = float(res[1]) if len(res) > 1 else 1.0 - prob_under
-                    pick = "OVER" if prob_over > prob_under else "UNDER"
-                    
                     print(f"Matchup: {h_row['TEAM_NAME']} vs {a_row['TEAM_NAME']}")
-                    print(f"Total Line: {total_line}")
-                    print(f"Prob(Under): {prob_under:.4f}")
-                    print(f"Prob(Over): {prob_over:.4f}")
-                    print(f"FINAL PICK: {pick}")
+                    print("\nLINE SWEEP TEST:")
+                    print("Line | Prob(Under) | Prob(Over) | Pick")
+                    print("-" * 40)
                     
-                    if pick == "UNDER" and total_line == 225.0:
-                        print("\nRESULT: SUCCESS! Model correctly predicts UNDER with this data.")
-                    else:
-                        print("\nRESULT: Warning - Model still predicts OVER. Inspecting data values...")
+                    for test_line in [200.0, 215.0, 225.0, 235.0, 250.0]:
+                        # Re-create vector with different line
+                        vec_sweep = np.insert(base_vec, 104, test_line, axis=1)
+                        res = kp._predict_probs(kp.xgb_ou, vec_sweep, kp.xgb_ou_calibrator)[0]
+                        
+                        p_u = float(res[0])
+                        p_o = float(res[1]) if len(res) > 1 else 1.0 - p_u
+                        p_pick = "OVER" if p_o > p_u else "UNDER"
+                        print(f"{test_line:<4} | {p_u:.4f}      | {p_o:.4f}     | {p_pick}")
+                    
+                    # Also test WITHOUT calibrator if possible to see if it's skewing
+                    print("\nRAW BOOSTED OUTPUT (No Calibration):")
+                    raw_res = kp.xgb_ou.predict(xgb.DMatrix(data_ou))
+                    print(f"Raw Output (225.0): {raw_res[0]}")
+                    
             except Exception as e:
                 print(f"Prediction Error: {e}")
         else:
