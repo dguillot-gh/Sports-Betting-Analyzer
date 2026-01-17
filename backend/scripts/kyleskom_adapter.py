@@ -178,19 +178,30 @@ class KyleskomPredictor:
         candidates = list(base_path.glob(f"*{suffix}"))
         if not candidates: candidates = list(base_path.glob(f"**/*{suffix}"))
         candidates = [c for c in candidates if kind in c.name and pattern.search(c.name)]
+        logger.info(f"Model discovery for '{kind}' in {base_path}: {len(candidates)} candidates found")
         if not candidates: return None
         def score(path):
             match = pattern.search(path.name)
-            return (float(match.group(1)) if match else 0.0, path.stat().st_mtime)
-        return max(candidates, key=score)
+            s = (float(match.group(1)) if match else 0.0, path.stat().st_mtime)
+            logger.debug(f"Candidate: {path.name} score: {s}")
+            return s
+        best = max(candidates, key=score)
+        logger.info(f"Selected best model for '{kind}': {best.name}")
+        return best
 
     def _load_calibrator(self, calibration_path: Path):
         if calibration_path.exists():
             try:
-                # Catch version mismatch warnings and treat them as failures
+                # Calibrators in kyleskom repo are usually in separate .joblib files
+                # The model file is .json, calibrator is typically .joblib
+                calib_file = calibration_path.with_suffix('.joblib')
+                if not calib_file.exists():
+                    # Fallback: maybe it's the exact same path?
+                    calib_file = calibration_path
+                
                 with warnings.catch_warnings(record=True) as w:
                     warnings.simplefilter("always")
-                    calibrator = joblib.load(calibration_path)
+                    calibrator = joblib.load(calib_file)
                     
                     for row in w:
                         if "InconsistentVersionWarning" in str(row.message):
@@ -205,9 +216,17 @@ class KyleskomPredictor:
 
     def load_models(self) -> bool:
         if self._models_loaded: return True
+        
+        if not os.path.exists(REFERENCE_REPO_PATH):
+            logger.error(f"Reference repo not found at {REFERENCE_REPO_PATH}")
+            self._models_loaded = True # Don't retry every time
+            return False
+            
         MODELS_ROOT = Path(REFERENCE_REPO_PATH) / 'Models'
         XGB_DIR = MODELS_ROOT / 'XGBoost_Models'
         NN_DIR = MODELS_ROOT / 'NN_Models'
+        
+        logger.info(f"Loading Kyleskom models from {MODELS_ROOT}")
         
         if XGB_AVAILABLE:
             try:
@@ -229,11 +248,22 @@ class KyleskomPredictor:
             try:
                 search_dir = NN_DIR if NN_DIR.exists() else MODELS_ROOT
                 ml_path = self._select_model_path("Trained-Model-ML-", search_dir, NN_ML_PATTERN, suffix=".onnx")
-                if ml_path: self.nn_ml = ort.InferenceSession(str(ml_path))
+                if ml_path:
+                    logger.info(f"Loading NN ML: {ml_path.name}")
+                    self.nn_ml = ort.InferenceSession(str(ml_path))
+                else:
+                    logger.warning("NN ML model not found (.onnx)")
+
                 ou_path = self._select_model_path("Trained-Model-OU-", search_dir, NN_OU_PATTERN, suffix=".onnx")
-                if ou_path: self.nn_ou = ort.InferenceSession(str(ou_path))
+                if ou_path:
+                    logger.info(f"Loading NN OU: {ou_path.name}")
+                    self.nn_ou = ort.InferenceSession(str(ou_path))
+                else:
+                    logger.warning("NN OU model not found (.onnx)")
             except Exception as e:
                 logger.error(f"Error loading ONNX: {e}")
+        else:
+            logger.warning("ONNX Runtime NOT available - NN models skipped")
 
         self._models_loaded = True
         return True
@@ -393,12 +423,16 @@ class KyleskomPredictor:
             logger.error(f"Kyleskom Orchestration Crash: {e}")
             return {"error": str(e)}
 
-    def _expected_value(self, Pwin, odds):
+    def _expected_value(self, Pwin: float, odds: int) -> float:
+        # Return as fraction (e.g. 0.05 for 5% EV) for frontend "P1" formatting
         Mwin = odds if odds > 0 else (100 / abs(odds)) * 100
-        return round((Pwin * Mwin) - ((1 - Pwin) * 100), 2)
-    def _kelly_criterion(self, odds, prob):
+        return round(((Pwin * Mwin) - ((1 - Pwin) * 100)) / 100, 4)
+
+    def _kelly_criterion(self, odds: int, prob: float) -> float:
+        # Return as fraction (e.g. 0.01 for 1% stake) for frontend "P1" formatting
         b = (odds / 100) if odds >= 100 else (100 / abs(odds))
-        return max(0, round((100 * (b * prob - (1 - prob))) / b, 2))
+        raw_kelly = (b * prob - (1 - prob)) / b
+        return max(0, round(raw_kelly, 4))
 
 _predictor = None
 def get_kyleskom_predictor() -> KyleskomPredictor:
