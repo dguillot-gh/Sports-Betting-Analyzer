@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 import aiohttp
 import warnings
+import xgboost as xgb
 
 logger = logging.getLogger(__name__)
 
@@ -199,7 +200,6 @@ class KyleskomPredictor:
                 cal_path = cal_dir / (model_path.stem + ".joblib")
                 
             if cal_path.exists():
-                import joblib
                 try:
                     with warnings.catch_warnings(record=True) as w:
                         warnings.simplefilter("always")
@@ -286,7 +286,6 @@ class KyleskomPredictor:
                 logger.warning(f"Calibration prediction failed ({e}). Falling back to raw.")
         
         # Fallback to raw Booster probabilities
-        import xgboost as xgb
         return model.predict(xgb.DMatrix(data))
 
     async def fetch_data_from_nba_api(self, retry_count=2) -> bool:
@@ -426,10 +425,10 @@ class KyleskomPredictor:
                 'predicted_winner': predicted_winner,
                 'confidence': avg_conf,
                 'over_under': ou_pred,
-                'home_ev': home_ev,
-                'away_ev': away_ev,
-                'home_kelly': home_kelly,
-                'away_kelly': away_kelly,
+                'ev_home': home_ev,
+                'ev_away': away_ev,
+                'kelly_home': home_kelly,
+                'kelly_away': away_kelly,
                 'xgb_error': xgb_error, 'nn_error': nn_error
             }
             logger.info(f"NBA Prediction Result: Winner={predicted_winner}, XGB Home={home_win_prob:.1%}, NN Home={result['nn_home_win_probability']:.1% if result['nn_home_win_probability'] else 'N/A'}")
