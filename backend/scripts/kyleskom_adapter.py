@@ -431,7 +431,7 @@ class KyleskomPredictor:
                 'kelly_away': away_kelly,
                 'xgb_error': xgb_error, 'nn_error': nn_error
             }
-            logger.info(f"NBA Prediction Result: Winner={predicted_winner}, XGB Home={home_win_prob:.1%}, NN Home={result['nn_home_win_probability']:.1% if result['nn_home_win_probability'] else 'N/A'}")
+            logger.info(f"NBA Prediction Result: Winner={predicted_winner}, XGB Home={home_win_prob:.1%}")
             return result
         except Exception as e:
             logger.error(f"Kyleskom Orchestration Crash: {e}")
