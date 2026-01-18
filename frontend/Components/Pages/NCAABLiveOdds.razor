@@ -273,21 +273,21 @@
                                                     <ApexChart TItem="RadarPoint"
                                                                Options="_radarOptions">
 
-                                                        <ApexChartSeries TItem="RadarPoint"
-                                                                         Items="GetRadarPoints(game.Prediction.V2Radar.Home)"
-                                                                         Name="@game.HomeTeam"
-                                                                         XValue="@(e => e.Category)"
-                                                                         YValue="@(e => (decimal)e.Value)"
-                                                                         SeriesType="SeriesType.Radar"
-                                                                         Color="#00c853" />
+                                                        <ApexPointSeries TItem="RadarPoint"
+                                                                          Items="GetRadarPoints(game.Prediction.V2Radar.Home)"
+                                                                          Name="@game.HomeTeam"
+                                                                          XValue="@(e => e.Category)"
+                                                                          YValue="@(e => (decimal)e.Value)"
+                                                                          SeriesType="SeriesType.Radar"
+                                                                          Color="#00c853" />
 
-                                                        <ApexChartSeries TItem="RadarPoint"
-                                                                         Items="GetRadarPoints(game.Prediction.V2Radar.Away)"
-                                                                         Name="@game.AwayTeam"
-                                                                         XValue="@(e => e.Category)"
-                                                                         YValue="@(e => (decimal)e.Value)"
-                                                                         SeriesType="SeriesType.Radar"
-                                                                         Color="#ff1744" />
+                                                        <ApexPointSeries TItem="RadarPoint"
+                                                                          Items="GetRadarPoints(game.Prediction.V2Radar.Away)"
+                                                                          Name="@game.AwayTeam"
+                                                                          XValue="@(e => e.Category)"
+                                                                          YValue="@(e => (decimal)e.Value)"
+                                                                          SeriesType="SeriesType.Radar"
+                                                                          Color="#ff4081" />
                                                     </ApexChart>
                                                 </div>
                                             </MudExpansionPanel>
