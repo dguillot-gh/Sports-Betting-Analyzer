@@ -16,7 +16,7 @@ data/
 *.pth
 *.model
 *.bin
-models/
+/models/
 
 # Python cache and pyc files
 __pycache__/
@@ -62,3 +62,6 @@ node_modules/
 
 # SportsBettingAnalyzer specific
 /SportsBettingAnalyzer/nul
+/backend/scripts/nba_ml_reference/Models/NN_Models
+/backend/scripts/nba_ml_reference/Models/XGBoost_Models
+/backend/scripts/models/nfl
