@@ -22,6 +22,7 @@
                     </MudText>
                 </div>
                 <MudStack Row="true" Spacing="2">
+                    <MudSwitch T="bool" @bind-Value="_showExperimental" Color="Color.Secondary" Label="Experimental Analytics" />
                     <MudSelect T="string" @bind-Value="_selectedSportsbook" Label="Sportsbook" 
                                Variant="Variant.Outlined" Dense="true" Style="width: 150px;">
                         <MudSelectItem Value="@("fanduel")">FanDuel</MudSelectItem>
@@ -262,6 +263,36 @@
                                             <MudText Typo="Typo.caption"><MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1" /> Loading ESPN BPI...</MudText>
                                         </div>
                                     }
+
+                                    @* Experimental Radar Chart *@
+                                    @if (_showExperimental && game.Prediction?.V2Radar != null && game.Prediction.V2Radar.Home.Any())
+                                    {
+                                        <MudExpansionPanels Elevation="0" Class="mt-2">
+                                            <MudExpansionPanel Text="Archetype Radar" Style="background: rgba(255, 64, 129, 0.05); border: 1px dashed #ff4081;">
+                                                <div style="height: 250px;">
+                                                    <ApexChart TItem="RadarPoint"
+                                                               Options="_radarOptions">
+
+                                                        <ApexChartSeries TItem="RadarPoint"
+                                                                         Items="GetRadarPoints(game.Prediction.V2Radar.Home)"
+                                                                         Name="@game.HomeTeam"
+                                                                         XValue="@(e => e.Category)"
+                                                                         YValue="@(e => (decimal)e.Value)"
+                                                                         SeriesType="SeriesType.Radar"
+                                                                         Color="#00c853" />
+
+                                                        <ApexChartSeries TItem="RadarPoint"
+                                                                         Items="GetRadarPoints(game.Prediction.V2Radar.Away)"
+                                                                         Name="@game.AwayTeam"
+                                                                         XValue="@(e => e.Category)"
+                                                                         YValue="@(e => (decimal)e.Value)"
+                                                                         SeriesType="SeriesType.Radar"
+                                                                         Color="#ff1744" />
+                                                    </ApexChart>
+                                                </div>
+                                            </MudExpansionPanel>
+                                        </MudExpansionPanels>
+                                    }
                                 </div>
                                 
                                 @if (game.ValueBets.Any())
@@ -341,6 +372,7 @@
 
 @code {
     private bool _isLoading = false;
+    private bool _showExperimental = false;
     private string? _error = null;
     private string _selectedSportsbook = "fanduel";
     private List<GameData> _games = new();
@@ -350,6 +382,25 @@
     // ESPN BPI State
     private EspnResponse? _espnData;
     private bool _isEspnLoading = false;
+    
+    private ApexChartOptions<RadarPoint> _radarOptions = new()
+    {
+        Chart = new Chart { Toolbar = new Toolbar { Show = false } },
+        PlotOptions = new PlotOptions { Radar = new PlotOptionsRadar { Polygons = new RadarPolygons { StrokeColors = "#333", ConnectorColors = "#333" } } },
+        Yaxis = new List<YAxis> { new YAxis { Max = 100, Min = 0, Show = false } },
+        Legend = new Legend { Show = true, Position = LegendPosition.Bottom }
+    };
+    
+    public class RadarPoint
+    {
+        public string Category { get; set; } = "";
+        public double Value { get; set; }
+    }
+
+    private List<RadarPoint> GetRadarPoints(Dictionary<string, double> radarData)
+    {
+        return radarData.Select(kvp => new RadarPoint { Category = kvp.Key, Value = kvp.Value }).ToList();
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -528,8 +579,23 @@
                 V2Available = pred.TryGetProperty("v2_available", out var v2a) && v2a.GetBoolean(),
                 V2WinProb = pred.TryGetProperty("v2_win_prob", out var v2wp) ? v2wp.GetDouble() : 0,
                 V2Total = pred.TryGetProperty("v2_total", out var v2t) ? v2t.GetDouble() : 0,
-                V2Factors = new()
+                V2Factors = new(),
+                V2Radar = new RadarTeamComparison()
             };
+
+            if (pred.TryGetProperty("v2_radar", out var radar) && radar.ValueKind == JsonValueKind.Object)
+            {
+                if (radar.TryGetProperty("home", out var hRadar) && hRadar.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var prop in hRadar.EnumerateObject())
+                        game.Prediction.V2Radar.Home[prop.Name] = prop.Value.GetDouble();
+                }
+                if (radar.TryGetProperty("away", out var aRadar) && aRadar.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var prop in aRadar.EnumerateObject())
+                        game.Prediction.V2Radar.Away[prop.Name] = prop.Value.GetDouble();
+                }
+            }
 
             if (pred.TryGetProperty("v2_factors", out var factors) && factors.ValueKind == JsonValueKind.Array)
             {
@@ -585,6 +651,13 @@
         public double V2WinProb { get; set; }
         public double V2Total { get; set; }
         public List<XgbFactor> V2Factors { get; set; } = new();
+        public RadarTeamComparison V2Radar { get; set; } = new();
+    }
+
+    private class RadarTeamComparison
+    {
+        public Dictionary<string, double> Home { get; set; } = new();
+        public Dictionary<string, double> Away { get; set; } = new();
     }
 
     private class XgbFactor

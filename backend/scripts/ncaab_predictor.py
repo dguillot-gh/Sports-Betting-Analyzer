@@ -120,6 +120,17 @@ class NCAABPredictor:
         except Exception as e:
             logger.error(f"Error loading NCAAB data: {e}")
 
+    def _normalize_radar(self, val, min_val, max_val, reverse=False):
+        """Helper to normalize a value to 5-100 for radar charts"""
+        try:
+            val = float(val)
+            scaled = (val - min_val) / (max_val - min_val)
+            if reverse:
+                scaled = 1 - scaled
+            return max(5, min(100, int(scaled * 100)))
+        except:
+            return 50
+
     def _load_models_v2(self):
         """Lazy load v2 models and features list"""
         if self.ml_model_v2 is None:
@@ -138,7 +149,8 @@ class NCAABPredictor:
             except Exception as e:
                 logger.error(f"Failed to load NCAAB v2 models: {e}")
 
-    def _prepare_features_v2(self, home_team: str, away_team: str) -> Optional[pd.DataFrame]:
+    def _prepare_features_v2(self, home_team: str, away_team: str):
+        """Prepare advanced v2 features for inference. Returns (df, h_stats, a_stats)"""
         """Prepare advanced v2 features for inference"""
         if self.stats_df is None:
             self._load_data()
@@ -225,7 +237,7 @@ class NCAABPredictor:
         for f in self.v2_features:
             final_row[f] = feat_dict.get(f, 0)
             
-        return pd.DataFrame([final_row])
+        return pd.DataFrame([final_row]), h_stats, a_stats
 
     def _humanize_feature(self, feat: str, home_team: str, away_team: str) -> str:
         """Convert technical feature name to human readable label"""
@@ -281,22 +293,30 @@ class NCAABPredictor:
             return {}
             
         try:
-            X = self._prepare_features_v2(home_team, away_team)
-            if X is None:
+            prep_res = self._prepare_features_v2(home_team, away_team)
+            if prep_res is None:
                 return {}
+            
+            X, h_stats, a_stats = prep_res
             
             ml_prob = self.ml_model_v2.predict_proba(X)[0][1]
             predicted_total = self.ou_model_v2.predict(X)[0]
             
             # --- SHAP Rationale ---
             try:
-                explainer = shap.TreeExplainer(self.ml_model_v2)
+                # Use booster directly to avoid some parsing issues in older SHAP versions
+                booster = self.ml_model_v2.get_booster()
+                explainer = shap.TreeExplainer(booster)
                 shap_values = explainer.shap_values(X)
                 
                 # Get top features
                 feature_names = self.v2_features
                 contributions = []
-                for i, val in enumerate(shap_values[0]):
+                
+                # shap_values can be a list or array depending on version
+                vals = shap_values[0] if isinstance(shap_values, list) else shap_values[0]
+                
+                for i, val in enumerate(vals):
                     if i < len(feature_names):
                         feat = feature_names[i]
                         contributions.append({
@@ -312,11 +332,32 @@ class NCAABPredictor:
                 logger.warning(f"SHAP calculation failed: {se}")
                 top_factors = []
             
+            # --- Radar Data (Experimental) ---
+            def get_radar(stats):
+                if not stats: return {}
+                # Ranges based on NCAAB distribution
+                return {
+                    'Offense': self._normalize_radar(stats.get('off_eff_season_avg', 100), 85, 125),
+                    'Defense': self._normalize_radar(stats.get('def_eff_season_avg', 100), 85, 125, reverse=True),
+                    'Pace': self._normalize_radar(stats.get('possessions_season_avg', 70), 62, 78),
+                    'SOS': self._normalize_radar(stats.get('owp_season_avg', 0.5), 0.44, 0.58),
+                    'Depth': self._normalize_radar(stats.get('oowp_season_avg', 0.5), 0.44, 0.58)
+                }
+            
+            # We need the underlying a_stats/h_stats. Let's recalculate or pull from prepare
+            # For simplicity in this call, we'll re-fetch just the season averages
+            h_radar = get_radar(h_stats)
+            a_radar = get_radar(a_stats)
+
             return {
                 'v2_win_prob': float(ml_prob),
                 'v2_total': float(predicted_total),
                 'v2_available': True,
-                'v2_factors': top_factors
+                'v2_factors': top_factors,
+                'v2_radar': {
+                    'home': h_radar,
+                    'away': a_radar
+                }
             }
         except Exception as e:
             logger.error(f"v2 inference failed: {e}")
@@ -425,7 +466,11 @@ class NCAABPredictor:
             feat_dict = {}
             for k, v in h_feats.items(): feat_dict[f'home_{k}'] = v
             for k, v in a_feats.items(): feat_dict[f'away_{k}'] = v
+            
+            # Ensure feature order matches the model exactly
+            expected_feats = self.model.get_booster().feature_names
             X = pd.DataFrame([feat_dict])
+            X = X.reindex(columns=expected_feats).fillna(0)
             
             prob = self.model.predict_proba(X)[0][1]
             return {
