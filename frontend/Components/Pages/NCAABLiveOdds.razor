@@ -212,6 +212,28 @@
                                                     <MudText Typo="Typo.caption">Total: @total.ToString("F1")</MudText>
                                                     @if (!hasXgb) { <MudText Typo="Typo.caption" Color="Color.Warning"><em>Retrain required for XGBoost</em></MudText> }
                                                 </div>
+
+                                                @* Rationale Factors *@
+                                                @if (hasXgb && game.Prediction.V2Factors.Any())
+                                                {
+                                                    <div class="mt-2 pt-2" style="border-top: 1px solid rgba(255,255,255,0.1);">
+                                                        <MudText Typo="Typo.caption" Class="d-block mb-1"><strong>Key Factors:</strong></MudText>
+                                                        <div class="d-flex flex-wrap" style="gap: 4px;">
+                                                            @foreach (var factor in game.Prediction.V2Factors)
+                                                            {
+                                                                var isPositive = factor.Impact > 0;
+                                                                <MudTooltip Text="@($"Impact: {factor.Impact:F3}")">
+                                                                    <MudChip T="string" Size="Size.Small" 
+                                                                             Color="@(isPositive ? Color.Success : Color.Error)" 
+                                                                             Variant="Variant.Outlined"
+                                                                             Style="font-size: 0.7rem; margin: 0; height: 20px;">
+                                                                        @(isPositive ? "+" : "-") @factor.Label
+                                                                    </MudChip>
+                                                                </MudTooltip>
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                }
                                             </div>
                                         }
                                     
@@ -505,8 +527,21 @@
                 // V2 fields
                 V2Available = pred.TryGetProperty("v2_available", out var v2a) && v2a.GetBoolean(),
                 V2WinProb = pred.TryGetProperty("v2_win_prob", out var v2wp) ? v2wp.GetDouble() : 0,
-                V2Total = pred.TryGetProperty("v2_total", out var v2t) ? v2t.GetDouble() : 0
+                V2Total = pred.TryGetProperty("v2_total", out var v2t) ? v2t.GetDouble() : 0,
+                V2Factors = new()
             };
+
+            if (pred.TryGetProperty("v2_factors", out var factors) && factors.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var f in factors.EnumerateArray())
+                {
+                    game.Prediction.V2Factors.Add(new XgbFactor
+                    {
+                        Label = f.TryGetProperty("label", out var l) ? l.GetString() ?? "" : "",
+                        Impact = f.TryGetProperty("impact", out var i) ? i.GetDouble() : 0
+                    });
+                }
+            }
         }
 
         return game;
@@ -549,6 +584,13 @@
         public bool V2Available { get; set; }
         public double V2WinProb { get; set; }
         public double V2Total { get; set; }
+        public List<XgbFactor> V2Factors { get; set; } = new();
+    }
+
+    private class XgbFactor
+    {
+        public string Label { get; set; } = "";
+        public double Impact { get; set; }
     }
 
     [Inject] private PythonMLServiceClient MLServiceClient { get; set; } = default!;

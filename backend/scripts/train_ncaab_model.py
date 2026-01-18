@@ -35,16 +35,44 @@ def engineer_features_v2(df):
     print("Engineering features V2 (Deep Aggregation)...")
     df = df.copy().sort_values(['team_display_name', 'game_date'])
     
+    # 0. Calculated Base Stats
+    # Possessions = FGA - ORB + TO + 0.44 * FTA
+    df['possessions'] = (
+        df['field_goals_attempted'] - 
+        df['offensive_rebounds'] + 
+        df['turnovers'] + 
+        (0.44 * df['free_throws_attempted'])
+    )
+    df['off_eff'] = (df['team_score'] / df['possessions']) * 100
+    df['def_eff'] = (df['opponent_team_score'] / df['possessions']) * 100
+    
+    # 0.5 Calculate Win Pct and OWP (Strength of Schedule)
+    print("Calculating Strength of Schedule (SOS)...")
+    # First, simple win % per season for each team
+    df['is_win'] = (df['team_score'] > df['opponent_team_score']).astype(int)
+    team_season_win_pct = df.groupby(['season', 'team_display_name'])['is_win'].expanding().mean().reset_index(level=[0,1], drop=True)
+    df['win_pct'] = team_season_win_pct
+    
+    # OWP (Opponent Win %)
+    matchup_map = df[['game_id', 'team_display_name', 'win_pct']].rename(columns={'team_display_name': 'opponent_team_display_name', 'win_pct': 'opp_win_pct'})
+    df = pd.merge(df, matchup_map, on=['game_id', 'opponent_team_display_name'], how='left')
+    df['owp'] = df.groupby(['season', 'team_display_name'])['opp_win_pct'].expanding().mean().reset_index(level=[0,1], drop=True)
+    
+    # OOWP (Opponent's Opponent Win %)
+    matchup_map_owp = df[['game_id', 'team_display_name', 'owp']].rename(columns={'team_display_name': 'opponent_team_display_name', 'owp': 'opp_owp'})
+    df = pd.merge(df, matchup_map_owp, on=['game_id', 'opponent_team_display_name'], how='left')
+    df['oowp'] = df.groupby(['season', 'team_display_name'])['opp_owp'].expanding().mean().reset_index(level=[0,1], drop=True)
+
     # Core stats to aggregate
     core_stats = [
         'team_score', 'opponent_team_score', 'field_goal_pct', 'three_point_field_goal_pct',
-        'free_throw_pct', 'total_rebounds', 'assists', 'steals', 'blocks', 'turnovers', 'fouls'
+        'free_throw_pct', 'total_rebounds', 'assists', 'steals', 'blocks', 'turnovers', 'fouls',
+        'possessions', 'off_eff', 'def_eff', 'win_pct', 'owp', 'oowp'
     ]
     
     # Ensure columns exist
     core_stats = [s for s in core_stats if s in df.columns]
     
-    # 1. Team-level Aggregations
     new_features_list = []
     windows = [5, 10, 20]
     
@@ -130,6 +158,11 @@ def train_v2():
     all_home_feats = [f'{f}_home' for f in team_feats]
     all_away_feats = [f'{f}_away' for f in team_feats]
     final_features = all_home_feats + all_away_feats + diff_feats
+    print(f"Total Features: {len(final_features)}")
+    sos_feats = [f for f in final_features if 'owp' in f or 'oowp' in f or 'win_pct' in f]
+    print(f"SOS Features included: {len(sos_feats)}")
+    if sos_feats:
+        print(f"Sample SOS features: {sos_feats[:5]}")
     
     # Filter for valid data
     matchups = matchups.dropna(subset=final_features)

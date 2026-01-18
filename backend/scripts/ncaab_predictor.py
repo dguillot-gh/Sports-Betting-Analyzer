@@ -95,6 +95,25 @@ class NCAABPredictor:
                 # Ensure date is datetime
                 self.stats_df['game_date'] = pd.to_datetime(self.stats_df['game_date'])
                 logger.info(f"Loaded {len(self.stats_df)} NCAAB stats rows")
+                
+                # --- Pre-calculate SOS metrics ---
+                # 1. Win Pct
+                self.stats_df['is_win'] = (self.stats_df['team_score'] > self.stats_df['opponent_team_score']).astype(int)
+                self.stats_df['win_pct'] = self.stats_df.groupby(['season', 'team_display_name'])['is_win'].expanding().mean().reset_index(level=[0,1], drop=True)
+                
+                # 2. OWP (Opponent Win %)
+                matchup_map = self.stats_df[['game_id', 'team_display_name', 'win_pct']].rename(
+                    columns={'team_display_name': 'opponent_team_display_name', 'win_pct': 'opp_win_pct'}
+                )
+                self.stats_df = pd.merge(self.stats_df, matchup_map, on=['game_id', 'opponent_team_display_name'], how='left')
+                self.stats_df['owp'] = self.stats_df.groupby(['season', 'team_display_name'])['opp_win_pct'].expanding().mean().reset_index(level=[0,1], drop=True)
+                
+                # 3. OOWP (Opponent's Opponent Win %)
+                matchup_map_owp = self.stats_df[['game_id', 'team_display_name', 'owp']].rename(
+                    columns={'team_display_name': 'opponent_team_display_name', 'owp': 'opp_owp'}
+                )
+                self.stats_df = pd.merge(self.stats_df, matchup_map_owp, on=['game_id', 'opponent_team_display_name'], how='left')
+                self.stats_df['oowp'] = self.stats_df.groupby(['season', 'team_display_name'])['opp_owp'].expanding().mean().reset_index(level=[0,1], drop=True)
             else:
                 logger.warning(f"NCAAB stats file not found at {box_path}")
                 
@@ -146,8 +165,22 @@ class NCAABPredictor:
 
             core_stats = [
                 'team_score', 'opponent_team_score', 'field_goal_pct', 'three_point_field_goal_pct',
-                'free_throw_pct', 'total_rebounds', 'assists', 'steals', 'blocks', 'turnovers', 'fouls'
+                'free_throw_pct', 'total_rebounds', 'assists', 'steals', 'blocks', 'turnovers', 'fouls',
+                'possessions', 'off_eff', 'def_eff', 'win_pct', 'owp', 'oowp'
             ]
+            
+            # 0. Calculated Base Stats for the team history (already handled in _load_data for season-wide metrics)
+            team_df = team_df.copy()
+            # Ensure possessions and efficiency are present if not already calculated
+            if 'possessions' not in team_df.columns:
+                team_df['possessions'] = (
+                    team_df['field_goals_attempted'] - 
+                    team_df['offensive_rebounds'] + 
+                    team_df['turnovers'] + 
+                    (0.44 * team_df['free_throws_attempted'])
+                )
+                team_df['off_eff'] = (team_df['team_score'] / team_df['possessions']) * 100
+                team_df['def_eff'] = (team_df['opponent_team_score'] / team_df['possessions']) * 100
             
             stats_dict = {}
             for stat in core_stats:
@@ -194,6 +227,53 @@ class NCAABPredictor:
             
         return pd.DataFrame([final_row])
 
+    def _humanize_feature(self, feat: str, home_team: str, away_team: str) -> str:
+        """Convert technical feature name to human readable label"""
+        # Mapping for better display names
+        stats_map = {
+            'team_score': 'Scoring',
+            'opponent_team_score': 'Defense',
+            'field_goal_pct': 'FG%',
+            'three_point_field_goal_pct': '3P%',
+            'free_throw_pct': 'FT%',
+            'total_rebounds': 'Rebounding',
+            'assists': 'Assists',
+            'steals': 'Steals',
+            'blocks': 'Blocks',
+            'turnovers': 'Turnovers',
+            'fouls': 'Fouls',
+            'possessions': 'Pace',
+            'off_eff': 'Off Efficiency',
+            'def_eff': 'Def Efficiency',
+            'win_pct': 'Win Rate',
+            'owp': 'Opponent Quality (SOS)',
+            'oowp': 'Schedule Depth'
+        }
+        
+        # Determine side or Diff
+        side = ""
+        if feat.endswith('_home'): side = "Home"
+        elif feat.endswith('_away'): side = "Away"
+        elif '_diff_' in feat: side = "Matchup"
+        
+        # Extract base stat and window
+        stat_label = "Stat"
+        window = ""
+        for k, v in stats_map.items():
+            if feat.startswith(k):
+                stat_label = v
+                break
+        
+        if '_mean_5' in feat: window = "(L5)"
+        elif '_mean_10' in feat: window = "(L10)"
+        elif '_mean_20' in feat: window = "(L20)"
+        elif '_season_avg' in feat: window = "(Season)"
+        
+        if side == "Matchup":
+            return f"{stat_label} Advantage {window}".strip()
+        else:
+            return f"{side} {stat_label} {window}".strip()
+
     def predict_v2(self, home_team: str, away_team: str) -> Dict[str, Any]:
         """Run v2 inference (Dual Models)"""
         self._load_models_v2()
@@ -208,10 +288,35 @@ class NCAABPredictor:
             ml_prob = self.ml_model_v2.predict_proba(X)[0][1]
             predicted_total = self.ou_model_v2.predict(X)[0]
             
+            # --- SHAP Rationale ---
+            try:
+                explainer = shap.TreeExplainer(self.ml_model_v2)
+                shap_values = explainer.shap_values(X)
+                
+                # Get top features
+                feature_names = self.v2_features
+                contributions = []
+                for i, val in enumerate(shap_values[0]):
+                    if i < len(feature_names):
+                        feat = feature_names[i]
+                        contributions.append({
+                            'feature': feat,
+                            'label': self._humanize_feature(feat, home_team, away_team),
+                            'impact': float(val)
+                        })
+                
+                # Sort by absolute contribution and take top 5
+                contributions.sort(key=lambda x: abs(x['impact']), reverse=True)
+                top_factors = contributions[:5]
+            except Exception as se:
+                logger.warning(f"SHAP calculation failed: {se}")
+                top_factors = []
+            
             return {
                 'v2_win_prob': float(ml_prob),
                 'v2_total': float(predicted_total),
-                'v2_available': True
+                'v2_available': True,
+                'v2_factors': top_factors
             }
         except Exception as e:
             logger.error(f"v2 inference failed: {e}")
