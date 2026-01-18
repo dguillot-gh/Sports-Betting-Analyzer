@@ -618,24 +618,24 @@
                                         <MudText Typo="Typo.subtitle2" Class="mb-3 rationale-header">DEEP ANALYSIS REPORT</MudText>
                                         
                                         @{
-                                            var sections = SplitRationale(_aiAnalysis.LlmInsight.Rationale);
+                                            var analysisSections = SplitRationale(_aiAnalysis.LlmInsight.Rationale);
                                             var expandedIndex = 0;
                                         }
 
                                         <MudExpansionPanels MultiExpansion="false" Elevation="0">
-                                            @foreach (var section in sections)
+                                            @foreach (var item in analysisSections)
                                             {
                                                 expandedIndex++;
                                                 <MudExpansionPanel Class="analysis-panel" IsExpanded="@(expandedIndex == 1)">
                                                     <TitleContent>
                                                         <div class="d-flex align-center">
-                                                            <MudIcon Icon="@GetSectionIcon(section.Title)" Class="mr-3" Color="Color.Primary" />
-                                                            <MudText Typo="Typo.subtitle1"><b>@section.Title</b></MudText>
+                                                            <MudIcon Icon="@GetSectionIcon(item.Title)" Class="mr-3" Color="Color.Primary" />
+                                                            <MudText Typo="Typo.subtitle1"><b>@item.Title</b></MudText>
                                                         </div>
                                                     </TitleContent>
                                                     <ChildContent>
                                                         <div class="rationale-container pa-4">
-                                                            @((MarkupString)CleanseRationale(section.Content))
+                                                            @((MarkupString)CleanseRationale(item.Content))
                                                         </div>
                                                     </ChildContent>
                                                 </MudExpansionPanel>
