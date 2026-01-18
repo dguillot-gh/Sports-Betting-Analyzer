@@ -71,50 +71,44 @@ def get_nascar_ai_predictions(
         'status': 'Running', # Assumption for pre-race prediction
         
         # Numeric - Core
+        'start': val('avg_start', 20),
         'year': datetime.now().year,
         'race_num': 1, # Placeholder
-        'start': val('avg_start', 20),
-        'car_num': 0, # Placeholder
-        'laps': 200, # Placeholder
-        'laps_led': val('avg_laps_led', 0),
-        'stage_1': 0, # Placeholder
-        'stage_2': 0, # Placeholder
-        'stage_points': val('stage_points', 0),
-        
-        # Numeric - Enhanced
-        'pole_position': 1 if val('avg_start') <= 1.5 else 0,
-        'qualified_top5': 1 if val('avg_start') <= 5.5 else 0,
-        'qualified_top10': 1 if val('avg_start') <= 10.5 else 0,
+
+        # Track Type Flags
         'is_road_course': 1 if 'road' in track_type.lower() else 0,
         'is_superspeedway': 1 if 'super' in track_type.lower() else 0,
         'is_short_track': 1 if 'short' in track_type.lower() else 0,
+        'is_dirt': 1 if 'dirt' in track_type.lower() else 0,
+
+        # Career Stats
         'career_races': val('career_races', 100),
         'career_wins': val('career_wins', 5),
         'career_win_pct': val('career_win_pct', 0.05),
         'career_top5': val('career_top5', 20),
         'career_top10': val('career_top10', 40),
         'career_avg_finish': val('career_avg_finish', 18),
+        'career_laps_led_pct': val('career_laps_led_pct', 0.0),
+
+        # Track History
         'races_at_track': val('races_at_track', 5),
         'wins_at_track': val('wins_at_track', 0),
         'avg_finish_at_track': val(f'avg_finish_{track_type.lower()}', 18),
         'best_finish_at_track': val('best_finish_at_track', 5),
+        
+        # Recent Form
         'avg_finish_last_3': val('recent_avg_finish', 15),
         'avg_finish_last_5': val('recent_avg_finish', 15),
         'avg_finish_last_10': val('recent_avg_finish', 15),
+        'laps_led_pct_last_5': val('laps_led_pct_last_5', 0.0),
+        'consistency_score': val('consistency_score', 1.0),
+
+        # Team/Manu Stats
         'team_wins_this_season': 0,
         'team_top5_this_season': 0,
         'team_avg_finish_this_season': 15,
         'manu_wins_this_season': 0,
-        'manu_win_pct_this_season': 0,
-        
-        # Numeric - Scraped
-        'scraped_avg_speed_rank': val('avg_speed_rank', 20),
-        'scraped_avg_finish': val('recent_avg_finish', 15),
-        'scraped_best_finish': 5,
-        'scraped_races_count': 5,
-        'track_specific_speed': val('avg_speed_rank', 20),
-        'track_specific_finish': val(f'avg_finish_{track_type.lower()}', 18),
-        'track_experience': val('races_at_track', 5)
+        'manu_win_pct_this_season': 0
     }
     
     # Convert to DataFrame for prediction

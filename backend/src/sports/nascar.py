@@ -19,6 +19,7 @@ class NASCARSport(BaseSport):
         self._active_teams_by_series = {}
         self._active_drivers = []
         self._active_drivers_by_series = {}
+        self._archetype_mapping = {}
 
     def load_data(self) -> pd.DataFrame:
         """Load NASCAR data, prioritizing enhanced CSV files if available."""
@@ -49,6 +50,17 @@ class NASCARSport(BaseSport):
                 # Merge scraped historical features from ifantasyrace.com
                 df = self._load_scraped_features(df)
                 self.df = df
+                
+                # Load Archetypes
+                archetype_path = self.data_dir.parent / "models" / "nascar" / "archetypes" / "driver_archetypes.json"
+                if archetype_path.exists():
+                    try:
+                        with open(archetype_path, 'r') as f:
+                            arch_data = json.load(f)
+                            self._archetype_mapping = arch_data.get('mapping', {})
+                    except Exception as e:
+                        print(f"Error loading archetypes: {e}")
+                        
                 return df
 
         # 2. Fallback to existing JSON method
@@ -69,11 +81,21 @@ class NASCARSport(BaseSport):
             self._active_drivers = data.get('active_drivers', [])
             self._active_drivers_by_series = data.get('active_drivers_by_series', {})
             
+            # Load Archetypes if available
+            archetype_path = self.data_dir.parent / "models" / "nascar" / "archetypes" / "driver_archetypes.json"
+            if archetype_path.exists():
+                try:
+                    with open(archetype_path, 'r') as f:
+                        arch_data = json.load(f)
+                        self._archetype_mapping = arch_data.get('mapping', {})
+                except Exception as e:
+                    print(f"Error loading archetypes: {e}")
+            
             # Load records into DataFrame
             records = data.get('records', [])
             if not records:
                 return pd.DataFrame()
-                
+            
             df = pd.DataFrame(records)
             self.df = self.preprocess_data(df)
             return self.df
@@ -432,6 +454,18 @@ class NASCARSport(BaseSport):
         avg_finish = driver_df['finishing_position'].mean() if total_races > 0 else 0
         avg_start = driver_df['start'].mean() if 'start' in driver_df.columns and total_races > 0 else 0
         
+        # Extended Metrics (Latest available)
+        latest_row = driver_df.iloc[0] # Sorted chronologically descending, so 0 is latest
+        consistency = latest_row.get('consistency_score', 0)
+        # Invert consistency so higher is better logic? No, CV is lower=better.
+        # Let's clean it for UI: "0.15" (High Stability) vs "0.8" (Volatile)
+        
+        # Career Laps Led Pct
+        career_ll_pct = latest_row.get('career_laps_led_pct', 0) * 100
+        
+        # Archetype
+        archetype = self._archetype_mapping.get(entity_id, "Unknown")
+        
         stats = {
             "Races": total_races,
             "Wins": wins,
@@ -440,9 +474,12 @@ class NASCARSport(BaseSport):
             "Top 10": top_10,
             "Poles": poles,
             "Laps Led": laps_led,
+            "Laps Led %": f"{career_ll_pct:.1f}%",
             "DNFs": dnfs,
             "Avg Start": f"{avg_start:.1f}",
             "Avg Finish": f"{avg_finish:.1f}",
+            "Consistency": f"{consistency:.2f}",
+            "Archetype": archetype
         }
 
         # --- Splits (Track Type) ---

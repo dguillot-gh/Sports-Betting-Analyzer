@@ -39,7 +39,8 @@ def standardize_columns(df, series_name):
         'Win': 'race_win',
         'S1': 'stage_1',
         'S2': 'stage_2',
-        'Pts': 'points'
+        'Pts': 'points',
+        'Rating': 'driver_rating' # If available, map it
     }
     
     # Rename columns if they exist
@@ -73,25 +74,32 @@ def calculate_features(df):
     
     # Track Type Features
     if 'track' in df.columns:
-        # Create explicit track_type column
-        df['track_type'] = 'Speedway' # Default
+        # Normalize track names for matching
+        t = df['track'].astype(str).str.lower()
         
-        # Define masks
-        is_road = df['track'].astype(str).str.contains('Road|Glen|Sonoma|Circuit|Roval|Chicago Street', case=False)
-        is_ss = df['track'].astype(str).str.contains('Daytona|Talladega|Atlanta', case=False) # Atlanta is SS now
-        is_short = df['track'].astype(str).str.contains('Bristol|Martinsville|Richmond|Iowa|North Wilkesboro', case=False)
-        is_dirt = df['track'].astype(str).str.contains('Dirt', case=False)
-        
-        # Apply types
-        df.loc[is_road, 'track_type'] = 'Road Course'
-        df.loc[is_ss, 'track_type'] = 'Superspeedway'
-        df.loc[is_short, 'track_type'] = 'Short Track'
-        df.loc[is_dirt, 'track_type'] = 'Dirt'
+        df['track_type'] = 'Speedway' # Default for 1-2 mile ovals
 
-        # Keep boolean flags for ML compatibility if needed, or rely on one-hot encoding of track_type later
+        # Road Courses
+        is_road = t.str.contains('road|glen|sonoma|circuit|roval|chicago street|portland|mid-ohio|road america|cota')
+        df.loc[is_road, 'track_type'] = 'Road Course'
+
+        # Superspeedways (>2.0 miles)
+        is_ss = t.str.contains('daytona|talladega|atlanta') 
+        df.loc[is_ss, 'track_type'] = 'Superspeedway'
+
+        # Short Tracks (<1.0 miles)
+        is_short = t.str.contains('bristol|martinsville|richmond|iowa|north wilkesboro|coliseum')
+        df.loc[is_short, 'track_type'] = 'Short Track'
+        
+        # Dirt Tracks
+        is_dirt = t.str.contains('dirt')
+        df.loc[is_dirt, 'track_type'] = 'Dirt'
+        
+        # One-hot encoding for ML
         df['is_road_course'] = is_road.astype(int)
         df['is_superspeedway'] = is_ss.astype(int)
         df['is_short_track'] = is_short.astype(int)
+        df['is_dirt'] = is_dirt.astype(int)
 
     # 2. Driver Career Stats (Cumulative)
     # Use transform to ensure alignment with original index
@@ -113,7 +121,34 @@ def calculate_features(df):
     df['career_top10'] = df.groupby('driver')['is_top10'].transform(lambda x: x.cumsum().shift(1)).fillna(0)
     
     # Career Average Finish
-    df['career_avg_finish'] = df.groupby('driver')['finishing_position'].transform(lambda x: x.expanding().mean().shift(1)).fillna(20)
+    df['career_avg_finish'] = df.groupby('driver')['finishing_position'].transform(lambda x: x.expanding().mean().shift(1)).fillna(25)
+    
+    # Career Laps Led
+    if 'laps_led' in df.columns and 'laps' in df.columns:
+        # Ensure numeric
+        df['laps_led'] = pd.to_numeric(df['laps_led'], errors='coerce').fillna(0)
+        df['laps'] = pd.to_numeric(df['laps'], errors='coerce').fillna(1) # Avoid div/0
+        
+        # Rolling Laps Led % (Last 5 races)
+        df['laps_led_pct_last_5'] = df.groupby('driver')['laps_led'] \
+            .transform(lambda x: x.shift(1).rolling(5, min_periods=1).sum()) / \
+            df.groupby('driver')['laps'].transform(lambda x: x.shift(1).rolling(5, min_periods=1).sum())
+        
+        df['laps_led_pct_last_5'] = df['laps_led_pct_last_5'].fillna(0)
+        
+        # Career Laps Led Pct
+        df['career_laps_led_pct'] = df.groupby('driver')['laps_led'].transform(lambda x: x.expanding().sum().shift(1)) / \
+                                    df.groupby('driver')['laps'].transform(lambda x: x.expanding().sum().shift(1))
+        df['career_laps_led_pct'] = df['career_laps_led_pct'].fillna(0)
+    
+    # Consistency Score (Coefficient of Variation of Finish Position - Last 10 Races)
+    # Lower is better (more consistent)
+    # CV = StdDev / Mean
+    df['std_dev_last_10'] = df.groupby('driver')['finishing_position'].transform(lambda x: x.shift(1).rolling(10, min_periods=5).std())
+    df['avg_finish_last_10_raw'] = df.groupby('driver')['finishing_position'].transform(lambda x: x.shift(1).rolling(10, min_periods=5).mean())
+    
+    df['consistency_score'] = df['std_dev_last_10'] / df['avg_finish_last_10_raw']
+    df['consistency_score'] = df['consistency_score'].fillna(1.0) # Default to high variance if unknown
     
     # 3. Driver Track History
     # Group by driver AND track

@@ -3,7 +3,7 @@ NASCAR API Endpoints
 Fetches live race data, schedules, and results from NASCAR's official API
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from typing import Optional
 import httpx
 import asyncio
@@ -685,3 +685,51 @@ async def get_race_predictions(race_id: int):
     except Exception as e:
         print(f"Prediction error: {e}")
         return {"error": str(e)}
+
+# ============================================
+# MODEL MAINTENANCE - Retrain & Update
+# ============================================
+
+import subprocess
+import sys
+from pathlib import Path
+
+@router.post("/train")
+async def train_nascar_models(background_tasks: BackgroundTasks):
+    """
+    Trigger the full NASCAR Data Pipeline:
+    1. Fetch new data (R)
+    2. Enhance features
+    3. Retrain Archetypes
+    4. Retrain Ensemble Model
+    """
+    try:
+        # Run in background to avoid blocking API
+        background_tasks.add_task(_run_pipeline_task)
+        return {"status": "started", "message": "NASCAR Model Pipeline triggered in background."}
+    except Exception as e:
+        raise HTTPException(500, f"Failed to start pipeline: {e}")
+
+async def _run_pipeline_task():
+    """Execute the pipeline script."""
+    script_path = Path(__file__).parent.parent / "scripts" / "run_nascar_pipeline.py"
+    
+    try:
+        print(f"Starting NASCAR Pipeline: {script_path}")
+        # Run the orchestrator script
+        result = subprocess.run(
+            [sys.executable, str(script_path)],
+            capture_output=True,
+            text=True,
+            cwd=script_path.parent
+        )
+        
+        if result.returncode == 0:
+            print("NASCAR Pipeline COMPLETED SUCCESSFULLY")
+            print(result.stdout)
+        else:
+            print("NASCAR Pipeline FAILED")
+            print(result.stderr)
+            
+    except Exception as e:
+        print(f"Pipeline Execution Error: {e}")
