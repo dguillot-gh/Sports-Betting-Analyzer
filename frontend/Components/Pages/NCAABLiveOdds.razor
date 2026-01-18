@@ -184,16 +184,66 @@
                                         }
                                     </tbody>
                                 </MudSimpleTable>
-                                     @if (game.ValueBets.Any())
-                                    {
-                                        <MudDivider Class="my-2"/>
-                                        <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
-                                            @foreach (var bet in game.ValueBets)
-                                            {
-                                                <MudChip T="string" Color="Color.Warning" Size="Size.Small">@bet</MudChip>
-                                            }
-                                        </MudStack>
+                                
+                                @* Model Predictions Section - Always Visible *@
+                                <div class="mt-3">
+                                    @{
+                                        var espnMatch = MatchEspnGame(game);
                                     }
+                                    
+                                    @* XGBoost Prediction (from analyze-all endpoint) *@
+                                    @if (game.Prediction != null)
+                                    {
+                                        var prob = game.Prediction.HomeWinProbability;
+                                        <div class="mb-2 pa-2 rounded" style="background: rgba(81, 45, 168, 0.1); border-left: 3px solid #512da8;">
+                                            <div class="d-flex justify-space-between align-center">
+                                                <MudText Typo="Typo.caption"><strong>XGBoost Model</strong></MudText>
+                                                <MudText Typo="Typo.caption" Color="@(prob > 0.5 ? Color.Success : Color.Error)">
+                                                    <strong>@(prob > 0.5 ? game.HomeTeam : game.AwayTeam) @((prob > 0.5 ? prob : 1 - prob).ToString("P0"))</strong>
+                                                </MudText>
+                                            </div>
+                                            <MudProgressLinear Color="@(prob > 0.5 ? Color.Success : Color.Error)" Value="@((prob > 0.5 ? prob : 1 - prob) * 100)" Size="Size.Small" />
+                                            <MudText Typo="Typo.caption" Class="mt-1">Total: @game.Prediction.PredictedTotal.ToString("F1")</MudText>
+                                        </div>
+                                    }
+                                    
+                                    @* ESPN BPI Prediction *@
+                                    @if (espnMatch != null)
+                                    {
+                                        var homeProb = espnMatch.HomeWinProb;
+                                        var awayProb = espnMatch.AwayWinProb;
+                                        <div class="mb-2 pa-2 rounded" style="background: rgba(0, 123, 255, 0.08); border-left: 3px solid #2196f3;">
+                                            <div class="d-flex justify-space-between align-center">
+                                                <MudText Typo="Typo.caption"><strong>ESPN BPI</strong></MudText>
+                                                <MudText Typo="Typo.caption" Color="@(homeProb > awayProb ? Color.Success : Color.Error)">
+                                                    <strong>@(homeProb > awayProb ? game.HomeTeam : game.AwayTeam) @((homeProb > awayProb ? homeProb : awayProb).ToString("P0"))</strong>
+                                                </MudText>
+                                            </div>
+                                            <MudProgressLinear Color="Color.Info" Value="@((homeProb > awayProb ? homeProb : awayProb) * 100)" Size="Size.Small" />
+                                            @if (espnMatch.Spread != 0)
+                                            {
+                                                <MudText Typo="Typo.caption" Class="mt-1">Spread: @espnMatch.Spread.ToString("+0.0;-0.0") | O/U: @espnMatch.OverUnder</MudText>
+                                            }
+                                        </div>
+                                    }
+                                    else if (_isEspnLoading)
+                                    {
+                                        <div class="mb-2 pa-2 rounded" style="background: rgba(0, 123, 255, 0.05);">
+                                            <MudText Typo="Typo.caption"><MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1" /> Loading ESPN BPI...</MudText>
+                                        </div>
+                                    }
+                                </div>
+                                
+                                @if (game.ValueBets.Any())
+                                {
+                                    <MudDivider Class="my-2"/>
+                                    <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                                        @foreach (var bet in game.ValueBets)
+                                        {
+                                            <MudChip T="string" Color="Color.Warning" Size="Size.Small">@bet</MudChip>
+                                        }
+                                    </MudStack>
+                                }
 
                                 <MudDivider Class="my-2" />
                                 <div class="mt-2">
@@ -266,10 +316,15 @@
     private List<GameData> _games = new();
     private int _valueBets = 0;
     private string _source = "";
+    
+    // ESPN BPI State
+    private EspnResponse? _espnData;
+    private bool _isEspnLoading = false;
 
     protected override async Task OnInitializedAsync()
     {
-        await RunAnalysis();
+        // Load ESPN BPI and odds in parallel
+        await Task.WhenAll(RunAnalysis(), LoadEspnPredictions());
     }
 
     private async Task RunAnalysis()
@@ -317,6 +372,35 @@
             _isLoading = false;
             StateHasChanged();
         }
+    }
+    
+    private async Task LoadEspnPredictions()
+    {
+        _isEspnLoading = true;
+        try
+        {
+            _espnData = await MLServiceClient.GetEspnPredictionsAsync("ncaab");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Error loading ESPN predictions");
+        }
+        finally
+        {
+            _isEspnLoading = false;
+        }
+    }
+    
+    private EspnGame? MatchEspnGame(GameData game)
+    {
+        if (_espnData?.Games == null) return null;
+        
+        return _espnData.Games.FirstOrDefault(g => 
+            (g.HomeTeam.Contains(game.HomeTeam, StringComparison.OrdinalIgnoreCase) || 
+             game.HomeTeam.Contains(g.HomeTeam, StringComparison.OrdinalIgnoreCase)) &&
+            (g.AwayTeam.Contains(game.AwayTeam, StringComparison.OrdinalIgnoreCase) || 
+             game.AwayTeam.Contains(g.AwayTeam, StringComparison.OrdinalIgnoreCase))
+        );
     }
 
     // Training State
