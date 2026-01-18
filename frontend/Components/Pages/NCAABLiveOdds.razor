@@ -184,28 +184,36 @@
                                         }
                                     </tbody>
                                 </MudSimpleTable>
-                                
-                                @* Model Predictions Section - Always Visible *@
-                                <div class="mt-3">
-                                    @{
-                                        var espnMatch = MatchEspnGame(game);
-                                    }
-                                    
-                                    @* XGBoost Prediction (from analyze-all endpoint) *@
-                                    @if (game.Prediction != null)
-                                    {
-                                        var prob = game.Prediction.HomeWinProbability;
-                                        <div class="mb-2 pa-2 rounded" style="background: rgba(81, 45, 168, 0.1); border-left: 3px solid #512da8;">
-                                            <div class="d-flex justify-space-between align-center">
-                                                <MudText Typo="Typo.caption"><strong>XGBoost Model</strong></MudText>
-                                                <MudText Typo="Typo.caption" Color="@(prob > 0.5 ? Color.Success : Color.Error)">
-                                                    <strong>@(prob > 0.5 ? game.HomeTeam : game.AwayTeam) @((prob > 0.5 ? prob : 1 - prob).ToString("P0"))</strong>
-                                                </MudText>
+                                                                @* Model Predictions Section - Always Visible *@
+                                    <div class="mt-3">
+                                        @{
+                                            var espnMatch = MatchEspnGame(game);
+                                        }
+                                        
+                                        @* XGBoost Prediction (from analyze-all endpoint) *@
+                                        @if (game.Prediction != null)
+                                        {
+                                            var hasXgb = game.Prediction.V2Available;
+                                            var prob = hasXgb ? game.Prediction.V2WinProb : game.Prediction.HomeWinProbability;
+                                            var total = hasXgb ? game.Prediction.V2Total : game.Prediction.PredictedTotal;
+                                            
+                                            <div class="mb-2 pa-2 rounded" style="background: rgba(81, 45, 168, 0.1); border-left: 3px solid #512da8;">
+                                                <div class="d-flex justify-space-between align-center">
+                                                    <MudText Typo="Typo.caption">
+                                                        <strong>@(hasXgb ? "XGBoost Model v2" : "Baseline Model")</strong>
+                                                        @if (!hasXgb) { <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" Color="Color.Warning" Class="ml-1" Title="Model not trained" /> }
+                                                    </MudText>
+                                                    <MudText Typo="Typo.caption" Color="@(prob > 0.5 ? Color.Success : Color.Error)">
+                                                        <strong>@(prob > 0.5 ? game.HomeTeam : game.AwayTeam) @((prob > 0.5 ? prob : 1 - prob).ToString("P0"))</strong>
+                                                    </MudText>
+                                                </div>
+                                                <MudProgressLinear Color="@(prob > 0.5 ? Color.Success : Color.Error)" Value="@((prob > 0.5 ? prob : 1 - prob) * 100)" Size="Size.Small" />
+                                                <div class="d-flex justify-space-between mt-1">
+                                                    <MudText Typo="Typo.caption">Total: @total.ToString("F1")</MudText>
+                                                    @if (!hasXgb) { <MudText Typo="Typo.caption" Color="Color.Warning"><em>Retrain required for XGBoost</em></MudText> }
+                                                </div>
                                             </div>
-                                            <MudProgressLinear Color="@(prob > 0.5 ? Color.Success : Color.Error)" Value="@((prob > 0.5 ? prob : 1 - prob) * 100)" Size="Size.Small" />
-                                            <MudText Typo="Typo.caption" Class="mt-1">Total: @game.Prediction.PredictedTotal.ToString("F1")</MudText>
-                                        </div>
-                                    }
+                                        }
                                     
                                     @* ESPN BPI Prediction *@
                                     @if (espnMatch != null)
@@ -492,7 +500,12 @@
                 PredictedWinner = pred.TryGetProperty("predicted_winner", out var pw) ? pw.GetString() ?? "" : "",
                 HomeWinProbability = pred.TryGetProperty("home_win_probability", out var hwp) ? hwp.GetDouble() : 0.5,
                 PredictedTotal = pred.TryGetProperty("predicted_total", out var pt) ? pt.GetDouble() : 0,
-                Confidence = pred.TryGetProperty("confidence", out var c) ? c.GetDouble() : 0.5
+                Confidence = pred.TryGetProperty("confidence", out var c) ? c.GetDouble() : 0.5,
+                
+                // V2 fields
+                V2Available = pred.TryGetProperty("v2_available", out var v2a) && v2a.GetBoolean(),
+                V2WinProb = pred.TryGetProperty("v2_win_prob", out var v2wp) ? v2wp.GetDouble() : 0,
+                V2Total = pred.TryGetProperty("v2_total", out var v2t) ? v2t.GetDouble() : 0
             };
         }
 
@@ -531,6 +544,11 @@
         public double HomeWinProbability { get; set; }
         public double PredictedTotal { get; set; }
         public double Confidence { get; set; }
+        
+        // XGBoost v2 fields
+        public bool V2Available { get; set; }
+        public double V2WinProb { get; set; }
+        public double V2Total { get; set; }
     }
 
     [Inject] private PythonMLServiceClient MLServiceClient { get; set; } = default!;
