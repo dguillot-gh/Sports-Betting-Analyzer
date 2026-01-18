@@ -9,14 +9,14 @@ import logging
 # Assuming scripts is in path or relative import
 try:
     from scripts.ncaab_predictor import NCAABPredictor
-    from scripts.train_ncaab_model import train as train_ncaab
+    from scripts.train_ncaab_model import train_v2 as train_ncaab
 except ImportError:
     # Fallback for different path structures
     import sys
     from pathlib import Path
     sys.path.append(str(Path(__file__).resolve().parents[2]))
     from scripts.ncaab_predictor import NCAABPredictor
-    from scripts.train_ncaab_model import train as train_ncaab
+    from scripts.train_ncaab_model import train_v2 as train_ncaab
 
 logger = logging.getLogger(__name__)
 
