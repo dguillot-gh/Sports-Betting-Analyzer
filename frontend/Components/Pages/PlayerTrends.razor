@@ -2,7 +2,6 @@
 @page "/player-trends/{Sport}"
 @rendermode InteractiveServer
 @using MudBlazor
-@using ApexCharts
 @using AC = ApexCharts
 @inject HttpClient Http
 @inject ISnackbar Snackbar
@@ -111,17 +110,17 @@
                     </MudSelect>
                 </div>
                 
-                <ApexChart TItem="GameDataPoint"
+                <AC.ApexChart TItem="GameDataPoint"
                            Title=""
                            Height="350"
                            Options="_chartOptions">
-                    <ApexPointSeries TItem="GameDataPoint"
+                    <AC.ApexPointSeries TItem="GameDataPoint"
                                      Items="_chartData"
                                      Name="@GetStatLabel(_selectedChartStat)"
                                      SeriesType="AC.SeriesType.Line"
                                      XValue="_getXValue"
                                      YValue="_getYValue" />
-                </ApexChart>
+                </AC.ApexChart>
             </MudPaper>
 
             <!-- Hit Rates Summary -->
