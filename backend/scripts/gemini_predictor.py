@@ -210,24 +210,24 @@ class GeminiPredictor:
         5. Situational Factors (Home/Away, rest, travel, recent form)
         6. Summary (Concise tie-together explaining why this team is favored)
 
-        Response Guidelines:
         - Avoid generic commentary. Use realistic on-field/on-court factors.
         - Ensure injuries are current for {date_str}.
         - **FORMATTING**: Provide the 'rationale' field as a **Raw HTML** string. 
           - Use <h4> for section headers.
           - Use <ul>Combined with <li> for lists.
           - Use <b> for bold text.
-          - Use <br> for line breaks between paragraphs.
-          - Do NOT use Markdown (no #, no *, no -).
-          - Make it visually clean and easy to read in a web view.
+          - Use <p> for paragraphs.
+          - Do **NOT** use Markdown (no #, no *, no -).
+          - Use <br> only if necessary for extra spacing.
+          - Make it visually clean and easy to read.
         """
 
         # 4. JSON Schema instruction
         prompt_metrics = """
         "winner": (Predicted Team Name or Driver Name),
         "confidence": (0-100),
-        "rationale": (Provide the full detailed 6-point analysis here. Use ### headers for each point, bullet points, and bold emphasis. Format as a single string containing valid Markdown with double newlines between sections),
-        "key_factor": (The single most important factor, e.g., 'Cade Cunningham Injury')
+        "rationale": (Provide the full detailed 6-point analysis here as a Raw HTML string as specified above),
+        "key_factor": (The single most important factor, e.g., 'Nikola Jokic Injury')
         """
         
         return f"{master_prompt}\n\nPlease provide a JSON object with:\n{prompt_metrics}"

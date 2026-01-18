@@ -304,25 +304,30 @@ class NCAABPredictor:
             
             # --- SHAP Rationale ---
             try:
-                # Use booster directly to avoid some parsing issues in older SHAP versions
                 booster = self.ml_model_v2.get_booster()
                 explainer = shap.TreeExplainer(booster)
-                shap_values = explainer.shap_values(X)
+                # For classification, returns list of [neg_impact, pos_impact] per class
+                shap_res = explainer.shap_values(X)
                 
-                # Get top features
+                # Standardize to 1D impact array for the positive class (Win)
+                if isinstance(shap_res, list):
+                    # Index 1 is the positive class in binary classifier
+                    impact_array = shap_res[1][0] if len(shap_res) > 1 else shap_res[0][0]
+                else:
+                    impact_array = shap_res[0] # First row
+
                 feature_names = self.v2_features
                 contributions = []
                 
-                # shap_values can be a list or array depending on version
-                vals = shap_values[0] if isinstance(shap_values, list) else shap_values[0]
-                
-                for i, val in enumerate(vals):
+                for i, impact_val in enumerate(impact_array):
                     if i < len(feature_names):
                         feat = feature_names[i]
+                        # Safe conversion to float scalar, flattening handles potential array-wrapping
+                        scalar_impact = float(np.array(impact_val).flatten()[0])
                         contributions.append({
                             'feature': feat,
                             'label': self._humanize_feature(feat, home_team, away_team),
-                            'impact': float(val)
+                            'impact': scalar_impact
                         })
                 
                 # Sort by absolute contribution and take top 5
@@ -434,7 +439,11 @@ class NCAABPredictor:
         if self.model is None and self.model_path.exists():
             try:
                 self.model = joblib.load(self.model_path)
-                self.explainer = shap.TreeExplainer(self.model)
+                # Pass booster directly if possible to avoid internal conversion/parsing issues in SHAP
+                model_to_explain = self.model
+                if hasattr(self.model, "get_booster"):
+                    model_to_explain = self.model.get_booster()
+                self.explainer = shap.TreeExplainer(model_to_explain)
             except Exception as e:
                 logger.error(f"Failed to load XGBoost v1: {e}")
 

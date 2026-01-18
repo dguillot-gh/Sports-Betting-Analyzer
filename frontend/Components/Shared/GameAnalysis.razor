@@ -1,9 +1,80 @@
-@using SportsBettingAnalyzer.Models
-@using SportsBettingAnalyzer.Services
-@using MudBlazor
 @inject BallDontLieService StatsService
 @inject PythonMLServiceClient MLService
 @inject ISnackbar Snackbar
+@using System.Text.RegularExpressions
+
+<style>
+    .rationale-container {
+        font-family: 'Roboto', 'Segoe UI', 'Inter', sans-serif;
+        font-size: 0.98rem;
+        line-height: 1.8;
+        color: #263238;
+    }
+    .rationale-container h4 {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #1a237e;
+        margin-top: 1.5rem;
+        margin-bottom: 0.75rem;
+        border-bottom: 2px solid #e8eaf6;
+        padding-bottom: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.75px;
+        display: flex;
+        align-items: center;
+    }
+    .rationale-container h4::before {
+        content: "";
+        display: inline-block;
+        width: 4px;
+        height: 18px;
+        background: #3f51b5;
+        margin-right: 10px;
+        border-radius: 2px;
+    }
+    .rationale-container ul {
+        padding-left: 1.5rem;
+        margin-bottom: 1.25rem;
+        list-style-type: none;
+    }
+    .rationale-container li {
+        margin-bottom: 0.65rem;
+        position: relative;
+        padding-left: 0.5rem;
+    }
+    .rationale-container li::before {
+        content: "•";
+        color: #3f51b5;
+        font-weight: bold;
+        display: inline-block;
+        width: 1rem;
+        margin-left: -1.25rem;
+        font-size: 1.2rem;
+        vertical-align: middle;
+    }
+    .rationale-container b, .rationale-container strong {
+        color: #c2185b;
+        font-weight: 700;
+    }
+    .rationale-container p {
+        margin-bottom: 1rem;
+    }
+    
+    .ai-insight-card {
+        background: #ffffff !important;
+        border: 1px solid #e0e0e0 !important;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.06) !important;
+        border-radius: 16px !important;
+        overflow: hidden;
+    }
+    
+    .ai-header-gradient {
+        background: linear-gradient(90deg, #1a237e 0%, #3949ab 100%);
+        color: white;
+        padding: 16px 24px;
+        margin: -24px -24px 20px -24px;
+    }
+</style>
 
 <MudDialog>
     <DialogContent>
@@ -521,15 +592,28 @@
                             <!-- Gemini LLM Insight -->
                             @if (_aiAnalysis.LlmInsight != null)
                             {
-                                <MudCard Elevation="3" Class="pa-4 mb-4" Style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);">
-                                    <div class="d-flex justify-space-between align-center mb-2">
-                                         <MudText Typo="Typo.h5" Color="Color.Primary" Style="font-weight: 800;">AI PREDICTION: @_aiAnalysis.LlmInsight.Winner</MudText>
-                                         <MudChip T="string" Color="Color.Tertiary">Confidence: @_aiAnalysis.LlmInsight.Confidence%</MudChip>
+                                <MudCard Elevation="0" Class="pa-6 mb-4 ai-insight-card">
+                                    <div class="ai-header-gradient d-flex justify-space-between align-center">
+                                         <MudText Typo="Typo.h5" Style="font-weight: 900; letter-spacing: 1px;">AI PREDICTION: @(_aiAnalysis.LlmInsight.Winner?.ToUpper() ?? "UNKNOWN")</MudText>
+                                         <MudChip T="string" Color="Color.Surface" Variant="Variant.Filled" Style="font-weight: 700;">Confidence: @_aiAnalysis.LlmInsight.Confidence%</MudChip>
                                     </div>
-                                    <MudText Typo="Typo.subtitle1" Class="mb-2"><b>Key Factor:</b> @_aiAnalysis.LlmInsight.KeyFactor</MudText>
-                                    <MudDivider Class="my-2"/>
-                                    <div class="markdown-body" style="font-family: 'Roboto', sans-serif; line-height: 1.6;">
-                                        @((MarkupString)_aiAnalysis.LlmInsight.Rationale)
+                                    
+                                    <div class="d-flex align-center mb-4 pa-3 rounded-lg" style="background: #fff8e1; border-left: 4px solid #ffc107;">
+                                        <MudIcon Icon="@Icons.Material.Filled.Lightbulb" Color="Color.Warning" Class="mr-3" />
+                                        <MudText Typo="Typo.body1"><b>Master Key Factor:</b> @_aiAnalysis.LlmInsight.KeyFactor</MudText>
+                                    </div>
+
+                                    <MudDivider Class="mb-4"/>
+                                    
+                                    <div class="rationale-container">
+                                        @((MarkupString)CleanseRationale(_aiAnalysis.LlmInsight.Rationale))
+                                    </div>
+                                    
+                                    <div class="mt-6 pa-3 rounded-lg d-flex align-center justify-center" style="background: #f5f5f5; border: 1px dashed #bdbdbd;">
+                                        <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Size="Size.Small" Class="mr-2" Style="color: #757575;" />
+                                        <MudText Typo="Typo.caption" Style="color: #757575; font-style: italic;">
+                                            Analysis generated by Gemini 1.5 Flash with Real-Time Google Search Grounding
+                                        </MudText>
                                     </div>
                                 </MudCard>
                             }
@@ -939,5 +1023,21 @@
             _isAiLoading = false;
             StateHasChanged(); // Re-render
         }
+    }
+
+    private string CleanseRationale(string? input)
+    {
+        if (string.IsNullOrEmpty(input)) return "";
+        
+        // Handle cases where the LLM might still throw in Markdown bolding despite instructions
+        var cleansed = Regex.Replace(input, @"\*\*(.*?)\*\*", "<b>$1</b>");
+        cleansed = Regex.Replace(cleansed, @"\*(.*?)\*", "<i>$1</i>");
+        
+        // Ensure standard bullets are treated consistently if they aren't in <ul>
+        // But the prompt asks for <ul>, so we'll trust that for now, 
+        // however we add a fallback for simple bullet characters
+        cleansed = cleansed.Replace("•", "<li>").Replace(" - ", "<li>"); // Extremely naive but helpful
+        
+        return cleansed;
     }
 }
