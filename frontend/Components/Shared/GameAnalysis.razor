@@ -1,3 +1,6 @@
+@using SportsBettingAnalyzer.Models
+@using SportsBettingAnalyzer.Services
+@using MudBlazor
 @inject BallDontLieService StatsService
 @inject PythonMLServiceClient MLService
 @inject ISnackbar Snackbar
@@ -5,74 +8,73 @@
 
 <style>
     .rationale-container {
-        font-family: 'Roboto', 'Segoe UI', 'Inter', sans-serif;
-        font-size: 0.98rem;
+        font-family: 'Inter', 'Roboto', 'Segoe UI', sans-serif;
+        font-size: 1rem;
         line-height: 1.8;
-        color: #263238;
+        color: #37474f;
     }
-    .rationale-container h4 {
-        font-size: 1.05rem;
-        font-weight: 700;
+    .rationale-header {
+        font-weight: 800;
         color: #1a237e;
-        margin-top: 1.5rem;
-        margin-bottom: 0.75rem;
-        border-bottom: 2px solid #e8eaf6;
-        padding-bottom: 6px;
-        text-transform: uppercase;
-        letter-spacing: 0.75px;
-        display: flex;
-        align-items: center;
-    }
-    .rationale-container h4::before {
-        content: "";
-        display: inline-block;
-        width: 4px;
-        height: 18px;
-        background: #3f51b5;
-        margin-right: 10px;
-        border-radius: 2px;
+        letter-spacing: 0.5px;
     }
     .rationale-container ul {
-        padding-left: 1.5rem;
-        margin-bottom: 1.25rem;
+        padding-left: 1.25rem;
+        margin-bottom: 0px;
         list-style-type: none;
     }
     .rationale-container li {
-        margin-bottom: 0.65rem;
+        margin-bottom: 0.8rem;
         position: relative;
-        padding-left: 0.5rem;
     }
     .rationale-container li::before {
         content: "•";
-        color: #3f51b5;
-        font-weight: bold;
+        color: #3949ab;
+        font-weight: 900;
         display: inline-block;
         width: 1rem;
         margin-left: -1.25rem;
-        font-size: 1.2rem;
+        font-size: 1.3rem;
         vertical-align: middle;
     }
     .rationale-container b, .rationale-container strong {
-        color: #c2185b;
+        color: #d81b60;
         font-weight: 700;
+        background: rgba(216, 27, 96, 0.04);
+        padding: 0 2px;
+        border-radius: 2px;
     }
     .rationale-container p {
         margin-bottom: 1rem;
     }
     
     .ai-insight-card {
-        background: #ffffff !important;
-        border: 1px solid #e0e0e0 !important;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.06) !important;
-        border-radius: 16px !important;
-        overflow: hidden;
+        background: #fafafa !important;
+        border: 1px solid #cfd8dc !important;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.08) !important;
+        border-radius: 20px !important;
+        padding: 0 !important;
     }
     
     .ai-header-gradient {
-        background: linear-gradient(90deg, #1a237e 0%, #3949ab 100%);
+        background: linear-gradient(135deg, #1a237e 0%, #283593 100%);
         color: white;
-        padding: 16px 24px;
-        margin: -24px -24px 20px -24px;
+        padding: 24px 32px;
+        border-radius: 20px 20px 0 0;
+    }
+    
+    .analysis-panel {
+        border-radius: 12px !important;
+        margin-bottom: 12px !important;
+        overflow: hidden;
+        border: 1px solid #eceff1 !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04) !important;
+    }
+    
+    .factor-badge {
+        background: #fff9c4;
+        border-left: 5px solid #fbc02d;
+        color: #5d4037;
     }
 </style>
 
@@ -592,30 +594,62 @@
                             <!-- Gemini LLM Insight -->
                             @if (_aiAnalysis.LlmInsight != null)
                             {
-                                <MudCard Elevation="0" Class="pa-6 mb-4 ai-insight-card">
+                                <div class="ai-insight-card mb-4">
                                     <div class="ai-header-gradient d-flex justify-space-between align-center">
-                                         <MudText Typo="Typo.h5" Style="font-weight: 900; letter-spacing: 1px;">AI PREDICTION: @(_aiAnalysis.LlmInsight.Winner?.ToUpper() ?? "UNKNOWN")</MudText>
-                                         <MudChip T="string" Color="Color.Surface" Variant="Variant.Filled" Style="font-weight: 700;">Confidence: @_aiAnalysis.LlmInsight.Confidence%</MudChip>
+                                         <div>
+                                             <MudText Typo="Typo.h4" Style="font-weight: 900; letter-spacing: 2px; text-shadow: 2px 2px 4px rgba(0,0,0,0.2);">AI PREDICTION</MudText>
+                                             <MudText Typo="Typo.h5" Style="font-weight: 400; opacity: 0.9;">@(_aiAnalysis.LlmInsight.Winner?.ToUpper() ?? "UNKNOWN")</MudText>
+                                         </div>
+                                         <div class="text-right">
+                                             <MudText Typo="Typo.caption" Style="text-transform: uppercase; font-weight: 700;">Model Confidence</MudText>
+                                             <MudText Typo="Typo.h3" Style="font-weight: 900;">@_aiAnalysis.LlmInsight.Confidence<span style="font-size: 1.5rem">%</span></MudText>
+                                         </div>
                                     </div>
                                     
-                                    <div class="d-flex align-center mb-4 pa-3 rounded-lg" style="background: #fff8e1; border-left: 4px solid #ffc107;">
-                                        <MudIcon Icon="@Icons.Material.Filled.Lightbulb" Color="Color.Warning" Class="mr-3" />
-                                        <MudText Typo="Typo.body1"><b>Master Key Factor:</b> @_aiAnalysis.LlmInsight.KeyFactor</MudText>
-                                    </div>
+                                    <div class="pa-8">
+                                        <div class="factor-badge d-flex align-center mb-6 pa-5 rounded-lg">
+                                            <MudIcon Icon="@Icons.Material.Filled.Whatshot" Size="Size.Large" Class="mr-4" Style="color: #f57f17;" />
+                                            <div>
+                                                <MudText Typo="Typo.caption" Style="font-weight: 900; color: #795548; text-transform: uppercase;">Primary Market Driver</MudText>
+                                                <MudText Typo="Typo.h6" Style="font-weight: 800;">@_aiAnalysis.LlmInsight.KeyFactor</MudText>
+                                            </div>
+                                        </div>
 
-                                    <MudDivider Class="mb-4"/>
-                                    
-                                    <div class="rationale-container">
-                                        @((MarkupString)CleanseRationale(_aiAnalysis.LlmInsight.Rationale))
+                                        <MudText Typo="Typo.subtitle2" Class="mb-3 rationale-header">DEEP ANALYSIS REPORT</MudText>
+                                        
+                                        @{
+                                            var sections = SplitRationale(_aiAnalysis.LlmInsight.Rationale);
+                                            var expandedIndex = 0;
+                                        }
+
+                                        <MudExpansionPanels MultiExpansion="false" Elevation="0">
+                                            @foreach (var section in sections)
+                                            {
+                                                expandedIndex++;
+                                                <MudExpansionPanel Class="analysis-panel" IsExpanded="@(expandedIndex == 1)">
+                                                    <TitleContent>
+                                                        <div class="d-flex align-center">
+                                                            <MudIcon Icon="@GetSectionIcon(section.Title)" Class="mr-3" Color="Color.Primary" />
+                                                            <MudText Typo="Typo.subtitle1"><b>@section.Title</b></MudText>
+                                                        </div>
+                                                    </TitleContent>
+                                                    <ChildContent>
+                                                        <div class="rationale-container pa-4">
+                                                            @((MarkupString)CleanseRationale(section.Content))
+                                                        </div>
+                                                    </ChildContent>
+                                                </MudExpansionPanel>
+                                            }
+                                        </MudExpansionPanels>
+                                        
+                                        <div class="mt-8 pa-4 rounded-xl d-flex align-center justify-center" style="background: #eceff1; border: 1px solid #cfd8dc;">
+                                            <MudIcon Icon="@Icons.Material.Filled.Shield" Size="Size.Small" Class="mr-3" Style="color: #546e7a;" />
+                                            <MudText Typo="Typo.caption" Style="color: #546e7a; font-weight: 600;">
+                                                Advanced Gemini 1.5 Flash Reasoning Engine • Verbatim Grounding Active
+                                            </MudText>
+                                        </div>
                                     </div>
-                                    
-                                    <div class="mt-6 pa-3 rounded-lg d-flex align-center justify-center" style="background: #f5f5f5; border: 1px dashed #bdbdbd;">
-                                        <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Size="Size.Small" Class="mr-2" Style="color: #757575;" />
-                                        <MudText Typo="Typo.caption" Style="color: #757575; font-style: italic;">
-                                            Analysis generated by Gemini 1.5 Flash with Real-Time Google Search Grounding
-                                        </MudText>
-                                    </div>
-                                </MudCard>
+                                </div>
                             }
                             
                             <MudExpansionPanel Text="Raw Engine Data">
@@ -1029,15 +1063,61 @@
     {
         if (string.IsNullOrEmpty(input)) return "";
         
-        // Handle cases where the LLM might still throw in Markdown bolding despite instructions
-        var cleansed = Regex.Replace(input, @"\*\*(.*?)\*\*", "<b>$1</b>");
+        // Final fallback to strip markdown leftovers that the backend might have missed
+        var cleansed = input.Replace("```html", "").Replace("```", "").Trim();
+        
+        // Ensure bolding is handled even if LLM ignores instructions
+        cleansed = Regex.Replace(cleansed, @"\*\*(.*?)\*\*", "<b>$1</b>");
         cleansed = Regex.Replace(cleansed, @"\*(.*?)\*", "<i>$1</i>");
         
-        // Ensure standard bullets are treated consistently if they aren't in <ul>
-        // But the prompt asks for <ul>, so we'll trust that for now, 
-        // however we add a fallback for simple bullet characters
-        cleansed = cleansed.Replace("•", "<li>").Replace(" - ", "<li>"); // Extremely naive but helpful
+        // Remove literal quotes that might be wrapping the string
+        if (cleansed.StartsWith("\"") && cleansed.EndsWith("\"")) cleansed = cleansed[1..^1];
         
         return cleansed;
+    }
+
+    private class RationaleSection { public string Title { get; set; } = ""; public string Content { get; set; } = ""; }
+
+    private List<RationaleSection> SplitRationale(string? rationale)
+    {
+        var result = new List<RationaleSection>();
+        if (string.IsNullOrEmpty(rationale)) return result;
+
+        // Split by <h4> tags
+        var matches = Regex.Matches(rationale, @"<h4>(.*?)</h4>(.*?)(?=<h4>|$)", RegexOptions.Singleline);
+        foreach (Match m in matches)
+        {
+            result.Add(new RationaleSection 
+            { 
+                Title = CleanTitle(m.Groups[1].Value), 
+                Content = m.Groups[2].Value.Trim() 
+            });
+        }
+
+        if (!result.Any())
+        {
+            // Fallback if no <h4> found
+            result.Add(new RationaleSection { Title = "Analysis", Content = rationale });
+        }
+
+        return result;
+    }
+
+    private string CleanTitle(string title)
+    {
+        // Remove leading numbers like "1. "
+        return Regex.Replace(title, @"^\d+\.\s*", "").Trim();
+    }
+
+    private string GetSectionIcon(string title)
+    {
+        var t = title.ToLower();
+        if (t.Contains("market")) return Icons.Material.Filled.ShowChart;
+        if (t.Contains("injury")) return Icons.Material.Filled.Medication;
+        if (t.Contains("matchup")) return Icons.Material.Filled.Compare;
+        if (t.Contains("environment") || t.Contains("total")) return Icons.Material.Filled.Speed;
+        if (t.Contains("situational")) return Icons.Material.Filled.Place;
+        if (t.Contains("summary")) return Icons.Material.Filled.Assignment;
+        return Icons.Material.Filled.Analytics;
     }
 }

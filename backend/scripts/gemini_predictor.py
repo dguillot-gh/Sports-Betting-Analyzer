@@ -118,8 +118,11 @@ class GeminiPredictor:
             # Post-process rationale for frontend rendering
             rationale = result.get('rationale')
             if isinstance(rationale, str):
-                # Ensure it's treated as a string, no major regex needed if LLM outputs HTML
-                pass
+                # Aggressively strip any markdown fences the LLM might have included
+                rationale = rationale.replace("```html", "").replace("```", "").strip()
+                # Remove escaped quotes if they are redundant
+                if (rationale.startswith('"') and rationale.endswith('"')) or (rationale.startswith("'") and rationale.endswith("'")):
+                    rationale = rationale[1:-1].strip()
             
             result['rationale'] = rationale
             
