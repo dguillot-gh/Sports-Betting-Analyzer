@@ -220,9 +220,9 @@
                                                 </MudText>
                                             </div>
                                             <MudProgressLinear Color="Color.Info" Value="@((homeProb > awayProb ? homeProb : awayProb) * 100)" Size="Size.Small" />
-                                            @if (espnMatch.Spread != 0)
+                                            @if (!string.IsNullOrEmpty(espnMatch.Spread) && espnMatch.Spread != "0")
                                             {
-                                                <MudText Typo="Typo.caption" Class="mt-1">Spread: @espnMatch.Spread.ToString("+0.0;-0.0") | O/U: @espnMatch.OverUnder</MudText>
+                                                <MudText Typo="Typo.caption" Class="mt-1">Spread: @espnMatch.Spread | O/U: @(espnMatch.OverUnder?.ToString("N1") ?? "-")</MudText>
                                             }
                                         </div>
                                     }
