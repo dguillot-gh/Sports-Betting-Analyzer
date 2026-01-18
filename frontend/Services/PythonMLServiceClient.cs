@@ -564,7 +564,7 @@ public class PythonMLServiceClient
     /// <summary>
     /// Train a new model
     /// </summary>
-    public async Task<TrainResponse> TrainAsync(string sport, string task, int? testStartSeason = null, int? trainStartSeason = null, Dictionary<string, object> hyperparameters = null, string? series = null)
+    public async Task<TrainResponse> TrainAsync(string sport, string task, int? testStartSeason = null, int? trainStartSeason = null, Dictionary<string, object>? hyperparameters = null, string? series = null)
     {
         try
         {

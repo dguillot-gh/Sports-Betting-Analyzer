@@ -2,7 +2,7 @@
 @page "/nfl/statboard"
 @rendermode InteractiveServer
 @using System.Text.Json
-@using AC = ApexCharts
+@using ApexCharts
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject ILogger<NFLStatBoard> Logger
@@ -755,36 +755,36 @@
                         
                         @if (_chartData != null && _chartData.Any())
                         {
-                            <AC.ApexChart TItem="NGSDataPoint"
+                            <ApexChart TItem="NGSDataPoint"
                                          Title=""
                                          Height="400"
                                          Options="_chartOptions">
-                                <AC.ApexPointSeries TItem="NGSDataPoint"
+                                <ApexPointSeries TItem="NGSDataPoint"
                                                   Items="_chartData"
                                                   Name="Time to Throw (s)"
-                                                  SeriesType="AC.SeriesType.Bar"
+                                                  SeriesType="SeriesType.Bar"
                                                   XValue="_chartXValue"
                                                   YValue="_chartYValueTTT" />
-                            </AC.ApexChart>
+                            </ApexChart>
                             
                             <MudDivider Class="my-4" />
                             
-                            <MudText Typo="Typo.h6" Class="mb-3">
+                            <MudText Typo="h6" Class="mb-3">
                                 <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Class="mr-2" />
                                 CPOE Distribution
                             </MudText>
                             
-                            <AC.ApexChart TItem="NGSDataPoint"
+                            <ApexChart TItem="NGSDataPoint"
                                          Title=""
                                          Height="350"
                                          Options="_cpoeChartOptions">
-                                <AC.ApexPointSeries TItem="NGSDataPoint"
+                                <ApexPointSeries TItem="NGSDataPoint"
                                                   Items="_chartData"
                                                   Name="CPOE %"
-                                                  SeriesType="AC.SeriesType.Bar"
+                                                  SeriesType="SeriesType.Bar"
                                                   XValue="_chartXValue"
                                                   YValue="_chartYValueCPOE" />
-                            </AC.ApexChart>
+                            </ApexChart>
                         }
                         else
                         {
