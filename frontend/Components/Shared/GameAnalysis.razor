@@ -477,10 +477,10 @@
                         {
                             <!-- XGBoost / ML Engine Display -->
                             @if (_aiAnalysis.Engines != null && _aiAnalysis.Engines.ContainsKey("XGBoost (ML)") 
-                                 && _aiAnalysis.Engines["XGBoost (ML)"] is System.Text.Json.JsonElement xgb)
+                                 && _aiAnalysis.Engines["XGBoost (ML)"] is AiEnginePrediction xgb)
                             {
-                                var prob = xgb.GetProperty("home_win_prob").GetDouble();
-                                var desc = xgb.TryGetProperty("description", out var d) ? d.GetString() : "";
+                                var prob = xgb.HomeWinProb;
+                                var desc = xgb.Description;
                                 
                                 <MudCard Elevation="4" Class="pa-4 mb-4 mud-theme-primary">
                                     <div class="d-flex justify-space-between align-center">
@@ -494,12 +494,11 @@
                                     </div>
                                     <MudProgressLinear Color="@(prob > 0.5 ? Color.Success : Color.Error)" Value="@(prob * 100)" Size="Size.Large" Class="mt-2" />
                                     
-                                    <!-- SHAP Explanations -->
-                                    @if (xgb.TryGetProperty("explanation", out var expl))
+                                    @if (xgb.Explanation != null && xgb.Explanation.Value.TryGetProperty("top_features", out var topFeatures))
                                     {
                                         <MudText Typo="Typo.subtitle2" Class="mt-3 mb-1">Top 5 Influential Factors (SHAP)</MudText>
                                         <MudList T="string" Dense="true">
-                                            @foreach (var feature in expl.GetProperty("top_features").EnumerateArray())
+                                            @foreach (var feature in topFeatures.EnumerateArray())
                                             {
                                                 var name = feature.GetProperty("feature").GetString();
                                                 var impact = feature.GetProperty("impact").GetString(); // "Pos" or "Neg"
@@ -914,7 +913,7 @@
 
     // AI Analysis State
     private bool _isAiLoading = false;
-    private AiAnalysisResult? _aiAnalysis;
+    private AiAnalysisReport? _aiAnalysis;
 
     private async Task LoadAiAnalysis()
     {
