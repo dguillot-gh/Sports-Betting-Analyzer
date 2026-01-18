@@ -2,7 +2,7 @@
 @page "/player-trends/{Sport}"
 @rendermode InteractiveServer
 @using MudBlazor
-@using ApexCharts
+@using AC = ApexCharts
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
@@ -15,15 +15,15 @@
         <MudPaper Class="pa-4" Elevation="2">
             <div class="d-flex align-center justify-space-between flex-wrap" style="gap: 16px;">
                 <div class="d-flex align-center">
-                    <MudIcon Icon="@Icons.Material.Filled.ShowChart" Size="Size.Large" MudBlazor.Color="MudBlazor.Color.Primary" Class="mr-3" />
+                    <MudIcon Icon="@Icons.Material.Filled.ShowChart" Size="Size.Large" Color="Color.Primary" Class="mr-3" />
                     <div>
                         <MudText Typo="Typo.h5">Player Performance Trends</MudText>
-                        <MudText Typo="Typo.caption" MudBlazor.Color="MudBlazor.Color.Secondary">Game-by-game stats visualization</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Game-by-game stats visualization</MudText>
                     </div>
                 </div>
                 
                 <!-- Sport Tabs -->
-                <MudButtonGroup MudBlazor.Color="MudBlazor.Color.Primary" Variant="Variant.Outlined">
+                <MudButtonGroup Color="Color.Primary" Variant="Variant.Outlined">
                     <MudButton Variant="@(_selectedSport == "nfl" ? Variant.Filled : Variant.Outlined)"
                                OnClick="@(() => SelectSport("nfl"))">
                         NFL
@@ -56,7 +56,7 @@
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12" md="2">
-                    <MudButton Variant="Variant.Filled" MudBlazor.Color="MudBlazor.Color.Primary" FullWidth="true"
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
                                OnClick="LoadPlayerData" Disabled="@(string.IsNullOrWhiteSpace(_searchPlayer) || _isLoading)">
                         @if (_isLoading)
                         {
@@ -70,7 +70,7 @@
 
         @if (_isLoading)
         {
-            <MudProgressLinear MudBlazor.Color="MudBlazor.Color.Primary" Indeterminate="true" />
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
         }
 
         @if (_gameData.Any())
@@ -81,11 +81,11 @@
                 {
                     <MudItem xs="6" md="3">
                         <MudPaper Class="pa-4 text-center" Elevation="2">
-                            <MudText Typo="Typo.h4" MudBlazor.Color="MudBlazor.Color.Primary">@stat.Value</MudText>
+                            <MudText Typo="Typo.h4" Color="Color.Primary">@stat.Value</MudText>
                             <MudText Typo="Typo.caption">@stat.Label</MudText>
                             @if (stat.HitRate > 0)
                             {
-                                <MudChip T="string" Size="Size.Small" MudBlazor.Color="@GetHitRateColor(stat.HitRate)" Class="mt-1">
+                                <MudChip T="string" Size="Size.Small" Color="@GetHitRateColor(stat.HitRate)" Class="mt-1">
                                     @stat.HitRate.ToString("P0") over @stat.Line
                                 </MudChip>
                             }
@@ -110,17 +110,17 @@
                     </MudSelect>
                 </div>
                 
-                <ApexChart TItem="GameDataPoint"
+                <AC.ApexChart TItem="GameDataPoint"
                            Title=""
                            Height="350"
                            Options="_chartOptions">
-                    <ApexPointSeries TItem="GameDataPoint"
+                    <AC.ApexPointSeries TItem="GameDataPoint"
                                      Items="_chartData"
                                      Name="@GetStatLabel(_selectedChartStat)"
-                                     SeriesType="SeriesType.Line"
+                                     SeriesType="AC.SeriesType.Line"
                                      XValue="_getXValue"
                                      YValue="_getYValue" />
-                </ApexChart>
+                </AC.ApexChart>
             </MudPaper>
 
             <!-- Hit Rates Summary -->
@@ -137,9 +137,9 @@
                                       Style="background: var(--mud-palette-background-default); border-radius: 4px;">
                                 <div>
                                     <MudText Typo="Typo.body1"><strong>Over @hr.Line @hr.StatLabel</strong></MudText>
-                                    <MudText Typo="Typo.caption" MudBlazor.Color="MudBlazor.Color.Secondary">@hr.Hits / @hr.Games games</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@hr.Hits / @hr.Games games</MudText>
                                 </div>
-                                <MudChip T="string" MudBlazor.Color="@GetHitRateColor(hr.Rate)" Size="Size.Medium">
+                                <MudChip T="string" Color="@GetHitRateColor(hr.Rate)" Size="Size.Medium">
                                     @hr.Rate.ToString("P0")
                                 </MudChip>
                             </MudStack>
@@ -243,18 +243,18 @@
         _ => 0
     };
     
-    private ApexCharts.ApexChartOptions<GameDataPoint> _chartOptions = new()
+    private AC.ApexChartOptions<GameDataPoint> _chartOptions = new()
     {
-        Chart = new ApexCharts.Chart
+        Chart = new AC.Chart
         {
-            Toolbar = new ApexCharts.Toolbar { Show = true },
+            Toolbar = new AC.Toolbar { Show = true },
             Background = "transparent"
         },
-        Theme = new ApexCharts.Theme { Mode = ApexCharts.Mode.Dark },
-        Stroke = new ApexCharts.Stroke { Curve = ApexCharts.Curve.Smooth, Width = 3 },
-        Markers = new ApexCharts.Markers { Size = 5 },
-        Xaxis = new ApexCharts.XAxis { Title = new ApexCharts.AxisTitle { Text = "Game" } },
-        Yaxis = new List<ApexCharts.YAxis> { new ApexCharts.YAxis { Title = new ApexCharts.AxisTitle { Text = "Value" } } },
+        Theme = new AC.Theme { Mode = AC.Mode.Dark },
+        Stroke = new AC.Stroke { Curve = AC.Curve.Smooth, Width = 3 },
+        Markers = new AC.Markers { Size = 5 },
+        Xaxis = new AC.XAxis { Title = new AC.AxisTitle { Text = "Game" } },
+        Yaxis = new List<AC.YAxis> { new AC.YAxis { Title = new AC.AxisTitle { Text = "Value" } } },
         Colors = new List<string> { "#00bcd4" }
     };
 
