@@ -2,7 +2,6 @@
 @page "/player-trends/{Sport}"
 @rendermode InteractiveServer
 @using MudBlazor
-@using AC = ApexCharts
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
@@ -110,17 +109,17 @@
                     </MudSelect>
                 </div>
                 
-                <AC.ApexChart TItem="GameDataPoint"
+                <ApexChart TItem="GameDataPoint"
                            Title=""
                            Height="350"
                            Options="_chartOptions">
-                    <AC.ApexPointSeries TItem="GameDataPoint"
+                    <ApexPointSeries TItem="GameDataPoint"
                                      Items="_chartData"
                                      Name="@GetStatLabel(_selectedChartStat)"
-                                     SeriesType="AC.SeriesType.Line"
+                                     SeriesType="SeriesType.Line"
                                      XValue="_getXValue"
                                      YValue="_getYValue" />
-                </AC.ApexChart>
+                </ApexChart>
             </MudPaper>
 
             <!-- Hit Rates Summary -->
@@ -243,18 +242,18 @@
         _ => 0
     };
     
-    private AC.ApexChartOptions<GameDataPoint> _chartOptions = new()
+    private ApexChartOptions<GameDataPoint> _chartOptions = new()
     {
-        Chart = new AC.Chart
+        Chart = new Chart
         {
-            Toolbar = new AC.Toolbar { Show = true },
+            Toolbar = new Toolbar { Show = true },
             Background = "transparent"
         },
-        Theme = new AC.Theme { Mode = AC.Mode.Dark },
-        Stroke = new AC.Stroke { Curve = AC.Curve.Smooth, Width = 3 },
-        Markers = new AC.Markers { Size = 5 },
-        Xaxis = new AC.XAxis { Title = new AC.AxisTitle { Text = "Game" } },
-        Yaxis = new List<AC.YAxis> { new AC.YAxis { Title = new AC.AxisTitle { Text = "Value" } } },
+        Theme = new Theme { Mode = Mode.Dark },
+        Stroke = new Stroke { Curve = Curve.Smooth, Width = 3 },
+        Markers = new Markers { Size = 5 },
+        Xaxis = new XAxis { Title = new AxisTitle { Text = "Game" } },
+        Yaxis = new List<YAxis> { new YAxis { Title = new AxisTitle { Text = "Value" } } },
         Colors = new List<string> { "#00bcd4" }
     };
 
