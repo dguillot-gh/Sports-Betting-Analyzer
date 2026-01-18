@@ -1376,6 +1376,56 @@ public class PythonMLServiceClient
             return null;
         }
     }
+
+    /// <summary>
+    /// Returns the current usage status of the Gemini API.
+    /// </summary>
+    public async Task<AiQuota?> GetAiQuotaAsync()
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<AiQuota>("/ai/quota");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting AI quota");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Returns a unified analysis report including multi-engine metrics and LLM insights.
+    /// </summary>
+    public async Task<AiAnalysisReport?> GetAiAnalysisAsync(string sport, string homeTeam, string awayTeam)
+    {
+        try
+        {
+            var url = $"/ai/analyze?sport={sport}&home_team={Uri.EscapeDataString(homeTeam)}&away_team={Uri.EscapeDataString(awayTeam)}";
+            var response = await _httpClient.PostAsync(url, null);
+            return await response.Content.ReadFromJsonAsync<AiAnalysisReport>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting AI analysis for {Home} vs {Away}", homeTeam, awayTeam);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Returns an aggregated summary of all trained models and their metrics.
+    /// </summary>
+    public async Task<List<DashboardModelSummary>> GetModelSummaryAsync()
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<List<DashboardModelSummary>>("/dashboard/model-summary") ?? new List<DashboardModelSummary>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting model summary");
+            return new List<DashboardModelSummary>();
+        }
+    }
 }
 
 public class EnhanceResponse
@@ -1543,7 +1593,7 @@ public class EspnGame
     public double? OverUnder { get; set; }
 }
 
-public class AiAnalysisResult
+public class AiAnalysisReport
 {
     [JsonPropertyName("sport")]
     public string Sport { get; set; } = "";
