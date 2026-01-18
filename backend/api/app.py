@@ -4106,6 +4106,72 @@ async def apex_compare_nba(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/apex/compare/ncaab")
+async def apex_compare_ncaab(
+    home_team: str = Query(..., description="Home team name"),
+    away_team: str = Query(..., description="Away team name"),
+    total_line: Optional[float] = Query(None, description="O/U line"),
+    home_ml: Optional[int] = Query(None, description="Home moneyline odds"),
+    away_ml: Optional[int] = Query(None, description="Away moneyline odds")
+):
+    """Compare models (Simple, XGBoost v2, ESPN BPI) for NCAAB prediction."""
+    try:
+        from scripts.ncaab_predictor import NCAABPredictor
+        predictor = NCAABPredictor()
+        
+        results = {"home_team": home_team, "away_team": away_team, "models": {}}
+        
+        # 1. Internal Models (Simple + XGB v2)
+        prediction = predictor.predict_game(home_team, away_team, spread=None, over_under=total_line)
+        
+        results["models"]["simple"] = {
+            "win_prob": prediction.get("home_win_probability"),
+            "total": prediction.get("predicted_total"),
+            "winner": prediction.get("predicted_winner")
+        }
+        
+        if prediction.get("v2_available"):
+            results["models"]["xgb"] = {
+                "win_prob": prediction.get("v2_win_prob"),
+                "total": prediction.get("v2_total"),
+                "winner": prediction.get("v2_winner")
+            }
+        
+        # 2. ESPN BPI Integration
+        try:
+            from api.espn_endpoints import get_espn_ncaab_predictions
+            espn_data = await get_espn_ncaab_predictions()
+            
+            # Simple team matcher
+            def normalize(n): return n.lower().replace(" state", " st").replace(" university", "").strip()
+            
+            h_norm = normalize(home_team)
+            a_norm = normalize(away_team)
+            
+            espn_match = None
+            for game in espn_data.get("games", []):
+                e_home = normalize(game.get("home_team", ""))
+                e_away = normalize(game.get("away_team", ""))
+                
+                if (h_norm in e_home or e_home in h_norm) and (a_norm in e_away or e_away in a_norm):
+                    espn_match = game
+                    break
+            
+            if espn_match and espn_match.get("has_bpi"):
+                results["models"]["espn"] = {
+                    "win_prob": espn_match.get("home_win_prob"),
+                    "total_over_prob": espn_match.get("total_over_prob"),
+                    "winner": home_team if espn_match.get("home_win_prob") > 0.5 else away_team
+                }
+        except Exception as e:
+            logger.warning(f"Could not fetch ESPN BPI for NCAAB comparison: {e}")
+
+        return results
+    except Exception as e:
+        logger.error(f"NCAAB Model comparison error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/apex/compare/nfl")
 async def apex_compare_nfl(
     home_team: str = Query(..., description="Home team abbreviation"),
