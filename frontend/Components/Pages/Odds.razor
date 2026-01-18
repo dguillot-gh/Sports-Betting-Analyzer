@@ -1,0 +1,742 @@
+@page "/odds"
+@page "/ncaab"
+@using SportsBettingAnalyzer.Services
+@using SportsBettingAnalyzer.Models
+@inject OddsService OddsService
+@inject BallDontLieService StatsService
+@inject PythonMLServiceClient PythonMLService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject FileExportService FileExportService
+@inject NavigationManager NavigationManager
+@using SportsBettingAnalyzer.Components.Shared
+@rendermode InteractiveServer
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <div>
+            <MudText Typo="Typo.h4" GutterBottom="true">Live Betting Odds</MudText>
+            <MudText Typo="Typo.body1">Real-time odds and trend analysis.</MudText>
+        </div>
+        <div class="d-flex gap-4 align-center">
+            @if (OddsService.LastQuotaUsage.RequestsRemaining > 0 || OddsService.LastQuotaUsage.RequestsUsed > 0)
+            {
+                <MudTooltip Text="Odds API Quota: Used / Remaining">
+                    <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined" Size="Size.Small" Icon="@Icons.Material.Filled.DataUsage">
+                        Odds API: @OddsService.LastQuotaUsage.RequestsUsed / @OddsService.LastQuotaUsage.RequestsRemaining
+                    </MudChip>
+                </MudTooltip>
+            }
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportOdds" Disabled="@(!_events.Any())">Export CSV</MudButton>
+        </div>
+    </div>
+
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4" KeepPanelsAlive="true">
+        <MudTabPanel Text="Live Odds" Icon="@Icons.Material.Filled.List">
+            <MudGrid Class="mb-4">
+                <MudItem xs="12" md="6">
+                    <MudSelect T="string" Label="Select Sport" Value="@_selectedSportKey" ValueChanged="OnSportChanged" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                        @foreach (var sport in _filteredSports)
+                        {
+                            <MudSelectItem Value="@sport.Key">@sport.Title</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="6" Class="d-flex align-center gap-2">
+                     <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadOdds" Disabled="@(string.IsNullOrEmpty(_selectedSportKey) || _isLoading)">
+                        @if (_isLoading)
+                        {
+                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                            <MudText Class="ms-2">Loading...</MudText>
+                        }
+                        else
+                        {
+                            <MudText>Refresh Odds</MudText>
+                        }
+                    </MudButton>
+
+                    @if (_selectedSportKey == "basketball_ncaab")
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.ModelTraining"
+                                   OnClick="TrainNcaabModel" Disabled="@(_isLoading || _isTraining)">
+                             @if (_isTraining)
+                             {
+                                 <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                                 <MudText Class="ms-2">Starting...</MudText>
+                             }
+                             else
+                             {
+                                 <MudText>Train Model (v2)</MudText>
+                             }
+                        </MudButton>
+                    }
+                </MudItem>
+            </MudGrid>
+
+            @if (_events.Any())
+            {
+                var validEvents = _events.Where(e => !string.IsNullOrEmpty(e.HomeTeam) && !string.IsNullOrEmpty(e.AwayTeam)).ToList();
+                
+                @if (validEvents.Any())
+                {
+                    <MudTable Items="@validEvents" Hover="true" Dense="true" Striped="true">
+                        <HeaderContent>
+                            <MudTh>Time</MudTh>
+                            <MudTh>Matchup</MudTh>
+                            <MudTh>DraftKings</MudTh>
+                            <MudTh>FanDuel</MudTh>
+                            <MudTh>ESPN BPI</MudTh>
+                            <MudTh>Analysis</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Time">@context.CommenceTime.ToLocalTime().ToString("MM/dd HH:mm")</MudTd>
+                            <MudTd DataLabel="Matchup">
+                                <div class="d-flex flex-column">
+                                    <MudText Typo="Typo.body2"><b>@context.AwayTeam</b></MudText>
+                                    <MudText Typo="Typo.caption">vs</MudText>
+                                    <MudText Typo="Typo.body2"><b>@context.HomeTeam</b></MudText>
+                                </div>
+                            </MudTd>
+                            <MudTd DataLabel="DraftKings">
+                                @GetBookmakerOdds(context, "DraftKings")
+                            </MudTd>
+                            <MudTd DataLabel="FanDuel">
+                                @GetBookmakerOdds(context, "FanDuel")
+                            </MudTd>
+                            <MudTd DataLabel="ESPN BPI">
+                                @{
+                                    var bpi = MatchEspnGame(context);
+                                }
+                                @if (bpi != null)
+                                {
+                                    <div class="d-flex flex-column gap-1" style="max-width: 100px;">
+                                        @if (bpi.HomeWinProb > bpi.AwayWinProb)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text">H: {(bpi.HomeWinProb*100):F0}%</MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text">A: {(bpi.AwayWinProb*100):F0}%</MudChip>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">-</MudText>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Analysis">
+                                <MudButton Variant="Variant.Outlined" Color="Color.Info" Size="Size.Small" 
+                                           OnClick="@(() => OpenAnalysis(context))"
+                                           StartIcon="@Icons.Material.Filled.Analytics">
+                                    Analyze
+                                </MudButton>
+                            </MudTd>
+                        </RowTemplate>
+                        <PagerContent>
+                            <MudTablePager />
+                        </PagerContent>
+                    </MudTable>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Info">This sport only has futures/outright markets available. Try selecting a different sport with upcoming games.</MudAlert>
+                }
+            }
+            else if (!string.IsNullOrEmpty(_selectedSportKey) && !_isLoading)
+            {
+                <MudAlert Severity="Severity.Info">No active events found for this sport.</MudAlert>
+            }
+        </MudTabPanel>
+
+        <MudTabPanel Text="Hit Rates (NCAAB)" Icon="@Icons.Material.Filled.TrendingUp" Disabled="@(!_selectedSportKey.Contains("ncaab"))" ToolTip="Select NCAAB to enable">
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudAutocomplete T="string" Label="Team" @bind-Value="_trendTeam" SearchFunc="@SearchTeams" ResetValueOnEmptyText="true" Variant="Variant.Outlined" AdornmentIcon="@Icons.Material.Filled.Search" />
+                </MudItem>
+                <MudItem xs="6" md="2">
+                    <MudSelect T="string" Label="Metric" @bind-Value="_trendMetric" Variant="Variant.Outlined">
+                        <MudSelectItem Value="@("total")">Total (O/U)</MudSelectItem>
+                        <MudSelectItem Value="@("team_score")">Team Score</MudSelectItem>
+                        <MudSelectItem Value="@("margin")">Margin (Spread)</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="6" md="2">
+                    <MudNumericField @bind-Value="_trendLine" Label="Target Line" Variant="Variant.Outlined" Step="0.5" />
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudSlider @bind-Value="_trendLastN" Min="5" Max="50" Step="1" Color="Color.Primary">Last @_trendLastN Games</MudSlider>
+                </MudItem>
+                <MudItem xs="12" md="2" Class="d-flex align-center">
+                    <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="CalculateTrend" Disabled="@(string.IsNullOrEmpty(_trendTeam) || _isTrendLoading)" FullWidth="true">
+                        @if (_isTrendLoading)
+                        {
+                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                        }
+                        else
+                        {
+                            <MudText>Check Trend</MudText>
+                        }
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+
+            @if (_hitRateResult != null)
+            {
+                <MudPaper Class="pa-4 mt-4" Elevation="3">
+                    <div class="d-flex justify-space-between align-center mb-2">
+                        <MudText Typo="Typo.h5">@_hitRateResult.Team Trends</MudText>
+                        <MudChip T="string" Color="@(_hitRateResult.HitRate > 0.55 ? Color.Success : Color.Default)">Hit Rate: @_hitRateResult.Hits / @_hitRateResult.GamesAnalyzed (@(_hitRateResult.HitRate.ToString("P0")))</MudChip>
+                    </div>
+                    <MudText Typo="Typo.body2" Class="mb-4">
+                        Analysis: Over last @_hitRateResult.GamesAnalyzed games, @_hitRateResult.Team went <b>@(_trendMetric == "total" ? "OVER" : "OVER")</b> @_hitRateResult.Line <b>@_hitRateResult.Hits</b> times.
+                        Avg Value: @_hitRateResult.AvgValue
+                    </MudText>
+
+                    <MudTable Items="@_hitRateResult.GameLog" Dense="true" Hover="true" Striped="true">
+                        <HeaderContent>
+                            <MudTh>Date</MudTh>
+                            <MudTh>Opponent</MudTh>
+                            <MudTh>Score</MudTh>
+                            <MudTh>Value</MudTh>
+                            <MudTh>Result</MudTh>
+                        </HeaderContent>
+                        <RowTemplate Context="game">
+                            <MudTd>@game.Date</MudTd>
+                            <MudTd>@game.Opponent</MudTd>
+                            <MudTd>@game.Score</MudTd>
+                            <MudTd>@game.Value</MudTd>
+                            <MudTd>
+                                @if (game.IsHit)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
+                                }
+                                else
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" />
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudPaper>
+            }
+            
+            <MudDivider Class="my-4" />
+            
+            <MudText Typo="Typo.h6" Class="mb-2">Model Management</MudText>
+            <div class="d-flex align-center gap-4">
+                <MudButton Variant="Variant.Filled" Color="Color.Tertiary" StartIcon="@Icons.Material.Filled.ModelTraining" 
+                           OnClick="TrainNcaabModel" Disabled="@_isTraining">
+                    @if(_isTraining) {
+                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                        <MudText Class="ms-2">Training...</MudText>
+                    } else {
+                        <MudText>Train XGBoost Model</MudText>
+                    }
+                </MudButton>
+                @if(_trainingMessage != null)
+                {
+                    <MudText Color="Color.Info">@_trainingMessage</MudText>
+                }
+                
+                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.History" 
+                           OnClick="RunBacktest" Disabled="@_isBacktesting">
+                    @if(_isBacktesting) {
+                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                        <MudText Class="ms-2">Running...</MudText>
+                    } else {
+                        <MudText>Run Backtest (2023-24)</MudText>
+                    }
+                </MudButton>
+            </div>
+            
+            @if(_backtestReport != null)
+            {
+                <MudCard Class="mt-4 pa-4" Elevation="3">
+                    <MudText Typo="Typo.h6">Backtest Results (Season 2023-24)</MudText>
+                    <div class="d-flex gap-4 mt-2">
+                        <MudPaper Class="pa-3 d-flex flex-column align-center" Width="120px">
+                            <MudText Typo="Typo.caption">ROI</MudText>
+                            <MudText Typo="Typo.h5" Color="@(_backtestReport.RoiPercent > 0 ? Color.Success : Color.Error)">
+                                @_backtestReport.RoiPercent%
+                            </MudText>
+                        </MudPaper>
+                        <MudPaper Class="pa-3 d-flex flex-column align-center" Width="120px">
+                            <MudText Typo="Typo.caption">Units Won</MudText>
+                            <MudText Typo="Typo.h5" Color="@(_backtestReport.UnitsWon > 0 ? Color.Success : Color.Error)">
+                                @_backtestReport.UnitsWon
+                            </MudText>
+                        </MudPaper>
+                        <MudPaper Class="pa-3 d-flex flex-column align-center" Width="120px">
+                            <MudText Typo="Typo.caption">Hit Rate</MudText>
+                            <MudText Typo="Typo.h5">@_backtestReport.HitRate%</MudText>
+                        </MudPaper>
+                        <MudPaper Class="pa-3 d-flex flex-column align-center" Width="120px">
+                            <MudText Typo="Typo.caption">Bets</MudText>
+                            <MudText Typo="Typo.h5">@_backtestReport.BetsPlaced</MudText>
+                        </MudPaper>
+                    </div>
+                </MudCard>
+            }
+
+        </MudTabPanel>
+
+        <MudTabPanel Text="ESPN Predictions" Icon="@Icons.Material.Filled.Psychology">
+            <div class="d-flex gap-4 mb-4 align-center">
+                <MudSelect T="string" Label="League" @bind-Value="_espnSport" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Class="flex-grow-0" Style="width: 200px;">
+                    <MudSelectItem Value="@("ncaab")">NCAAB</MudSelectItem>
+                    <MudSelectItem Value="@("nba")">NBA</MudSelectItem>
+                    <MudSelectItem Value="@("nfl")">NFL</MudSelectItem>
+                </MudSelect>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadEspnPredictions" Disabled="@_isEspnLoading">
+                    @if (_isEspnLoading)
+                    {
+                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                        <MudText Class="ms-2">Loading...</MudText>
+                    }
+                    else
+                    {
+                        <MudText>Load Predictions</MudText>
+                    }
+                </MudButton>
+                @if (_espnResponse != null)
+                {
+                    <MudText Typo="Typo.caption">Source: @_espnResponse.Source</MudText>
+                }
+            </div>
+
+            @if (_espnResponse?.Games != null && _espnResponse.Games.Any())
+            {
+                <MudTable Items="@_espnResponse.Games" Hover="true" Dense="true" Striped="true" Virtualize="true" FixedHeader="true" Height="600px">
+                    <HeaderContent>
+                        <MudTh>Time</MudTh>
+                        <MudTh>Away Team</MudTh>
+                        <MudTh>Home Team</MudTh>
+                        <MudTh>Win Probability</MudTh>
+                        <MudTh>Spread/Total</MudTh>
+                    </HeaderContent>
+                    <RowTemplate Context="game">
+                        <MudTd>
+                            @DateTime.Parse(game.GameTime).ToLocalTime().ToString("MM/dd HH:mm")
+                            <MudText Typo="Typo.caption" Class="d-block">@game.EventId</MudText>
+                        </MudTd>
+                        <MudTd>
+                             <div class="d-flex flex-column">
+                                <MudText>
+                                    <b>@game.AwayTeam</b> 
+                                    @if(game.AwayRank is object && game.AwayRank.ToString() != "99" && game.AwayRank.ToString() != "999") 
+                                    { <span class="mud-secondary-text ms-1">(@game.AwayRank)</span> }
+                                </MudText>
+                                <MudText Typo="Typo.caption">@game.AwayScore</MudText>
+                            </div>
+                        </MudTd>
+                        <MudTd>
+                             <div class="d-flex flex-column">
+                                <MudText>
+                                    <b>@game.HomeTeam</b>
+                                    @if(game.HomeRank is object && game.HomeRank.ToString() != "99" && game.HomeRank.ToString() != "999") 
+                                    { <span class="mud-secondary-text ms-1">(@game.HomeRank)</span> }
+                                </MudText>
+                                <MudText Typo="Typo.caption">@game.HomeScore</MudText>
+                            </div>
+                        </MudTd>
+                        <MudTd>
+                            <div class="d-flex flex-column gap-1">
+                                <MudProgressLinear Color="@(game.AwayWinProb > game.HomeWinProb ? Color.Success : Color.Default)" Value="@(game.AwayWinProb * 100)" Class="my-1" Size="Size.Medium">
+                                    <MudText Typo="Typo.caption">Away: @(game.AwayWinProb.ToString("P1"))</MudText>
+                                </MudProgressLinear>
+                                <MudProgressLinear Color="@(game.HomeWinProb > game.AwayWinProb ? Color.Success : Color.Default)" Value="@(game.HomeWinProb * 100)" Class="my-1" Size="Size.Medium">
+                                    <MudText Typo="Typo.caption">Home: @(game.HomeWinProb.ToString("P1"))</MudText>
+                                </MudProgressLinear>
+                            </div>
+                        </MudTd>
+                        <MudTd>
+                            <MudText Typo="Typo.body2">Spread: @game.Spread</MudText>
+                            <MudText Typo="Typo.body2">Total: @game.OverUnder</MudText>
+                        </MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
+                </MudTable>
+            }
+        </MudTabPanel>
+    </MudTabs>
+
+</MudContainer>
+
+@code {
+    private List<SportInfo> _sports = new();
+    private List<SportInfo> _filteredSports = new();
+    private List<OddsEvent> _events = new();
+    private string _selectedSportKey = "";
+    private bool _isLoading = false;
+
+    // Major US sports to filter by
+    private readonly HashSet<string> _majorSports = new() 
+    { 
+        "americanfootball_nfl", 
+        "basketball_nba", 
+        "baseball_mlb", 
+        "icehockey_nhl", 
+        "motorsports_nascar_cup",
+        "basketball_ncaab" 
+    };
+
+    // Trend Tab State
+    private string _trendTeam = "";
+    private string _trendMetric = "total";
+    private double _trendLine = 145.5;
+    private int _trendLastN = 10;
+    private bool _isTrendLoading = false;
+    private HitRateResult? _hitRateResult;
+    private List<string> _teamList = new();
+
+    // ESPN Tab State
+    private string _espnSport = "ncaab";
+    private bool _isEspnLoading = false;
+    private EspnResponse? _espnResponse;
+
+    // Training State
+    private bool _isTraining = false;
+    private string? _trainingMessage;
+
+    private async Task TrainNcaabModel()
+    {
+        _isTraining = true;
+        _trainingMessage = "Training started in background...";
+        try
+        {
+            await PythonMLService.TrainNcaabModelAsync();
+            Snackbar.Add("Training started! The model will be updated shortly.", Severity.Success);
+            _trainingMessage = "Training triggered successfully.";
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Training failed: {ex.Message}", Severity.Error);
+            _trainingMessage = "Training failed.";
+        }
+        finally
+        {
+            _isTraining = false;
+        }
+    }
+
+    // Backtest State
+    private bool _isBacktesting = false;
+    private BacktestReport? _backtestReport;
+
+    private async Task RunBacktest()
+    {
+        _isBacktesting = true;
+        _backtestReport = null;
+        try
+        {
+            _backtestReport = await PythonMLService.BacktestNcaabAsync();
+            if (_backtestReport != null)
+            {
+                Snackbar.Add($"Backtest Complete! ROI: {_backtestReport.RoiPercent}%", Severity.Success);
+            }
+            else
+            {
+                 Snackbar.Add("Backtest failed or returned no data.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Backtest Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isBacktesting = false;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _sports = await OddsService.GetSportsAsync();
+            
+            // Filter
+            _filteredSports = _sports
+                .Where(s => s.Active && (_majorSports.Contains(s.Key) || s.Group == "American Football" || s.Group == "Basketball" || s.Group == "Baseball"))
+                .ToList();
+            
+            // Default Logic
+            SportInfo? defaultSport = null;
+            
+            if (NavigationManager.Uri.Contains("/ncaab"))
+            {
+                 defaultSport = _filteredSports.FirstOrDefault(s => s.Key == "basketball_ncaab");
+            }
+            
+            if (defaultSport == null)
+            {
+                defaultSport = _filteredSports.FirstOrDefault(s => s.Key == "americanfootball_nfl") 
+                                ?? _filteredSports.FirstOrDefault(s => s.Key == "basketball_nba")
+                                ?? _filteredSports.FirstOrDefault();
+            }
+                            
+            if (defaultSport != null)
+            {
+                _selectedSportKey = defaultSport.Key;
+                await OnSportChanged(_selectedSportKey);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading sports: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task OnSportChanged(string sportKey)
+    {
+        _selectedSportKey = sportKey;
+        
+        // Auto-switch ESPN tab too
+        if (sportKey.Contains("ncaab")) _espnSport = "ncaab";
+        else if (sportKey.Contains("nba")) _espnSport = "nba";
+        else if (sportKey.Contains("nfl")) _espnSport = "nfl";
+        
+        // Load data in parallel
+        await Task.WhenAll(LoadOdds(), LoadEspnPredictions());
+
+        // Low priority: load teams
+        if (sportKey.Contains("ncaab"))
+        {
+            _ = LoadNcaabTeams();
+        }
+    }
+
+    private async Task LoadOdds()
+    {
+        if (string.IsNullOrEmpty(_selectedSportKey)) return;
+
+        _isLoading = true;
+        try
+        {
+            _events = await OddsService.GetOddsAsync(_selectedSportKey);
+            Snackbar.Add($"Loaded {_events.Count} events", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading odds: {ex.Message}", Severity.Error);
+            Console.WriteLine($"Error: {ex}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadNcaabTeams()
+    {
+        try 
+        {
+            var teams = await PythonMLService.GetTeamsAsync("ncaab"); 
+            _teamList = teams.Select(t => t.ContainsKey("team_name") ? t["team_name"].ToString() : 
+                                          t.ContainsKey("team") ? t["team"].ToString() : 
+                                          t.ContainsKey("school") ? t["school"].ToString() : "Unknown").Where(x => x != null).ToList()!;
+            
+            _teamList = _teamList.Distinct().OrderBy(x => x).ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading NCAAB teams: {ex}");
+        }
+    }
+    
+    private async Task<IEnumerable<string>> SearchTeams(string value, CancellationToken token)
+    {
+        if (string.IsNullOrEmpty(value))
+            return _teamList;
+        return _teamList.Where(x => x.Contains(value, StringComparison.InvariantCultureIgnoreCase));
+    }
+
+    private async Task CalculateTrend()
+    {
+        if (string.IsNullOrEmpty(_trendTeam)) return;
+        
+        _isTrendLoading = true;
+        try
+        {
+            _hitRateResult = await PythonMLService.GetNcaabHitRatesAsync(_trendTeam, _trendMetric, _trendLine, _trendLastN);
+            if (_hitRateResult == null)
+            {
+                 Snackbar.Add("No data found for this team/trend.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error calculating trend: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isTrendLoading = false;
+        }
+    }
+
+    private async Task LoadEspnPredictions()
+    {
+        _isEspnLoading = true;
+        try
+        {
+            _espnResponse = await PythonMLService.GetEspnPredictionsAsync(_espnSport);
+            if (_espnResponse == null || !_espnResponse.Games.Any())
+            {
+                Snackbar.Add("No ESPN predictions found.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading ESPN predictions: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isEspnLoading = false;
+        }
+    }
+
+    private void OpenAnalysis(OddsEvent ev)
+    {
+        var espnGame = MatchEspnGame(ev);
+        var parameters = new DialogParameters 
+        { 
+            { "Event", ev },
+            { "Sport", _selectedSportKey },
+            { "EspnData", espnGame } // Pass matched data 
+        };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+        DialogService.Show<GameAnalysis>("Game Analysis", parameters, options);
+    }
+
+
+    private EspnGame? MatchEspnGame(OddsEvent ev)
+    {
+        if (_espnResponse?.Games == null) return null;
+        
+        // Simple fuzzy match on names
+        // Normalize: remove generic terms (University, State, Team) if needed, but for now strict-ish logic
+        
+        return _espnResponse.Games.FirstOrDefault(g => 
+            // Try Exact match first
+            (g.HomeTeam.Equals(ev.HomeTeam, StringComparison.OrdinalIgnoreCase) || g.HomeTeam.Contains(ev.HomeTeam) || ev.HomeTeam.Contains(g.HomeTeam)) &&
+            (g.AwayTeam.Equals(ev.AwayTeam, StringComparison.OrdinalIgnoreCase) || g.AwayTeam.Contains(ev.AwayTeam) || ev.AwayTeam.Contains(g.AwayTeam))
+        );
+    }
+
+    private async Task ExportOdds()
+    {
+        if (!_events.Any()) return;
+
+        var exportData = _events.Select(e => new 
+        {
+            Time = e.CommenceTime.ToLocalTime().ToString("g"),
+            Matchup = $"{e.AwayTeam} vs {e.HomeTeam}",
+            DK_ML_Home = GetOddsValue(e, "DraftKings", "h2h", e.HomeTeam),
+            DK_ML_Away = GetOddsValue(e, "DraftKings", "h2h", e.AwayTeam),
+            DK_Spread = GetSpreadValue(e, "DraftKings", e.HomeTeam),
+            DK_Total = GetTotalValue(e, "DraftKings"),
+            FD_ML_Home = GetOddsValue(e, "FanDuel", "h2h", e.HomeTeam),
+            FD_ML_Away = GetOddsValue(e, "FanDuel", "h2h", e.AwayTeam),
+            FD_Spread = GetSpreadValue(e, "FanDuel", e.HomeTeam),
+            FD_Total = GetTotalValue(e, "FanDuel")
+        }).ToList();
+
+        await FileExportService.ExportToCsv(exportData, $"odds_{_selectedSportKey}_{DateTime.Now:yyyyMMdd}.csv");
+        Snackbar.Add("Odds exported successfully", Severity.Success);
+    }
+
+    private string GetOddsValue(OddsEvent ev, string bookmaker, string marketKey, string outcomeName)
+    {
+        var book = ev.Bookmakers.FirstOrDefault(b => b.Title.Contains(bookmaker, StringComparison.OrdinalIgnoreCase));
+        var market = book?.Markets.FirstOrDefault(m => m.Key == marketKey);
+        var outcome = market?.Outcomes.FirstOrDefault(o => o.Name == outcomeName);
+        return FormatPrice(outcome?.Price);
+    }
+
+    private string GetSpreadValue(OddsEvent ev, string bookmaker, string teamName)
+    {
+        var book = ev.Bookmakers.FirstOrDefault(b => b.Title.Contains(bookmaker, StringComparison.OrdinalIgnoreCase));
+        var market = book?.Markets.FirstOrDefault(m => m.Key == "spreads");
+        var outcome = market?.Outcomes.FirstOrDefault(o => o.Name == teamName);
+        if (outcome == null) return "-";
+        return $"{FormatPoint(outcome.Point)} ({FormatPrice(outcome.Price)})";
+    }
+
+    private string GetTotalValue(OddsEvent ev, string bookmaker)
+    {
+        var book = ev.Bookmakers.FirstOrDefault(b => b.Title.Contains(bookmaker, StringComparison.OrdinalIgnoreCase));
+        var market = book?.Markets.FirstOrDefault(m => m.Key == "totals");
+        var outcome = market?.Outcomes.FirstOrDefault(o => o.Name == "Over");
+        if (outcome == null) return "-";
+        return $"O {outcome.Point} ({FormatPrice(outcome.Price)})";
+    }
+
+    private RenderFragment GetBookmakerOdds(OddsEvent ev, string bookmakerName) => builder =>
+    {
+        var book = ev.Bookmakers.FirstOrDefault(b => b.Title.Contains(bookmakerName, StringComparison.OrdinalIgnoreCase));
+        if (book == null)
+        {
+            builder.AddContent(0, "-");
+            return;
+        }
+
+        // Moneyline (h2h)
+        var h2h = book.Markets.FirstOrDefault(m => m.Key == "h2h");
+        if (h2h != null)
+        {
+            var away = h2h.Outcomes.FirstOrDefault(o => o.Name == ev.AwayTeam);
+            var home = h2h.Outcomes.FirstOrDefault(o => o.Name == ev.HomeTeam);
+            
+            builder.OpenElement(1, "div");
+            builder.AddAttribute(2, "class", "d-flex justify-space-between mb-1");
+            builder.AddContent(3, $"ML: {FormatPrice(away?.Price)} / {FormatPrice(home?.Price)}");
+            builder.CloseElement();
+        }
+
+        // Spread
+        var spread = book.Markets.FirstOrDefault(m => m.Key == "spreads");
+        if (spread != null)
+        {
+            var away = spread.Outcomes.FirstOrDefault(o => o.Name == ev.AwayTeam);
+            var home = spread.Outcomes.FirstOrDefault(o => o.Name == ev.HomeTeam);
+            
+            if (away != null && home != null)
+            {
+                builder.OpenElement(4, "div");
+                builder.AddAttribute(5, "class", "d-flex justify-space-between mb-1");
+                builder.AddContent(6, $"Spr: {FormatPoint(away.Point)} ({FormatPrice(away.Price)})");
+                builder.CloseElement();
+            }
+        }
+
+        // Total
+        var total = book.Markets.FirstOrDefault(m => m.Key == "totals");
+        if (total != null)
+        {
+            var over = total.Outcomes.FirstOrDefault(o => o.Name == "Over");
+            
+            if (over != null)
+            {
+                builder.OpenElement(7, "div");
+                builder.AddAttribute(8, "class", "d-flex justify-space-between");
+                builder.AddContent(9, $"Tot: {over.Point} ({FormatPrice(over.Price)})");
+                builder.CloseElement();
+            }
+        }
+    };
+
+    private string FormatPrice(double? price)
+    {
+        if (!price.HasValue) return "-";
+        return price > 0 ? $"+{price}" : price.ToString();
+    }
+
+    private string FormatPoint(double? point)
+    {
+        if (!point.HasValue) return "";
+        return point > 0 ? $"+{point}" : point.ToString();
+    }
+}

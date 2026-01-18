@@ -107,9 +107,6 @@ public class PredictResponse
     [JsonPropertyName("probability")]
     public double? Probability { get; set; }
 
-    [JsonPropertyName("nn_home_win_probability")]
-    public double? NnProbability { get; set; }
-
     [JsonPropertyName("confidence")]
     public string? Confidence { get; set; }
 
@@ -118,6 +115,55 @@ public class PredictResponse
 
     [JsonPropertyName("series")]
     public string? Series { get; set; }
+}
+
+public class NcaabComparisonResponse
+{
+    [JsonPropertyName("home_team")]
+    public string HomeTeam { get; set; } = "";
+
+    [JsonPropertyName("away_team")]
+    public string AwayTeam { get; set; } = "";
+
+    [JsonPropertyName("models")]
+    public Dictionary<string, JsonElement> Models { get; set; } = new();
+
+    public NcaabInternalResult? GetSimpleResult() => GetResult<NcaabInternalResult>("simple");
+    public NcaabInternalResult? GetXgbResult() => GetResult<NcaabInternalResult>("xgb");
+    public NcaabEspnResult? GetEspnResult() => GetResult<NcaabEspnResult>("espn");
+
+    private T? GetResult<T>(string key) where T : class
+    {
+        if (Models.TryGetValue(key, out var el))
+        {
+            return JsonSerializer.Deserialize<T>(el.GetRawText());
+        }
+        return null;
+    }
+}
+
+public class NcaabInternalResult
+{
+    [JsonPropertyName("win_prob")]
+    public double WinProb { get; set; }
+    
+    [JsonPropertyName("total")]
+    public double Total { get; set; }
+    
+    [JsonPropertyName("winner")]
+    public string Winner { get; set; } = "";
+}
+
+public class NcaabEspnResult
+{
+    [JsonPropertyName("win_prob")]
+    public double WinProb { get; set; }
+    
+    [JsonPropertyName("total_over_prob")]
+    public double TotalOverProb { get; set; }
+    
+    [JsonPropertyName("winner")]
+    public string Winner { get; set; } = "";
 }
 
 public class NbaComparisonResponse
@@ -191,186 +237,6 @@ public class ModelInfo
 
     [JsonPropertyName("last_updated")]
     public double LastUpdated { get; set; }
-
-    [JsonPropertyName("accuracy")]
-    public double? Accuracy { get; set; }
-
-    [JsonPropertyName("roi")]
-    public double? Roi { get; set; }
-}
-
-public class DashboardModelSummary
-{
-    [JsonPropertyName("sport")]
-    public string Sport { get; set; } = "";
-
-    [JsonPropertyName("series")]
-    public string Series { get; set; } = "";
-
-    [JsonPropertyName("task")]
-    public string Task { get; set; } = "";
-
-    [JsonPropertyName("accuracy")]
-    public double Accuracy { get; set; }
-
-    [JsonPropertyName("roi")]
-    public double Roi { get; set; }
-
-    [JsonPropertyName("last_updated")]
-    public double LastUpdated { get; set; }
-}
-
-public class AiAnalysisReport
-{
-    [JsonPropertyName("sport")]
-    public string Sport { get; set; } = "";
-
-    [JsonPropertyName("matchup")]
-    public string Matchup { get; set; } = "";
-
-    [JsonPropertyName("engines")]
-    public Dictionary<string, AiEnginePrediction> Engines { get; set; } = new();
-
-    [JsonPropertyName("llm_insight")]
-    public LlmInsight? LlmInsight { get; set; }
-}
-
-public class AiEnginePrediction
-{
-    [JsonPropertyName("home_win_prob")]
-    public double HomeWinProb { get; set; }
-
-    [JsonPropertyName("home_score")]
-    public double HomeScore { get; set; }
-
-    [JsonPropertyName("away_score")]
-    public double AwayScore { get; set; }
-
-    [JsonPropertyName("description")]
-    public string? Description { get; set; }
-
-    [JsonPropertyName("explanation")]
-    public JsonElement? Explanation { get; set; }
-}
-
-public class LlmInsight
-{
-    [JsonPropertyName("winner")]
-    public string Winner { get; set; } = "";
-
-    [JsonPropertyName("confidence")]
-    public int Confidence { get; set; }
-
-    [JsonPropertyName("rationale")]
-    public string Rationale { get; set; } = "";
-
-    [JsonPropertyName("key_factor")]
-    public string KeyFactor { get; set; } = "";
-}
-
-public class BacktestReport
-{
-    [JsonPropertyName("total_games")]
-    public int TotalGames { get; set; }
-
-    [JsonPropertyName("bets_placed")]
-    public int BetsPlaced { get; set; }
-
-    [JsonPropertyName("wins")]
-    public int Wins { get; set; }
-
-    [JsonPropertyName("losses")]
-    public int Losses { get; set; }
-
-    [JsonPropertyName("hit_rate")]
-    public double HitRate { get; set; }
-
-    [JsonPropertyName("units_won")]
-    public double UnitsWon { get; set; }
-
-    [JsonPropertyName("roi_percent")]
-    public double RoiPercent { get; set; }
-}
-
-public class EspnResponse
-{
-    [JsonPropertyName("sport")]
-    public string Sport { get; set; } = "";
-
-    [JsonPropertyName("source")]
-    public string Source { get; set; } = "";
-
-    [JsonPropertyName("games")]
-    public List<EspnGame> Games { get; set; } = new();
-}
-
-public class EspnGame
-{
-    [JsonPropertyName("event_id")]
-    public string EventId { get; set; } = "";
-
-    [JsonPropertyName("home_team")]
-    public string HomeTeam { get; set; } = "";
-
-    [JsonPropertyName("away_team")]
-    public string AwayTeam { get; set; } = "";
-
-    [JsonPropertyName("home_rank")]
-    public object? HomeRank { get; set; }
-
-    [JsonPropertyName("away_rank")]
-    public object? AwayRank { get; set; }
-
-    [JsonPropertyName("home_win_prob")]
-    public double HomeWinProb { get; set; }
-
-    [JsonPropertyName("away_win_prob")]
-    public double AwayWinProb { get; set; }
-
-    [JsonPropertyName("home_score")]
-    public double HomeScore { get; set; }
-
-    [JsonPropertyName("away_score")]
-    public double AwayScore { get; set; }
-
-    [JsonPropertyName("spread")]
-    public string Spread { get; set; } = "";
-
-    [JsonPropertyName("over_under")]
-    public string OverUnder { get; set; } = "";
-
-    [JsonPropertyName("game_time")]
-    public string GameTime { get; set; } = "";
-}
-
-public class MatchupAnalysisResult
-{
-    [JsonPropertyName("matchup")]
-    public string Matchup { get; set; } = "";
-
-    [JsonPropertyName("home_team")]
-    public string HomeTeam { get; set; } = "";
-
-    [JsonPropertyName("away_team")]
-    public string AwayTeam { get; set; } = "";
-
-    [JsonPropertyName("prediction")]
-    public PredictResponse? Prediction { get; set; }
-
-    [JsonPropertyName("timestamp")]
-    public string Timestamp { get; set; } = "";
-}
-
-public class AiQuota
-{
-    [JsonPropertyName("used")]
-    public int Used { get; set; }
-
-    [JsonPropertyName("limit")]
-    public int Limit { get; set; }
-
-    [JsonPropertyName("remaining")]
-    public int Remaining { get; set; }
 }
 
 public class ProfileData
@@ -504,6 +370,24 @@ public class SportDataStatus
 
     [JsonPropertyName("model_accuracy")]
     public double? ModelAccuracy { get; set; }
+
+    [JsonPropertyName("datasets")]
+    public List<DatasetConfig>? Datasets { get; set; }
+}
+
+public class DatasetConfig
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = "";
+
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "kaggle";
+
+    [JsonPropertyName("added_at")]
+    public string? AddedAt { get; set; }
+
+    [JsonPropertyName("last_updated")]
+    public string? LastUpdated { get; set; }
 }
 
 public class DataUpdateResponse
@@ -534,81 +418,6 @@ public class RetrainResponse
 
     [JsonPropertyName("metrics")]
     public Dictionary<string, object>? Metrics { get; set; }
-}
-
-/// <summary>
-/// Response from analyze-cached endpoints (NFL/NBA odds with caching)
-/// </summary>
-public class OddsAnalysisResponse
-{
-    [JsonPropertyName("date")]
-    public string? Date { get; set; }
-
-    [JsonPropertyName("sportsbook")]
-    public string? Sportsbook { get; set; }
-
-    [JsonPropertyName("games")]
-    public List<AnalyzedGame>? Games { get; set; }
-
-    [JsonPropertyName("count")]
-    public int Count { get; set; }
-
-    [JsonPropertyName("fresh_count")]
-    public int FreshCount { get; set; }
-
-    [JsonPropertyName("cached_count")]
-    public int CachedCount { get; set; }
-
-    [JsonPropertyName("value_bets_found")]
-    public int ValueBetsFound { get; set; }
-
-    [JsonPropertyName("xgb_available")]
-    public bool XgbAvailable { get; set; }
-}
-
-public class AnalyzedGame
-{
-    [JsonPropertyName("id")]
-    public string? Id { get; set; }
-
-    [JsonPropertyName("home_team")]
-    public string? HomeTeam { get; set; }
-
-    [JsonPropertyName("away_team")]
-    public string? AwayTeam { get; set; }
-
-    [JsonPropertyName("game_time")]
-    public string? GameTime { get; set; }
-
-    [JsonPropertyName("spread")]
-    public double? Spread { get; set; }
-
-    [JsonPropertyName("over_under")]
-    public double? OverUnder { get; set; }
-
-    [JsonPropertyName("home_moneyline")]
-    public int? HomeMoneyline { get; set; }
-
-    [JsonPropertyName("away_moneyline")]
-    public int? AwayMoneyline { get; set; }
-
-    [JsonPropertyName("has_value")]
-    public bool HasValue { get; set; }
-
-    [JsonPropertyName("is_cached")]
-    public bool IsCached { get; set; }
-
-    [JsonPropertyName("cached_at")]
-    public string? CachedAt { get; set; }
-
-    [JsonPropertyName("simple_model")]
-    public Dictionary<string, object>? SimpleModel { get; set; }
-
-    [JsonPropertyName("xgboost_model")]
-    public Dictionary<string, object>? XgboostModel { get; set; }
-
-    [JsonPropertyName("prediction_error")]
-    public string? PredictionError { get; set; }
 }
 
 /// <summary>
@@ -672,6 +481,29 @@ public class PythonMLServiceClient
         }
 
         return _isHealthy;
+    }
+
+    /// <summary>
+    /// Get list of teams for a sport
+    /// </summary>
+    public async Task<List<Dictionary<string, object>>> GetTeamsAsync(string sport)
+    {
+        try
+        {
+            if (!await IsHealthyAsync())
+            {
+                // Return empty list instead of throwing to avoid crashing UI on offline service
+                _logger.LogWarning("Python ML Service unavailable, returning empty team list");
+                return new List<Dictionary<string, object>>();
+            }
+            return await _httpClient.GetFromJsonAsync<List<Dictionary<string, object>>>($"/{sport}/teams") 
+                   ?? new List<Dictionary<string, object>>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting teams for sport: {Sport}", sport);
+            return new List<Dictionary<string, object>>();
+        }
     }
 
     /// <summary>
@@ -770,35 +602,6 @@ public class PythonMLServiceClient
     }
 
     /// <summary>
-    /// Make a prediction using a trained model
-    /// </summary>
-    public async Task<PredictResponse> PredictAsync(string sport, string task, PredictRequest request, string? series = null)
-    {
-        try
-        {
-            if (!await IsHealthyAsync())
-            {
-                throw new InvalidOperationException("Python ML Service is not available");
-            }
-
-            var url = $"/{sport}/predict/{task}";
-            if (!string.IsNullOrEmpty(series))
-                url += $"?series={series}";
-
-            var response = await _httpClient.PostAsJsonAsync(url, request);
-            response.EnsureSuccessStatusCode();
-
-            return await response.Content.ReadFromJsonAsync<PredictResponse>()
-                ?? new PredictResponse();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error predicting for {Sport} {Task}", sport, task);
-            throw;
-        }
-    }
-
-    /// <summary>
     /// Trigger retraining of the NCAAB model
     /// </summary>
     public async Task TrainNcaabModelAsync()
@@ -842,37 +645,31 @@ public class PythonMLServiceClient
     }
 
     /// <summary>
-    /// Perform full analysis of a matchup
+    /// Make a prediction using a trained model
     /// </summary>
-    public async Task<MatchupAnalysisResult?> AnalyzeMatchupAsync(string sport, string homeTeam, string awayTeam)
+    public async Task<PredictResponse> PredictAsync(string sport, string task, PredictRequest request, string? series = null)
     {
         try
         {
-            if (!await IsHealthyAsync()) return null;
-            var url = $"/analysis/matchup?sport={sport}&home_team={Uri.EscapeDataString(homeTeam)}&away_team={Uri.EscapeDataString(awayTeam)}";
-            return await _httpClient.GetFromJsonAsync<MatchupAnalysisResult>(url);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error analyzing matchup: {Home} @ {Away}", homeTeam, awayTeam);
-            return null;
-        }
-    }
+            if (!await IsHealthyAsync())
+            {
+                throw new InvalidOperationException("Python ML Service is not available");
+            }
 
-    /// <summary>
-    /// Get ESPN predictions for a sport
-    /// </summary>
-    public async Task<EspnResponse?> GetEspnPredictionsAsync(string sport)
-    {
-        try
-        {
-            if (!await IsHealthyAsync()) return null;
-            return await _httpClient.GetFromJsonAsync<EspnResponse>($"/trends/{sport}/predictions");
+            var url = $"/{sport}/predict/{task}";
+            if (!string.IsNullOrEmpty(series))
+                url += $"?series={series}";
+
+            var response = await _httpClient.PostAsJsonAsync(url, request);
+            response.EnsureSuccessStatusCode();
+
+            return await response.Content.ReadFromJsonAsync<PredictResponse>()
+                ?? new PredictResponse();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting ESPN predictions for {Sport}", sport);
-            return null;
+            _logger.LogError(ex, "Error predicting for {Sport} {Task}", sport, task);
+            throw;
         }
     }
 
@@ -1035,6 +832,25 @@ public class PythonMLServiceClient
     /// </summary>
     public async Task<List<string>> GetEntitiesAsync(string sport, string? series = null)
     {
+        try
+        {
+            if (!await IsHealthyAsync())
+            {
+                throw new InvalidOperationException("Python ML Service is not available");
+            }
+
+            var url = $"/{sport}/entities";
+            if (!string.IsNullOrEmpty(series))
+                url += $"?series={series}";
+
+            var response = await _httpClient.GetFromJsonAsync<List<string>>(url);
+            return response ?? new List<string>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting entities for {Sport}", sport);
+            throw;
+        }
         try
         {
             if (!await IsHealthyAsync())
@@ -1235,6 +1051,54 @@ public class PythonMLServiceClient
     }
 
     /// <summary>
+    /// Add a new dataset configuration
+    /// </summary>
+    public async Task<bool> AddDatasetAsync(string sport, string datasetId, string type = "kaggle")
+    {
+        try
+        {
+            var payload = new { dataset_id = datasetId, type = type };
+            var response = await _httpClient.PostAsJsonAsync($"/data/datasets/{sport}", payload);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding dataset {DatasetId} to {Sport}", datasetId, sport);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Remove a dataset configuration
+    /// </summary>
+    public async Task<bool> RemoveDatasetAsync(string sport, string datasetId)
+    {
+        try
+        {
+            // Encode datasetId because it contains slashes (e.g. owner/dataset)
+            // But FastAPI path param handles it if configured correctly, or we pass it safely.
+            // Using a simple slash encoding might be tricky if the API expects path param.
+            // The API is: DELETE /data/datasets/{sport}/{dataset_id:path}
+            // So we can just append it, but URI encoding helps safely transmit special chars.
+            // However, FastAPI ":path" expects the slashes to be part of the path structure potentially.
+            // Let's rely on standard URL rules. 
+            // In request, we usually do NOT encode the slash that separates path segments, 
+            // but here "owner/dataset" IS the ID.
+            // Is it treated as one segment or two? 
+            // FastAPI with `{dataset_id:path}` accepts arbitrary slashes.
+            // So `owner/dataset` works.
+            
+            var response = await _httpClient.DeleteAsync($"/data/datasets/{sport}/{datasetId}");
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error removing dataset {DatasetId} from {Sport}", datasetId, sport);
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Run Monte Carlo simulation
     /// </summary>
     public async Task<SimulationResponse> SimulateRaceAsync(string sport, SimulationRequest request, string? series = null)
@@ -1342,63 +1206,6 @@ public class PythonMLServiceClient
     }
 
     /// <summary>
-    /// Get summary metrics for all models (used on dashboard)
-    /// </summary>
-    public async Task<List<DashboardModelSummary>> GetModelSummaryAsync()
-    {
-        try
-        {
-            if (!await IsHealthyAsync()) return new List<DashboardModelSummary>();
-            var response = await _httpClient.GetFromJsonAsync<List<DashboardModelSummary>>("/dashboard/model-summary");
-            return response ?? new List<DashboardModelSummary>();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting model summary");
-            return new List<DashboardModelSummary>();
-        }
-    }
-
-    /// <summary>
-    /// Get unified AI analysis (Multi-engine + LLM)
-    /// </summary>
-    public async Task<AiAnalysisReport?> GetAiAnalysisAsync(string sport, string homeTeam, string awayTeam, string? homeStatsJson = null, string? awayStatsJson = null)
-    {
-        try
-        {
-            if (!await IsHealthyAsync()) return null;
-            var url = $"/ai/analyze?sport={sport}&home_team={Uri.EscapeDataString(homeTeam)}&away_team={Uri.EscapeDataString(awayTeam)}";
-            if (!string.IsNullOrEmpty(homeStatsJson)) url += $"&home_stats={Uri.EscapeDataString(homeStatsJson)}";
-            if (!string.IsNullOrEmpty(awayStatsJson)) url += $"&away_stats={Uri.EscapeDataString(awayStatsJson)}";
-
-            var response = await _httpClient.PostAsync(url, null);
-            return await response.Content.ReadFromJsonAsync<AiAnalysisReport>();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting AI analysis");
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Get current Gemini AI quota status
-    /// </summary>
-    public async Task<AiQuota?> GetAiQuotaAsync()
-    {
-        try
-        {
-            if (!await IsHealthyAsync()) return null;
-            return await _httpClient.GetFromJsonAsync<AiQuota>("/ai/quota");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting AI quota");
-            return null;
-        }
-    }
-
-    /// <summary>
     /// Enhance data for a sport (adds computed features)
     /// </summary>
     public async Task<EnhanceResponse> EnhanceDataAsync(string sport, string? series = null)
@@ -1430,82 +1237,142 @@ public class PythonMLServiceClient
     }
 
     /// <summary>
-    /// Get NFL odds with caching - returns fresh odds plus any previously cached games
-    /// that are no longer in the live API response (e.g., late night games)
+    /// Get AI Analysis (Multi-Engine + LLM)
     /// </summary>
-    public async Task<OddsAnalysisResponse?> GetNFLOddsCachedAsync(string sportsbook = "fanduel", bool includeCached = true)
+    public async Task<AiAnalysisResult?> AnalyzeMatchupAsync(string sport, string homeTeam, string awayTeam, string homeStats = "{}", string awayStats = "{}")
     {
         try
         {
-            var response = await _httpClient.PostAsync(
-                $"/odds/nfl/analyze-cached?sportsbook={sportsbook}&include_cached={includeCached.ToString().ToLower()}", 
-                null);
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<OddsAnalysisResponse>();
+            if (!await IsHealthyAsync())
+                return null;
+
+            var url = $"/ai/analyze?sport={sport}&home_team={Uri.EscapeDataString(homeTeam)}&away_team={Uri.EscapeDataString(awayTeam)}&home_stats={Uri.EscapeDataString(homeStats)}&away_stats={Uri.EscapeDataString(awayStats)}";
+            var response = await _httpClient.PostAsync(url, null);
+            
+            if (!response.IsSuccessStatusCode) return null;
+            
+            return await response.Content.ReadFromJsonAsync<AiAnalysisResult>();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching cached NFL odds");
+            _logger.LogError(ex, "Error getting AI analysis for {Home} vs {Away}", homeTeam, awayTeam);
             return null;
         }
     }
 
     /// <summary>
-    /// Get NBA odds with caching - returns fresh odds plus any previously cached games
-    /// that are no longer in the live API response (e.g., late night games)
+    /// Get ESPN Predictions (FPI/BPI)
     /// </summary>
-    public async Task<OddsAnalysisResponse?> GetNBAOddsCachedAsync(string sportsbook = "fanduel", bool includeCached = true)
+    public async Task<EspnResponse?> GetEspnPredictionsAsync(string sport)
     {
         try
         {
-            var response = await _httpClient.PostAsync(
-                $"/odds/nba/analyze-cached?sportsbook={sportsbook}&include_cached={includeCached.ToString().ToLower()}", 
-                null);
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<OddsAnalysisResponse>();
+             if (!await IsHealthyAsync())
+                return null;
+                
+             var url = $"/espn/{sport}/predictions";
+             return await _httpClient.GetFromJsonAsync<EspnResponse>(url);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching cached NBA odds");
+            _logger.LogError(ex, "Error getting ESPN predictions for {Sport}", sport);
             return null;
         }
     }
 
     /// <summary>
-    /// Initialize the odds cache table (run once on first deployment)
+    /// Get NBA model comparison (Simple, Kyle, Apex)
     /// </summary>
-    public async Task<bool> InitializeOddsCacheAsync()
+    public async Task<NbaComparisonResponse?> CompareNbaModelsAsync(string homeTeam, string awayTeam, double? totalLine = null, int? homeMl = null, int? awayMl = null)
     {
         try
         {
-            var response = await _httpClient.PostAsync("/cache/init", null);
+            var url = $"/apex/compare/nba?home_team={Uri.EscapeDataString(homeTeam)}&away_team={Uri.EscapeDataString(awayTeam)}";
+            if (totalLine.HasValue) url += $"&total_line={totalLine.Value}";
+            if (homeMl.HasValue) url += $"&home_ml={homeMl.Value}";
+            if (awayMl.HasValue) url += $"&away_ml={awayMl.Value}";
+
+            var response = await _httpClient.GetFromJsonAsync<NbaComparisonResponse>(url);
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting NBA model comparison for {Home} vs {Away}", homeTeam, awayTeam);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Get NASCAR live race predictions and odds
+    /// </summary>
+    public async Task<NascarRacePredictions?> GetRacePredictionsAsync(int raceId)
+    {
+        try
+        {
+            var url = $"/nascar/predictions/{raceId}";
+            return await _httpClient.GetFromJsonAsync<NascarRacePredictions>(url);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting NASCAR predictions for race {RaceId}", raceId);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Trigger NASCAR Model Retraining
+    /// </summary>
+    public async Task<bool> TrainNascarModelAsync()
+    {
+        try
+        {
+            var response = await _httpClient.PostAsync("/nascar/train", null);
             return response.IsSuccessStatusCode;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error initializing odds cache");
+            _logger.LogError(ex, "Error triggering NASCAR training");
             return false;
         }
     }
 
     /// <summary>
-    /// Compare different NBA models (XGBoost vs Neural Network)
+    /// Get NCAAB Team Hit Rates
     /// </summary>
-    public async Task<NbaComparisonResponse?> CompareNbaModelsAsync(string homeTeam, string awayTeam, double totalLine, int? homeMl = null, int? awayMl = null)
+    public async Task<HitRateResult?> GetNcaabHitRatesAsync(string team, string metric, double line, int lastN = 10)
     {
         try
         {
-            var url = $"/apex/compare/nba?home_team={Uri.EscapeDataString(homeTeam)}&away_team={Uri.EscapeDataString(awayTeam)}&total_line={totalLine}";
-            if (homeMl.HasValue) url += $"&home_ml={homeMl}";
-            if (awayMl.HasValue) url += $"&away_ml={awayMl}";
-
-            var response = await _httpClient.GetAsync(url);
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<NbaComparisonResponse>();
+            var url = $"/trends/ncaab/hit-rate?team={Uri.EscapeDataString(team)}&metric={metric}&line={line}&last_n={lastN}";
+            return await _httpClient.GetFromJsonAsync<HitRateResult>(url);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error comparing NBA models for {Home} vs {Away}", homeTeam, awayTeam);
+            _logger.LogError(ex, "Error getting hit rates for {Team}", team);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Get NCAAB model comparison (Simple, XGBoost v2, ESPN BPI)
+    /// </summary>
+    public async Task<NcaabComparisonResponse?> CompareNcaabModelsAsync(string homeTeam, string awayTeam, double? totalLine = null, int? homeMl = null, int? awayMl = null)
+    {
+        try
+        {
+            if (!await IsHealthyAsync())
+                return null;
+
+            var url = $"/apex/compare/ncaab?home_team={Uri.EscapeDataString(homeTeam)}&away_team={Uri.EscapeDataString(awayTeam)}";
+            if (totalLine.HasValue) url += $"&total_line={totalLine.Value}";
+            if (homeMl.HasValue) url += $"&home_ml={homeMl.Value}";
+            if (awayMl.HasValue) url += $"&away_ml={awayMl.Value}";
+
+            return await _httpClient.GetFromJsonAsync<NcaabComparisonResponse>(url);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting NCAAB model comparison for {Home} vs {Away}", homeTeam, awayTeam);
             return null;
         }
     }
@@ -1524,4 +1391,211 @@ public class EnhanceResponse
 
     [JsonPropertyName("total_records")]
     public int? TotalRecords { get; set; }
+}
+
+public class NascarRacePredictions
+{
+    [JsonPropertyName("race_id")]
+    public int RaceId { get; set; }
+
+    [JsonPropertyName("track_name")]
+    public string TrackName { get; set; } = "";
+
+    [JsonPropertyName("prediction_count")]
+    public int PredictionCount { get; set; }
+
+    [JsonPropertyName("confidence")]
+    public string Confidence { get; set; } = "";
+
+    [JsonPropertyName("predictions")]
+    public List<NascarDriverPrediction> Predictions { get; set; } = new();
+}
+
+public class NascarDriverPrediction
+{
+    [JsonPropertyName("driver_name")]
+    public string DriverName { get; set; } = "";
+
+    [JsonPropertyName("car_number")]
+    public string CarNumber { get; set; } = "";
+
+    [JsonPropertyName("win_probability")]
+    public double WinProbability { get; set; }
+
+    [JsonPropertyName("projected_finish")]
+    public double ProjectedFinish { get; set; }
+
+    [JsonPropertyName("market_odds")]
+    public string MarketOdds { get; set; } = "";
+
+    [JsonPropertyName("engines")]
+    public Dictionary<string, object> Engines { get; set; } = new();
+
+    [JsonPropertyName("confidence")]
+    public string Confidence { get; set; } = "";
+    
+    [JsonPropertyName("rank")]
+    public int Rank { get; set; }
+}
+
+public class HitRateResult
+{
+    [JsonPropertyName("team")] 
+    public string Team { get; set; } = "";
+    
+    [JsonPropertyName("metric")] 
+    public string Metric { get; set; } = "";
+    
+    [JsonPropertyName("line")] 
+    public double Line { get; set; }
+    
+    [JsonPropertyName("games_analyzed")] 
+    public int GamesAnalyzed { get; set; }
+    
+    [JsonPropertyName("hits")] 
+    public int Hits { get; set; }
+    
+    [JsonPropertyName("hit_rate")] 
+    public double HitRate { get; set; }
+    
+    [JsonPropertyName("avg_value")] 
+    public double AvgValue { get; set; }
+    
+    [JsonPropertyName("game_log")] 
+    public List<HitRateGameLog> GameLog { get; set; } = new();
+}
+
+public class HitRateGameLog
+{
+    [JsonPropertyName("date")] 
+    public string Date { get; set; } = "";
+    
+    [JsonPropertyName("opponent")] 
+    public string Opponent { get; set; } = "";
+    
+    [JsonPropertyName("score")] 
+    public string Score { get; set; } = "";
+    
+    [JsonPropertyName("value")] 
+    public double Value { get; set; }
+    
+    [JsonPropertyName("is_hit")] 
+    public bool IsHit { get; set; }
+}
+
+public class EspnResponse
+{
+    [JsonPropertyName("sport")]
+    public string Sport { get; set; } = "";
+    
+    [JsonPropertyName("source")]
+    public string Source { get; set; } = "";
+    
+    [JsonPropertyName("week")]
+    public int? Week { get; set; }
+    
+    [JsonPropertyName("disclaimer")]
+    public string Disclaimer { get; set; } = "";
+    
+    [JsonPropertyName("games")]
+    public List<EspnGame> Games { get; set; } = new();
+}
+
+public class EspnGame
+{
+    [JsonPropertyName("event_id")]
+    public string EventId { get; set; } = "";
+    
+    [JsonPropertyName("game_time")]
+    public string GameTime { get; set; } = "";
+    
+    [JsonPropertyName("home_team")]
+    public string HomeTeam { get; set; } = "";
+    
+    [JsonPropertyName("away_team")]
+    public string AwayTeam { get; set; } = "";
+    
+    [JsonPropertyName("home_score")]
+    public string HomeScore { get; set; } = "";
+    
+    [JsonPropertyName("away_score")]
+    public string AwayScore { get; set; } = "";
+    
+    [JsonPropertyName("home_rank")]
+    public object? HomeRank { get; set; }
+    
+    [JsonPropertyName("away_rank")]
+    public object? AwayRank { get; set; }
+    
+    [JsonPropertyName("home_win_prob")]
+    public double HomeWinProb { get; set; }
+    
+    [JsonPropertyName("away_win_prob")]
+    public double AwayWinProb { get; set; }
+    
+    [JsonPropertyName("total_over_prob")]
+    public double TotalOverProb { get; set; }
+    
+    [JsonPropertyName("spread")]
+    public string Spread { get; set; } = "";
+    
+    [JsonPropertyName("over_under")]
+    public double? OverUnder { get; set; }
+}
+
+public class AiAnalysisResult
+{
+    [JsonPropertyName("sport")]
+    public string Sport { get; set; } = "";
+    
+    [JsonPropertyName("matchup")]
+    public string Matchup { get; set; } = "";
+    
+    [JsonPropertyName("engines")]
+    public Dictionary<string, object> Engines { get; set; } = new();
+    
+    [JsonPropertyName("llm_insight")]
+    public AiInsight? LlmInsight { get; set; }
+}
+
+public class AiInsight
+{
+    [JsonPropertyName("winner")]
+    public string Winner { get; set; } = "";
+    
+    [JsonPropertyName("confidence")]
+    public double Confidence { get; set; }
+    
+    [JsonPropertyName("rationale")]
+    public string Rationale { get; set; } = "";
+    
+    [JsonPropertyName("key_factor")]
+    public string KeyFactor { get; set; } = "";
+}
+
+public class BacktestReport
+{
+    [JsonPropertyName("total_games")]
+    public int TotalGames { get; set; }
+    
+    [JsonPropertyName("bets_placed")]
+    public int BetsPlaced { get; set; }
+    
+    [JsonPropertyName("wins")]
+    public int Wins { get; set; }
+    
+    [JsonPropertyName("losses")]
+    public int Losses { get; set; }
+    
+    [JsonPropertyName("hit_rate")]
+    public double HitRate { get; set; }
+    
+    [JsonPropertyName("units_won")]
+    public double UnitsWon { get; set; }
+    
+    [JsonPropertyName("roi_percent")]
+    public double RoiPercent { get; set; }
+    
+    [JsonPropertyName("daily_pnl")]
+    public Dictionary<string, double>? DailyPnl { get; set; }
 }

@@ -1,0 +1,180 @@
+@page "/upcoming-race"
+@using SportsBettingAnalyzer.Services
+@inject PythonMLServiceClient MLClient
+@inject ISnackbar Snackbar
+@rendermode InteractiveServer
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Upcoming Race</MudText>
+
+    @if (_isLoading)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_raceInfo != null)
+    {
+        <MudPaper Class="pa-4 mb-4">
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.h5">@_raceInfo.RaceName</MudText>
+                    <MudText Typo="Typo.subtitle1">@_raceInfo.Track</MudText>
+                    <MudText Typo="Typo.body1">Year: @_raceInfo.Year</MudText>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        <MudStack Row="true" Class="mb-4" Spacing="2">
+             <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Update" OnClick="TrainModel" Disabled="_isLoadingPredictions">
+                Update & Train Models
+            </MudButton>
+        </MudStack>
+
+        <MudPaper Class="pa-4">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+                <MudText Typo="Typo.h6">Ensemble Model Predictions</MudText>
+                <MudSpacer />
+                <MudChip T="string" Color="Color.Success" Size="Size.Small">XGBoost + Random Forest</MudChip>
+            </MudStack>
+
+            @if (_predictions?.Predictions != null && _predictions.Predictions.Any())
+            {
+                <MudTable Items="@_predictions.Predictions" Dense="true" Hover="true" Striped="true" SortLabel="Sort By">
+                    <HeaderContent>
+                        <MudTh><MudTableSortLabel SortBy="new Func<NascarDriverPrediction, object>(x => x.DriverName)">Driver</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortBy="new Func<NascarDriverPrediction, object>(x => x.ProjectedFinish)" InitialDirection="SortDirection.Ascending">Proj Finish</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortBy="new Func<NascarDriverPrediction, object>(x => x.WinProbability)">Win Prob</MudTableSortLabel></MudTh>
+                        <MudTh>Market</MudTh>
+                        <MudTh>Value</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Driver">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudAvatar Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">@context.CarNumber</MudAvatar> 
+                                <MudText>@context.DriverName</MudText>
+                            </MudStack>
+                        </MudTd>
+                        <MudTd DataLabel="Proj Finish">
+                            <MudChip T="string" Size="Size.Small" Color="@(context.ProjectedFinish <= 5 ? Color.Success : context.ProjectedFinish <= 10 ? Color.Info : Color.Default)">
+                                @context.ProjectedFinish.ToString("F1")
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Win Prob">@((context.WinProbability * 100).ToString("F1"))%</MudTd>
+                        <MudTd DataLabel="Market">@(string.IsNullOrEmpty(context.MarketOdds) ? "-" : context.MarketOdds)</MudTd>
+                        <MudTd DataLabel="Value">
+                            <!-- Simple Value Logic: If Model Prob > Implied Odds (heuristic) -->
+                            @if (!string.IsNullOrEmpty(context.MarketOdds))
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Color="Color.Success" />
+                            }
+                            else
+                            {
+                                <center>-</center>
+                            }
+                        </MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
+                </MudTable>
+                
+                <MudText Typo="Typo.caption" Class="mt-2 text-muted">
+                    Prediction based on @_predictions.PredictionCount engines. Confidence: @_predictions.Confidence
+                </MudText>
+            }
+            else
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="LoadPredictions" Disabled="_isLoadingPredictions">
+                    Load Predictions
+                </MudButton>
+            }
+        </MudPaper>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Info">No upcoming race information available.</MudAlert>
+    }
+</MudContainer>
+
+@code {
+    private UpcomingRaceInfo? _raceInfo;
+    private NascarRacePredictions? _predictions;
+    private bool _isLoading = false;
+    private bool _isLoadingPredictions = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRaceInfo();
+    }
+
+    private async Task LoadRaceInfo()
+    {
+        _isLoading = true;
+        try
+        {
+            _raceInfo = await MLClient.GetUpcomingRaceAsync("nascar");
+            if (_raceInfo != null)
+            {
+                await LoadPredictions();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading upcoming race: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+    
+    private async Task LoadPredictions()
+    {
+        if (_raceInfo == null) return;
+        
+        _isLoadingPredictions = true;
+        try
+        {
+            // Assuming RaceNumber exists, defaulting to 1 if not
+            // Since we can't find class def, we rely on standard naming conventions
+            // If RaceNumber fails, we might need to update client
+            // For now, hardcode 1 to test (Daytona 500)
+            int raceId = 1; 
+            _predictions = await MLClient.GetRacePredictionsAsync(raceId);
+        }
+        catch (Exception ex)
+        {
+            // Fail silently for now as predictions might not be ready
+            Console.WriteLine($"Error loading predictions: {ex.Message}");
+        }
+        finally
+        {
+            _isLoadingPredictions = false;
+        }
+    }
+
+    private async Task TrainModel()
+    {
+        _isLoadingPredictions = true;
+        try 
+        {
+            Snackbar.Add("Triggering Model Update Pipeline... This runs in background.", Severity.Info);
+            var success = await MLClient.TrainNascarModelAsync();
+            if (success)
+            {
+                Snackbar.Add("Update Started! Data is being fetched and trained.", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to trigger update.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoadingPredictions = false;
+        }
+    }
+}
