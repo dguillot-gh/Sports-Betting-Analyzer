@@ -175,7 +175,7 @@
                                         {
                                             <tr>
                                                 <td><strong>Winner</strong></td>
-                                                <td>@game.Prediction.PredictedWinner (@(game.Prediction.HomeWinProbability * 100):F0%)</td>
+                                                <td>@game.Prediction.PredictedWinner (@((game.Prediction.HomeWinProbability * 100).ToString("F0"))%)</td>
                                             </tr>
                                             <tr>
                                                 <td><strong>Predicted Total</strong></td>
