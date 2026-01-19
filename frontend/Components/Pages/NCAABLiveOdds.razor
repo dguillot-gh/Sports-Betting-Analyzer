@@ -281,7 +281,12 @@
                                     {
                                         <MudExpansionPanels Elevation="0" Class="mt-2">
                                             <MudExpansionPanel Text="Archetype Radar" Style="background: rgba(255, 64, 129, 0.05); border: 1px dashed #ff4081;">
-                                                <div style="height: 250px;">
+                                                @* Debug: Verify data presence *@
+                                                <div class="mb-2" style="font-size: 0.7rem; color: #666;">
+                                                    <strong>Debug:</strong>
+                                                    @foreach (var p in game.Prediction.V2Radar.Home) { <span>H-@p.Key: @p.Value | </span> }
+                                                </div>
+                                                <div style="height: 300px; width: 100%;">
                                                     <ApexChart TItem="RadarPoint"
                                                                Options="_radarOptions">
 
@@ -441,7 +446,17 @@
 
     private List<RadarPoint> GetRadarPoints(Dictionary<string, double> radarData)
     {
-        return radarData.Select(kvp => new RadarPoint { Category = kvp.Key, Value = kvp.Value }).ToList();
+        var categories = new[] { "Offense", "Defense", "Pace", "SOS", "Depth" };
+        var points = new List<RadarPoint>();
+        foreach (var cat in categories)
+        {
+            points.Add(new RadarPoint 
+            { 
+                Category = cat, 
+                Value = radarData.ContainsKey(cat) ? radarData[cat] : 50 
+            });
+        }
+        return points;
     }
 
     protected override async Task OnInitializedAsync()
