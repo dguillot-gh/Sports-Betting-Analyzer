@@ -138,23 +138,14 @@ class NCAABPredictor:
             # We iterate object columns and try to coerce valid numerics
             for col in self.stats_df.select_dtypes(include=['object']).columns:
                 # heuristic: if column name implies numeric
-                if any(x in col for x in ['score', 'pct', 'eff', 'points', 'rating', 'win', 'owp']):
+                if any(x in col for x in ['score', 'pct', 'eff', 'points', 'rating', 'win', 'owp', 'rebounds', 'assists', 'steals', 'blocks', 'turnovers', 'fouls']):
                     try:
-                        # Attempt to clean specific known bad format "['value']" or "[value]"
-                        msg_logged = False
-                        def clean_val(x):
-                            if isinstance(x, str):
-                                s = x.strip(" []'\"")
-                                try: return float(s)
-                                except: pass
-                            return x
-                        
-                        # Check first non-null
-                        sample = self.stats_df[col].dropna().iloc[0] if not self.stats_df[col].dropna().empty else 0
-                        if isinstance(sample, str) and (sample.startswith('[') or 'E-' in sample):
+                        # Vectorized check for corruption markers
+                        if self.stats_df[col].astype(str).str.contains(r'\[|\]|E\-', regex=True).any():
                             logger.warning(f"Cleaning corrupted column: {col}")
-                            self.stats_df[col] = self.stats_df[col].apply(clean_val)
-                            # Convert to float
+                            # Vectorized cleaning: remove brackets and quotes
+                            self.stats_df[col] = self.stats_df[col].astype(str).str.replace(r'[\[\]\'\"]', '', regex=True)
+                            # Convert to numeric
                             self.stats_df[col] = pd.to_numeric(self.stats_df[col], errors='coerce').fillna(0.0)
                     except Exception as e:
                         logger.warning(f"Failed to clean column {col}: {e}")
