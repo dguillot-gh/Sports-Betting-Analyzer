@@ -171,9 +171,13 @@
                 </MudText>
                 @if (_latestInsight != null)
                 {
-                    <MudCard Elevation="0" Outlined="true" Class="mt-2 pa-4">
+                    <MudCard Elevation="0" Outlined="true" Class="mt-2 pa-4" Style="border-radius: 12px;">
                         <MudText Typo="Typo.subtitle1"><strong>@_latestInsight.Matchup</strong></MudText>
-                        <MudText Typo="Typo.body2" Class="mt-1 italic">"@(_latestInsight.LlmInsight?.Rationale)"</MudText>
+                        
+                        <div class="my-3" style="font-family: 'Inter', 'Roboto', sans-serif; font-size: 0.9rem; line-height: 1.75; color: #37474f;">
+                            @((MarkupString)(_latestInsight.LlmInsight?.Rationale ?? ""))
+                        </div>
+                        
                         <div class="d-flex align-center mt-2">
                             <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">
                                 Confidence: @(_latestInsight.LlmInsight?.Confidence)%

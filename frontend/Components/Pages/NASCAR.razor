@@ -282,13 +282,19 @@
 
                 @if (_aiInsight != null)
                 {
-                    <MudPaper Class="pa-3" Style="background: rgba(156, 39, 176, 0.05); border-left: 4px solid #9c27b0;">
-                        <MudText Typo="Typo.body2" Class="mb-2">
-                            "@_aiInsight.LlmInsight?.Rationale"
-                        </MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">
-                            <strong>Key Factor:</strong> @_aiInsight.LlmInsight?.KeyFactor
-                        </MudText>
+                    <MudPaper Class="pa-4" Style="background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px;">
+                        <div class="d-flex align-center mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Small" Color="Color.Secondary" Class="mr-2" />
+                            <MudText Typo="Typo.subtitle2" Color="Color.Secondary">AI Race Analysis</MudText>
+                        </div>
+                        
+                        <div class="d-flex align-center mb-3 pa-2 rounded" style="background: #fff8e1; border-left: 3px solid #ffc107;">
+                            <MudText Typo="Typo.caption"><b>Key Factor:</b> @_aiInsight.LlmInsight?.KeyFactor</MudText>
+                        </div>
+                        
+                        <div style="font-family: 'Inter', 'Roboto', sans-serif; font-size: 0.9rem; line-height: 1.75; color: #37474f;">
+                            @((MarkupString)(_aiInsight.LlmInsight?.Rationale ?? ""))
+                        </div>
                     </MudPaper>
                 }
                 else if (!_loadingInsight)

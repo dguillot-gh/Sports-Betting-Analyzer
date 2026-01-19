@@ -411,14 +411,19 @@
                                                     </MudSimpleTable>
 
                                                     <!-- Gemini Rationale -->
-                                                    <MudPaper Class="pa-3" Style="background: rgba(156, 39, 176, 0.05); border-left: 4px solid #9c27b0;">
-                                                        <MudText Typo="Typo.subtitle2" Color="Color.Secondary">
-                                                            <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Small" Class="mr-1" /> Gemini Rationale
-                                                        </MudText>
-                                                        <MudText Typo="Typo.body2" Class="italic mt-1">"@game.GeminiAnalysis.LlmInsight?.Rationale"</MudText>
-                                                        <MudText Typo="Typo.caption" Class="mt-2" Style="display: block;">
-                                                            <strong>Key Factor:</strong> @game.GeminiAnalysis.LlmInsight?.KeyFactor
-                                                        </MudText>
+                                                    <MudPaper Class="pa-4" Style="background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px;">
+                                                        <div class="d-flex align-center mb-2">
+                                                            <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Small" Color="Color.Secondary" Class="mr-2" />
+                                                            <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Gemini Analysis</MudText>
+                                                        </div>
+                                                        
+                                                        <div class="d-flex align-center mb-3 pa-2 rounded" style="background: #fff8e1; border-left: 3px solid #ffc107;">
+                                                            <MudText Typo="Typo.caption"><b>Key Factor:</b> @game.GeminiAnalysis.LlmInsight?.KeyFactor</MudText>
+                                                        </div>
+                                                        
+                                                        <div style="font-family: 'Inter', 'Roboto', sans-serif; font-size: 0.9rem; line-height: 1.75; color: #37474f;">
+                                                            @((MarkupString)(game.GeminiAnalysis.LlmInsight?.Rationale ?? ""))
+                                                        </div>
                                                     </MudPaper>
                                                 }
                                             </div>

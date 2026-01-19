@@ -348,9 +348,14 @@
                                                 </div>
                                             }
 
-                                            <MudPaper Class="pa-2 mt-1" Style="background: rgba(156, 39, 176, 0.05); border-left: 3px solid #9c27b0;">
-                                                <MudText Typo="Typo.caption" Color="Color.Secondary"><strong>AI Rationale:</strong></MudText>
-                                                <MudText Typo="Typo.body2" Class="italic mt-1" Style="font-size: 0.8rem;">"@game.GeminiAnalysis.LlmInsight?.Rationale"</MudText>
+                                            <MudPaper Class="pa-3 mt-2" Style="background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px;">
+                                                <div class="d-flex align-center mb-2">
+                                                    <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Small" Color="Color.Secondary" Class="mr-2" />
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary"><strong>AI Rationale</strong></MudText>
+                                                </div>
+                                                <div style="font-family: 'Inter', 'Roboto', sans-serif; font-size: 0.85rem; line-height: 1.7; color: #37474f;">
+                                                    @((MarkupString)(game.GeminiAnalysis.LlmInsight?.Rationale ?? ""))
+                                                </div>
                                             </MudPaper>
                                         </div>
                                     }
