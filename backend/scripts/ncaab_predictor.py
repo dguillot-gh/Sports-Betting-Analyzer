@@ -367,8 +367,25 @@ class NCAABPredictor:
                 for i, impact_val in enumerate(impact_array):
                     if i < len(feature_names):
                         feat = feature_names[i]
-                        # Safe conversion to float scalar, flattening handles potential array-wrapping
-                        scalar_impact = float(np.array(impact_val).flatten()[0])
+                        
+                        # Safe conversion helper for potential stringified lists e.g. "['0.123']"
+                        def safe_float(v):
+                            try:
+                                return float(v)
+                            except:
+                                if isinstance(v, str):
+                                    v = v.strip(" []'\"")
+                                    try: return float(v)
+                                    except: pass
+                                return 0.0
+
+                        # Flatten and parse
+                        try:
+                            raw_val = np.array(impact_val).flatten()[0]
+                            scalar_impact = safe_float(raw_val)
+                        except:
+                            scalar_impact = 0.0
+
                         contributions.append({
                             'feature': feat,
                             'label': self._humanize_feature(feat, home_team, away_team),
@@ -484,13 +501,18 @@ class NCAABPredictor:
         if self.model is None and self.model_path.exists():
             try:
                 self.model = joblib.load(self.model_path)
+            except Exception as e:
+                logger.error(f"Failed to load XGBoost v1 model: {e}")
+                return
+
+            try:
                 # Pass booster directly if possible to avoid internal conversion/parsing issues in SHAP
                 model_to_explain = self.model
                 if hasattr(self.model, "get_booster"):
                     model_to_explain = self.model.get_booster()
                 self.explainer = shap.TreeExplainer(model_to_explain)
             except Exception as e:
-                logger.error(f"Failed to load XGBoost v1: {e}")
+                logger.warning(f"Failed to initialize V1 SHAP explainer: {e}")
 
     def predict_xgb_inference(self, home_team: str, away_team: str) -> Dict[str, Any]:
         """Run XGBoost v1 (Legacy) inference"""
