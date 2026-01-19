@@ -3,6 +3,7 @@
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject ILogger<NCAABLiveOdds> Logger
+@inject PythonMLServiceClient MLService
 @rendermode InteractiveServer
 
 <PageTitle>NCAAB Live Odds</PageTitle>
@@ -92,7 +93,16 @@
                         <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
                         <MudText Class="ms-2">Running...</MudText>
                     } else {
-                        <MudText>Run Backtest (2023-24)</MudText>
+                    }
+                </MudButton>
+
+                <MudButton Variant="Variant.Outlined" Color="Color.Info" StartIcon="@Icons.Material.Filled.CloudSync" 
+                           OnClick="UpdateTorvikData" Disabled="@_isUpdatingTorvik">
+                    @if(_isUpdatingTorvik) {
+                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                        <MudText Class="ms-2">Updating...</MudText>
+                    } else {
+                        <MudText>Update Torvik Data</MudText>
                     }
                 </MudButton>
             </div>
@@ -226,9 +236,12 @@
                                                                 <MudTooltip Text="@($"Impact: {factor.Impact:F3}")">
                                                                     <MudChip T="string" Size="Size.Small" 
                                                                              Color="@(isPositive ? Color.Success : Color.Error)" 
-                                                                             Variant="Variant.Outlined"
-                                                                             Style="font-size: 0.7rem; margin: 0; height: 20px;">
-                                                                        @(isPositive ? "+" : "-") @factor.Label
+                                                                             Variant="Variant.Filled"
+                                                                             ValidationTooltip="false"
+                                                                             Class="px-2 py-0">
+                                                                        <MudText Typo="Typo.caption" Style="color: white; font-weight: 700;">
+                                                                            @(isPositive ? "+" : "")@factor.Label
+                                                                        </MudText>
                                                                     </MudChip>
                                                                 </MudTooltip>
                                                             }
@@ -387,6 +400,32 @@
     // ESPN BPI State
     private EspnResponse? _espnData;
     private bool _isEspnLoading = false;
+    private bool _isUpdatingTorvik = false;
+
+    private async Task UpdateTorvikData()
+    {
+        _isUpdatingTorvik = true;
+        try
+        {
+            var success = await MLService.UpdateTorvikDataAsync();
+            if (success)
+            {
+                Snackbar.Add("Torvik data updated successfully! Please re-train the model.", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to update Torvik data. Check backend logs.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isUpdatingTorvik = false;
+        }
+    }
     
     private ApexChartOptions<RadarPoint> _radarOptions = new()
     {

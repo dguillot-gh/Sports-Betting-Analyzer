@@ -1417,4 +1417,21 @@ public class PythonMLServiceClient
             return new List<DashboardModelSummary>();
         }
     }
+
+    /// <summary>
+    /// Triggers the backend to fetch fresh Torvik data (T-Rank ratings).
+    /// </summary>
+    public async Task<bool> UpdateTorvikDataAsync()
+    {
+        try
+        {
+            var response = await _httpClient.PostAsync("/odds/ncaab/update-torvik", null);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error triggering Torvik data update");
+            return false;
+        }
+    }
 }

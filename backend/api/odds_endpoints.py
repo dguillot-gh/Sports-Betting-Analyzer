@@ -3,7 +3,7 @@ Live Odds API Endpoints
 Fetches real-time betting lines from sportsbooks
 """
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, UploadFile, File
 from typing import Optional
 import logging
 
@@ -792,3 +792,55 @@ async def analyze_all_college_baseball_games(
         "count": len(analyzed_games),
         "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False)),
     }
+
+
+@router.post("/ncaab/update-torvik")
+async def update_torvik_data():
+    """
+    Trigger update of Torvik data (T-Rank ratings) from raw CSV.
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+    
+    script_path = Path(__file__).resolve().parent.parent / "scripts" / "process_torvik_csv.py"
+    
+    try:
+        # Run the processing script
+        result = subprocess.run(
+            [sys.executable, str(script_path)],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return {"status": "success", "message": "Torvik data updated from CSV", "output": result.stdout}
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Torvik update failed: {e.stderr}")
+        return {"status": "error", "message": "Failed to update Torvik data", "details": e.stderr}
+    except Exception as e:
+        logger.error(f"Torvik update error: {e}")
+        return {"status": "error", "message": str(e)}
+
+@router.post("/ncaab/upload-torvik")
+async def upload_torvik_csv(
+    file: UploadFile = File(...)
+):
+    """
+    Upload a new raw_torvik.csv file.
+    """
+    from pathlib import Path
+    import shutil
+    
+    try:
+        data_dir = Path(__file__).resolve().parent.parent / "data" / "ncaab"
+        data_dir.mkdir(exist_ok=True, parents=True) # Ensure dir exists
+        
+        file_path = data_dir / "raw_torvik.csv"
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        return {"status": "success", "message": f"Torvik CSV uploaded to {file_path}"}
+    except Exception as e:
+        logger.error(f"Upload failed: {e}")
+        return {"status": "error", "message": str(e)}

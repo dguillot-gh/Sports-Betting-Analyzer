@@ -65,6 +65,10 @@ class NCAABPredictor:
         self.v2_features = None
         self.model_v2_dir = Path(__file__).resolve().parent.parent / "models"
         
+        # Torvik data (optional enhancement)
+        self.torvik_ratings = None
+        self.torvik_stats = None
+        
     def _load_data(self):
         """Load historical stats from Parquet files if available."""
         try:
@@ -116,9 +120,22 @@ class NCAABPredictor:
                 self.stats_df['oowp'] = self.stats_df.groupby(['season', 'team_display_name'])['opp_owp'].expanding().mean().reset_index(level=[0,1], drop=True)
             else:
                 logger.warning(f"NCAAB stats file not found at {box_path}")
+            
+            # Load Torvik data if available (for enhanced features)
+            torvik_ratings_path = DATA_DIR / "torvik_ratings.parquet"
+            torvik_stats_path = DATA_DIR / "torvik_team_stats.parquet"
+            
+            if torvik_ratings_path.exists():
+                self.torvik_ratings = pd.read_parquet(torvik_ratings_path)
+                logger.info(f"Loaded {len(self.torvik_ratings)} Torvik T-Rank ratings")
+            
+            if torvik_stats_path.exists():
+                self.torvik_stats = pd.read_parquet(torvik_stats_path)
+                logger.info(f"Loaded {len(self.torvik_stats)} Torvik team stats")
                 
         except Exception as e:
             logger.error(f"Error loading NCAAB data: {e}")
+
 
     def _normalize_radar(self, val, min_val, max_val, reverse=False):
         """Helper to normalize a value to 5-100 for radar charts"""
@@ -223,6 +240,34 @@ class NCAABPredictor:
         for k, v in a_stats.items():
             feat_dict[f'{k}_away'] = v
             
+        # --- Torvik Data Injection ---
+        def get_torvik_vals(team_norm, side):
+            vals = {'adj_o': None, 'adj_d': None, 'tempo': None}
+            if self.torvik_ratings is not None:
+                # Normalize cache if needed or just use apply
+                # Optimization: Could cache normalized names map
+                t_row = self.torvik_ratings[self.torvik_ratings['team'].apply(normalize) == team_norm]
+                if not t_row.empty:
+                    # Assume columns: adj_o, adj_d, adj_t
+                    vals['adj_o'] = t_row.iloc[0].get('adj_o')
+                    vals['adj_d'] = t_row.iloc[0].get('adj_d')
+                    vals['tempo'] = t_row.iloc[0].get('adj_t')
+            return vals
+
+        t_h = get_torvik_vals(h_norm, 'home')
+        t_a = get_torvik_vals(a_norm, 'away')
+
+        # Fill with values or fallbacks
+        # Home
+        feat_dict['torvik_adj_o_home'] = t_h['adj_o'] if t_h['adj_o'] is not None else h_stats.get('off_eff_season_avg', 100)
+        feat_dict['torvik_adj_d_home'] = t_h['adj_d'] if t_h['adj_d'] is not None else h_stats.get('def_eff_season_avg', 100)
+        feat_dict['torvik_tempo_home'] = t_h['tempo'] if t_h['tempo'] is not None else h_stats.get('possessions_season_avg', 70)
+        
+        # Away
+        feat_dict['torvik_adj_o_away'] = t_a['adj_o'] if t_a['adj_o'] is not None else a_stats.get('off_eff_season_avg', 100)
+        feat_dict['torvik_adj_d_away'] = t_a['adj_d'] if t_a['adj_d'] is not None else a_stats.get('def_eff_season_avg', 100)
+        feat_dict['torvik_tempo_away'] = t_a['tempo'] if t_a['tempo'] is not None else a_stats.get('possessions_season_avg', 70)
+
         core_stats = [
             'team_score', 'opponent_team_score', 'field_goal_pct', 'three_point_field_goal_pct',
             'free_throw_pct', 'total_rebounds', 'assists', 'steals', 'blocks', 'turnovers', 'fouls'
@@ -532,6 +577,11 @@ class NCAABPredictor:
             result['v2_total'] = round(v2_res['v2_total'], 1)
             result['v2_winner'] = home_team if v2_res['v2_win_prob'] > 0.5 else away_team
             result['v2_available'] = True
+            # Pass through SHAP factors and radar data for experimental analytics
+            if 'v2_factors' in v2_res:
+                result['v2_factors'] = v2_res['v2_factors']
+            if 'v2_radar' in v2_res:
+                result['v2_radar'] = v2_res['v2_radar']
         else:
             result['v2_available'] = False
 

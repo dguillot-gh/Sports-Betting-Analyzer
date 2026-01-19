@@ -134,7 +134,47 @@ def engineer_features_v2(df):
     
     diff_feature_names = df_diffs.columns.tolist()
 
-    # 4. Targets
+    # 4. Integrate Torvik Data (if available)
+    print("Integrating Torvik T-Rank data...")
+    torvik_path = DATA_DIR / "torvik_ratings.parquet"
+    if torvik_path.exists():
+        torvik_df = pd.read_parquet(torvik_path)
+        # Normalize names for join
+        def normalize(n):
+            return str(n).lower().replace(" state", " st").replace(" university", "").strip()
+            
+        torvik_df['team_norm'] = torvik_df['team'].apply(normalize)
+        matchups['team_home_norm'] = matchups['team_display_name_home'].apply(normalize)
+        matchups['team_away_norm'] = matchups['team_display_name_away'].apply(normalize)
+        
+        # Merge Home
+        t_home = torvik_df[['team_norm', 'adj_o', 'adj_d', 'adj_t']].rename(columns={
+            'adj_o': 'torvik_adj_o_home', 'adj_d': 'torvik_adj_d_home', 'adj_t': 'torvik_tempo_home'
+        })
+        matchups = pd.merge(matchups, t_home, left_on='team_home_norm', right_on='team_norm', how='left')
+        
+        # Merge Away
+        t_away = torvik_df[['team_norm', 'adj_o', 'adj_d', 'adj_t']].rename(columns={
+            'adj_o': 'torvik_adj_o_away', 'adj_d': 'torvik_adj_d_away', 'adj_t': 'torvik_tempo_away'
+        })
+        matchups = pd.merge(matchups, t_away, left_on='team_away_norm', right_on='team_norm', how='left')
+        
+        # Fill missing historical Torvik data with our calculated proxies
+        # torvik_adj_o ~= off_eff_season_avg
+        # torvik_tempo ~= possessions_season_avg
+        for side in ['home', 'away']:
+            matchups[f'torvik_adj_o_{side}'] = matchups[f'torvik_adj_o_{side}'].fillna(matchups[f'off_eff_season_avg_{side}'])
+            matchups[f'torvik_adj_d_{side}'] = matchups[f'torvik_adj_d_{side}'].fillna(matchups[f'def_eff_season_avg_{side}'])
+            matchups[f'torvik_tempo_{side}'] = matchups[f'torvik_tempo_{side}'].fillna(matchups[f'possessions_season_avg_{side}'])
+            
+        diff_feature_names.extend([
+            'torvik_adj_o_home', 'torvik_adj_d_home', 'torvik_tempo_home',
+            'torvik_adj_o_away', 'torvik_adj_d_away', 'torvik_tempo_away'
+        ])
+    else:
+        print("Torvik data not found. Skipping integration.")
+
+    # 5. Targets
     matchups['target_win'] = (matchups['team_score_home'] > matchups['team_score_away']).astype(int)
     matchups['target_total'] = matchups['team_score_home'] + matchups['team_score_away']
     
