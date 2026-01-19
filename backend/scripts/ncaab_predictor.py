@@ -131,28 +131,45 @@ class NCAABPredictor:
             
             if torvik_stats_path.exists():
                 self.torvik_stats = pd.read_parquet(torvik_stats_path)
+                # Clean Torvik stats too
+                for col in self.torvik_stats.select_dtypes(include=['object']).columns:
+                    try:
+                         if self.torvik_stats[col].astype(str).str.contains(r'\[|\]|E\-', regex=True).any():
+                            self.torvik_stats[col] = self.torvik_stats[col].astype(str).str.replace(r'[\[\]\'\"]', '', regex=True)
+                            self.torvik_stats[col] = pd.to_numeric(self.torvik_stats[col], errors='coerce').fillna(0.0)
+                    except: pass
                 logger.info(f"Loaded {len(self.torvik_stats)} Torvik team stats")
                 
             # --- Data Cleaning (Fix for potential stringified lists in Parquet) ---
-            # Some environments may have corrupted data like "[0.45]" strings
-            # We iterate object columns and try to coerce valid numerics
+            # Some environments may have corrupted data like "['0.45']" strings
+            # We iterate ALL object columns and try to coerce valid numerics
             for col in self.stats_df.select_dtypes(include=['object']).columns:
-                # heuristic: if column name implies numeric
-                if any(x in col for x in ['score', 'pct', 'eff', 'points', 'rating', 'win', 'owp', 'rebounds', 'assists', 'steals', 'blocks', 'turnovers', 'fouls']):
-                    try:
-                        # Vectorized check for corruption markers
-                        if self.stats_df[col].astype(str).str.contains(r'\[|\]|E\-', regex=True).any():
-                            logger.warning(f"Cleaning corrupted column: {col}")
-                            # Vectorized cleaning: remove brackets and quotes
-                            self.stats_df[col] = self.stats_df[col].astype(str).str.replace(r'[\[\]\'\"]', '', regex=True)
-                            # Convert to numeric
-                            self.stats_df[col] = pd.to_numeric(self.stats_df[col], errors='coerce').fillna(0.0)
-                    except Exception as e:
-                        logger.warning(f"Failed to clean column {col}: {e}")
+                try:
+                    # Vectorized check for corruption markers
+                    if self.stats_df[col].astype(str).str.contains(r'\[|\]|E\-', regex=True).any():
+                        logger.warning(f"Cleaning corrupted column: {col}")
+                        # Vectorized cleaning: remove brackets and quotes
+                        self.stats_df[col] = self.stats_df[col].astype(str).str.replace(r'[\[\]\'\"]', '', regex=True)
+                        # Convert to numeric
+                        self.stats_df[col] = pd.to_numeric(self.stats_df[col], errors='coerce').fillna(0.0)
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup column {col}: {e}")
 
         except Exception as e:
             logger.error(f"Error loading NCAAB data: {e}")
 
+
+    def _clean_inference_data(self, df):
+        """Last line of defense: clean features before inference"""
+        if df is None or df.empty: return df
+        for col in df.select_dtypes(include=['object']).columns:
+             try:
+                # Fast check
+                if df[col].astype(str).str.contains(r'\[|\]', regex=True).any():
+                    df[col] = df[col].astype(str).str.replace(r'[\[\]\'\"]', '', regex=True)
+                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+             except: pass
+        return df
 
     def _normalize_radar(self, val, min_val, max_val, reverse=False):
         """Helper to normalize a value to 5-100 for radar charts"""
@@ -360,6 +377,10 @@ class NCAABPredictor:
                 return {}
             
             X, h_stats, a_stats = prep_res
+            
+            # --- CRITICAL SAFETY CLEANING ---
+            # Ensure no stringified lists exist in X before XGBoost/SHAP touch it
+            X = self._clean_inference_data(X)
             
             ml_prob = self.ml_model_v2.predict_proba(X)[0][1]
             predicted_total = self.ou_model_v2.predict(X)[0]
