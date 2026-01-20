@@ -194,85 +194,86 @@
                                         }
                                     </tbody>
                                 </MudSimpleTable>
-                                                                @* Model Predictions Section - Always Visible *@
-                                    <div class="mt-3">
-                                        @{
-                                            var espnMatch = MatchEspnGame(game);
-                                        }
-                                        
-                                        @* XGBoost Prediction (from analyze-all endpoint) *@
-                                        @if (game.Prediction != null)
-                                        {
-                                            var hasXgb = game.Prediction.V2Available;
-                                            var prob = hasXgb ? game.Prediction.V2WinProb : game.Prediction.HomeWinProbability;
-                                            var total = hasXgb ? game.Prediction.V2Total : game.Prediction.PredictedTotal;
-                                            
-                                            <div class="mb-2 pa-2 rounded" style="background: rgba(81, 45, 168, 0.1); border-left: 3px solid #512da8;">
-                                                <div class="d-flex justify-space-between align-center">
-                                                    <MudText Typo="Typo.caption">
-                                                        <strong>@(hasXgb ? "XGBoost Model v2" : "Baseline Model")</strong>
-                                                        @if (!hasXgb) { <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" Color="Color.Warning" Class="ml-1" Title="Model not trained" /> }
-                                                    </MudText>
-                                                    <MudText Typo="Typo.caption" Color="@(prob > 0.5 ? Color.Success : Color.Error)">
-                                                        <strong>@(prob > 0.5 ? game.HomeTeam : game.AwayTeam) @((prob > 0.5 ? prob : 1 - prob).ToString("P0"))</strong>
-                                                    </MudText>
-                                                </div>
-                                                <MudProgressLinear Color="@(prob > 0.5 ? Color.Success : Color.Error)" Value="@((prob > 0.5 ? prob : 1 - prob) * 100)" Size="Size.Small" />
-                                                <div class="d-flex justify-space-between mt-1">
-                                                    <MudText Typo="Typo.caption">Total: @total.ToString("F1")</MudText>
-                                                    @if (!hasXgb) { <MudText Typo="Typo.caption" Color="Color.Warning"><em>Retrain required for XGBoost</em></MudText> }
-                                                </div>
+                                    @* Model Comparison Table *@
+                                    <MudSimpleTable Dense="true" Hover="true" Style="background: transparent; border: 1px solid #e0e0e0; border-radius: 4px;">
+                                        <thead>
+                                            <tr style="background: rgba(0,0,0,0.05);">
+                                                <th style="font-weight: 700;">Metric</th>
+                                                <th style="text-align: center;">📊 Baseline</th>
+                                                <th style="text-align: center;">🤖 XGB v2</th>
+                                                <th style="text-align: center;">📡 ESPN BPI</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @{
+                                                var espnMatch = MatchEspnGame(game);
+                                                var hasXgb = game.Prediction?.V2Available ?? false;
+                                                var baseProb = game.Prediction?.HomeWinProbability ?? 0.5;
+                                                var xgbProb = game.Prediction?.V2WinProb ?? 0.5;
+                                                var espnProb = espnMatch?.HomeWinProb ?? 0.5;
+                                                
+                                                string GetColor(double p) => p > 0.5 ? "#4caf50" : "#f44336";
+                                            }
+                                            <tr>
+                                                <td><MudText Typo="Typo.caption" Style="font-weight:600;">Win Prob</MudText></td>
+                                                <td style="text-align: center;">
+                                                    <strong style="color: @GetColor(baseProb);">@baseProb.ToString("P0")</strong> (@(baseProb > 0.5 ? "Home" : "Away"))
+                                                </td>
+                                                <td style="text-align: center;">
+                                                    @if (game.Prediction != null) 
+                                                    {
+                                                        if (hasXgb) {
+                                                            <strong style="color: @GetColor(xgbProb);">@xgbProb.ToString("P0")</strong> <span>(@(xgbProb > 0.5 ? "Home" : "Away"))</span>
+                                                        } else {
+                                                            <MudText Typo="Typo.caption" Color="Color.Warning">Retry</MudText>
+                                                        }
+                                                    }
+                                                    else { <span>-</span> }
+                                                </td>
+                                                <td style="text-align: center;">
+                                                    @if (espnMatch != null) {
+                                                        <strong style="color: @GetColor(espnProb);">@espnProb.ToString("P0")</strong> <span>(@(espnProb > 0.5 ? "Home" : "Away"))</span>
+                                                    }
+                                                    else if (_isEspnLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true"/> }
+                                                    else { <span>-</span> }
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td><MudText Typo="Typo.caption" Style="font-weight:600;">Total</MudText></td>
+                                                <td style="text-align: center;">@(game.Prediction?.PredictedTotal.ToString("F1") ?? "-")</td>
+                                                <td style="text-align: center;">@(hasXgb ? game.Prediction?.V2Total.ToString("F1") : "-")</td>
+                                                <td style="text-align: center;">-</td>
+                                            </tr>
+                                            <tr>
+                                                <td><MudText Typo="Typo.caption" Style="font-weight:600;">Pick</MudText></td>
+                                                <td style="text-align: center;">@(game.Prediction?.PredictedWinner ?? "-")</td>
+                                                <td style="text-align: center;">@(hasXgb && xgbProb > 0.5 ? game.HomeTeam : (hasXgb ? game.AwayTeam : "-"))</td>
+                                                <td style="text-align: center;">@(espnMatch != null ? (espnProb > 0.5 ? game.HomeTeam : game.AwayTeam) : "-")</td>
+                                            </tr>
+                                        </tbody>
+                                    </MudSimpleTable>
 
-                                                @* Rationale Factors *@
-                                                @if (hasXgb && game.Prediction.V2Factors.Any())
+                                    @* Key Factors (Moved below table) *@
+                                    @if (game.Prediction?.V2Factors.Any() == true)
+                                    {
+                                        <div class="mt-2 pl-1">
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1"><strong>Key Factors (XGB):</strong></MudText>
+                                            <div class="d-flex flex-wrap" style="gap: 4px;">
+                                                @foreach (var factor in game.Prediction.V2Factors)
                                                 {
-                                                    <div class="mt-2 pt-2" style="border-top: 1px solid rgba(255,255,255,0.1);">
-                                                        <MudText Typo="Typo.caption" Class="d-block mb-1"><strong>Key Factors:</strong></MudText>
-                                                        <div class="d-flex flex-wrap" style="gap: 4px;">
-                                                            @foreach (var factor in game.Prediction.V2Factors)
-                                                            {
-                                                                var isPositive = factor.Impact > 0;
-                                                                <MudTooltip Text="@($"Impact: {factor.Impact:F3}")">
-                                                                    <MudChip T="string" Size="Size.Small" 
-                                                                             Color="@(isPositive ? Color.Success : Color.Error)" 
-                                                                             Variant="Variant.Filled"
-                                                                             ValidationTooltip="false"
-                                                                             Class="px-2 py-0">
-                                                                        <MudText Typo="Typo.caption" Style="color: white; font-weight: 700;">
-                                                                            @(isPositive ? "+" : "")@factor.Label
-                                                                        </MudText>
-                                                                    </MudChip>
-                                                                </MudTooltip>
-                                                            }
-                                                        </div>
-                                                    </div>
+                                                    var isPositive = factor.Impact > 0;
+                                                    <MudTooltip Text="@($"Impact: {factor.Impact:F3}")">
+                                                        <MudChip T="string" Size="Size.Small" 
+                                                                 Color="@(isPositive ? Color.Success : Color.Error)" 
+                                                                 Variant="Variant.Filled"
+                                                                 Class="px-2 py-0" Style="height: 20px;">
+                                                            <MudText Typo="Typo.caption" Style="color: white; font-size: 0.65rem;">
+                                                                @(isPositive ? "+" : "")@factor.Label
+                                                            </MudText>
+                                                        </MudChip>
+                                                    </MudTooltip>
                                                 }
                                             </div>
-                                        }
-                                    
-                                    @* ESPN BPI Prediction *@
-                                    @if (espnMatch != null)
-                                    {
-                                        var homeProb = espnMatch.HomeWinProb;
-                                        var awayProb = espnMatch.AwayWinProb;
-                                        <div class="mb-2 pa-2 rounded" style="background: rgba(0, 123, 255, 0.08); border-left: 3px solid #2196f3;">
-                                            <div class="d-flex justify-space-between align-center">
-                                                <MudText Typo="Typo.caption"><strong>ESPN BPI</strong></MudText>
-                                                <MudText Typo="Typo.caption" Color="@(homeProb > awayProb ? Color.Success : Color.Error)">
-                                                    <strong>@(homeProb > awayProb ? game.HomeTeam : game.AwayTeam) @((homeProb > awayProb ? homeProb : awayProb).ToString("P0"))</strong>
-                                                </MudText>
-                                            </div>
-                                            <MudProgressLinear Color="Color.Info" Value="@((homeProb > awayProb ? homeProb : awayProb) * 100)" Size="Size.Small" />
-                                            @if (!string.IsNullOrEmpty(espnMatch.Spread) && espnMatch.Spread != "0")
-                                            {
-                                                <MudText Typo="Typo.caption" Class="mt-1">Spread: @espnMatch.Spread | O/U: @(espnMatch.OverUnder?.ToString("N1") ?? "-")</MudText>
-                                            }
-                                        </div>
-                                    }
-                                    else if (_isEspnLoading)
-                                    {
-                                        <div class="mb-2 pa-2 rounded" style="background: rgba(0, 123, 255, 0.05);">
-                                            <MudText Typo="Typo.caption"><MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1" /> Loading ESPN BPI...</MudText>
                                         </div>
                                     }
 

@@ -173,12 +173,12 @@ class GeminiPredictor:
             """
         elif sport_upper == "NCAAB":
             priorities = """
-            - Adjusted tempo and possession control
-            - Offensive execution vs defensive pressure
-            - Experience vs youth in lineups
-            - Home-court advantage intensity
-            - Coaching style, rotation depth, and substitution patterns
-            - Turnover rate and free-throw reliance
+            - **Adjusted Tempo & Pace**: Analyze possessions per game. Does the pace align with the O/U line?
+            - **Offense vs Defense Mismatch**: Efficiency gaps that could drive scoring up or down.
+            - **O/U Verdict**: Specific analysis on whether the game will go Over or Under based on tempo.
+            - **Turnover Rate & Free Throws**: Impact on total scoring and volatility.
+            - **Home Court Advantage**: Specific intensity of the venue.
+            - **Experience vs Youth**: How composure affects late-game fouling (impacts O/U).
             """
         elif "BASEBALL" in sport_upper:
             priorities = """
