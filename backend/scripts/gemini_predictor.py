@@ -173,12 +173,12 @@ class GeminiPredictor:
             """
         elif sport_upper == "NCAAB":
             priorities = """
-            - **Adjusted Tempo & Pace**: Analyze possessions per game. Does the pace align with the O/U line?
+            - **Adjusted Tempo & Pace**: Analyze possessions per game. Does the pace align with the O/U line? (Critical for O/U analysis).
             - **Offense vs Defense Mismatch**: Efficiency gaps that could drive scoring up or down.
-            - **O/U Verdict**: Specific analysis on whether the game will go Over or Under based on tempo.
-            - **Turnover Rate & Free Throws**: Impact on total scoring and volatility.
-            - **Home Court Advantage**: Specific intensity of the venue.
-            - **Experience vs Youth**: How composure affects late-game fouling (impacts O/U).
+            - **O/U Verdict & Pace Consistency**: Provide a clear stance on whether the game tempo supports an Over or Under bet.
+            - **Turnover Rate & Free Throws**: Impact on total scoring and late-game volatility.
+            - **Home Court Intensity**: How the venue affects shooting percentages and defensive energy.
+            - **Experience Factor**: Composure in high-leverage situations and its impact on late-game fouling.
             """
         elif "BASEBALL" in sport_upper:
             priorities = """

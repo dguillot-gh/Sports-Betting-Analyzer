@@ -150,12 +150,24 @@
                                     <MudText Typo="Typo.caption">at</MudText>
                                     <MudText Typo="Typo.h6">@game.HomeTeam</MudText>
                                 </CardHeaderContent>
-                                <CardHeaderActions>
-                                    @if (game.HasValue)
-                                    {
-                                        <MudChip T="string" Color="Color.Success" Size="Size.Small">VALUE</MudChip>
-                                    }
-                                </CardHeaderActions>
+                                 <CardHeaderActions>
+                                     @if (game.Prediction != null && game.OverUnder.HasValue)
+                                     {
+                                         var edge = Math.Abs((double)game.OverUnder.Value - (game.Prediction.V2Available ? game.Prediction.V2Total : game.Prediction.PredictedTotal));
+                                         var pick = game.Prediction.V2Available ? (game.Prediction.V2Total > (double)game.OverUnder.Value ? "OVER" : "UNDER") : (game.Prediction.PredictedTotal > (double)game.OverUnder.Value ? "OVER" : "UNDER");
+                                         var chipColor = pick == "OVER" ? Color.Success : Color.Info;
+                                         
+                                         <MudTooltip Text="@($"Model Edge: {edge:F1} points")">
+                                             <MudChip T="string" Color="@chipColor" Variant="@(edge >= 5 ? Variant.Filled : Variant.Outlined)" Size="Size.Small" Icon="@(pick == "OVER" ? Icons.Material.Filled.ArrowUpward : Icons.Material.Filled.ArrowDownward)">
+                                                 <b>@pick @game.OverUnder.Value</b>
+                                             </MudChip>
+                                         </MudTooltip>
+                                     }
+                                     @if (game.HasValue)
+                                     {
+                                         <MudChip T="string" Color="Color.Success" Size="Size.Small">VALUE</MudChip>
+                                     }
+                                 </CardHeaderActions>
                             </MudCardHeader>
                             <MudCardContent>
                                 <MudSimpleTable Dense="true" Hover="true">
@@ -253,59 +265,38 @@
                                         </tbody>
                                     </MudSimpleTable>
 
-                                    @* Key Factors (Moved below table) *@
-                                    @if (game.Prediction?.V2Factors.Any() == true)
-                                    {
-                                        <div class="mt-2 pl-1">
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1"><strong>Key Factors (XGB):</strong></MudText>
-                                            <div class="d-flex flex-wrap" style="gap: 4px;">
+                                    @* Key Factors (XGBoost SHAP) - Prominent Section *@
+                                    <div class="mt-4 pa-3 rounded" style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1);">
+                                        <div class="d-flex align-center mb-2">
+                                            <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Color="Color.Info" Class="mr-2" />
+                                            <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">Model Impact Factors</MudText>
+                                        </div>
+
+                                        @if (game.Prediction?.V2Factors.Any() == true)
+                                        {
+                                            <div class="d-flex flex-wrap" style="gap: 8px;">
                                                 @foreach (var factor in game.Prediction.V2Factors)
                                                 {
                                                     var isPositive = factor.Impact > 0;
-                                                    <MudTooltip Text="@($"Impact: {factor.Impact:F3}")">
-                                                        <MudChip T="string" Size="Size.Small" 
-                                                                 Color="@(isPositive ? Color.Success : Color.Error)" 
-                                                                 Variant="Variant.Filled"
-                                                                 Class="px-2 py-0" Style="height: 20px;">
-                                                            <MudText Typo="Typo.caption" Style="color: white; font-size: 0.65rem;">
-                                                                @(isPositive ? "+" : "")@factor.Label
-                                                            </MudText>
+                                                    <MudTooltip Text="@($"Impact Value: {factor.Impact:F4}")">
+                                                        <MudChip T="string" Color="@(isPositive ? Color.Success : Color.Error)" 
+                                                                 Variant="Variant.Filled" 
+                                                                 Size="Size.Small" 
+                                                                 Class="px-3"
+                                                                 Style="font-weight: 600; font-size: 0.75rem;">
+                                                            @(isPositive ? "+" : "")@factor.Label
                                                         </MudChip>
                                                     </MudTooltip>
                                                 }
                                             </div>
-                                        </div>
-                                    }
-
-                                    @* Radar Chart (Archetype) *@
-                                    @if (game.Prediction?.V2Radar != null && game.Prediction.V2Radar.Home.Any())
-                                    {
-                                        <MudExpansionPanels Elevation="0" Class="mt-2">
-                                            <MudExpansionPanel Text="Archetype Radar" Style="background: rgba(255, 64, 129, 0.05); border: 1px dashed #ff4081;">
-                                                <div style="height: 300px; width: 100%;">
-                                                    <ApexChart TItem="RadarPoint"
-                                                               Options="_radarOptions">
-
-                                                        <ApexPointSeries TItem="RadarPoint"
-                                                                          Items="GetRadarPoints(game.Prediction.V2Radar.Home)"
-                                                                          Name="@game.HomeTeam"
-                                                                          XValue="@(e => e.Category)"
-                                                                          YValue="@(e => (decimal)e.Value)"
-                                                                          SeriesType="SeriesType.Radar"
-                                                                          Color="#00c853" />
-
-                                                        <ApexPointSeries TItem="RadarPoint"
-                                                                          Items="GetRadarPoints(game.Prediction.V2Radar.Away)"
-                                                                          Name="@game.AwayTeam"
-                                                                          XValue="@(e => e.Category)"
-                                                                          YValue="@(e => (decimal)e.Value)"
-                                                                          SeriesType="SeriesType.Radar"
-                                                                          Color="#ff4081" />
-                                                    </ApexChart>
-                                                </div>
-                                            </MudExpansionPanel>
-                                        </MudExpansionPanels>
-                                    }
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-style: italic;">
+                                                SHAP analysis currently unavailable for this matchup.
+                                            </MudText>
+                                        }
+                                    </div>
                                 
                                 @if (game.ValueBets.Any())
                                 {
@@ -628,6 +619,7 @@
                 HomeWinProbability = pred.TryGetProperty("home_win_probability", out var hwp) ? hwp.GetDouble() : 0.5,
                 PredictedTotal = pred.TryGetProperty("predicted_total", out var pt) ? pt.GetDouble() : 0,
                 Confidence = pred.TryGetProperty("confidence", out var c) ? c.GetDouble() : 0.5,
+                OuPick = pred.TryGetProperty("ou_pick", out var oup) ? oup.GetString() ?? "" : "",
                 
                 // V2 fields
                 V2Available = pred.TryGetProperty("v2_available", out var v2a) && v2a.GetBoolean(),
@@ -699,6 +691,7 @@
         public double HomeWinProbability { get; set; }
         public double PredictedTotal { get; set; }
         public double Confidence { get; set; }
+        public string OuPick { get; set; } = "";
         
         // XGBoost v2 fields
         public bool V2Available { get; set; }
