@@ -281,11 +281,6 @@
                                     {
                                         <MudExpansionPanels Elevation="0" Class="mt-2">
                                             <MudExpansionPanel Text="Archetype Radar" Style="background: rgba(255, 64, 129, 0.05); border: 1px dashed #ff4081;">
-                                                @* Debug: Verify data presence *@
-                                                <div class="mb-2" style="font-size: 0.7rem; color: #666;">
-                                                    <strong>Debug:</strong>
-                                                    @foreach (var p in game.Prediction.V2Radar.Home) { <span>H-@p.Key: @p.Value | </span> }
-                                                </div>
                                                 <div style="height: 300px; width: 100%;">
                                                     <ApexChart TItem="RadarPoint"
                                                                Options="_radarOptions">
@@ -432,10 +427,12 @@
     
     private ApexChartOptions<RadarPoint> _radarOptions = new()
     {
-        Chart = new Chart { Toolbar = new Toolbar { Show = false } },
-        PlotOptions = new PlotOptions { Radar = new PlotOptionsRadar { Polygons = new RadarPolygons { StrokeColors = "#333", ConnectorColors = "#333" } } },
+        Chart = new Chart { Toolbar = new Toolbar { Show = false }, ForeColor = "#e0e0e0" },
+        PlotOptions = new PlotOptions { Radar = new PlotOptionsRadar { Polygons = new RadarPolygons { StrokeColors = "rgba(255,255,255,0.2)", ConnectorColors = "rgba(255,255,255,0.2)" } } },
         Yaxis = new List<YAxis> { new YAxis { Max = 100, Min = 0, Show = false } },
-        Legend = new Legend { Show = true, Position = LegendPosition.Bottom }
+        Legend = new Legend { Show = true, Position = LegendPosition.Bottom },
+        Stroke = new Stroke { Width = 2 },
+        Fill = new Fill { Opacity = 0.4 }
     };
     
     public class RadarPoint
