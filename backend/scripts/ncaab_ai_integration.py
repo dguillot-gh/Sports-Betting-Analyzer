@@ -54,9 +54,7 @@ def get_ncaab_ai_predictions(
             return _fallback_logic(home_team, away_team, home_stats, away_stats)
 
         # 2. Extract Heuristic Engine
-        # The predictor returns 'home_win_probability' from the heuristic logic
         h_prob_heur = pred_result.get("home_win_probability", 0.5)
-        
         engines["Heuristic (Stats)"] = {
             "home_score": pred_result.get("predicted_score_home", 0),
             "away_score": pred_result.get("predicted_score_away", 0),
@@ -65,8 +63,7 @@ def get_ncaab_ai_predictions(
             "description": "Based on Adjusted Efficiency & Pace"
         }
         
-        # 3. Extract XGBoost Engine
-        # If available (might be None if model file missing)
+        # 3. Extract XGBoost v1 (Legacy)
         if pred_result.get("xgb_win_prob") is not None:
             xgb_prob = pred_result["xgb_win_prob"]
             engines["XGBoost (ML)"] = {
@@ -74,10 +71,31 @@ def get_ncaab_ai_predictions(
                 "confidence": "High" if abs(xgb_prob - 0.5) > 0.15 else "Low",
                 "description": "Gradient Boosting on Rolling Stats (L5/L10)"
             }
+        
+        # 4. Extract High-Accuracy XGBoost v2 (New)
+        if pred_result.get("v2_available"):
+            v2_prob = pred_result["v2_win_prob"]
+            v2_factors = pred_result.get("v2_factors", [])
             
-            # Add SHAP explanations if present
-            if "explanation" in pred_result and pred_result["explanation"]:
-                engines["XGBoost (ML)"]["explanation"] = pred_result["explanation"]
+            engines["XGBoost v2 (High Accuracy)"] = {
+                "home_win_prob": round(v2_prob, 3),
+                "predicted_total": pred_result.get("v2_total"),
+                "confidence": "Highest" if abs(v2_prob - 0.5) > 0.2 else "High",
+                "description": "Advanced Dual-Model with Torvik Integration",
+                "factors": v2_factors,
+                "radar": pred_result.get("v2_radar", {}),
+                # Frontend expects Factors to be inside a 'top_features' property of the explanation
+                "explanation": {"top_features": v2_factors}
+            }
+            
+            # Map to legacy key "XGBoost (ML)" as well if it doesn't already exist or to override it with V2 accuracy
+            # The frontend specifically looks for "XGBoost (ML)" in some rationale blocks
+            engines["XGBoost (ML)"] = {
+                "home_win_prob": round(v2_prob, 3),
+                "confidence": "Highest" if abs(v2_prob - 0.5) > 0.2 else "High",
+                "description": "XGBoost v2 (Upgraded)",
+                "explanation": {"top_features": v2_factors}
+            }
         
     except Exception as e:
         logger.error(f"Error in NCAAB AI integration: {e}")

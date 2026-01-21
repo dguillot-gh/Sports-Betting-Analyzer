@@ -262,7 +262,7 @@ class NCAABPredictor:
         df = df.copy()  # Work on a copy to avoid modifying cached data
         
         for col in df.columns:
-            if col in ['game_id', 'team_display_name', 'opponent_team_display_name', 'game_date', 'season', 'team_norm', 'team']:
+            if col in ['game_id', 'team_display_name', 'opponent_team_display_name', 'game_date', 'season', 'team_norm', 'team', 'game_date_time']:
                 continue
             try:
                 # Check if column needs cleaning
