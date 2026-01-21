@@ -120,6 +120,50 @@ class NCAABPredictor:
         if 'features' not in NCAABPredictor._v2_cache:
             self._load_models_v2()
         return NCAABPredictor._v2_cache.get('features')
+    
+    def _load_models_v2(self):
+        """Load and repair V2 models with aggressive base_score fixing"""
+        if 'ml' in NCAABPredictor._v2_cache:
+            return  # Already loaded
+        
+        try:
+            import joblib
+            
+            # Load ML Model
+            if not self.ml_v2_path.exists():
+                logger.warning(f"ML v2 model not found at {self.ml_v2_path}")
+                return
+            
+            ml_model = joblib.load(self.ml_v2_path)
+            logger.info(f"Loaded ML v2 model from {self.ml_v2_path}")
+            
+            # CRITICAL: Repair BEFORE caching to fix base_score corruption
+            self._repair_booster(ml_model)
+            NCAABPredictor._v2_cache['ml'] = ml_model
+            
+            # Load O/U Model
+            if not self.ou_v2_path.exists():
+                logger.warning(f"O/U v2 model not found at {self.ou_v2_path}")
+                return
+            
+            ou_model = joblib.load(self.ou_v2_path)
+            logger.info(f"Loaded O/U v2 model from {self.ou_v2_path}")
+            
+            # CRITICAL: Repair BEFORE caching to fix base_score corruption
+            self._repair_booster(ou_model)
+            NCAABPredictor._v2_cache['ou'] = ou_model
+            
+            # Load Features
+            if not self.v2_features_path.exists():
+                logger.warning(f"V2 features not found at {self.v2_features_path}")
+                return
+            
+            features = joblib.load(self.v2_features_path)
+            NCAABPredictor._v2_cache['features'] = features
+            logger.info(f"Loaded {len(features)} V2 features")
+            
+        except Exception as e:
+            logger.error(f"Failed to load V2 models: {e}")
 
     def _load_data(self):
         """Load historical stats from Parquet files if available."""
