@@ -582,28 +582,48 @@ class NCAABPredictor:
             
             # --- SHAP Rationale ---
             try:
-                # Re-repair booster before SHAP to fix any lingering base_score corruption
-                self._repair_booster(self.ml_model_v2)
-                booster = self.ml_model_v2.get_booster()
+                import json
+                import tempfile
                 
-                # Additional safety: ensure booster config is valid before creating explainer
+                # Get a fresh booster and repair it directly for SHAP use
+                original_booster = self.ml_model_v2.get_booster()
+                
+                # Create a repaired booster for SHAP by saving/reloading with fixed config
+                with tempfile.NamedTemporaryFile(suffix='.json', delete=False, mode='w') as tf:
+                    temp_path = tf.name
+                
                 try:
-                    import json
-                    config = booster.save_config()
-                    # Check for corrupted base_score pattern and fix inline
-                    if '\"base_score\":\"[' in config:
-                        cfg_dict = json.loads(config)
-                        if 'learner' in cfg_dict and 'learner_model_param' in cfg_dict['learner']:
-                            bs_str = cfg_dict['learner']['learner_model_param'].get('base_score', '0.5')
-                            if isinstance(bs_str, str) and bs_str.startswith('[') and bs_str.endswith(']'):
-                                fixed_val = float(bs_str.strip('[] '))
-                                cfg_dict['learner']['learner_model_param']['base_score'] = str(fixed_val)
-                                booster.load_config(json.dumps(cfg_dict))
-                                logger.debug(f"Fixed inline base_score corruption: {bs_str} -> {fixed_val}")
-                except Exception as cfg_err:
-                    logger.debug(f"Config pre-check skipped: {cfg_err}")
+                    original_booster.save_model(temp_path)
+                    with open(temp_path, 'r') as f:
+                        model_json = json.load(f)
+                    
+                    # Fix any corrupted base_score values
+                    if 'learner' in model_json and 'learner_model_param' in model_json['learner']:
+                        bs_val = model_json['learner']['learner_model_param'].get('base_score', '0.5')
+                        if isinstance(bs_val, str) and bs_val.startswith('[') and bs_val.endswith(']'):
+                            fixed_bs = float(bs_val.strip('[] '))
+                            model_json['learner']['learner_model_param']['base_score'] = str(fixed_bs)
+                            logger.debug(f"SHAP booster base_score fixed: {bs_val} -> {fixed_bs}")
+                    
+                    # Write fixed model and load into a clean booster for SHAP
+                    fixed_path = temp_path + "_shap_fixed.json"
+                    with open(fixed_path, 'w') as f:
+                        json.dump(model_json, f)
+                    
+                    shap_booster = xgb.Booster()
+                    shap_booster.load_model(fixed_path)
+                    
+                    # Clean up temp files
+                    import os
+                    if os.path.exists(fixed_path):
+                        os.remove(fixed_path)
+                finally:
+                    import os
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
                 
-                explainer = shap.TreeExplainer(booster)
+                # Now use the clean booster for SHAP
+                explainer = shap.TreeExplainer(shap_booster)
                 
                 # Convert to clean numpy array for SHAP - critical step
                 X_np = X_clean.to_numpy(dtype=np.float64)
