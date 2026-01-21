@@ -51,6 +51,7 @@ class NCAABPredictor:
     _stats_df_cache = None
     _torvik_ratings_cache = None
     _torvik_stats_cache = None
+    _v1_cache = {} # {'model': model, 'explainer': explainer}
     _v2_cache = {} # {'ml': model, 'ou': model, 'features': list}
     _league_averages = {'ppp': 1.03, 'pace': 70.0}
     
@@ -184,9 +185,6 @@ class NCAABPredictor:
         except Exception as e:
             logger.error(f"Error loading NCAAB data: {e}")
 
-        except Exception as e:
-            logger.error(f"Error loading NCAAB data: {e}")
-
     def _find_team_df(self, team_name):
         """Flexible team lookup that handles exact, normalized, and contains matching."""
         if self.stats_df is None or self.stats_df.empty:
@@ -212,24 +210,49 @@ class NCAABPredictor:
 
 
     def _repair_booster(self, model):
-        """Repair corrupted base_score in booster metadata if found"""
+        """Fix base_score corruption on the fly using aggressive JSON rebuild."""
         try:
             import json
+            import tempfile
+            import os
             booster = model.get_booster()
-            config = json.loads(booster.save_config())
+            config = booster.save_config()
             
-            lp = config.get('learner', {}).get('learner_model_param', {})
-            bs = lp.get('base_score')
-            
-            if bs and isinstance(bs, str) and ('[' in bs or ']' in bs):
-                clean_bs = bs.strip('[] ')
-                logger.info(f"Repairing corrupted base_score: {bs} -> {clean_bs}")
-                lp['base_score'] = clean_bs
-                booster.load_config(json.dumps(config))
-                return True
+            # If base_score is a bracketed string list: "[0.5]" or "[4.94E-1]"
+            if '"base_score":"[' in config:
+                # We must use the 'save_model' JSON to properly overwrite the internal state.
+                # Just 'load_config' often fails to clear the base_score string in the core.
+                with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as tf:
+                    temp_path = tf.name
+                try:
+                    booster.save_model(temp_path)
+                    with open(temp_path, 'r') as f:
+                        b_cfg = json.load(f)
+                    
+                    if 'learner' in b_cfg and 'learner_model_param' in b_cfg['learner']:
+                        bs_str = b_cfg['learner']['learner_model_param']['base_score']
+                        if isinstance(bs_str, str) and bs_str.startswith('[') and bs_str.endswith(']'):
+                            val = float(bs_str.strip('[] '))
+                            b_cfg['learner']['learner_model_param']['base_score'] = str(val)
+                            
+                            fixed_path = temp_path + "_fixed.json"
+                            with open(fixed_path, 'w') as f:
+                                json.dump(b_cfg, f)
+                            
+                            new_booster = xgb.Booster()
+                            new_booster.load_model(fixed_path)
+                            model._Booster = new_booster # Replace internal booster
+                            
+                            # Sync package-level param if possible
+                            if hasattr(model, 'base_score'):
+                                model.base_score = val
+                                
+                            logger.info(f"Aggressively repaired corrupted base_score: {bs_str} -> {val}")
+                            if os.path.exists(fixed_path): os.remove(fixed_path)
+                finally:
+                    if os.path.exists(temp_path): os.remove(temp_path)
         except Exception as e:
-            logger.debug(f"Booster repair skipped/failed: {e}")
-        return False
+            logger.warning(f"Model repair failed: {e}")
 
     def _clean_numeric_df(self, df):
         """Paranoid data cleaning for all numeric-like columns"""
@@ -625,21 +648,32 @@ class NCAABPredictor:
         return stats
 
     def _load_model(self):
-        """Lazy load v1 Legacy Model"""
+        """Lazy load v1 Legacy Model with global caching"""
+        if NCAABPredictor._v1_cache:
+            self.model = NCAABPredictor._v1_cache.get('model')
+            self.explainer = NCAABPredictor._v1_cache.get('explainer')
+            return
+
         if self.model is None and self.model_path.exists():
             try:
+                logger.info(f"Loading NCAAB V1 model from {self.model_path}")
                 model = joblib.load(self.model_path)
                 self._repair_booster(model)
                 self.model = model
+                
                 # Initialize SHAP explainer for v1
+                v1_explainer = None
                 try:
                     booster = self.model.get_booster()
-                    self.explainer = shap.TreeExplainer(booster)
+                    v1_explainer = shap.TreeExplainer(booster)
                 except Exception as e:
-                    logger.warning(f"V1 SHAP initialization skipped: {e}")
+                    logger.warning(f"V1 SHAP initialization skipped (likely legacy model corruption): {e}")
+                
+                self.explainer = v1_explainer
+                NCAABPredictor._v1_cache = {'model': self.model, 'explainer': self.explainer}
+                
             except Exception as e:
                 logger.error(f"Failed to load XGBoost v1 model: {e}")
-                return
 
             try:
                 # Pass booster directly if possible to avoid internal conversion/parsing issues in SHAP
