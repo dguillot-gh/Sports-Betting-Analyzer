@@ -31,9 +31,9 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite($"Data Source={dbPath}"));
 
 // Add HTTP client factory for API calls
-builder.Services.AddHttpClient();
-builder.Services.AddHttpClient<ESPNDataProvider>();
-builder.Services.AddHttpClient<WebScrapingDataProvider>();
+builder.Services.AddHttpClient().ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5));
+builder.Services.AddHttpClient<ESPNDataProvider>().ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5));
+builder.Services.AddHttpClient<WebScrapingDataProvider>().ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5));
 
 // Configure Python ML Service client with extended timeout
 builder.Services.Configure<PythonMLOptions>(builder.Configuration.GetSection("PythonMLService"));
@@ -80,8 +80,8 @@ builder.Services.AddScoped<WebScrapingDataProvider>();
 builder.Services.AddScoped<ExternalDataManager>();
 builder.Services.AddScoped<SimulationStateService>();
 builder.Services.AddScoped<FileExportService>();
-builder.Services.AddHttpClient<OddsService>();
-builder.Services.AddHttpClient<BallDontLieService>();
+builder.Services.AddHttpClient<OddsService>().ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(10));
+builder.Services.AddHttpClient<BallDontLieService>().ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5));
 builder.Services.AddMemoryCache();
 
 // Configure Tesseract data path

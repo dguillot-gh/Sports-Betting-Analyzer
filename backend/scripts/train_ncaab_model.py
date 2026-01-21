@@ -13,6 +13,27 @@ DATA_DIR = BASE_DIR / "data" / "ncaab"
 MODEL_DIR = BASE_DIR / "models"
 MODEL_DIR.mkdir(exist_ok=True)
 
+def clean_numeric_df(df):
+    """Paranoid data cleaning for all numeric-like columns"""
+    for col in df.columns:
+        if col in ['game_id', 'team_display_name', 'opponent_team_display_name', 'game_date', 'season', 'team_norm', 'team']:
+            continue
+        try:
+            series_str = df[col].astype(str)
+            # If it looks like it has brackets or quotes, it's definitely corrupted
+            if series_str.str.contains(r'\[|\]|\'|\"', regex=True).any():
+                df[col] = series_str.str.replace(r'[\[\]\'\"]', '', regex=True)
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+            else:
+                # Try a numeric conversion for object/other columns, but don't force it if it's text
+                try:
+                    df[col] = pd.to_numeric(df[col])
+                except (ValueError, TypeError):
+                    pass
+        except Exception: 
+            pass
+    return df
+
 def load_data():
     """Load and prep data from local parquet"""
     path = DATA_DIR / "ncaab_team_box_history.parquet"
@@ -24,23 +45,8 @@ def load_data():
     df = pd.read_parquet(path)
     df['game_date'] = pd.to_datetime(df['game_date'])
     
-    # --- Data Cleaning ---
-    # Fix for potential stringified lists in Parquet
-    for col in df.columns:
-        try:
-            series_str = df[col].astype(str)
-            if series_str.str.contains(r'\[|\]', regex=True).any():
-                print(f"Cleaning corrupted column: {col}")
-                df[col] = series_str.str.replace(r'[\[\]\'\"]', '', regex=True)
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
-            elif df[col].dtype == 'object' and col not in ['game_id', 'team_display_name', 'opponent_team_display_name', 'game_date', 'season']:
-                 # Try a numeric conversion for unknown object columns
-                 try:
-                    df[col] = pd.to_numeric(df[col])
-                 except (ValueError, TypeError):
-                    pass
-        except Exception: pass
-        
+    print(f"Loaded {len(df)} stats rows. Cleaning...")
+    df = clean_numeric_df(df)
     return df
 
 def engineer_features_v2(df):
@@ -157,6 +163,9 @@ def engineer_features_v2(df):
     torvik_path = DATA_DIR / "torvik_ratings.parquet"
     if torvik_path.exists():
         torvik_df = pd.read_parquet(torvik_path)
+        print("Cleaning Torvik ratings...")
+        torvik_df = clean_numeric_df(torvik_df)
+        
         # Normalize names for join
         def normalize(n):
             return str(n).lower().replace(" state", " st").replace(" university", "").strip()

@@ -46,31 +46,58 @@ class NCAABPredictor:
     """
     Advanced NCAAB game predictor using team statistics.
     Supports Legacy v1 XGBoost and New v2 Dual Models (ML + O/U).
+    Uses class-level caching to avoid redundant data loading/cleaning.
     """
+    _stats_df_cache = None
+    _torvik_ratings_cache = None
+    _torvik_stats_cache = None
+    _v2_cache = {} # {'ml': model, 'ou': model, 'features': list}
     
     def __init__(self, db_connection=None):
         self.db = db_connection
         self._team_stats_cache: Dict[str, Dict] = {}
-        self.stats_df = None
-        self.schedule_df = None
         
         # v1 Model
         self.model = None
         self.explainer = None
         self.model_path = Path(__file__).resolve().parent.parent / "models" / "ncaab_xgb_v1.joblib"
-        
-        # v2 Models (Side-by-side)
-        self.ml_model_v2 = None
-        self.ou_model_v2 = None
-        self.v2_features = None
         self.model_v2_dir = Path(__file__).resolve().parent.parent / "models"
         
-        # Torvik data (optional enhancement)
-        self.torvik_ratings = None
-        self.torvik_stats = None
-        
+    @property
+    def stats_df(self):
+        if NCAABPredictor._stats_df_cache is None:
+            self._load_data()
+        return NCAABPredictor._stats_df_cache
+
+    @property
+    def torvik_ratings(self):
+        if NCAABPredictor._torvik_ratings_cache is None:
+            self._load_data()
+        return NCAABPredictor._torvik_ratings_cache
+
+    @property
+    def torvik_stats(self):
+        if NCAABPredictor._torvik_stats_cache is None:
+            self._load_data()
+        return NCAABPredictor._torvik_stats_cache
+
+    @property
+    def ml_model_v2(self):
+        return NCAABPredictor._v2_cache.get('ml')
+
+    @property
+    def ou_model_v2(self):
+        return NCAABPredictor._v2_cache.get('ou')
+
+    @property
+    def v2_features(self):
+        return NCAABPredictor._v2_cache.get('features')
+
     def _load_data(self):
         """Load historical stats from Parquet files if available."""
+        if NCAABPredictor._stats_df_cache is not None:
+            return
+
         try:
             import pandas as pd
             SCRIPT_DIR = Path(__file__).parent.absolute()
@@ -95,72 +122,42 @@ class NCAABPredictor:
 
             box_path = DATA_DIR / "ncaab_team_box_history.parquet"
             if box_path.exists():
-                self.stats_df = pd.read_parquet(box_path)
-                # Ensure date is datetime
-                self.stats_df['game_date'] = pd.to_datetime(self.stats_df['game_date'])
-                logger.info(f"Loaded {len(self.stats_df)} NCAAB stats rows")
+                df = pd.read_parquet(box_path)
+                df['game_date'] = pd.to_datetime(df['game_date'])
                 
                 # --- Pre-calculate SOS metrics ---
-                # 1. Win Pct
-                self.stats_df['is_win'] = (self.stats_df['team_score'] > self.stats_df['opponent_team_score']).astype(int)
-                self.stats_df['win_pct'] = self.stats_df.groupby(['season', 'team_display_name'])['is_win'].expanding().mean().reset_index(level=[0,1], drop=True)
+                df['is_win'] = (df['team_score'] > df['opponent_team_score']).astype(int)
+                df['win_pct'] = df.groupby(['season', 'team_display_name'])['is_win'].expanding().mean().reset_index(level=[0,1], drop=True)
                 
-                # 2. OWP (Opponent Win %)
-                matchup_map = self.stats_df[['game_id', 'team_display_name', 'win_pct']].rename(
+                matchup_map = df[['game_id', 'team_display_name', 'win_pct']].rename(
                     columns={'team_display_name': 'opponent_team_display_name', 'win_pct': 'opp_win_pct'}
                 )
-                self.stats_df = pd.merge(self.stats_df, matchup_map, on=['game_id', 'opponent_team_display_name'], how='left')
-                self.stats_df['owp'] = self.stats_df.groupby(['season', 'team_display_name'])['opp_win_pct'].expanding().mean().reset_index(level=[0,1], drop=True)
+                df = pd.merge(df, matchup_map, on=['game_id', 'opponent_team_display_name'], how='left')
+                df['owp'] = df.groupby(['season', 'team_display_name'])['opp_win_pct'].expanding().mean().reset_index(level=[0,1], drop=True)
                 
-                # 3. OOWP (Opponent's Opponent Win %)
-                matchup_map_owp = self.stats_df[['game_id', 'team_display_name', 'owp']].rename(
+                matchup_map_owp = df[['game_id', 'team_display_name', 'owp']].rename(
                     columns={'team_display_name': 'opponent_team_display_name', 'owp': 'opp_owp'}
                 )
-                self.stats_df = pd.merge(self.stats_df, matchup_map_owp, on=['game_id', 'opponent_team_display_name'], how='left')
-                self.stats_df['oowp'] = self.stats_df.groupby(['season', 'team_display_name'])['opp_owp'].expanding().mean().reset_index(level=[0,1], drop=True)
-            else:
-                logger.warning(f"NCAAB stats file not found at {box_path}")
-            
-            # Load Torvik data if available (for enhanced features)
-            torvik_ratings_path = DATA_DIR / "torvik_ratings.parquet"
-            torvik_stats_path = DATA_DIR / "torvik_team_stats.parquet"
-            
-            if torvik_ratings_path.exists():
-                self.torvik_ratings = pd.read_parquet(torvik_ratings_path)
-                logger.info(f"Loaded {len(self.torvik_ratings)} Torvik T-Rank ratings")
-            
-            if torvik_stats_path.exists():
-                self.torvik_stats = pd.read_parquet(torvik_stats_path)
-                # Clean Torvik stats too
-                for col in self.torvik_stats.select_dtypes(include=['object']).columns:
-                    try:
-                         if self.torvik_stats[col].astype(str).str.contains(r'\[|\]|E\-', regex=True).any():
-                            self.torvik_stats[col] = self.torvik_stats[col].astype(str).str.replace(r'[\[\]\'\"]', '', regex=True)
-                            self.torvik_stats[col] = pd.to_numeric(self.torvik_stats[col], errors='coerce').fillna(0.0)
-                    except: pass
-                logger.info(f"Loaded {len(self.torvik_stats)} Torvik team stats")
+                df = pd.merge(df, matchup_map_owp, on=['game_id', 'opponent_team_display_name'], how='left')
+                df['oowp'] = df.groupby(['season', 'team_display_name'])['opp_owp'].expanding().mean().reset_index(level=[0,1], drop=True)
                 
-            # --- Data Cleaning (Fix for potential stringified lists in Parquet) ---
-            # We scan ALL columns (not just object) to find bracketed strings like "['0.123']"
-            # or scientific notation wrapped in strings.
-            for col in self.stats_df.columns:
-                try:
-                    # Check if the column potentially contains string corruption
-                    # We cast to string for the check but only modify if markers are found
-                    series_str = self.stats_df[col].astype(str)
-                    if series_str.str.contains(r'\[|\]', regex=True).any():
-                        logger.warning(f"Cleaning corrupted column: {col}")
-                        # Remove brackets, quotes and convert to numeric
-                        self.stats_df[col] = series_str.str.replace(r'[\[\]\'\"]', '', regex=True)
-                        self.stats_df[col] = pd.to_numeric(self.stats_df[col], errors='coerce').fillna(0.0)
-                    elif self.stats_df[col].dtype == 'object':
-                        # Try a numeric conversion for object columns, but don't force it if it's text
-                        try:
-                            self.stats_df[col] = pd.to_numeric(self.stats_df[col])
-                        except (ValueError, TypeError):
-                            pass
-                except Exception:
-                    pass
+                NCAABPredictor._stats_df_cache = self._clean_numeric_df(df)
+                logger.info(f"Loaded and cleaned {len(NCAABPredictor._stats_df_cache)} NCAAB stats rows")
+            
+            torvik_ratings_path = DATA_DIR / "torvik_ratings.parquet"
+            if torvik_ratings_path.exists():
+                tr = pd.read_parquet(torvik_ratings_path)
+                NCAABPredictor._torvik_ratings_cache = self._clean_numeric_df(tr)
+                logger.info(f"Loaded {len(NCAABPredictor._torvik_ratings_cache)} Torvik ratings")
+            
+            torvik_stats_path = DATA_DIR / "torvik_team_stats.parquet"
+            if torvik_stats_path.exists():
+                ts = pd.read_parquet(torvik_stats_path)
+                NCAABPredictor._torvik_stats_cache = self._clean_numeric_df(ts)
+                logger.info(f"Loaded {len(NCAABPredictor._torvik_stats_cache)} Torvik stats")
+
+        except Exception as e:
+            logger.error(f"Error loading NCAAB data: {e}")
 
         except Exception as e:
             logger.error(f"Error loading NCAAB data: {e}")
@@ -189,24 +186,31 @@ class NCAABPredictor:
         return None
 
 
-    def _clean_inference_data(self, df):
-        """Last line of defense: clean features before inference"""
-        if df is None or df.empty: return df
-        # Scan ALL columns in the inference df for safety
+    def _clean_numeric_df(self, df):
+        """Paranoid data cleaning for all numeric-like columns"""
+        if df is None: return None
         for col in df.columns:
-             try:
-                # Fast check for corruption markers
+            if col in ['game_id', 'team_display_name', 'opponent_team_display_name', 'game_date', 'season', 'team_norm', 'team']:
+                continue
+            try:
                 series_str = df[col].astype(str)
-                if series_str.str.contains(r'\[|\]', regex=True).any():
+                # If it looks like it has brackets, scientific notation E-, or quotes, it's potentially corrupted
+                if series_str.str.contains(r'\[|\]|\'|\"|E\-', regex=True).any():
                     df[col] = series_str.str.replace(r'[\[\]\'\"]', '', regex=True)
                     df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
                 elif df[col].dtype == 'object':
+                    # Try a soft numeric conversion for unknown object columns
                     try:
                         df[col] = pd.to_numeric(df[col])
                     except (ValueError, TypeError):
                         pass
-             except Exception: pass
+            except Exception: 
+                pass
         return df
+
+    def _clean_inference_data(self, df):
+        """Last line of defense: clean features before inference"""
+        return self._clean_numeric_df(df)
 
     def _normalize_radar(self, val, min_val, max_val, reverse=False):
         """Helper to normalize a value to 5-100 for radar charts"""
@@ -220,18 +224,18 @@ class NCAABPredictor:
             return 50
 
     def _load_models_v2(self):
-        """Lazy load v2 models and features list"""
-        if self.ml_model_v2 is None:
+        """Lazy load v2 models and features list into class cache"""
+        if 'ml' not in NCAABPredictor._v2_cache:
             try:
                 ml_path = self.model_v2_dir / "ncaab_ml_v2.joblib"
                 ou_path = self.model_v2_dir / "ncaab_ou_v2.joblib"
                 feat_path = self.model_v2_dir / "ncaab_features_v2.joblib"
                 
                 if ml_path.exists() and ou_path.exists() and feat_path.exists():
-                    self.ml_model_v2 = joblib.load(ml_path)
-                    self.ou_model_v2 = joblib.load(ou_path)
-                    self.v2_features = joblib.load(feat_path)
-                    logger.info("Successfully loaded NCAAB v2 models and features")
+                    NCAABPredictor._v2_cache['ml'] = joblib.load(ml_path)
+                    NCAABPredictor._v2_cache['ou'] = joblib.load(ou_path)
+                    NCAABPredictor._v2_cache['features'] = joblib.load(feat_path)
+                    logger.info("Successfully loaded NCAAB v2 models into cache")
                 else:
                     logger.warning("NCAAB v2 models or features list missing")
             except Exception as e:
