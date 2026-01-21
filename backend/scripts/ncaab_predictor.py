@@ -581,54 +581,83 @@ class NCAABPredictor:
             predicted_total = self.ou_model_v2.predict(X_clean)[0]
             
             # --- SHAP Rationale ---
-            # NOTE: SHAP may fail due to corrupted base_score values in old XGBoost models.
-            # To permanently fix this, run: python scripts/fix_models.py
+            # Monkey-patch SHAP to handle corrupted base_score values like '[6.502445E-1]'
             top_factors = []
-            if not getattr(NCAABPredictor, '_shap_disabled', False):
-                try:
-                    explainer = shap.TreeExplainer(self.ml_model_v2.get_booster())
-                    X_np = X_clean.to_numpy(dtype=np.float64)
-                    shap_res = explainer.shap_values(X_np)
-                    
-                    # Standardize to 1D impact array for the positive class (Win)
-                    if isinstance(shap_res, list):
-                        impact_array = shap_res[1][0] if len(shap_res) > 1 else shap_res[0][0]
-                    else:
-                        impact_array = shap_res[0]
+            try:
+                # Apply one-time patch to SHAP's XGBTreeModelLoader
+                if not getattr(NCAABPredictor, '_shap_patched', False):
+                    try:
+                        from shap.explainers._tree import XGBTreeModelLoader
+                        original_init = XGBTreeModelLoader.__init__
+                        
+                        def patched_init(self, xgb_model):
+                            import json
+                            self.original_model = xgb_model
+                            config = json.loads(xgb_model.save_config())
+                            learner_model_param = config.get("learner", {}).get("learner_model_param", {})
+                            
+                            # Fix corrupted base_score
+                            bs = learner_model_param.get("base_score", "0.5")
+                            if isinstance(bs, str) and bs.startswith('[') and bs.endswith(']'):
+                                bs = bs.strip('[] ')
+                            self.base_score = float(bs)
+                            
+                            # Fix corrupted num_feature
+                            nf = learner_model_param.get("num_feature", "0")
+                            if isinstance(nf, str) and nf.startswith('[') and nf.endswith(']'):
+                                nf = nf.strip('[] ')
+                            self.num_feature = int(nf)
+                            
+                            self.num_class = int(learner_model_param.get("num_class", 0))
+                            self.objective_name = config.get("learner", {}).get("objective", {}).get("name", "")
+                            
+                            # Parse tree structure
+                            self.trees = []
+                            tree_info = config.get("learner", {}).get("gradient_booster", {}).get("model", {}).get("trees", [])
+                            for tree_data in tree_info:
+                                self.trees.append(tree_data)
+                        
+                        XGBTreeModelLoader.__init__ = patched_init
+                        NCAABPredictor._shap_patched = True
+                        logger.info("SHAP XGBTreeModelLoader patched for base_score compatibility")
+                    except Exception as patch_err:
+                        logger.warning(f"SHAP patch failed: {patch_err}")
+                
+                explainer = shap.TreeExplainer(self.ml_model_v2.get_booster())
+                X_np = X_clean.to_numpy(dtype=np.float64)
+                shap_res = explainer.shap_values(X_np)
+                
+                # Standardize to 1D impact array for the positive class (Win)
+                if isinstance(shap_res, list):
+                    impact_array = shap_res[1][0] if len(shap_res) > 1 else shap_res[0][0]
+                else:
+                    impact_array = shap_res[0]
 
-                    feature_names = self.v2_features
-                    contributions = []
-                    
-                    for i, impact_val in enumerate(impact_array):
-                        if i < len(feature_names):
-                            feat = feature_names[i]
-                            try:
-                                if hasattr(impact_val, 'item'):
-                                    val = float(impact_val.item())
-                                elif isinstance(impact_val, (np.ndarray, list)):
-                                    val = float(np.array(impact_val).flatten()[0])
-                                else:
-                                    val = float(impact_val)
-                            except:
-                                val = 0.0
-                            contributions.append({
-                                'feature': feat,
-                                'label': self._humanize_feature(feat, home_team, away_team),
-                                'impact': val
-                            })
-                    
-                    contributions.sort(key=lambda x: abs(x['impact']), reverse=True)
-                    top_factors = contributions[:5]
-                except Exception as se:
-                    # Only log once per session to avoid spamming logs
-                    if 'base_score' in str(se):
-                        NCAABPredictor._shap_disabled = True
-                        logger.warning(
-                            "SHAP disabled for this session due to model base_score corruption. "
-                            "To fix permanently, run: python scripts/fix_models.py"
-                        )
-                    else:
-                        logger.warning(f"SHAP calculation failed: {se}")
+                feature_names = self.v2_features
+                contributions = []
+                
+                for i, impact_val in enumerate(impact_array):
+                    if i < len(feature_names):
+                        feat = feature_names[i]
+                        try:
+                            if hasattr(impact_val, 'item'):
+                                val = float(impact_val.item())
+                            elif isinstance(impact_val, (np.ndarray, list)):
+                                val = float(np.array(impact_val).flatten()[0])
+                            else:
+                                val = float(impact_val)
+                        except:
+                            val = 0.0
+                        contributions.append({
+                            'feature': feat,
+                            'label': self._humanize_feature(feat, home_team, away_team),
+                            'impact': val
+                        })
+                
+                contributions.sort(key=lambda x: abs(x['impact']), reverse=True)
+                top_factors = contributions[:5]
+            except Exception as se:
+                logger.warning(f"SHAP calculation failed: {se}")
             
             # --- Radar Data (Experimental) ---
             def get_radar(stats):
