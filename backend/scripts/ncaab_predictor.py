@@ -78,8 +78,8 @@ class NCAABPredictor:
             potential_models_dir = Path(__file__).parent / "models"
             
         self.model_v2_dir = potential_models_dir
-        self.ml_v2_path = potential_models_dir / "ncaab_v2_ml.joblib"
-        self.ou_v2_path = potential_models_dir / "ncaab_v2_ou.joblib"
+        self.ml_v2_path = potential_models_dir / "ncaab_ml_v2.joblib"
+        self.ou_v2_path = potential_models_dir / "ncaab_ou_v2.joblib"
         self.v2_features_path = potential_models_dir / "ncaab_features_v2.joblib"
         self.model_path = potential_models_dir / "ncaab_xgb_v1.joblib"
         
