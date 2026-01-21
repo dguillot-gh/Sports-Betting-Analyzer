@@ -582,7 +582,27 @@ class NCAABPredictor:
             
             # --- SHAP Rationale ---
             try:
+                # Re-repair booster before SHAP to fix any lingering base_score corruption
+                self._repair_booster(self.ml_model_v2)
                 booster = self.ml_model_v2.get_booster()
+                
+                # Additional safety: ensure booster config is valid before creating explainer
+                try:
+                    import json
+                    config = booster.save_config()
+                    # Check for corrupted base_score pattern and fix inline
+                    if '\"base_score\":\"[' in config:
+                        cfg_dict = json.loads(config)
+                        if 'learner' in cfg_dict and 'learner_model_param' in cfg_dict['learner']:
+                            bs_str = cfg_dict['learner']['learner_model_param'].get('base_score', '0.5')
+                            if isinstance(bs_str, str) and bs_str.startswith('[') and bs_str.endswith(']'):
+                                fixed_val = float(bs_str.strip('[] '))
+                                cfg_dict['learner']['learner_model_param']['base_score'] = str(fixed_val)
+                                booster.load_config(json.dumps(cfg_dict))
+                                logger.debug(f"Fixed inline base_score corruption: {bs_str} -> {fixed_val}")
+                except Exception as cfg_err:
+                    logger.debug(f"Config pre-check skipped: {cfg_err}")
+                
                 explainer = shap.TreeExplainer(booster)
                 
                 # Convert to clean numpy array for SHAP - critical step
