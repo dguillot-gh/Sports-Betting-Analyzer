@@ -59,11 +59,31 @@ class NCAABPredictor:
         self.db = db_connection
         self._team_stats_cache: Dict[str, Dict] = {}
         
-        # v1 Model
+        # Initialize model paths
+        self._load_paths()
+        
+        # Model instances (cached at class level, managed in _load methods)
         self.model = None
         self.explainer = None
-        self.model_path = Path(__file__).resolve().parent.parent / "models" / "ncaab_xgb_v1.joblib"
-        self.model_v2_dir = Path(__file__).resolve().parent.parent / "models"
+        self.ml_model_v2_internal = None
+        self.ou_model_v2_internal = None
+        
+    def _load_paths(self):
+        """Robustly locate model files in backend/models or backend/scripts/models"""
+        base_dir = Path(__file__).parent.parent # Project root/backend
+        potential_models_dir = base_dir / "models"
+        
+        if not potential_models_dir.exists():
+            # Fallback for some dev environments
+            potential_models_dir = Path(__file__).parent / "models"
+            
+        self.model_v2_dir = potential_models_dir
+        self.ml_v2_path = potential_models_dir / "ncaab_v2_ml.joblib"
+        self.ou_v2_path = potential_models_dir / "ncaab_v2_ou.joblib"
+        self.v2_features_path = potential_models_dir / "ncaab_features_v2.joblib"
+        self.model_path = potential_models_dir / "ncaab_xgb_v1.joblib"
+        
+        logger.debug(f"NCAAB model paths initialized. V2 dir: {self.model_v2_dir}")
         
     @property
     def stats_df(self):
@@ -85,14 +105,20 @@ class NCAABPredictor:
 
     @property
     def ml_model_v2(self):
+        if 'ml' not in NCAABPredictor._v2_cache:
+            self._load_models_v2()
         return NCAABPredictor._v2_cache.get('ml')
 
     @property
     def ou_model_v2(self):
+        if 'ou' not in NCAABPredictor._v2_cache:
+            self._load_models_v2()
         return NCAABPredictor._v2_cache.get('ou')
 
     @property
     def v2_features(self):
+        if 'features' not in NCAABPredictor._v2_cache:
+            self._load_models_v2()
         return NCAABPredictor._v2_cache.get('features')
 
     def _load_data(self):
