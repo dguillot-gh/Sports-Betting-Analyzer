@@ -581,127 +581,54 @@ class NCAABPredictor:
             predicted_total = self.ou_model_v2.predict(X_clean)[0]
             
             # --- SHAP Rationale ---
-            try:
-                import json
-                import tempfile
-                import traceback
-                
-                # Recursive function to fix ALL bracket-pattern corrupted values in the model JSON
-                def fix_bracket_values(obj, path=""):
-                    """Recursively find and fix any string values matching '[...E...]' pattern"""
-                    fixes = []
-                    if isinstance(obj, dict):
-                        for key, val in obj.items():
-                            new_path = f"{path}.{key}" if path else key
-                            if isinstance(val, str) and val.startswith('[') and val.endswith(']'):
-                                try:
-                                    # Try to parse as a bracketed number
-                                    fixed_val = float(val.strip('[] '))
-                                    obj[key] = str(fixed_val)
-                                    fixes.append(f"{new_path}: {val} -> {fixed_val}")
-                                except ValueError:
-                                    pass  # Not a number, leave it alone
-                            elif isinstance(val, (dict, list)):
-                                fixes.extend(fix_bracket_values(val, new_path))
-                    elif isinstance(obj, list):
-                        for i, val in enumerate(obj):
-                            new_path = f"{path}[{i}]"
-                            if isinstance(val, str) and val.startswith('[') and val.endswith(']'):
-                                try:
-                                    fixed_val = float(val.strip('[] '))
-                                    obj[i] = str(fixed_val)
-                                    fixes.append(f"{new_path}: {val} -> {fixed_val}")
-                                except ValueError:
-                                    pass
-                            elif isinstance(val, (dict, list)):
-                                fixes.extend(fix_bracket_values(val, new_path))
-                    return fixes
-                
-                # Get a fresh booster and repair it directly for SHAP use
-                original_booster = self.ml_model_v2.get_booster()
-                
-                # Create a repaired booster for SHAP by saving/reloading with fixed config
-                with tempfile.NamedTemporaryFile(suffix='.json', delete=False, mode='w') as tf:
-                    temp_path = tf.name
-                
+            # NOTE: SHAP may fail due to corrupted base_score values in old XGBoost models.
+            # To permanently fix this, run: python scripts/fix_models.py
+            top_factors = []
+            if not getattr(NCAABPredictor, '_shap_disabled', False):
                 try:
-                    original_booster.save_model(temp_path)
-                    with open(temp_path, 'r') as f:
-                        model_json = json.load(f)
+                    explainer = shap.TreeExplainer(self.ml_model_v2.get_booster())
+                    X_np = X_clean.to_numpy(dtype=np.float64)
+                    shap_res = explainer.shap_values(X_np)
                     
-                    # Apply comprehensive fix to ALL bracket-pattern corruptions
-                    all_fixes = fix_bracket_values(model_json)
-                    if all_fixes:
-                        logger.debug(f"SHAP booster fixes applied: {all_fixes}")
-                    
-                    # Write fixed model and load into a clean booster for SHAP
-                    fixed_path = temp_path + "_shap_fixed.json"
-                    with open(fixed_path, 'w') as f:
-                        json.dump(model_json, f)
-                    
-                    shap_booster = xgb.Booster()
-                    shap_booster.load_model(fixed_path)
-                    
-                    # Clean up temp files
-                    import os
-                    if os.path.exists(fixed_path):
-                        os.remove(fixed_path)
-                finally:
-                    import os
-                    if os.path.exists(temp_path):
-                        os.remove(temp_path)
-                
-                # Now use the clean booster for SHAP
-                explainer = shap.TreeExplainer(shap_booster)
-                
-                # Convert to clean numpy array for SHAP - critical step
-                X_np = X_clean.to_numpy(dtype=np.float64)
-                shap_res = explainer.shap_values(X_np)
-                
-                # Standardize to 1D impact array for the positive class (Win)
-                if isinstance(shap_res, list):
-                    # Index 1 is the positive class in binary classifier
-                    impact_array = shap_res[1][0] if len(shap_res) > 1 else shap_res[0][0]
-                else:
-                    impact_array = shap_res[0] # First row
+                    # Standardize to 1D impact array for the positive class (Win)
+                    if isinstance(shap_res, list):
+                        impact_array = shap_res[1][0] if len(shap_res) > 1 else shap_res[0][0]
+                    else:
+                        impact_array = shap_res[0]
 
-                feature_names = self.v2_features
-                contributions = []
-                
-                for i, impact_val in enumerate(impact_array):
-                    if i < len(feature_names):
-                        feat = feature_names[i]
-                        
-                        # Safe conversion helper for potential stringified lists or numpy scalars
-                        def safe_float(v):
+                    feature_names = self.v2_features
+                    contributions = []
+                    
+                    for i, impact_val in enumerate(impact_array):
+                        if i < len(feature_names):
+                            feat = feature_names[i]
                             try:
-                                # Handle numpy array/scalar
-                                if hasattr(v, 'item'):
-                                    return float(v.item())
-                                if isinstance(v, (np.ndarray, list)):
-                                    return float(np.array(v).flatten()[0])
-                                # Handle stringified scientific notation
-                                if isinstance(v, str):
-                                    v = v.strip(" []'\"")
-                                    return float(v)
-                                return float(v)
+                                if hasattr(impact_val, 'item'):
+                                    val = float(impact_val.item())
+                                elif isinstance(impact_val, (np.ndarray, list)):
+                                    val = float(np.array(impact_val).flatten()[0])
+                                else:
+                                    val = float(impact_val)
                             except:
-                                return 0.0
-
-                        scalar_impact = safe_float(impact_val)
-
-                        contributions.append({
-                            'feature': feat,
-                            'label': self._humanize_feature(feat, home_team, away_team),
-                            'impact': scalar_impact
-                        })
-                
-                # Sort by absolute contribution and take top 5
-                contributions.sort(key=lambda x: abs(x['impact']), reverse=True)
-                top_factors = contributions[:5]
-            except Exception as se:
-                logger.warning(f"SHAP calculation failed: {se}\n{traceback.format_exc()}")
-                top_factors = []
+                                val = 0.0
+                            contributions.append({
+                                'feature': feat,
+                                'label': self._humanize_feature(feat, home_team, away_team),
+                                'impact': val
+                            })
+                    
+                    contributions.sort(key=lambda x: abs(x['impact']), reverse=True)
+                    top_factors = contributions[:5]
+                except Exception as se:
+                    # Only log once per session to avoid spamming logs
+                    if 'base_score' in str(se):
+                        NCAABPredictor._shap_disabled = True
+                        logger.warning(
+                            "SHAP disabled for this session due to model base_score corruption. "
+                            "To fix permanently, run: python scripts/fix_models.py"
+                        )
+                    else:
+                        logger.warning(f"SHAP calculation failed: {se}")
             
             # --- Radar Data (Experimental) ---
             def get_radar(stats):
