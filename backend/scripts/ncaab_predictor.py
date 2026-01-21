@@ -141,19 +141,23 @@ class NCAABPredictor:
                 logger.info(f"Loaded {len(self.torvik_stats)} Torvik team stats")
                 
             # --- Data Cleaning (Fix for potential stringified lists in Parquet) ---
-            # Some environments may have corrupted data like "['0.45']" strings
-            # We iterate ALL object columns and try to coerce valid numerics
-            for col in self.stats_df.select_dtypes(include=['object']).columns:
+            # We scan ALL columns (not just object) to find bracketed strings like "['0.123']"
+            # or scientific notation wrapped in strings.
+            for col in self.stats_df.columns:
                 try:
-                    # Vectorized check for corruption markers
-                    if self.stats_df[col].astype(str).str.contains(r'\[|\]|E\-', regex=True).any():
+                    # Check if the column potentially contains string corruption
+                    # We cast to string for the check but only modify if markers are found
+                    series_str = self.stats_df[col].astype(str)
+                    if series_str.str.contains(r'\[|\]', regex=True).any():
                         logger.warning(f"Cleaning corrupted column: {col}")
-                        # Vectorized cleaning: remove brackets and quotes
-                        self.stats_df[col] = self.stats_df[col].astype(str).str.replace(r'[\[\]\'\"]', '', regex=True)
-                        # Convert to numeric
+                        # Remove brackets, quotes and convert to numeric
+                        self.stats_df[col] = series_str.str.replace(r'[\[\]\'\"]', '', regex=True)
                         self.stats_df[col] = pd.to_numeric(self.stats_df[col], errors='coerce').fillna(0.0)
+                    elif self.stats_df[col].dtype == 'object':
+                        # Try a soft conversion for typical numeric columns that ended up as objects
+                        self.stats_df[col] = pd.to_numeric(self.stats_df[col], errors='ignore')
                 except Exception as e:
-                    logger.warning(f"Failed to cleanup column {col}: {e}")
+                    pass
 
         except Exception as e:
             logger.error(f"Error loading NCAAB data: {e}")
@@ -381,6 +385,7 @@ class NCAABPredictor:
             # --- CRITICAL SAFETY CLEANING ---
             # Ensure no stringified lists exist in X before XGBoost/SHAP touch it
             X = self._clean_inference_data(X)
+            X = X.astype(float) # Force numeric matrix
             
             ml_prob = self.ml_model_v2.predict_proba(X)[0][1]
             predicted_total = self.ou_model_v2.predict(X)[0]
