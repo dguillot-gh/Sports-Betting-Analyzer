@@ -52,6 +52,7 @@ class NCAABPredictor:
     _torvik_ratings_cache = None
     _torvik_stats_cache = None
     _v2_cache = {} # {'ml': model, 'ou': model, 'features': list}
+    _league_averages = {'ppp': 1.03, 'pace': 70.0}
     
     def __init__(self, db_connection=None):
         self.db = db_connection
@@ -119,6 +120,8 @@ class NCAABPredictor:
             if not DATA_DIR:
                 logger.error("NCAAB data directory NOT found.")
                 return
+            
+            logger.info(f"NCAAB Data Directory: {DATA_DIR}")
 
             box_path = DATA_DIR / "ncaab_team_box_history.parquet"
             if box_path.exists():
@@ -143,6 +146,28 @@ class NCAABPredictor:
                 
                 NCAABPredictor._stats_df_cache = self._clean_numeric_df(df)
                 logger.info(f"Loaded and cleaned {len(NCAABPredictor._stats_df_cache)} NCAAB stats rows")
+                
+                # --- Dynamic League Averages ---
+                last_season = df['season'].max()
+                recent_df = df[df['season'] == last_season]
+                if not recent_df.empty:
+                    recent_df = recent_df.copy()
+                    if 'possessions' not in recent_df.columns:
+                        recent_df['possessions'] = (
+                            recent_df['field_goals_attempted'] - 
+                            recent_df['offensive_rebounds'] + 
+                            recent_df['turnovers'] + 
+                            (0.44 * recent_df['free_throws_attempted'])
+                        )
+                    pace = recent_df['possessions'].mean()
+                    total_points = recent_df['team_score'].sum()
+                    total_poss = recent_df['possessions'].sum()
+                    ppp = total_points / total_poss if total_poss > 0 else 1.03
+                    NCAABPredictor._league_averages = {
+                        'ppp': float(ppp),
+                        'pace': float(pace)
+                    }
+                    logger.info(f"Dynamic League Averages: PPP={ppp:.3f}, Pace={pace:.1f}")
             
             torvik_ratings_path = DATA_DIR / "torvik_ratings.parquet"
             if torvik_ratings_path.exists():
@@ -185,6 +210,26 @@ class NCAABPredictor:
         
         return None
 
+
+    def _repair_booster(self, model):
+        """Repair corrupted base_score in booster metadata if found"""
+        try:
+            import json
+            booster = model.get_booster()
+            config = json.loads(booster.save_config())
+            
+            lp = config.get('learner', {}).get('learner_model_param', {})
+            bs = lp.get('base_score')
+            
+            if bs and isinstance(bs, str) and ('[' in bs or ']' in bs):
+                clean_bs = bs.strip('[] ')
+                logger.info(f"Repairing corrupted base_score: {bs} -> {clean_bs}")
+                lp['base_score'] = clean_bs
+                booster.load_config(json.dumps(config))
+                return True
+        except Exception as e:
+            logger.debug(f"Booster repair skipped/failed: {e}")
+        return False
 
     def _clean_numeric_df(self, df):
         """Paranoid data cleaning for all numeric-like columns"""
@@ -232,10 +277,14 @@ class NCAABPredictor:
                 feat_path = self.model_v2_dir / "ncaab_features_v2.joblib"
                 
                 if ml_path.exists() and ou_path.exists() and feat_path.exists():
-                    NCAABPredictor._v2_cache['ml'] = joblib.load(ml_path)
-                    NCAABPredictor._v2_cache['ou'] = joblib.load(ou_path)
+                    ml = joblib.load(ml_path)
+                    ou = joblib.load(ou_path)
+                    self._repair_booster(ml)
+                    self._repair_booster(ou)
+                    NCAABPredictor._v2_cache['ml'] = ml
+                    NCAABPredictor._v2_cache['ou'] = ou
                     NCAABPredictor._v2_cache['features'] = joblib.load(feat_path)
-                    logger.info("Successfully loaded NCAAB v2 models into cache")
+                    logger.info("Successfully loaded and repaired NCAAB v2 models into cache")
                 else:
                     logger.warning("NCAAB v2 models or features list missing")
             except Exception as e:
@@ -430,7 +479,8 @@ class NCAABPredictor:
                 booster = self.ml_model_v2.get_booster()
                 explainer = shap.TreeExplainer(booster)
                 # For classification, returns list of [neg_impact, pos_impact] per class
-                shap_res = explainer.shap_values(X)
+                X_np = X.to_numpy(dtype=np.float32)
+                shap_res = explainer.shap_values(X_np)
                 
                 # Standardize to 1D impact array for the positive class (Win)
                 if isinstance(shap_res, list):
@@ -578,7 +628,15 @@ class NCAABPredictor:
         """Lazy load v1 Legacy Model"""
         if self.model is None and self.model_path.exists():
             try:
-                self.model = joblib.load(self.model_path)
+                model = joblib.load(self.model_path)
+                self._repair_booster(model)
+                self.model = model
+                # Initialize SHAP explainer for v1
+                try:
+                    booster = self.model.get_booster()
+                    self.explainer = shap.TreeExplainer(booster)
+                except Exception as e:
+                    logger.warning(f"V1 SHAP initialization skipped: {e}")
             except Exception as e:
                 logger.error(f"Failed to load XGBoost v1 model: {e}")
                 return
@@ -646,16 +704,20 @@ class NCAABPredictor:
         home_stats = self.get_team_stats(home_team)
         away_stats = self.get_team_stats(away_team)
         
-        # Simple/Heuristic Baseline
-        home_advantage = 3.5
+        # Baseline/Dynamic Baseline
+        league_pace = NCAABPredictor._league_averages['pace']
+        league_ppp = NCAABPredictor._league_averages['ppp']
+        home_advantage = 3.5 # Standard HFA in points
+        
         avg_pace = (home_stats['pace'] + away_stats['pace']) / 2
-        league_ppp = 1.03
-        home_expected = avg_pace * (home_stats['off_efficiency'] * away_stats['def_efficiency']) / league_ppp + (home_advantage / 2)
-        away_expected = avg_pace * (away_stats['off_efficiency'] * home_stats['def_efficiency']) / league_ppp - (home_advantage / 2)
+        # Normalize efficiencies relative to league baseline
+        home_expected = avg_pace * (home_stats['off_efficiency'] * (away_stats['def_efficiency'] / league_ppp)) + (home_advantage / 2)
+        away_expected = avg_pace * (away_stats['off_efficiency'] * (home_stats['def_efficiency'] / league_ppp)) - (home_advantage / 2)
         
         predicted_margin = home_expected - away_expected
         predicted_total = home_expected + away_expected
-        home_win_prob = 1 / (1 + math.exp(-predicted_margin * 0.11))
+        # logistic conversion for baseline prob
+        home_win_prob = 1 / (1 + math.exp(-predicted_margin * 0.12))
 
         result = {
             'home_team': home_team, 'away_team': away_team,
@@ -664,7 +726,7 @@ class NCAABPredictor:
             'away_win_probability': round(1 - home_win_prob, 3),
             'predicted_margin': round(predicted_margin, 1),
             'predicted_total': round(predicted_total, 1),
-            'confidence': round(0.5 + abs(predicted_margin) * 0.015, 2)
+            'confidence': round(0.5 + min(0.49, abs(predicted_margin) * 0.02), 2)
         }
 
         # XGBoost v1
@@ -691,10 +753,10 @@ class NCAABPredictor:
 
         # Betting Edge (using v2 if available, else simple)
         if spread is not None:
-            base_margin = result['v2_win_prob'] * 10 - 5 if result.get('v2_available') else predicted_margin 
-            # (Simple win probability to margin conversion for value pick)
-            line_margin = -spread
-            result['spread_pick'] = 'HOME' if (result.get('v2_win_prob', home_win_prob) > 0.5) else 'AWAY'
+            # result['spread_pick'] logic
+            p = result.get('v2_win_prob', home_win_prob)
+            result['spread_pick'] = 'HOME' if p > 0.5 else 'AWAY'
+            # Note: A real edge would compare (p * payout) vs risk, but this is pick-only
             
         if over_under is not None:
             base_total = result.get('v2_total', predicted_total)

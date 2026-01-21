@@ -246,7 +246,7 @@ def train_v2():
     y_ou_train, y_ou_test = y_ou.iloc[:split_idx], y_ou.iloc[split_idx:]
     
     # --- 1. Moneyline Classifier (v2) ---
-    print("\n--- Training Moneyline Classifier (v2) ---")
+    print(f"\n--- Training Moneyline Classifier (v2) ---")
     ml_model = xgb.XGBClassifier(
         objective='binary:logistic',
         n_estimators=1000,
@@ -254,7 +254,11 @@ def train_v2():
         learning_rate=0.03,
         subsample=0.8,
         colsample_bytree=0.8,
-        random_state=42
+        # IMPORTANT: Force float to avoid stringified base_score corruption
+        base_score=float(y_ml_train.mean()),
+        random_state=42,
+        eval_metric='logloss',
+        early_stopping_rounds=50
     )
     ml_model.fit(X_train, y_ml_train, eval_set=[(X_test, y_ml_test)], verbose=100)
     
@@ -263,7 +267,7 @@ def train_v2():
     print(f"ML Accuracy: {ml_acc:.4f}")
     
     # --- 2. Over/Under Regressor (v2) ---
-    print("\n--- Training Over/Under Regressor (v2) ---")
+    print(f"\n--- Training Over/Under Regressor (v2) ---")
     ou_model = xgb.XGBRegressor(
         objective='reg:squarederror',
         n_estimators=1000,
@@ -271,7 +275,11 @@ def train_v2():
         learning_rate=0.03,
         subsample=0.8,
         colsample_bytree=0.8,
-        random_state=42
+        # IMPORTANT: Force float to avoid stringified base_score corruption
+        base_score=float(y_ou_train.mean()),
+        random_state=42,
+        eval_metric='rmse',
+        early_stopping_rounds=50
     )
     ou_model.fit(X_train, y_ou_train, eval_set=[(X_test, y_ou_test)], verbose=100)
     
