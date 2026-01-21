@@ -256,24 +256,33 @@ class NCAABPredictor:
 
     def _clean_numeric_df(self, df):
         """Paranoid data cleaning for all numeric-like columns"""
-        if df is None: return None
+        if df is None: 
+            return None
+        
+        df = df.copy()  # Work on a copy to avoid modifying cached data
+        
         for col in df.columns:
             if col in ['game_id', 'team_display_name', 'opponent_team_display_name', 'game_date', 'season', 'team_norm', 'team']:
                 continue
             try:
-                series_str = df[col].astype(str)
-                # If it looks like it has brackets, scientific notation E-, or quotes, it's potentially corrupted
-                if series_str.str.contains(r'\[|\]|\'|\"|E\-', regex=True).any():
-                    df[col] = series_str.str.replace(r'[\[\]\'\"]', '', regex=True)
-                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
-                elif df[col].dtype == 'object':
-                    # Try a soft numeric conversion for unknown object columns
-                    try:
-                        df[col] = pd.to_numeric(df[col])
-                    except (ValueError, TypeError):
-                        pass
-            except Exception: 
-                pass
+                # Check if column needs cleaning
+                if df[col].dtype == 'object' or df[col].dtype.name == 'object':
+                    # Remove brackets, quotes, and other artifacts
+                    df[col] = df[col].astype(str).str.replace(r'[\[\]\'\"]', '', regex=True)
+                    # Convert to numeric, coercing errors to NaN
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+                
+                # Fill any NaN values with 0
+                df[col] = df[col].fillna(0.0)
+                
+                # Ensure float64 dtype
+                if df[col].dtype != np.float64:
+                    df[col] = df[col].astype(np.float64)
+                    
+            except Exception as e:
+                logger.warning(f"Failed to clean column {col}: {e}")
+                df[col] = 0.0
+        
         return df
 
     def _clean_inference_data(self, df):
@@ -315,7 +324,6 @@ class NCAABPredictor:
 
     def _prepare_features_v2(self, home_team: str, away_team: str):
         """Prepare advanced v2 features for inference. Returns (df, h_stats, a_stats)"""
-        """Prepare advanced v2 features for inference"""
         if self.stats_df is None:
             self._load_data()
         if self.stats_df is None or self.v2_features is None:
@@ -492,17 +500,23 @@ class NCAABPredictor:
             # --- CRITICAL SAFETY CLEANING ---
             # Ensure no stringified lists exist in X before XGBoost/SHAP touch it
             X = self._clean_inference_data(X)
-            X = X.astype(float) # Force numeric matrix
             
-            ml_prob = self.ml_model_v2.predict_proba(X)[0][1]
-            predicted_total = self.ou_model_v2.predict(X)[0]
+            # Force conversion to float64 numpy array to strip any lingering object types
+            X_clean = X.copy()
+            for col in X_clean.columns:
+                X_clean[col] = pd.to_numeric(X_clean[col], errors='coerce').fillna(0.0)
+            X_clean = X_clean.astype(np.float64)
+            
+            ml_prob = self.ml_model_v2.predict_proba(X_clean)[0][1]
+            predicted_total = self.ou_model_v2.predict(X_clean)[0]
             
             # --- SHAP Rationale ---
             try:
                 booster = self.ml_model_v2.get_booster()
                 explainer = shap.TreeExplainer(booster)
-                # For classification, returns list of [neg_impact, pos_impact] per class
-                X_np = X.to_numpy(dtype=np.float32)
+                
+                # Convert to clean numpy array for SHAP - critical step
+                X_np = X_clean.to_numpy(dtype=np.float64)
                 shap_res = explainer.shap_values(X_np)
                 
                 # Standardize to 1D impact array for the positive class (Win)
@@ -562,8 +576,6 @@ class NCAABPredictor:
                     'Depth': self._normalize_radar(stats.get('oowp_season_avg', 0.5), 0.44, 0.58)
                 }
             
-            # We need the underlying a_stats/h_stats. Let's recalculate or pull from prepare
-            # For simplicity in this call, we'll re-fetch just the season averages
             h_radar = get_radar(h_stats)
             a_radar = get_radar(a_stats)
 
@@ -674,19 +686,6 @@ class NCAABPredictor:
                 
             except Exception as e:
                 logger.error(f"Failed to load XGBoost v1 model: {e}")
-
-            try:
-                # Pass booster directly if possible to avoid internal conversion/parsing issues in SHAP
-                model_to_explain = self.model
-                if hasattr(self.model, "get_booster"):
-                    model_to_explain = self.model.get_booster()
-                
-                # If the legacy model has corrupted metadata, TreeExplainer might fail during init
-                # We wrap this tightly to ensure the entire predictor doesn't choke on legacy SHAP
-                self.explainer = shap.TreeExplainer(model_to_explain)
-            except Exception as e:
-                logger.warning(f"V1 SHAP initialization skipped (likely legacy model corruption): {e}")
-                self.explainer = None
 
     def predict_xgb_inference(self, home_team: str, away_team: str) -> Dict[str, Any]:
         """Run XGBoost v1 (Legacy) inference"""
