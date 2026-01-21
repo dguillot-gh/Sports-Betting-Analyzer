@@ -584,6 +584,38 @@ class NCAABPredictor:
             try:
                 import json
                 import tempfile
+                import traceback
+                
+                # Recursive function to fix ALL bracket-pattern corrupted values in the model JSON
+                def fix_bracket_values(obj, path=""):
+                    """Recursively find and fix any string values matching '[...E...]' pattern"""
+                    fixes = []
+                    if isinstance(obj, dict):
+                        for key, val in obj.items():
+                            new_path = f"{path}.{key}" if path else key
+                            if isinstance(val, str) and val.startswith('[') and val.endswith(']'):
+                                try:
+                                    # Try to parse as a bracketed number
+                                    fixed_val = float(val.strip('[] '))
+                                    obj[key] = str(fixed_val)
+                                    fixes.append(f"{new_path}: {val} -> {fixed_val}")
+                                except ValueError:
+                                    pass  # Not a number, leave it alone
+                            elif isinstance(val, (dict, list)):
+                                fixes.extend(fix_bracket_values(val, new_path))
+                    elif isinstance(obj, list):
+                        for i, val in enumerate(obj):
+                            new_path = f"{path}[{i}]"
+                            if isinstance(val, str) and val.startswith('[') and val.endswith(']'):
+                                try:
+                                    fixed_val = float(val.strip('[] '))
+                                    obj[i] = str(fixed_val)
+                                    fixes.append(f"{new_path}: {val} -> {fixed_val}")
+                                except ValueError:
+                                    pass
+                            elif isinstance(val, (dict, list)):
+                                fixes.extend(fix_bracket_values(val, new_path))
+                    return fixes
                 
                 # Get a fresh booster and repair it directly for SHAP use
                 original_booster = self.ml_model_v2.get_booster()
@@ -597,13 +629,10 @@ class NCAABPredictor:
                     with open(temp_path, 'r') as f:
                         model_json = json.load(f)
                     
-                    # Fix any corrupted base_score values
-                    if 'learner' in model_json and 'learner_model_param' in model_json['learner']:
-                        bs_val = model_json['learner']['learner_model_param'].get('base_score', '0.5')
-                        if isinstance(bs_val, str) and bs_val.startswith('[') and bs_val.endswith(']'):
-                            fixed_bs = float(bs_val.strip('[] '))
-                            model_json['learner']['learner_model_param']['base_score'] = str(fixed_bs)
-                            logger.debug(f"SHAP booster base_score fixed: {bs_val} -> {fixed_bs}")
+                    # Apply comprehensive fix to ALL bracket-pattern corruptions
+                    all_fixes = fix_bracket_values(model_json)
+                    if all_fixes:
+                        logger.debug(f"SHAP booster fixes applied: {all_fixes}")
                     
                     # Write fixed model and load into a clean booster for SHAP
                     fixed_path = temp_path + "_shap_fixed.json"
@@ -671,7 +700,7 @@ class NCAABPredictor:
                 contributions.sort(key=lambda x: abs(x['impact']), reverse=True)
                 top_factors = contributions[:5]
             except Exception as se:
-                logger.warning(f"SHAP calculation failed: {se}")
+                logger.warning(f"SHAP calculation failed: {se}\n{traceback.format_exc()}")
                 top_factors = []
             
             # --- Radar Data (Experimental) ---
