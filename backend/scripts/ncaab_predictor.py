@@ -588,36 +588,28 @@ class NCAABPredictor:
                 if not getattr(NCAABPredictor, '_shap_patched', False):
                     try:
                         from shap.explainers._tree import XGBTreeModelLoader
-                        original_init = XGBTreeModelLoader.__init__
+                        _original_xgb_init = XGBTreeModelLoader.__init__
                         
-                        def patched_init(self, xgb_model):
+                        def _patched_xgb_init(loader_self, xgb_model):
+                            # Pre-fix the booster's config by temporarily patching save_config
                             import json
-                            self.original_model = xgb_model
-                            config = json.loads(xgb_model.save_config())
-                            learner_model_param = config.get("learner", {}).get("learner_model_param", {})
+                            original_save_config = xgb_model.save_config
                             
-                            # Fix corrupted base_score
-                            bs = learner_model_param.get("base_score", "0.5")
-                            if isinstance(bs, str) and bs.startswith('[') and bs.endswith(']'):
-                                bs = bs.strip('[] ')
-                            self.base_score = float(bs)
+                            def fixed_save_config():
+                                config_str = original_save_config()
+                                # Fix bracketed values in the config string
+                                import re
+                                # Pattern matches "key":"[value]" and replaces with "key":"value"
+                                fixed = re.sub(r'"(\[)([0-9.eE+-]+)(\])"', r'"\2"', config_str)
+                                return fixed
                             
-                            # Fix corrupted num_feature
-                            nf = learner_model_param.get("num_feature", "0")
-                            if isinstance(nf, str) and nf.startswith('[') and nf.endswith(']'):
-                                nf = nf.strip('[] ')
-                            self.num_feature = int(nf)
-                            
-                            self.num_class = int(learner_model_param.get("num_class", 0))
-                            self.objective_name = config.get("learner", {}).get("objective", {}).get("name", "")
-                            
-                            # Parse tree structure
-                            self.trees = []
-                            tree_info = config.get("learner", {}).get("gradient_booster", {}).get("model", {}).get("trees", [])
-                            for tree_data in tree_info:
-                                self.trees.append(tree_data)
+                            xgb_model.save_config = fixed_save_config
+                            try:
+                                _original_xgb_init(loader_self, xgb_model)
+                            finally:
+                                xgb_model.save_config = original_save_config
                         
-                        XGBTreeModelLoader.__init__ = patched_init
+                        XGBTreeModelLoader.__init__ = _patched_xgb_init
                         NCAABPredictor._shap_patched = True
                         logger.info("SHAP XGBTreeModelLoader patched for base_score compatibility")
                     except Exception as patch_err:
