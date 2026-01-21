@@ -32,33 +32,31 @@ def debug_data():
     box_path = DATA_DIR / "ncaab_team_box_history.parquet"
     if box_path.exists():
         df = pd.read_parquet(box_path)
-        print(f"Loaded {len(df)} rows.")
+        print(f"\n--- Main Stats ({box_path.name}): {len(df)} rows ---")
         
         for col in df.columns:
-            # Check for corruption markers in ANY row
             try:
-                # Optimized check: first check if it's object, then search
-                if df[col].dtype == 'object':
-                    has_bracket = df[col].astype(str).str.contains(r'\[|\]', regex=True)
-                    if has_bracket.any():
-                        bad_rows = df[has_bracket]
-                        print(f"Column '{col}' HAS CORRUPTION! Total bad rows: {len(bad_rows)}")
-                        print(f"Sample bad values: {bad_rows[col].head(5).tolist()}")
-                else:
-                    # Even if it's numeric, check if some values are strings?
-                    # (rare in parquet but possible if mixed)
-                    pass
-            except Exception as e:
-                print(f"Error checking column {col}: {e}")
+                series_str = df[col].astype(str)
+                # Check for brackets OR purely scientific notation strings like [4.94E-1] or just 4.94E-1 if in object col
+                has_corruption = series_str.str.contains(r'\[|\]|E\-', regex=True)
+                if has_corruption.any():
+                    bad_rows = df[has_corruption]
+                    print(f"Column '{col}' HAS CORRUPTION! Total bad rows: {len(bad_rows)}")
+                    print(f"Sample values: {bad_rows[col].head(5).tolist()}")
+            except: pass
                 
-        # Targeted search for the specific value from the logs: [6.502445E-1]
-        target_pat = "6.502445E-1"
-        for col in df.columns:
+    torvik_path = DATA_DIR / "torvik_ratings.parquet"
+    if torvik_path.exists():
+        tdf = pd.read_parquet(torvik_path)
+        print(f"\n--- Torvik Stats ({torvik_path.name}): {len(tdf)} rows ---")
+        for col in tdf.columns:
             try:
-                found = df[df[col].astype(str).str.contains(target_pat)]
-                if not found.empty:
-                    print(f"Value '{target_pat}' FOUND in column '{col}'!")
-                    print(f"Raw value: {found[col].head(1).iloc[0]}")
+                series_str = tdf[col].astype(str)
+                if series_str.str.contains(r'\[|\]', regex=True).any():
+                    has_bracket = series_str.str.contains(r'\[|\]', regex=True)
+                    bad_rows = tdf[has_bracket]
+                    print(f"Column '{col}' HAS CORRUPTION! Total bad rows: {len(bad_rows)}")
+                    print(f"Sample values: {bad_rows[col].head(5).tolist()}")
             except: pass
 
 def test_cleaning_logic():

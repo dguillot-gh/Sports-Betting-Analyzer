@@ -154,25 +154,58 @@ class NCAABPredictor:
                         self.stats_df[col] = series_str.str.replace(r'[\[\]\'\"]', '', regex=True)
                         self.stats_df[col] = pd.to_numeric(self.stats_df[col], errors='coerce').fillna(0.0)
                     elif self.stats_df[col].dtype == 'object':
-                        # Try a soft conversion for typical numeric columns that ended up as objects
-                        self.stats_df[col] = pd.to_numeric(self.stats_df[col], errors='ignore')
-                except Exception as e:
+                        # Try a numeric conversion for object columns, but don't force it if it's text
+                        try:
+                            self.stats_df[col] = pd.to_numeric(self.stats_df[col])
+                        except (ValueError, TypeError):
+                            pass
+                except Exception:
                     pass
 
         except Exception as e:
             logger.error(f"Error loading NCAAB data: {e}")
 
+    def _find_team_df(self, team_name):
+        """Flexible team lookup that handles exact, normalized, and contains matching."""
+        if self.stats_df is None or self.stats_df.empty:
+            return None
+        
+        def normalize(n):
+            return n.lower().replace(" state", " st").replace(" university", "").replace(";", "").strip()
+
+        # 1. Exact match
+        mask = self.stats_df['team_display_name'].str.lower() == team_name.lower()
+        if mask.any(): return self.stats_df[mask]
+        
+        # 2. Normalized match
+        norm_name = normalize(team_name)
+        mask = self.stats_df['team_display_name'].apply(normalize) == norm_name
+        if mask.any(): return self.stats_df[mask]
+        
+        # 3. Contains match
+        mask = self.stats_df['team_display_name'].str.lower().str.contains(team_name.lower(), regex=False)
+        if mask.any(): return self.stats_df[mask]
+        
+        return None
+
 
     def _clean_inference_data(self, df):
         """Last line of defense: clean features before inference"""
         if df is None or df.empty: return df
-        for col in df.select_dtypes(include=['object']).columns:
+        # Scan ALL columns in the inference df for safety
+        for col in df.columns:
              try:
-                # Fast check
-                if df[col].astype(str).str.contains(r'\[|\]', regex=True).any():
-                    df[col] = df[col].astype(str).str.replace(r'[\[\]\'\"]', '', regex=True)
+                # Fast check for corruption markers
+                series_str = df[col].astype(str)
+                if series_str.str.contains(r'\[|\]', regex=True).any():
+                    df[col] = series_str.str.replace(r'[\[\]\'\"]', '', regex=True)
                     df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
-             except: pass
+                elif df[col].dtype == 'object':
+                    try:
+                        df[col] = pd.to_numeric(df[col])
+                    except (ValueError, TypeError):
+                        pass
+             except Exception: pass
         return df
 
     def _normalize_radar(self, val, min_val, max_val, reverse=False):
@@ -218,11 +251,9 @@ class NCAABPredictor:
         h_norm = normalize(home_team)
         a_norm = normalize(away_team)
 
-        def get_team_v2_stats(team_name_norm):
-            team_mask = self.stats_df['team_display_name'].apply(normalize) == team_name_norm
-            team_df = self.stats_df[team_mask]
-            
-            if team_df.empty:
+        def get_team_v2_stats(team_name):
+            team_df = self._find_team_df(team_name)
+            if team_df is None or team_df.empty:
                 return None
             
             max_season = team_df['season'].max()
@@ -265,8 +296,8 @@ class NCAABPredictor:
             
             return stats_dict
 
-        h_stats = get_team_v2_stats(h_norm)
-        a_stats = get_team_v2_stats(a_norm)
+        h_stats = get_team_v2_stats(home_team)
+        a_stats = get_team_v2_stats(away_team)
         
         if not h_stats or not a_stats:
             return None
@@ -411,23 +442,23 @@ class NCAABPredictor:
                     if i < len(feature_names):
                         feat = feature_names[i]
                         
-                        # Safe conversion helper for potential stringified lists e.g. "['0.123']"
+                        # Safe conversion helper for potential stringified lists or numpy scalars
                         def safe_float(v):
                             try:
-                                return float(v)
-                            except:
+                                # Handle numpy array/scalar
+                                if hasattr(v, 'item'):
+                                    return float(v.item())
+                                if isinstance(v, (np.ndarray, list)):
+                                    return float(np.array(v).flatten()[0])
+                                # Handle stringified scientific notation
                                 if isinstance(v, str):
                                     v = v.strip(" []'\"")
-                                    try: return float(v)
-                                    except: pass
+                                    return float(v)
+                                return float(v)
+                            except:
                                 return 0.0
 
-                        # Flatten and parse
-                        try:
-                            raw_val = np.array(impact_val).flatten()[0]
-                            scalar_impact = safe_float(raw_val)
-                        except:
-                            scalar_impact = 0.0
+                        scalar_impact = safe_float(impact_val)
 
                         contributions.append({
                             'feature': feat,
@@ -553,9 +584,13 @@ class NCAABPredictor:
                 model_to_explain = self.model
                 if hasattr(self.model, "get_booster"):
                     model_to_explain = self.model.get_booster()
+                
+                # If the legacy model has corrupted metadata, TreeExplainer might fail during init
+                # We wrap this tightly to ensure the entire predictor doesn't choke on legacy SHAP
                 self.explainer = shap.TreeExplainer(model_to_explain)
             except Exception as e:
-                logger.warning(f"Failed to initialize V1 SHAP explainer: {e}")
+                logger.warning(f"V1 SHAP initialization skipped (likely legacy model corruption): {e}")
+                self.explainer = None
 
     def predict_xgb_inference(self, home_team: str, away_team: str) -> Dict[str, Any]:
         """Run XGBoost v1 (Legacy) inference"""
@@ -564,8 +599,8 @@ class NCAABPredictor:
         try:
             # Re-calculating rolling stats for v1 features
             def get_rolling(team):
-                team_df = self.stats_df[self.stats_df['team_display_name'] == team]
-                if team_df.empty: return None
+                team_df = self._find_team_df(team)
+                if team_df is None or team_df.empty: return None
                 team_df = team_df.sort_values('game_date')
                 features = ['team_score', 'opponent_team_score', 'field_goals_made', 'field_goals_attempted', 
                     'three_point_field_goals_made', 'three_point_field_goals_attempted', 'free_throws_made', 

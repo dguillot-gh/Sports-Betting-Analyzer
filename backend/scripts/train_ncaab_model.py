@@ -34,9 +34,12 @@ def load_data():
                 df[col] = series_str.str.replace(r'[\[\]\'\"]', '', regex=True)
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
             elif df[col].dtype == 'object' and col not in ['game_id', 'team_display_name', 'opponent_team_display_name', 'game_date', 'season']:
-                 # Try a soft conversion for unknown numeric columns
-                 df[col] = pd.to_numeric(df[col], errors='ignore')
-        except: pass
+                 # Try a numeric conversion for unknown object columns
+                 try:
+                    df[col] = pd.to_numeric(df[col])
+                 except (ValueError, TypeError):
+                    pass
+        except Exception: pass
         
     return df
 
