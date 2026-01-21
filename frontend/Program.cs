@@ -31,7 +31,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite($"Data Source={dbPath}"));
 
 // Add HTTP client factory for API calls
-builder.Services.AddHttpClient().ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5));
+builder.Services.AddHttpClient();
 builder.Services.AddHttpClient<ESPNDataProvider>().ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5));
 builder.Services.AddHttpClient<WebScrapingDataProvider>().ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5));
 
