@@ -216,15 +216,33 @@ class SchedulerService:
     @staticmethod
     async def _import_nba_task():
         """Worker for NBA."""
-        # Uses migrate_data script logic
-        await run_migration("nba")
-        return {"rows": 1} # Row count not returned by migration yet
+        from scripts.nba_importer import import_all_nba
+        res = await import_all_nba(clear_existing=False) # Don't clear history on auto-run
+        
+        # Sum up imported items
+        rows = (res.get("games_imported", 0) + 
+                res.get("players_imported", 0) + 
+                res.get("season_stats_imported", 0))
+        
+        if res.get("status") == "failed":
+             raise Exception(f"NBA import failed: {res.get('errors')}")
+             
+        return {"rows": rows}
 
     @staticmethod
     async def _import_nfl_task():
         """Worker for NFL."""
-        await run_migration("nfl")
-        return {"rows": 1}
+        from scripts.nfl_importer import import_all_nfl
+        res = await import_all_nfl(clear_existing=False)
+        
+        rows = (res.get("games_imported", 0) + 
+                res.get("players_imported", 0) + 
+                res.get("weekly_stats_imported", 0))
+
+        if res.get("status") == "failed":
+             raise Exception(f"NFL import failed: {res.get('errors')}")
+
+        return {"rows": rows}
 
     @staticmethod
     async def _import_nascar_task():
@@ -246,6 +264,11 @@ class SchedulerService:
         current_year = datetime.now().year
         res = await run_college_baseball_import(division=1, year=current_year, source="auto")
         
+        # If current year fails (e.g. early in season), try previous year
+        if not res.get("success") and datetime.now().month < 4:
+            logger.info(f"Baseball import for {current_year} failed, trying {current_year-1}...")
+            res = await run_college_baseball_import(division=1, year=current_year-1, source="auto")
+
         if not res.get("success"):
             raise Exception(res.get("message", "Unknown baseball import error"))
             

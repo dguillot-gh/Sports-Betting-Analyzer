@@ -176,10 +176,23 @@ async def import_csv_to_database(sport: str, background_tasks: BackgroundTasks):
 
 
 async def run_csv_import(sport: str):
-    """Background task to run CSV import."""
-    from scripts.migrate_data import run_migration
-    # No direct asyncpg or pandas usage here, run_migration handles its own.
-    await run_migration(sport)
+    """Background task to run full data import pipeline."""
+    logger.info(f"Running manual import for {sport}...")
+    
+    try:
+        if sport == 'nba':
+            from scripts.nba_importer import import_all_nba
+            await import_all_nba(clear_existing=False)
+        elif sport == 'nfl':
+            from scripts.nfl_importer import import_all_nfl
+            await import_all_nfl(clear_existing=False)
+        else:
+            # Fallback for other sports or legacy
+            from scripts.migrate_data import run_migration
+            await run_migration(sport)
+            
+    except Exception as e:
+        logger.error(f"Manual import for {sport} failed: {e}")
 
 
 @router.post("/import/nascar/rda")
