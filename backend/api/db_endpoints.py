@@ -262,9 +262,15 @@ async def run_csv_import(sport: str):
         # Calculate rows based on result format
         rows = 0
         if isinstance(result, dict):
-             rows = (result.get("games_imported", 0) + 
-                     result.get("players_imported", 0) + 
-                     result.get("rows", 0))
+             # Sum up all "imported" keys we know about across all sports
+             count_keys = [
+                 "games_imported", "players_imported", "stats_computed", 
+                 "schedules_imported", "weekly_stats_imported", "season_stats_imported",
+                 "imported_teams", "box_scores_imported", "br_stats_imported", 
+                 "br_stats_computed", "games_processed", "rows"
+             ]
+             for key in count_keys:
+                 rows += result.get(key, 0)
         
         # Update log
         if log_id:

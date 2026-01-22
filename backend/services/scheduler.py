@@ -237,6 +237,8 @@ class SchedulerService:
         
         rows = (res.get("games_imported", 0) + 
                 res.get("players_imported", 0) + 
+                res.get("stats_computed", 0) +
+                res.get("schedules_imported", 0) +
                 res.get("weekly_stats_imported", 0))
 
         if res.get("status") == "failed":
