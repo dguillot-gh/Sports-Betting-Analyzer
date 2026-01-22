@@ -2,150 +2,140 @@
 @using SportsBettingAnalyzer.Models
 @using SportsBettingAnalyzer.Services
 @inject PythonMLServiceClient PythonService
-@inject IJSRuntime JSRuntime
+@inject ISnackbar Snackbar
 
-<div class="container-fluid">
-    <div class="row mb-4">
-        <div class="col-12">
-            <h1>Automated Data Import</h1>
-            <p>Manage data imports, view logs, and configure automation settings.</p>
-        </div>
-    </div>
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-8">
+    <MudText Typo="Typo.h3" GutterBottom="true">Automated Data Import</MudText>
+    <MudText Class="mb-8">Manage data imports, view logs, and configure automation settings.</MudText>
 
-    <div class="row mb-4">
+    <MudGrid>
         <!-- Control Panel -->
-        <div class="col-md-4">
-            <div class="card shadow-sm h-100">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0">Actions</h5>
-                </div>
-                <div class="card-body">
-                    <p>Trigger a full import sequence manually. This runs all active sports in order.</p>
+        <MudItem xs="12" md="4">
+            <MudCard Elevation="3" Class="h-100">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Actions</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText Class="mb-4">Trigger a full import sequence manually. This runs all active sports in order.</MudText>
                     
                     @if (isImporting)
                     {
-                         <div class="alert alert-info">
-                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                            Import request sent... Check logs for progress.
+                        <div class="d-flex align-center justify-center pa-4">
+                            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Class="mr-3"/>
+                            <MudText>Importing...</MudText>
                         </div>
                     }
                     else
                     {
-                        <button class="btn btn-success w-100 mb-3" @onclick="TriggerImport">
-                            <i class="oi oi-play-circle me-2"></i> Run Manual Import
-                        </button>
+                        <MudButton Variant="Variant.Filled" 
+                                   Color="Color.Success" 
+                                   FullWidth="true" 
+                                   StartIcon="@Icons.Material.Filled.PlayCircle"
+                                   OnClick="TriggerImport"
+                                   Class="mb-4 py-3">
+                            Run Manual Import
+                        </MudButton>
                     }
 
-                    <hr />
+                    <MudDivider Class="my-4"/>
                     
-                    <h6>Status Indicators</h6>
-                    <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Scheduler Service
-                            <span class="badge bg-success rounded-pill">Active</span>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Pushover Notifications
-                            <span class="badge bg-secondary rounded-pill" title="Check .env file">Unknown</span>
-                        </li>
-                    </ul>
-                </div>
-                <div class="card-footer text-muted">
-                    <small>Next Scheduled Run: 03:00 AM</small>
-                </div>
-            </div>
-        </div>
+                    <MudText Typo="Typo.subtitle1" Class="mb-2">Status Indicators</MudText>
+                    <MudList T="string" Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">
+                            Scheduler Service: Active
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Notifications" IconColor="Color.Default">
+                            Pushover: (Check .env)
+                        </MudListItem>
+                    </MudList>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudText Typo="Typo.caption" Class="pa-2">Next Run: 03:00 AM</MudText>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
         
         <!-- Notifications Setup Guide -->
-        <div class="col-md-8">
-            <div class="card shadow-sm h-100">
-                 <div class="card-header">
-                    <h5 class="mb-0">Setup Notifications</h5>
-                </div>
-                <div class="card-body">
-                    <p>To receive instant alerts on your phone when imports finish (or fail), setup Pushover:</p>
-                    <ol>
-                        <li>Create a free account at <a href="https://pushover.net" target="_blank">Pushover.net</a>.</li>
-                        <li>Get your <strong>User Key</strong> from the dashboard.</li>
-                        <li>Create an "Application" (e.g., "SportsBettingBot") to get an <strong>API Token</strong>.</li>
-                        <li>Add these to your <code>backend/.env</code> file:</li>
-                    </ol>
-                    <div class="bg-light p-3 rounded font-monospace">
-                        PUSHOVER_USER_KEY=your_user_key<br/>
-                        PUSHOVER_API_TOKEN=your_api_token
-                    </div>
-                    <p class="mt-3 text-muted"><small>No restart required; the service loads these dynamically or on next run.</small></p>
-                </div>
-            </div>
-        </div>
-    </div>
+        <MudItem xs="12" md="8">
+            <MudCard Elevation="3" Class="h-100">
+                 <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Setup Notifications</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText Class="mb-2">To receive alerts on your phone:</MudText>
+                    <MudList T="string" Dense="true" Class="mb-4">
+                        <MudListItem Icon="@Icons.Material.Filled.LooksOne">Create account at <MudLink Href="https://pushover.net" Target="_blank">Pushover.net</MudLink></MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.LooksTwo">Get <strong>User Key</strong> from dashboard</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Looks3">Create App to get <strong>API Token</strong></MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Looks4">Add to <code>backend/.env</code></MudListItem>
+                    </MudList>
+                    
+                    <MudPaper Class="pa-4 mud-theme-dark" Elevation="0">
+                        <code style="color: #a6e22e">PUSHOVER_USER_KEY</code>=<code style="color: #e6db74">your_user_key</code><br/>
+                        <code style="color: #a6e22e">PUSHOVER_API_TOKEN</code>=<code style="color: #e6db74">your_api_token</code>
+                    </MudPaper>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
 
-    <!-- Logs Table -->
-    <div class="row">
-        <div class="col-12">
-            <div class="card shadow-sm">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Import History</h5>
-                    <button class="btn btn-sm btn-outline-secondary" @onclick="LoadLogs">
-                        <i class="oi oi-reload"></i> Refresh
-                    </button>
-                </div>
-                <table class="table table-hover table-striped mb-0">
-                    <thead>
-                        <tr>
-                            <th>Status</th>
-                            <th>Sport</th>
-                            <th>Time</th>
-                            <th>Duration</th>
-                            <th>Rows</th>
-                            <th>Details</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @if (logs == null)
+        <!-- Logs Table -->
+        <MudItem xs="12">
+            <MudTable Items="@logs" Hover="true" Loading="@(logs == null)" Elevation="3">
+                <ToolBarContent>
+                    <MudText Typo="Typo.h6">Import History</MudText>
+                    <MudSpacer />
+                    <MudButton StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadLogs">Refresh</MudButton>
+                </ToolBarContent>
+                <HeaderContent>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Sport</MudTh>
+                    <MudTh>Time</MudTh>
+                    <MudTh>Duration</MudTh>
+                    <MudTh>Rows</MudTh>
+                    <MudTh>Details</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Status">
+                        @if (context.Status == "SUCCESS") 
+                        { <MudChip T="string" Color="Color.Success" Size="Size.Small">Success</MudChip> }
+                        else if (context.Status == "IN_PROGRESS") 
+                        { <MudChip T="string" Color="Color.Warning" Size="Size.Small" Text="dark">Running</MudChip> }
+                        else 
+                        { <MudChip T="string" Color="Color.Error" Size="Size.Small">Failed</MudChip> }
+                    </MudTd>
+                    <MudTd DataLabel="Sport">@context.Sport.ToUpper()</MudTd>
+                    <MudTd DataLabel="Time">@context.StartTime.ToLocalTime().ToString("g")</MudTd>
+                    <MudTd DataLabel="Duration">@(context.DurationSeconds.HasValue ? $"{context.DurationSeconds:F1}s" : "-")</MudTd>
+                    <MudTd DataLabel="Rows">@context.RowsImported</MudTd>
+                    <MudTd DataLabel="Details">
+                        @if (!string.IsNullOrEmpty(context.ErrorMessage))
                         {
-                            <tr><td colspan="6" class="text-center">Loading...</td></tr>
-                        }
-                        else if (!logs.Any())
-                        {
-                            <tr><td colspan="6" class="text-center">No logs found.</td></tr>
+                            <MudTooltip Text="@context.ErrorMessage">
+                                <MudText Color="Color.Error" Typo="Typo.body2">
+                                    @(context.ErrorMessage.Length > 50 ? context.ErrorMessage.Substring(0, 50) + "..." : context.ErrorMessage)
+                                </MudText>
+                            </MudTooltip>
                         }
                         else
                         {
-                            @foreach (var log in logs)
-                            {
-                                <tr>
-                                    <td>
-                                        @if (log.Status == "SUCCESS") 
-                                        { <span class="badge bg-success">Success</span> }
-                                        else if (log.Status == "IN_PROGRESS") 
-                                        { <span class="badge bg-warning text-dark">Running</span> }
-                                        else 
-                                        { <span class="badge bg-danger">Failed</span> }
-                                    </td>
-                                    <td>@log.Sport.ToUpper()</td>
-                                    <td>@log.StartTime.ToLocalTime().ToString("g")</td>
-                                    <td>@(log.DurationSeconds.HasValue ? $"{log.DurationSeconds:F1}s" : "-")</td>
-                                    <td>@log.RowsImported</td>
-                                    <td>
-                                        @if (!string.IsNullOrEmpty(log.ErrorMessage))
-                                        {
-                                            <span class="text-danger" title="@log.ErrorMessage">@log.ErrorMessage.Substring(0, Math.Min(50, log.ErrorMessage.Length))...</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="text-muted">-</span>
-                                        }
-                                    </td>
-                                </tr>
-                            }
+                            <MudText Typo="Typo.body2" Color="Color.Default">-</MudText>
                         }
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-</div>
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText>No logs found.</MudText>
+                </NoRecordsContent>
+                <LoadingContent>
+                    <MudText>Loading logs...</MudText>
+                </LoadingContent>
+            </MudTable>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
 
 @code {
     private List<ImportLog> logs;
@@ -164,17 +154,20 @@
     private async Task TriggerImport()
     {
         isImporting = true;
+        // Show immediate feedback
+        Snackbar.Add("Import request sent...", Severity.Info);
+        
         bool success = await PythonService.RunImportsAsync();
         
         if (success)
         {
-            // Wait a sec for the job to register in DB
-            await Task.Delay(1000); 
+            await Task.Delay(1000); // Wait for DB write
             await LoadLogs();
+            Snackbar.Add("Import process started in background", Severity.Success);
         }
         else 
         {
-            await JSRuntime.InvokeVoidAsync("alert", "Failed to trigger import. Check console.");
+            Snackbar.Add("Failed to trigger import", Severity.Error);
         }
         
         isImporting = false;
