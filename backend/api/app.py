@@ -28,6 +28,7 @@ from api.bug_tracker_endpoints import router as bug_tracker_router
 from api.dashboard_endpoints import router as dashboard_router
 from api.ai_endpoints import router as ai_router
 from api.ncaab_endpoints import router as ncaab_router
+from api.scheduler_endpoints import router as scheduler_router
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 # import pandas as pd  <-- Moved to local function scope
@@ -49,6 +50,7 @@ from dataset_manager import DatasetManager
 
 # Use the new data updaters
 from data_sources import NASCARDataUpdater, NFLDataUpdater, GitHubDataSource, BaseDataUpdater
+from services.scheduler import SchedulerService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -71,6 +73,7 @@ app.include_router(bug_tracker_router)  # Bug tracking
 app.include_router(dashboard_router)  # Dashboard metrics summary
 app.include_router(ai_router)  # Unified AI Advisor (Multi-engine + LLM)
 app.include_router(ncaab_router)  # NCAAB Trends
+app.include_router(scheduler_router)  # Import Scheduler & Logs
 
 # Dev CORS. Tighten for production.
 app.add_middleware(
@@ -4248,3 +4251,14 @@ async def import_ncaab_root(background_tasks: BackgroundTasks, start_year: int =
     }
     background_tasks.add_task(run_ncaab_import, start_year, end_year)
     return {'status': 'started', 'message': f'Started NCAAB import {start_year}-{end_year}'}
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize scheduler and import logs on startup."""
+    try:
+        await SchedulerService.init_db()
+        SchedulerService.start_scheduler()
+    except Exception as e:
+        logger.error(f"Startup error: {e}")
+

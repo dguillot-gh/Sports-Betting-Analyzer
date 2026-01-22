@@ -32,3 +32,4 @@ google-genai
 shap
 mlflow
 pytest
+APScheduler>=3.10.4

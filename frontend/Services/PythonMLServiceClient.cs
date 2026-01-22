@@ -1434,4 +1434,31 @@ public class PythonMLServiceClient
             return false;
         }
     }
+    public async Task<List<ImportLog>> GetImportLogsAsync(int limit = 50)
+    {
+        try 
+        {
+            var response = await _httpClient.GetFromJsonAsync<List<ImportLog>>($"/admin/import-logs?limit={limit}");
+            return response ?? new List<ImportLog>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting logs");
+            return new List<ImportLog>();
+        }
+    }
+
+    public async Task<bool> RunImportsAsync()
+    {
+        try
+        {
+            var response = await _httpClient.PostAsync("/admin/run-imports", null);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error triggering import");
+            return false;
+        }
+    }
 }
