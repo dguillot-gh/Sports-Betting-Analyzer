@@ -147,17 +147,45 @@ async def database_stats():
 
 @router.get("/import/history")
 async def get_import_history():
-    """Get import history."""
+    """Get import history from scheduler logs."""
     conn = await get_db_connection()
     try:
+        # Check if import_logs exists
+        table_exists = await conn.fetchval(
+            "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'import_logs')"
+        )
+        
+        if not table_exists:
+            return []
+            
         rows = await conn.fetch("""
-            SELECT ih.*, s.name as sport_name
-            FROM import_history ih
-            JOIN sports s ON s.id = ih.sport_id
-            ORDER BY ih.imported_at DESC
+            SELECT id, sport as topic, status, 
+                   start_time as date, 
+                   rows_imported as details,
+                   error_message
+            FROM import_logs
+            ORDER BY start_time DESC
             LIMIT 50
         """)
-        return [dict(row) for row in rows]
+        
+        # Format for frontend (frontend expects: date, topic, details)
+        history = []
+        for row in rows:
+            details = {
+                "status": row['status'],
+                "rows": row['details'],
+                "error": row['error_message']
+            }
+            history.append({
+                "date": row['date'].isoformat() if row['date'] else None,
+                "topic": row['topic'],
+                "details": details
+            })
+            
+        return history
+    except Exception as e:
+        logger.error(f"Error fetching history: {e}")
+        return []
     finally:
         await conn.close()
 
@@ -176,23 +204,98 @@ async def import_csv_to_database(sport: str, background_tasks: BackgroundTasks):
 
 
 async def run_csv_import(sport: str):
-    """Background task to run full data import pipeline."""
+    """Background task to run full data import pipeline with status tracking."""
     logger.info(f"Running manual import for {sport}...")
     
+    # Initialize status
+    import_status[sport] = {
+        "status": "running",
+        "started_at": datetime.now().isoformat(),
+        "completed_at": None,
+        "progress": [f"Starting {sport} import..."],
+        "result": None,
+        "error": None
+    }
+    
+    conn = None
+    log_id = None
+    
     try:
+        conn = await get_db_connection()
+        
+        # Create log entry
+        try:
+            log_id = await conn.fetchval("""
+                INSERT INTO import_logs (sport, status, start_time)
+                VALUES ($1, 'IN_PROGRESS', NOW())
+                RETURNING id
+            """, sport)
+        except Exception as e:
+            logger.warning(f"Could not create import log: {e}")
+
+        # Progress callback to update global state
+        def update_progress(msg):
+            if sport in import_status:
+                import_status[sport]["progress"].append(msg)
+                # Keep log size manageable
+                if len(import_status[sport]["progress"]) > 100:
+                    import_status[sport]["progress"] = import_status[sport]["progress"][-100:]
+
+        result = None
         if sport == 'nba':
             from scripts.nba_importer import import_all_nba
-            await import_all_nba(clear_existing=False)
+            result = await import_all_nba(clear_existing=False, progress_callback=update_progress)
         elif sport == 'nfl':
             from scripts.nfl_importer import import_all_nfl
-            await import_all_nfl(clear_existing=False)
+            result = await import_all_nfl(clear_existing=False, progress_callback=update_progress)
         else:
-            # Fallback for other sports or legacy
             from scripts.migrate_data import run_migration
             await run_migration(sport)
+            result = {"status": "completed", "message": "Legacy migration ran"}
+
+        # Success handling
+        import_status[sport]["status"] = "completed"
+        import_status[sport]["completed_at"] = datetime.now().isoformat()
+        import_status[sport]["result"] = result
+        import_status[sport]["progress"].append("Import completed successfully!")
+        
+        # Calculate rows based on result format
+        rows = 0
+        if isinstance(result, dict):
+             rows = (result.get("games_imported", 0) + 
+                     result.get("players_imported", 0) + 
+                     result.get("rows", 0))
+        
+        # Update log
+        if log_id:
+            await conn.execute("""
+                UPDATE import_logs 
+                SET status = 'SUCCESS', end_time = NOW(), rows_imported = $2
+                WHERE id = $1
+            """, log_id, rows)
             
     except Exception as e:
         logger.error(f"Manual import for {sport} failed: {e}")
+        
+        # Failure handling
+        import_status[sport]["status"] = "failed"
+        import_status[sport]["completed_at"] = datetime.now().isoformat()
+        import_status[sport]["error"] = str(e)
+        import_status[sport]["progress"].append(f"Error: {str(e)}")
+        
+        # Update log
+        if log_id and conn:
+            try:
+                await conn.execute("""
+                    UPDATE import_logs 
+                    SET status = 'FAILED', end_time = NOW(), error_message = $2
+                    WHERE id = $1
+                """, log_id, str(e))
+            except:
+                pass
+    finally:
+        if conn:
+            await conn.close()
 
 
 @router.post("/import/nascar/rda")
