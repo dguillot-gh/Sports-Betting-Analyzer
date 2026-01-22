@@ -620,9 +620,14 @@ class NCAABPredictor:
                             # Final Impact Calculation
                             impact = float(importance * modifier * direction)
                             
+                            # Add Favored Team to Label for Clarity
+                            favored_team = home_team if impact > 0 else away_team
+                            base_label = self._humanize_feature(feat, home_team, away_team)
+                            final_label = f"{base_label} >> {favored_team}"
+                            
                             contributions.append({
                                 'feature': feat,
-                                'label': self._humanize_feature(feat, home_team, away_team),
+                                'label': final_label,
                                 'impact': impact
                             })
                     
