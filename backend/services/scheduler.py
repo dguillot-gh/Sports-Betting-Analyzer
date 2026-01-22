@@ -230,12 +230,13 @@ class SchedulerService:
     async def _import_nascar_task():
         """Worker for NASCAR (RDA 2012-Current)."""
         current_year = datetime.now().year
-        res = await import_nascar_rda(year_start=2012, year_end=current_year, clear_existing=False)
+        # Fix: import_nascar_rda does not accept clear_existing
+        res = await import_nascar_rda(year_start=2012, year_end=current_year)
         
         # Calculate rows
         rows = 0
         if res.get("series_results"):
-             rows = sum(r['results_imported'] for r in res['series_results'])
+             rows = sum(r.get('results_imported', 0) for r in res['series_results'])
              
         return {"rows": rows}
 

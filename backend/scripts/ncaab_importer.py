@@ -61,7 +61,8 @@ async def import_ncaab_data(start_year: int = 2018, end_year: int = 2025):
         return {
             "success": True,
             "message": f"Imported NCAAB data via hoopR for {start_year}-{end_year}.",
-            "data_dir": str(DATA_DIR)
+            "data_dir": str(DATA_DIR),
+            "games_processed": 1  # Placeholder since R script doesn't output count
         }
         
     except Exception as e:
