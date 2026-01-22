@@ -580,76 +580,56 @@ class NCAABPredictor:
             ml_prob = self.ml_model_v2.predict_proba(X_clean)[0][1]
             predicted_total = self.ou_model_v2.predict(X_clean)[0]
             
-            # --- SHAP Rationale ---
-            # Monkey-patch SHAP to handle corrupted base_score values like '[6.502445E-1]'
+            # --- Feature Importance (using XGBoost native instead of SHAP) ---
+            # XGBoost's get_score(importance_type='gain') provides feature importance
+            # without requiring SHAP's base_score parsing.
+            # We map this to directional impact using feature values.
             top_factors = []
             try:
-                # Apply one-time patch to SHAP's XGBTreeModelLoader
-                if not getattr(NCAABPredictor, '_shap_patched', False):
-                    try:
-                        from shap.explainers._tree import XGBTreeModelLoader
-                        _original_xgb_init = XGBTreeModelLoader.__init__
+                booster = self.ml_model_v2.get_booster()
+                importance_dict = booster.get_score(importance_type='gain')
+                
+                if importance_dict and self.v2_features:
+                    contributions = []
+                    # Inverted metrics: Lower is better (so + diff favors Away)
+                    inverted_stats = ['turnovers', 'fouls', 'opponent_team_score', 'def_eff', 'adj_d']
+                    
+                    for feat in self.v2_features:
+                        feat_idx = self.v2_features.index(feat)
+                        xgb_feat_name = f'f{feat_idx}'
                         
-                        def _patched_xgb_init(loader_self, xgb_model):
-                            # Pre-fix the booster's config by temporarily patching save_config
-                            import json
-                            original_save_config = xgb_model.save_config
-                            
-                            def fixed_save_config():
-                                config_str = original_save_config()
-                                # Fix bracketed values in the config string
-                                import re
-                                # Pattern matches "key":"[value]" and replaces with "key":"value"
-                                fixed = re.sub(r'"(\[)([0-9.eE+-]+)(\])"', r'"\2"', config_str)
-                                return fixed
-                            
-                            xgb_model.save_config = fixed_save_config
-                            try:
-                                _original_xgb_init(loader_self, xgb_model)
-                            finally:
-                                xgb_model.save_config = original_save_config
+                        # Try exact name match first, then f{idx} fallback
+                        importance = importance_dict.get(feat, 0) or importance_dict.get(xgb_feat_name, 0)
                         
-                        XGBTreeModelLoader.__init__ = _patched_xgb_init
-                        NCAABPredictor._shap_patched = True
-                        logger.info("SHAP XGBTreeModelLoader patched for base_score compatibility")
-                    except Exception as patch_err:
-                        logger.warning(f"SHAP patch failed: {patch_err}")
-                
-                explainer = shap.TreeExplainer(self.ml_model_v2.get_booster())
-                X_np = X_clean.to_numpy(dtype=np.float64)
-                shap_res = explainer.shap_values(X_np)
-                
-                # Standardize to 1D impact array for the positive class (Win)
-                if isinstance(shap_res, list):
-                    impact_array = shap_res[1][0] if len(shap_res) > 1 else shap_res[0][0]
-                else:
-                    impact_array = shap_res[0]
-
-                feature_names = self.v2_features
-                contributions = []
-                
-                for i, impact_val in enumerate(impact_array):
-                    if i < len(feature_names):
-                        feat = feature_names[i]
-                        try:
-                            if hasattr(impact_val, 'item'):
-                                val = float(impact_val.item())
-                            elif isinstance(impact_val, (np.ndarray, list)):
-                                val = float(np.array(impact_val).flatten()[0])
-                            else:
-                                val = float(impact_val)
-                        except:
-                            val = 0.0
-                        contributions.append({
-                            'feature': feat,
-                            'label': self._humanize_feature(feat, home_team, away_team),
-                            'impact': val
-                        })
-                
-                contributions.sort(key=lambda x: abs(x['impact']), reverse=True)
-                top_factors = contributions[:5]
-            except Exception as se:
-                logger.warning(f"SHAP calculation failed: {se}")
+                        if importance > 0:
+                            # Get feature value
+                            feat_val = X_clean[feat].iloc[0] if feat in X_clean.columns else 0.0
+                            
+                            # Determine Direction (Humanized)
+                            # Default: +Diff means Home Advantage (Multiplier 1)
+                            # Inverted: +Diff means Away Advantage (Multiplier -1)
+                            modifier = 1.0
+                            for inv in inverted_stats:
+                                if inv in feat:
+                                    modifier = -1.0
+                                    break
+                            
+                            # Direction: 1 if Home>Away, -1 if Away>Home
+                            direction = 1.0 if feat_val >= 0 else -1.0
+                            
+                            # Final Impact Calculation
+                            impact = float(importance * modifier * direction)
+                            
+                            contributions.append({
+                                'feature': feat,
+                                'label': self._humanize_feature(feat, home_team, away_team),
+                                'impact': impact
+                            })
+                    
+                    contributions.sort(key=lambda x: abs(x['impact']), reverse=True)
+                    top_factors = contributions[:5]
+            except Exception as fe:
+                logger.debug(f"Feature importance calculation: {fe}")
             
             # --- Radar Data (Experimental) ---
             def get_radar(stats):
