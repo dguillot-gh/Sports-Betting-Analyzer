@@ -222,6 +222,9 @@ class SchedulerService:
         # Sum up imported items
         rows = (res.get("games_imported", 0) + 
                 res.get("players_imported", 0) + 
+                res.get("box_scores_imported", 0) +
+                res.get("br_stats_imported", 0) +
+                res.get("br_stats_computed", 0) +
                 res.get("season_stats_imported", 0))
         
         if res.get("status") == "failed":
@@ -239,7 +242,8 @@ class SchedulerService:
                 res.get("players_imported", 0) + 
                 res.get("stats_computed", 0) +
                 res.get("schedules_imported", 0) +
-                res.get("weekly_stats_imported", 0))
+                res.get("weekly_stats_imported", 0) +
+                res.get("season_stats_imported", 0))
 
         if res.get("status") == "failed":
              raise Exception(f"NFL import failed: {res.get('errors')}")
@@ -262,16 +266,14 @@ class SchedulerService:
 
     @staticmethod
     async def _import_baseball_task():
-        """Worker for College Baseball (Current Year)."""
-        current_year = datetime.now().year
-        res = await run_college_baseball_import(division=1, year=current_year, source="auto")
+        """Worker for College Baseball."""
+        from scripts.college_baseball_importer import run_college_baseball_import
+        res = await run_college_baseball_import(division=1, year=datetime.now().year)
         
-        # If current year fails (e.g. early in season), try previous year
-        if not res.get("success") and datetime.now().month < 4:
-            logger.info(f"Baseball import for {current_year} failed, trying {current_year-1}...")
-            res = await run_college_baseball_import(division=1, year=current_year-1, source="auto")
-
-        if not res.get("success"):
-            raise Exception(res.get("message", "Unknown baseball import error"))
-            
-        return {"rows": res.get("imported_teams", 0)}
+        # Capture from flat 'rows' key or 'imported_teams'
+        rows = res.get("rows", res.get("imported_teams", 0))
+        
+        if not res.get("success") and res.get("message") == "All import sources failed":
+             raise Exception("College Baseball import failed: All sources failed")
+             
+        return {"rows": rows}

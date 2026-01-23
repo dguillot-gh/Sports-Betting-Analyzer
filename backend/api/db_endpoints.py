@@ -53,6 +53,14 @@ import_status = {
         "progress": [],
         "result": None,
         "error": None
+    },
+    "baseball": {
+        "status": "idle",
+        "started_at": None,
+        "completed_at": None,
+        "progress": [],
+        "result": None,
+        "error": None
     }
 }
 
@@ -359,34 +367,45 @@ async def get_nascar_import_status():
 
 
 async def run_rda_import(series: str, year_start: int, year_end: int, clear_existing: bool):
-    """Background task for RDA import."""
+    """Background task for RDA import with DB logging."""
     logger.info(f"Starting RDA import: series={series}, years={year_start}-{year_end}, clear={clear_existing}")
+    import asyncpg
+    conn = None
+    log_id = None
+    start_time = datetime.now()
     
     try:
-        import asyncpg # Local import
+        # 1. Create IN_PROGRESS log
+        conn = await asyncpg.connect(DATABASE_URL)
+        log_id = await conn.fetchval("""
+            INSERT INTO import_logs (sport, status, start_time)
+            VALUES ('nascar', 'IN_PROGRESS', NOW())
+            RETURNING id
+        """)
+        
         if clear_existing:
             import_status["nascar_rda"]["progress"].append("Clearing existing data...")
-            # Clear existing NASCAR data
-            conn = await get_db_connection()
+            # Reuse existing connection or create new one for clear
+            clear_conn = await get_db_connection()
             try:
-                sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = 'nascar'")
+                sport_id = await clear_conn.fetchval("SELECT id FROM sports WHERE name = 'nascar'")
                 if sport_id:
                     if series and series != 'all':
-                        await conn.execute("DELETE FROM results WHERE sport_id = $1 AND series = $2", sport_id, series)
-                        await conn.execute("DELETE FROM stats WHERE series = $1", series)
-                        await conn.execute("DELETE FROM entities WHERE sport_id = $1 AND series = $2", sport_id, series)
+                        await clear_conn.execute("DELETE FROM results WHERE sport_id = $1 AND series = $2", sport_id, series)
+                        await clear_conn.execute("DELETE FROM stats WHERE series = $1", series)
+                        await clear_conn.execute("DELETE FROM entities WHERE sport_id = $1 AND series = $2", sport_id, series)
                         import_status["nascar_rda"]["progress"].append(f"Cleared existing {series} data")
                     else:
-                        await conn.execute("DELETE FROM results WHERE sport_id = $1", sport_id)
-                        await conn.execute("DELETE FROM stats WHERE entity_id IN (SELECT id FROM entities WHERE sport_id = $1)", sport_id)
-                        await conn.execute("DELETE FROM entities WHERE sport_id = $1", sport_id)
+                        await clear_conn.execute("DELETE FROM results WHERE sport_id = $1", sport_id)
+                        await clear_conn.execute("DELETE FROM stats WHERE entity_id IN (SELECT id FROM entities WHERE sport_id = $1)", sport_id)
+                        await clear_conn.execute("DELETE FROM entities WHERE sport_id = $1", sport_id)
                         import_status["nascar_rda"]["progress"].append("Cleared all NASCAR data")
             finally:
-                await conn.close()
+                await clear_conn.close()
         
         import_status["nascar_rda"]["progress"].append("Starting RDA file import...")
         
-        # Run RDA import
+        # 2. Run RDA import
         from scripts.rda_importer import import_nascar_rda
         result = await import_nascar_rda(
             series=series if series and series != 'all' else None,
@@ -394,10 +413,17 @@ async def run_rda_import(series: str, year_start: int, year_end: int, clear_exis
             year_end=year_end
         )
         
-        # Update status on completion
-        import_status["nascar_rda"]["status"] = "completed"
+        # 3. Comprehensive Row Count
+        rows = 0
+        if result.get("series_results"):
+            for sr in result["series_results"]:
+                rows += sr.get("results_imported", 0)
+                rows += sr.get("stats_computed", 0)
+        
+        status = "COMPLETED" if result.get("status") == "success" else "FAILED"
+        import_status["nascar_rda"]["status"] = status.lower()
         import_status["nascar_rda"]["completed_at"] = datetime.now().isoformat()
-        import_status["nascar_rda"]["result"] = result
+        import_status["nascar_rda"]["result"] = {**result, "rows": rows}
         
         # Add summary to progress
         if result.get("series_results"):
@@ -405,15 +431,37 @@ async def run_rda_import(series: str, year_start: int, year_end: int, clear_exis
                 import_status["nascar_rda"]["progress"].append(
                     f"✅ {sr['series']}: {sr['results_imported']} results, {sr['stats_computed']} stats"
                 )
-        import_status["nascar_rda"]["progress"].append("Import complete!")
+        import_status["nascar_rda"]["progress"].append(f"Import {status.lower()}!")
         
-        logger.info(f"RDA import complete: {result}")
+        # 4. Update DB Log
+        duration = (datetime.now() - start_time).total_seconds()
+        error_msg = result.get("error") if not result.get("success") else None
+        
+        await conn.execute("""
+            UPDATE import_logs 
+            SET status = $2, end_time = NOW(), duration_seconds = $3, 
+                rows_imported = $4, error_message = $5
+            WHERE id = $1
+        """, log_id, status, duration, rows, error_msg)
+        
     except Exception as e:
+        logger.error(f"RDA import failed: {e}")
         import_status["nascar_rda"]["status"] = "failed"
         import_status["nascar_rda"]["completed_at"] = datetime.now().isoformat()
         import_status["nascar_rda"]["error"] = str(e)
         import_status["nascar_rda"]["progress"].append(f"❌ Error: {e}")
-        logger.error(f"RDA import failed: {e}")
+        
+        if conn and log_id:
+            duration = (datetime.now() - start_time).total_seconds()
+            await conn.execute("""
+                UPDATE import_logs 
+                SET status = 'FAILED', end_time = NOW(), duration_seconds = $2, 
+                    error_message = $3
+                WHERE id = $1
+            """, log_id, duration, str(e))
+    finally:
+        if conn:
+            await conn.close()
         raise
         
 @router.post("/import/ncaab")
@@ -444,30 +492,64 @@ async def get_ncaab_import_status():
 
 
 async def run_ncaab_import(start_year: int, end_year: int):
-    """Background task to run NCAAB import via R script."""
+    """Background task to run NCAAB import via R script with DB logging."""
+    import asyncpg
+    conn = None
+    log_id = None
+    start_time = datetime.now()
+    
     try:
         from scripts.ncaab_importer import import_ncaab_data
+        
+        # 1. Create IN_PROGRESS log
+        conn = await asyncpg.connect(DATABASE_URL)
+        log_id = await conn.fetchval("""
+            INSERT INTO import_logs (sport, status, start_time)
+            VALUES ('ncaab', 'IN_PROGRESS', NOW())
+            RETURNING id
+        """)
         
         import_status["ncaab"]["progress"].append("Calling hybrid NCAAB importer (hoopR)...")
         result = await import_ncaab_data(start_year, end_year)
         
-        if result.get("success"):
-            import_status["ncaab"]["status"] = "completed"
-            import_status["ncaab"]["result"] = result
-            import_status["ncaab"]["progress"].append("✅ Import complete!")
-        else:
-            import_status["ncaab"]["status"] = "failed"
-            import_status["ncaab"]["error"] = result.get("error")
-            import_status["ncaab"]["progress"].append(f"❌ Error: {result.get('error')}")
-            
+        # 2. Comprehensive Row Count (NCAAB often returns generic success)
+        # Using games_processed or similar if available, else placeholder 1
+        rows = result.get("games_processed", 1) if result.get("success") else 0
+        
+        status = "COMPLETED" if result.get("success") else "FAILED"
+        import_status["ncaab"]["status"] = status.lower()
+        import_status["ncaab"]["result"] = {**result, "rows": rows}
+        import_status["ncaab"]["progress"].append(f"✅ Import {status.lower()}!")
+        
+        # 3. Update DB Log
+        duration = (datetime.now() - start_time).total_seconds()
+        error_msg = result.get("error") if not result.get("success") else None
+        
+        await conn.execute("""
+            UPDATE import_logs 
+            SET status = $2, end_time = NOW(), duration_seconds = $3, 
+                rows_imported = $4, error_message = $5
+            WHERE id = $1
+        """, log_id, status, duration, rows, error_msg)
+        
     except Exception as e:
+        logger.error(f"NCAAB import failed: {e}")
         import_status["ncaab"]["status"] = "failed"
-        import_status["ncaab"]["completed_at"] = datetime.now().isoformat()
         import_status["ncaab"]["error"] = str(e)
         import_status["ncaab"]["progress"].append(f"❌ Critical Error: {e}")
-        logger.error(f"NCAAB import failed: {e}")
+        
+        if conn and log_id:
+            duration = (datetime.now() - start_time).total_seconds()
+            await conn.execute("""
+                UPDATE import_logs 
+                SET status = 'FAILED', end_time = NOW(), duration_seconds = $2, 
+                    error_message = $3
+                WHERE id = $1
+            """, log_id, duration, str(e))
     finally:
         import_status["ncaab"]["completed_at"] = datetime.now().isoformat()
+        if conn:
+            await conn.close()
 
 
 @router.delete("/clear/{sport}")
@@ -1516,10 +1598,22 @@ async def get_nfl_import_status():
 
 
 async def run_nfl_import(clear_existing: bool):
-    """Background task for NFL import."""
+    """Background task for NFL import with DB logging."""
+    import asyncpg
+    conn = None
+    log_id = None
+    start_time = datetime.now()
+    
     try:
         from scripts.nfl_importer import import_all_nfl
-        # No direct asyncpg or pandas usage here, import_all_nfl handles its own.
+        
+        # 1. Create IN_PROGRESS log
+        conn = await asyncpg.connect(DATABASE_URL)
+        log_id = await conn.fetchval("""
+            INSERT INTO import_logs (sport, status, start_time)
+            VALUES ('nfl', 'IN_PROGRESS', NOW())
+            RETURNING id
+        """)
         
         def progress_callback(msg):
             import_status["nfl"]["progress"].append(msg)
@@ -1530,12 +1624,32 @@ async def run_nfl_import(clear_existing: bool):
             progress_callback=progress_callback
         )
         
-        import_status["nfl"]["status"] = "completed" if result.get("status") == "success" else "failed"
+        # 2. Comprehensive Row Count
+        rows = (result.get("games_imported", 0) + 
+                result.get("players_imported", 0) + 
+                result.get("stats_computed", 0) +
+                result.get("schedules_imported", 0) +
+                result.get("weekly_stats_imported", 0) +
+                result.get("season_stats_imported", 0))
+        
+        status = "COMPLETED" if result.get("status") == "success" else "FAILED"
+        import_status["nfl"]["status"] = status.lower()
         import_status["nfl"]["completed_at"] = datetime.now().isoformat()
-        import_status["nfl"]["result"] = result
+        import_status["nfl"]["result"] = {**result, "rows": rows}
+        
+        # 3. Update DB Log
+        duration = (datetime.now() - start_time).total_seconds()
+        error_msg = "; ".join(result.get("errors", [])) if result.get("errors") else None
+        
+        await conn.execute("""
+            UPDATE import_logs 
+            SET status = $2, end_time = NOW(), duration_seconds = $3, 
+                rows_imported = $4, error_message = $5
+            WHERE id = $1
+        """, log_id, status, duration, rows, error_msg)
         
         if result.get("errors"):
-            import_status["nfl"]["error"] = "; ".join(result["errors"])
+            import_status["nfl"]["error"] = error_msg
         
     except Exception as e:
         logger.error(f"NFL import failed: {e}")
@@ -1543,6 +1657,18 @@ async def run_nfl_import(clear_existing: bool):
         import_status["nfl"]["completed_at"] = datetime.now().isoformat()
         import_status["nfl"]["error"] = str(e)
         import_status["nfl"]["progress"].append(f"❌ Error: {e}")
+        
+        if conn and log_id:
+            duration = (datetime.now() - start_time).total_seconds()
+            await conn.execute("""
+                UPDATE import_logs 
+                SET status = 'FAILED', end_time = NOW(), duration_seconds = $2, 
+                    error_message = $3
+                WHERE id = $1
+            """, log_id, duration, str(e))
+    finally:
+        if conn:
+            await conn.close()
 
 
 # =============================================================================
@@ -1591,10 +1717,22 @@ async def get_nba_import_status():
 
 
 async def run_nba_import(clear_existing: bool):
-    """Background task for NBA import."""
+    """Background task for NBA import with DB logging."""
+    import asyncpg
+    conn = None
+    log_id = None
+    start_time = datetime.now()
+    
     try:
         from scripts.nba_importer import import_all_nba
-        # No direct asyncpg or pandas usage here, import_all_nba handles its own.
+        
+        # 1. Create IN_PROGRESS log
+        conn = await asyncpg.connect(DATABASE_URL)
+        log_id = await conn.fetchval("""
+            INSERT INTO import_logs (sport, status, start_time)
+            VALUES ('nba', 'IN_PROGRESS', NOW())
+            RETURNING id
+        """)
         
         def progress_callback(msg):
             import_status["nba"]["progress"].append(msg)
@@ -1605,12 +1743,32 @@ async def run_nba_import(clear_existing: bool):
             progress_callback=progress_callback
         )
         
-        import_status["nba"]["status"] = "completed" if result.get("status") == "success" else "failed"
+        # 2. Comprehensive Row Count
+        rows = (result.get("games_imported", 0) + 
+                result.get("players_imported", 0) + 
+                result.get("box_scores_imported", 0) +
+                result.get("br_stats_imported", 0) +
+                result.get("br_stats_computed", 0) +
+                result.get("season_stats_imported", 0))
+        
+        status = "COMPLETED" if result.get("status") == "success" else "FAILED"
+        import_status["nba"]["status"] = status.lower()
         import_status["nba"]["completed_at"] = datetime.now().isoformat()
-        import_status["nba"]["result"] = result
+        import_status["nba"]["result"] = {**result, "rows": rows}
+        
+        # 3. Update DB Log
+        duration = (datetime.now() - start_time).total_seconds()
+        error_msg = "; ".join(result.get("errors", [])) if result.get("errors") else None
+        
+        await conn.execute("""
+            UPDATE import_logs 
+            SET status = $2, end_time = NOW(), duration_seconds = $3, 
+                rows_imported = $4, error_message = $5
+            WHERE id = $1
+        """, log_id, status, duration, rows, error_msg)
         
         if result.get("errors"):
-            import_status["nba"]["error"] = "; ".join(result["errors"])
+            import_status["nba"]["error"] = error_msg
         
     except Exception as e:
         logger.error(f"NBA import failed: {e}")
@@ -1618,6 +1776,18 @@ async def run_nba_import(clear_existing: bool):
         import_status["nba"]["completed_at"] = datetime.now().isoformat()
         import_status["nba"]["error"] = str(e)
         import_status["nba"]["progress"].append(f"❌ Error: {e}")
+        
+        if conn and log_id:
+            duration = (datetime.now() - start_time).total_seconds()
+            await conn.execute("""
+                UPDATE import_logs 
+                SET status = 'FAILED', end_time = NOW(), duration_seconds = $2, 
+                    error_message = $3
+                WHERE id = $1
+            """, log_id, duration, str(e))
+    finally:
+        if conn:
+            await conn.close()
 
 
 # =============================================================================

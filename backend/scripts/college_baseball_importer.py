@@ -11,6 +11,7 @@ import asyncio
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional, List, Literal
+import time
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -116,7 +117,8 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
     """
     try:
         from collegebaseball import ncaa_scraper
-        from collegebaseball.lookup import load_schools_df
+        import os
+        import collegebaseball
     except ImportError:
         logger.warning("collegebaseball package not installed")
         return {"error": True, "message": "collegebaseball package not installed. Run: pip install git+https://github.com/nathanblumenfeld/collegebaseball"}
@@ -124,8 +126,14 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
     _update_status("Loading schools from collegebaseball...", 10, source="python")
     
     try:
-        # Load schools from built-in CSV
-        schools_df = load_schools_df()
+        # Robustly load schools from package CSV
+        pkg_path = os.path.dirname(collegebaseball.__file__)
+        schools_path = os.path.join(pkg_path, 'data', 'schools.csv')
+        
+        if not os.path.exists(schools_path):
+             return {"error": True, "message": f"Schools data not found at {schools_path}"}
+             
+        schools_df = pd.read_csv(schools_path)
         
         # Filter by division
         if 'division' in schools_df.columns:
@@ -163,9 +171,15 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
             _update_status(f"[{idx+1}/{total}] Importing {team_name}...", progress, source="python")
             
             try:
-                # Try to get team stats using the package
-                # Note: collegebaseball has different API, adapt as needed
-                imported_count += 1
+                # Fetch team stats (Batting) as a test
+                stats_df = ncaa_scraper.ncaa_team_stats(team_id, year, variant='batting')
+                if stats_df is not None and not stats_df.empty:
+                    stats_file = DATA_DIR / "stats" / f"{team_id}_batting.csv"
+                    stats_df.to_csv(stats_file, index=False)
+                    imported_count += 1
+                
+                # Sleep briefly to avoid aggressive rate limiting
+                time.sleep(0.5)
                 
             except Exception as e:
                 logger.warning(f"Could not import stats for {team_name}: {e}")
@@ -345,9 +359,13 @@ async def run_college_baseball_import(
     if results.get("python", {}).get("success") or results.get("r", {}).get("success"):
         results["success"] = True
         results["primary_source"] = "python" if results.get("python", {}).get("success") else "r"
+        # Add flat fields for easier dashboard consumption
+        results["rows"] = (results.get("python", {}).get("imported_teams", 0) + 
+                          results.get("r", {}).get("imported_teams", 0))
     else:
         results["success"] = False
         results["message"] = "All import sources failed"
+        results["rows"] = 0
         _update_status("Import failed - no data sources available", 0, True, division)
     
     return results

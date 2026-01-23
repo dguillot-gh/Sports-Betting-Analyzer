@@ -2898,6 +2898,74 @@ class CollegeBaseballImportRequest(BaseModel):
     team_id: Optional[int] = None  # Optional: import specific team only
 
 
+async def run_baseball_import_with_logging(division, year, team_id, source):
+    """Background task for baseball import with progress tracking and DB logging."""
+    from scripts.college_baseball_importer import run_college_baseball_import
+    from src.config import DATABASE_URL
+    import asyncpg
+    
+    start_time = datetime.now()
+    conn = None
+    log_id = None
+    
+    # Initialize status
+    import_status["baseball"] = {
+        "status": "running",
+        "started_at": start_time.isoformat(),
+        "completed_at": None,
+        "progress": [f"D{division} {year} import started..."],
+        "result": None,
+        "error": None
+    }
+    
+    try:
+        # 1. Create DB log
+        conn = await asyncpg.connect(DATABASE_URL)
+        log_id = await conn.fetchval("""
+            INSERT INTO import_logs (sport, status, start_time)
+            VALUES ('baseball', 'IN_PROGRESS', NOW())
+            RETURNING id
+        """)
+        
+        # 2. Run import
+        result = await run_college_baseball_import(division, year, team_id, source)
+        
+        # 3. Handle result
+        rows = result.get("rows", 0)
+        status = "COMPLETED" if result.get("success") else "FAILED"
+        
+        import_status["baseball"]["status"] = status.lower()
+        import_status["baseball"]["completed_at"] = datetime.now().isoformat()
+        import_status["baseball"]["result"] = result
+        
+        # 4. Update DB log
+        duration = (datetime.now() - start_time).total_seconds()
+        error_msg = result.get("message") if not result.get("success") else None
+        
+        await conn.execute("""
+            UPDATE import_logs 
+            SET status = $2, end_time = NOW(), duration_seconds = $3, 
+                rows_imported = $4, error_message = $5
+            WHERE id = $1
+        """, log_id, status, duration, rows, error_msg)
+        
+    except Exception as e:
+        logger.error(f"Baseball import failed: {e}")
+        import_status["baseball"]["status"] = "failed"
+        import_status["baseball"]["error"] = str(e)
+        if conn and log_id:
+            duration = (datetime.now() - start_time).total_seconds()
+            await conn.execute("""
+                UPDATE import_logs 
+                SET status = 'FAILED', end_time = NOW(), duration_seconds = $2, 
+                    error_message = $3
+                WHERE id = $1
+            """, log_id, duration, str(e))
+    finally:
+        if conn:
+            await conn.close()
+
+
 @app.post('/baseball/ncaa/import')
 async def import_college_baseball(
     division: int = Query(1, description="NCAA Division (1, 2, or 3)"),
@@ -2911,12 +2979,10 @@ async def import_college_baseball(
     Runs in background to avoid timeout.
     """
     try:
-        from scripts.college_baseball_importer import run_college_baseball_import
-        
         logger.info(f"Starting college baseball import: D{division}, Year {year}, Source: {source}")
         
-        # Run in background
-        background_tasks.add_task(run_college_baseball_import, division, year, team_id, source)
+        # Run in background with logging wrapper
+        background_tasks.add_task(run_baseball_import_with_logging, division, year, team_id, source)
         
         return {
             "status": "started", 
