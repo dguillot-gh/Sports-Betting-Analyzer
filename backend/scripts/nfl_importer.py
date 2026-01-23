@@ -36,10 +36,14 @@ from src.config import DATABASE_URL
 NFLVERSE_BASE = "https://github.com/nflverse/nflverse-data/releases/download"
 NFLVERSE_PBP_BASE = "https://github.com/nflverse/nflverse-pbp/releases/download"
 
-# Years to import - extended to 2016+ for Next Gen Stats coverage
-# 2025 season uses PBP aggregation since nflverse hasn't published stats files for ongoing season
-IMPORT_YEARS = list(range(2016, 2025))  # Extended from 2020 to 2016 for NGS
-IMPORT_YEARS_MODERN = list(range(2020, 2025))  # Modern seasons for full stats
+# Years to import - dynamic based on current date
+current_year = datetime.now().year
+# NFL season corresponds to the year it started (e.g., Jan 2026 is still 2025 season)
+# We assume a new season's data might appear around July
+active_season = current_year if datetime.now().month < 7 else current_year + 1
+
+IMPORT_YEARS = list(range(2016, active_season + 1))
+IMPORT_YEARS_MODERN = list(range(2020, active_season + 1))
 
 # Per-season weekly player stats from nflverse-data releases
 # URL format: https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats_YYYY.csv
@@ -718,12 +722,14 @@ async def import_stats_via_nflreadpy(conn, sport_id: int, player_map: dict, prog
     stats_computed = 0
     
     try:
-        # Get season-level aggregates for all years in one call
+        # Get season-level aggregates for all modern years
         # summary_level="reg" gives us regular season totals pre-aggregated
         stats_df = nfl.load_player_stats(
-            seasons=[2020, 2021, 2022, 2023, 2024, 2025],
+            seasons=IMPORT_YEARS_MODERN,
             summary_level="reg"
-        ).to_pandas()
+        )
+        if hasattr(stats_df, "to_pandas"):
+            stats_df = stats_df.to_pandas()
         
         if progress_callback:
             progress_callback(f"Processing {len(stats_df)} player-season records...")
@@ -863,10 +869,13 @@ async def import_weekly_stats_via_nflreadpy(conn, sport_id: int, player_map: dic
     
     try:
         # Load weekly stats (no summary_level = game-by-game data)
-        # Only load recent seasons to keep DB size manageable
+        # Only load recent 3 seasons to keep DB size manageable
+        recent_years = IMPORT_YEARS_MODERN[-3:] if len(IMPORT_YEARS_MODERN) >= 3 else IMPORT_YEARS_MODERN
         weekly_df = nfl.load_player_stats(
-            seasons=[2023, 2024, 2025]
-        ).to_pandas()
+            seasons=recent_years
+        )
+        if hasattr(weekly_df, "to_pandas"):
+            weekly_df = weekly_df.to_pandas()
         
         if progress_callback:
             progress_callback(f"Processing {len(weekly_df)} weekly game records...")
@@ -1367,8 +1376,10 @@ async def import_schedules_via_nflreadpy(conn, sport_id: int, progress_callback=
     imported = 0
     
     try:
-        # Load schedules for all years
-        schedules_df = nfl.load_schedules(seasons=[2020, 2021, 2022, 2023, 2024, 2025]).to_pandas()
+        # Load schedules for all modern years
+        schedules_df = nfl.load_schedules(seasons=IMPORT_YEARS_MODERN)
+        if hasattr(schedules_df, "to_pandas"):
+            schedules_df = schedules_df.to_pandas()
         
         if progress_callback:
             progress_callback(f"Processing {len(schedules_df)} games...")

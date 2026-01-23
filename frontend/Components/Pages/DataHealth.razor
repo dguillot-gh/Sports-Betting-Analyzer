@@ -86,7 +86,7 @@
                         var data = _sportData[sport.Key];
                         <MudGrid Spacing="3">
                             <!-- Summary Cards -->
-                            <MudItem xs="12" md="3">
+                            <MudItem xs="12" md="2">
                                 <MudPaper Class="pa-4 text-center" Elevation="1">
                                     <MudText Typo="Typo.h3" Color="@GetScoreColor(data.SufficiencyScore)">
                                         @data.SufficiencyScore
@@ -95,10 +95,16 @@
                                     <MudProgressLinear Value="@data.SufficiencyScore" Color="@GetScoreColor(data.SufficiencyScore)" Class="mt-2" />
                                 </MudPaper>
                             </MudItem>
-                            <MudItem xs="12" md="3">
+                            <MudItem xs="12" md="2">
                                 <MudPaper Class="pa-4 text-center" Elevation="1">
                                     <MudText Typo="Typo.h3" Color="Color.Info">@data.TotalRows.ToString("N0")</MudText>
                                     <MudText Typo="Typo.body2">Total Rows</MudText>
+                                </MudPaper>
+                            </MudItem>
+                            <MudItem xs="12" md="2">
+                                <MudPaper Class="pa-4 text-center" Elevation="1">
+                                    <MudText Typo="Typo.h5" Color="Color.Primary" Class="mt-2">@data.DateRange</MudText>
+                                    <MudText Typo="Typo.body2" Class="mt-2">Season Range</MudText>
                                 </MudPaper>
                             </MudItem>
                             <MudItem xs="12" md="3">
@@ -175,6 +181,33 @@
                             <!-- Feature Coverage -->
                             <MudItem xs="12">
                                 <MudExpansionPanels>
+                                    @if (data.FeatureImpact.Any())
+                                    {
+                                        <MudExpansionPanel Text="Model Feature Importance (SHAP)">
+                                            <MudSimpleTable Dense="true" Hover="true">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Feature</th>
+                                                        <th>Importance</th>
+                                                        <th>Impact</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var fi in data.FeatureImpact)
+                                                    {
+                                                        <tr>
+                                                            <td>@fi.Feature</td>
+                                                            <td>@fi.Impact.ToString("P2")</td>
+                                                            <td>
+                                                                <MudProgressLinear Value="@(fi.Impact * 100)" Color="Color.Primary" Size="Size.Small" />
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </MudSimpleTable>
+                                        </MudExpansionPanel>
+                                    }
+
                                     <MudExpansionPanel Text="Feature Coverage Details">
                                         <MudSimpleTable Dense="true" Hover="true" Striped="true">
                                             <thead>
@@ -213,6 +246,72 @@
                                             </tbody>
                                         </MudSimpleTable>
                                     </MudExpansionPanel>
+
+                                    @if (data.Correlations.Any())
+                                    {
+                                        <MudExpansionPanel Text="Highly Correlated Features (Redundancy)">
+                                            <MudAlert Severity="Severity.Info" Class="mb-2">These feature pairs are highly redundant (Correlation > 0.8). Removing one can reduce overfitting.</MudAlert>
+                                            <MudSimpleTable Dense="true">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Feature A</th>
+                                                        <th>Feature B</th>
+                                                        <th>Corr</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var c in data.Correlations)
+                                                    {
+                                                        <tr>
+                                                            <td>@c.Feature1</td>
+                                                            <td>@c.Feature2</td>
+                                                            <td><MudChip T="string" Size="Size.Small" Color="Color.Warning">@c.Correlation.ToString("F3")</MudChip></td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </MudSimpleTable>
+                                        </MudExpansionPanel>
+                                    }
+
+                                    @if (data.MissingIdealFeatures.Any())
+                                    {
+                                        <MudExpansionPanel Text="Missing Ideal Features (Improvement Potential)">
+                                            <MudSimpleTable Dense="true">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Missing Feature</th>
+                                                        <th>Est. Accuracy Gain</th>
+                                                        <th>Difficulty</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var mf in data.MissingIdealFeatures)
+                                                    {
+                                                        <tr>
+                                                            <td>@mf.Feature.Replace("_", " ").ToUpper()</td>
+                                                            <td><MudText Color="Color.Success">@mf.Impact</MudText></td>
+                                                            <td><MudChip T="string" Size="Size.Small">@mf.Difficulty</MudChip></td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </MudSimpleTable>
+                                        </MudExpansionPanel>
+                                    }
+
+                                    @if (data.ImprovementRecommendations.Any())
+                                    {
+                                        <MudExpansionPanel Text="Detailed Recommendations">
+                                            <MudList T="string">
+                                                @foreach (var ir in data.ImprovementRecommendations)
+                                                {
+                                                    <MudListItem>
+                                                        <MudText Typo="Typo.subtitle2" Color="Color.Info">@ir.Issue</MudText>
+                                                        <MudText Typo="Typo.body2">@ir.Suggestion (@ir.Impact impact)</MudText>
+                                                    </MudListItem>
+                                                }
+                                            </MudList>
+                                        </MudExpansionPanel>
+                                    }
 
                                     @if (data.ClassBalance.Any())
                                     {
@@ -393,14 +492,14 @@
 
         try
         {
-            _sportLoadingStatus[sportKey] = $"Loading {sport.DisplayName} data...";
+            _sportLoadingStatus[sportKey] = $"Loading detailed {sport.DisplayName} data...";
             StateHasChanged();
             
             var series = sportKey == "nascar" ? "?series=cup" : "";
             
-            // Use HttpClient with timeout
+            // Use HttpClient with timeout and call /detailed endpoint
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
-            var response = await Http.GetAsync($"http://backend:8000/data/quality/{sportKey}{series}", cts.Token);
+            var response = await Http.GetAsync($"http://backend:8000/data/quality/{sportKey}/detailed{series}", cts.Token);
             
             if (response.IsSuccessStatusCode)
             {
@@ -410,17 +509,28 @@
                 var json = await response.Content.ReadAsStringAsync();
                 var data = JsonSerializer.Deserialize<JsonElement>(json);
                 
+                var summary = data.GetProperty("summary");
+                var dr = data.GetProperty("date_range");
+
                 _sportData[sportKey] = new SportQualityData
                 {
-                    SufficiencyScore = data.GetProperty("summary").GetProperty("sufficiency_score").GetInt32(),
-                    TotalRows = data.GetProperty("summary").GetProperty("total_rows").GetInt32(),
-                    FeaturesAvailable = data.GetProperty("summary").GetProperty("features_available").GetInt32(),
-                    Rating = data.GetProperty("summary").GetProperty("rating").GetString() ?? "",
+                    SufficiencyScore = summary.GetProperty("sufficiency_score").GetInt32(),
+                    TotalRows = summary.GetProperty("total_rows").GetInt32(),
+                    FeaturesAvailable = summary.GetProperty("features_available").GetInt32(),
+                    Rating = summary.GetProperty("rating").GetString() ?? "",
+                    DateRange = dr.ValueKind != JsonValueKind.Null && dr.TryGetProperty("min", out var min) && dr.TryGetProperty("max", out var max) 
+                        ? $"{min.GetInt32()} - {max.GetInt32()}" : "N/A",
                     Issues = ParseStringArray(data, "issues"),
                     Recommendations = ParseStringArray(data, "recommendations"),
                     FeatureCoverage = ParseDictionary(data, "feature_coverage"),
                     ClassBalance = ParseClassBalance(data),
-                    MissingValues = ParseDictionary(data, "missing_values")
+                    MissingValues = ParseDictionary(data, "missing_values"),
+                    
+                    // Detailed metrics
+                    Correlations = ParseCorrelations(data),
+                    MissingIdealFeatures = ParseMissingFeatures(data),
+                    ImprovementRecommendations = ParseDetailedRecommendations(data),
+                    FeatureImpact = ParseFeatureImpact(data)
                 };
                 _sportData[sportKey].IssuesCount = _sportData[sportKey].Issues.Count;
                 _sportLoadingStatus[sportKey] = "Complete!";
@@ -446,6 +556,73 @@
             _sportLoading[sportKey] = false;
             StateHasChanged();
         }
+    }
+
+    private List<CorrelationInfo> ParseCorrelations(JsonElement data)
+    {
+        var result = new List<CorrelationInfo>();
+        if (data.TryGetProperty("correlations", out var corr) && corr.TryGetProperty("high_correlations", out var list))
+        {
+            foreach (var item in list.EnumerateArray())
+            {
+                result.Add(new CorrelationInfo {
+                    Feature1 = item.GetProperty("feature1").GetString() ?? "",
+                    Feature2 = item.GetProperty("feature2").GetString() ?? "",
+                    Correlation = item.GetProperty("correlation").GetDouble()
+                });
+            }
+        }
+        return result;
+    }
+
+    private List<MissingFeatureInfo> ParseMissingFeatures(JsonElement data)
+    {
+        var result = new List<MissingFeatureInfo>();
+        if (data.TryGetProperty("missing_ideal_features", out var list))
+        {
+            foreach (var item in list.EnumerateArray())
+            {
+                result.Add(new MissingFeatureInfo {
+                    Feature = item.GetProperty("feature").GetString() ?? "",
+                    Impact = item.GetProperty("estimated_impact").GetString() ?? "",
+                    Difficulty = item.GetProperty("difficulty").GetString() ?? ""
+                });
+            }
+        }
+        return result;
+    }
+
+    private List<RecommendationInfo> ParseDetailedRecommendations(JsonElement data)
+    {
+        var result = new List<RecommendationInfo>();
+        if (data.TryGetProperty("improvement_recommendations", out var list))
+        {
+            foreach (var item in list.EnumerateArray())
+            {
+                result.Add(new RecommendationInfo {
+                    Issue = item.GetProperty("issue").GetString() ?? "",
+                    Suggestion = item.GetProperty("suggestion").GetString() ?? "",
+                    Impact = item.GetProperty("estimated_impact").GetString() ?? ""
+                });
+            }
+        }
+        return result;
+    }
+
+    private List<FeatureImpactInfo> ParseFeatureImpact(JsonElement data)
+    {
+        var result = new List<FeatureImpactInfo>();
+        if (data.TryGetProperty("feature_impact", out var list))
+        {
+            foreach (var item in list.EnumerateArray())
+            {
+                result.Add(new FeatureImpactInfo {
+                    Feature = item.GetProperty("feature").GetString() ?? "",
+                    Impact = item.GetProperty("importance").GetDouble()
+                });
+            }
+        }
+        return result;
     }
 
 
@@ -535,11 +712,45 @@
         public int FeaturesAvailable { get; set; }
         public int IssuesCount { get; set; }
         public string Rating { get; set; } = "";
+        public string DateRange { get; set; } = "N/A";
         public List<string> Issues { get; set; } = new();
         public List<string> Recommendations { get; set; } = new();
         public Dictionary<string, double> FeatureCoverage { get; set; } = new();
         public Dictionary<string, double> ClassBalance { get; set; } = new();
         public Dictionary<string, double> MissingValues { get; set; } = new();
+        
+        // Detailed metrics
+        public List<CorrelationInfo> Correlations { get; set; } = new();
+        public List<MissingFeatureInfo> MissingIdealFeatures { get; set; } = new();
+        public List<RecommendationInfo> ImprovementRecommendations { get; set; } = new();
+        public List<FeatureImpactInfo> FeatureImpact { get; set; } = new();
+    }
+
+    private class CorrelationInfo
+    {
+        public string Feature1 { get; set; } = "";
+        public string Feature2 { get; set; } = "";
+        public double Correlation { get; set; }
+    }
+
+    private class MissingFeatureInfo
+    {
+        public string Feature { get; set; } = "";
+        public string Impact { get; set; } = "";
+        public string Difficulty { get; set; } = "";
+    }
+
+    private class RecommendationInfo
+    {
+        public string Issue { get; set; } = "";
+        public string Suggestion { get; set; } = "";
+        public string Impact { get; set; } = "";
+    }
+
+    private class FeatureImpactInfo
+    {
+        public string Feature { get; set; } = "";
+        public double Impact { get; set; }
     }
     
     private class DbStats

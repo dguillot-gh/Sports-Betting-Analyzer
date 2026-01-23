@@ -66,10 +66,10 @@ class SchedulerService:
 
         cls._scheduler = AsyncIOScheduler()
         
-        # Schedule Daily Import at 3:00 AM
+        # Schedule Daily Import at 3:00 AM CST (9:00 AM UTC)
         cls._scheduler.add_job(
             cls.run_all_imports,
-            CronTrigger(hour=3, minute=0),
+            CronTrigger(hour=9, minute=0),
             id="daily_import",
             replace_existing=True
         )
