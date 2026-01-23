@@ -20,13 +20,13 @@ import asyncio
 import logging
 import json
 import hashlib
-import gc  # Garbage collection for memory management
+import gc
 import requests
 import io
+import pandas as pd
+import asyncpg
 from pathlib import Path
 from datetime import datetime
-# import pandas as pd  <-- Moved to local function scope
-# import asyncpg  <-- Moved to local function scope
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +46,9 @@ NFLVERSE_PBP_BASE = "https://github.com/nflverse/nflverse-pbp/releases/download"
 
 # Years to import - dynamic based on current date
 current_year = datetime.now().year
-# NFL season corresponds to the year it started (e.g., Jan 2026 is still 2025 season)
-# We assume a new season's data might appear around July
-active_season = current_year if datetime.now().month < 7 else current_year + 1
+# NFL season corresponds to the year it started (e.g., Jan 2026 is still the 2025 season)
+# A new season's data starts appearing around July/August of that year
+active_season = current_year if datetime.now().month >= 7 else current_year - 1
 
 IMPORT_YEARS = list(range(2016, active_season + 1))
 IMPORT_YEARS_MODERN = list(range(2020, active_season + 1))
@@ -1373,11 +1373,6 @@ async def import_all_nfl(clear_existing: bool = False, progress_callback=None) -
         # Step 6: Import game schedules using nflreadpy
         schedule_result = await import_schedules_via_nflreadpy(conn, sport_id, progress_callback)
         results["schedules_imported"] = schedule_result.get("imported", 0)
-        
-        if results["schedules_imported"] == 0:
-            msg = f"Warning: No NFL schedules imported for {IMPORT_YEARS_MODERN}."
-            results["errors"].append(msg)
-            results["status"] = "failed"
         
         if results["schedules_imported"] == 0:
             msg = f"Warning: No NFL schedules imported for {IMPORT_YEARS_MODERN}."
