@@ -22,12 +22,20 @@ import json
 import hashlib
 import gc  # Garbage collection for memory management
 import requests
+import io
 from pathlib import Path
 from datetime import datetime
 # import pandas as pd  <-- Moved to local function scope
 # import asyncpg  <-- Moved to local function scope
 
 logger = logging.getLogger(__name__)
+
+# Try to get nflreadpy version for logging
+try:
+    import nflreadpy as nfl
+    NFLREADPY_VERSION = getattr(nfl, "__version__", "installed")
+except ImportError:
+    NFLREADPY_VERSION = "NOT INSTALLED"
 
 # Database URL
 from src.config import DATABASE_URL
@@ -732,9 +740,21 @@ async def import_stats_via_nflreadpy(conn, sport_id: int, player_map: dict, prog
             stats_df = stats_df.to_pandas()
         
         if progress_callback:
+            progress_callback(f"Requesting NFL stats for years: {IMPORT_YEARS_MODERN}")
             progress_callback(f"Processing {len(stats_df)} player-season records...")
         
-        logger.info(f"Loaded {len(stats_df)} player-season records from nflreadpy")
+        logger.info(f"Loaded {len(stats_df)} player-season records from nflreadpy (Years: {IMPORT_YEARS_MODERN})")
+        
+        if len(stats_df) == 0:
+            msg = f"nflreadpy returned ZERO player stats for years {IMPORT_YEARS_MODERN}."
+            logger.warning(msg)
+            # We don't have results object here, so we'll just log it. 
+            # The caller will handle checking the count.
+        else:
+            # Check if active season (2025) is actually in the data
+            has_current = not stats_df[stats_df['season'] == active_season].empty if 'season' in stats_df.columns else False
+            if not has_current and active_season in IMPORT_YEARS_MODERN:
+                logger.warning(f"nflreadpy returned data, but NO records for the {active_season} season.")
         
         for i, (_, row) in enumerate(stats_df.iterrows()):
             if progress_callback and i % 500 == 0:
@@ -836,6 +856,8 @@ async def import_stats_via_nflreadpy(conn, sport_id: int, player_map: dict, prog
                         entity_id, int(season), json.dumps(stats_dict), stats_hash
                     )
                     stats_computed += 1
+                else:
+                    logger.debug(f"Could not find entity_id for player {metadata.get('player_name')} ({player_id}) - skipping stats table")
                 
                 imported += 1
                 
@@ -1293,7 +1315,9 @@ async def import_all_nfl(clear_existing: bool = False, progress_callback=None) -
     try:
         # Step 1: Download nflverse data
         if progress_callback:
-            progress_callback("Starting NFL data import...")
+            progress_callback(f"Starting NFL data import (nflreadpy version: {NFLREADPY_VERSION})...")
+        
+        logger.info(f"Starting NFL import. nflreadpy: {NFLREADPY_VERSION}, Target Years: {IMPORT_YEARS_MODERN}")
         
         downloaded = await download_nflverse(progress_callback)
         results["downloaded"] = downloaded
@@ -1303,6 +1327,9 @@ async def import_all_nfl(clear_existing: bool = False, progress_callback=None) -
             progress_callback("Connecting to database...")
         
         conn = await get_db_connection()
+        
+        # Store results dict for use in sub-functions if needed (passed via closure or just shared scope)
+        # Actually, we'll just check at the end.
         
         # Ensure schema has required columns
         await ensure_schema(conn)
@@ -1338,9 +1365,24 @@ async def import_all_nfl(clear_existing: bool = False, progress_callback=None) -
         results["games_imported"] = stats_result.get("imported", 0)
         results["stats_computed"] = stats_result.get("stats_computed", 0)
         
+        if results["games_imported"] == 0:
+            msg = f"Warning: No NFL player stats imported for {IMPORT_YEARS_MODERN}."
+            results["errors"].append(msg)
+            results["status"] = "failed" # This will trigger the Pushover error priority
+        
         # Step 6: Import game schedules using nflreadpy
         schedule_result = await import_schedules_via_nflreadpy(conn, sport_id, progress_callback)
         results["schedules_imported"] = schedule_result.get("imported", 0)
+        
+        if results["schedules_imported"] == 0:
+            msg = f"Warning: No NFL schedules imported for {IMPORT_YEARS_MODERN}."
+            results["errors"].append(msg)
+            results["status"] = "failed"
+        
+        if results["schedules_imported"] == 0:
+            msg = f"Warning: No NFL schedules imported for {IMPORT_YEARS_MODERN}."
+            results["errors"].append(msg)
+            results["status"] = "failed"
         
         # Step 7: Import weekly game-by-game stats for hit rate calculations
         weekly_result = await import_weekly_stats_via_nflreadpy(conn, sport_id, player_map, progress_callback)
@@ -1382,9 +1424,12 @@ async def import_schedules_via_nflreadpy(conn, sport_id: int, progress_callback=
             schedules_df = schedules_df.to_pandas()
         
         if progress_callback:
-            progress_callback(f"Processing {len(schedules_df)} games...")
+            progress_callback(f"Processing {len(schedules_df)} games (Years: {IMPORT_YEARS_MODERN})...")
         
-        logger.info(f"Loaded {len(schedules_df)} games from nflreadpy schedules")
+        logger.info(f"Loaded {len(schedules_df)} games from nflreadpy schedules (Years: {IMPORT_YEARS_MODERN})")
+        
+        if len(schedules_df) == 0:
+            logger.warning("nflreadpy returned ZERO schedules. This is likely why the schedules are not updating.")
         
         for i, (_, row) in enumerate(schedules_df.iterrows()):
             if progress_callback and i % 100 == 0:
