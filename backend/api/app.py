@@ -4143,17 +4143,6 @@ async def apex_compare_nba(
 ):
     """Compare all 3 models (Simple, Kyle, Apex) for NBA prediction."""
     try:
-        # Defensive cache check
-        game_id = f"nba_compare_{home_team}_{away_team}_{datetime.now().strftime('%Y%m%d')}"
-        try:
-            from src.odds_cache import get_cache_service
-            cache = get_cache_service()
-            cached_game = await cache.get_game(game_id)
-            if cached_game and cached_game.get("analysis") and not cached_game.get("analysis").get("error"):
-                return cached_game["analysis"]
-        except Exception as ce:
-            logger.warning(f"NBA Cache lookup failed: {ce}")
-
         results = {"home_team": home_team, "away_team": away_team, "models": {}}
         
         # 1. Simple model (basic rolling averages)
@@ -4180,12 +4169,6 @@ async def apex_compare_nba(
         except Exception as e:
             results["models"]["apex"] = {"error": str(e)}
         
-        # Defensive cache storage
-        try:
-            await cache.store_games("nba", [{"id": game_id, "home_team": home_team, "away_team": away_team, "analysis": results}])
-        except Exception as ce:
-            logger.warning(f"NBA Cache storage failed: {ce}")
-
         return results
     except Exception as e:
         logger.error(f"Model comparison error: {e}")
@@ -4202,17 +4185,6 @@ async def apex_compare_ncaab(
 ):
     """Compare models (Simple, XGBoost v2, ESPN BPI) for NCAAB prediction."""
     try:
-        # Defensive cache check
-        game_id = f"ncaab_compare_{home_team}_{away_team}_{datetime.now().strftime('%Y%m%d')}"
-        try:
-            from src.odds_cache import get_cache_service
-            cache = get_cache_service()
-            cached_game = await cache.get_game(game_id)
-            if cached_game and cached_game.get("analysis") and not cached_game.get("analysis").get("error"):
-                return cached_game["analysis"]
-        except Exception as ce:
-            logger.warning(f"NCAAB Cache lookup failed: {ce}")
-
         from scripts.ncaab_predictor import NCAABPredictor
         predictor = NCAABPredictor()
         
@@ -4263,12 +4235,6 @@ async def apex_compare_ncaab(
         except Exception as e:
             logger.warning(f"Could not fetch ESPN BPI for NCAAB comparison: {e}")
 
-        # Defensive cache storage
-        try:
-            await cache.store_games("ncaab", [{"id": game_id, "home_team": home_team, "away_team": away_team, "analysis": results}])
-        except Exception as ce:
-            logger.warning(f"NCAAB Cache storage failed: {ce}")
-
         return results
     except Exception as e:
         logger.error(f"NCAAB Model comparison error: {e}")
@@ -4285,17 +4251,6 @@ async def apex_compare_nfl(
 ):
     """Compare Simple and Apex models for NFL prediction (Kyle is NBA-only)."""
     try:
-        # Defensive cache check
-        game_id = f"nfl_compare_{home_team}_{away_team}_{datetime.now().strftime('%Y%m%d')}"
-        try:
-            from src.odds_cache import get_cache_service
-            cache = get_cache_service()
-            cached_game = await cache.get_game(game_id)
-            if cached_game and cached_game.get("analysis") and not cached_game.get("analysis").get("error"):
-                return cached_game["analysis"]
-        except Exception as ce:
-            logger.warning(f"NFL Cache lookup failed: {ce}")
-
         results = {"home_team": home_team, "away_team": away_team, "models": {}}
         
         # 1. Simple model (existing NFL XGBoost)

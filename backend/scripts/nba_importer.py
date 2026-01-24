@@ -950,12 +950,6 @@ async def import_all_nba(clear_existing: bool = False, progress_callback=None) -
         game_log_result = await import_game_logs_via_nba_api(conn, sport_id, progress_callback)
         results["game_logs_imported"] = game_log_result.get("imported", 0)
         
-        # Step 9: Supplemental Closing Lines (New for hit-rate tracking)
-        try:
-            await update_historical_odds_task(conn, days_back=5, progress_callback=progress_callback)
-        except Exception as e:
-            logger.warning(f"Historical odds supplemental task failed: {e}")
-        
         if progress_callback:
             progress_callback("NBA import complete!")
         
@@ -1132,7 +1126,7 @@ async def import_game_logs_via_nba_api(conn, sport_id: int, progress_callback=No
                 
                 if logs_df is not None and len(logs_df) > 0:
                     all_logs.append(logs_df)
-                    logger.info(f"Loaded {len(logs_df)} game logs for {season}")
+                    logger.info(f"Loaded {len(logs_df)} game records for {season}")
                 
                 time.sleep(1)  # Rate limit
                 
@@ -1223,115 +1217,6 @@ async def import_game_logs_via_nba_api(conn, sport_id: int, progress_callback=No
     except Exception as e:
         logger.error(f"Error importing NBA game logs: {e}")
         return {"imported": 0, "error": str(e)}
-
-async def fetch_closing_lines_via_sbr(target_date: date) -> Dict[str, Dict[str, float]]:
-    """
-    Fetch closing lines for a specific date using sbrscrape.
-    Returns mapping: { "Away @ Home": { "total": 220.5, "spread": -5.5 } }
-    """
-    try:
-        from sbrscrape import Scoreboard
-        # sbrscrape handles date objects
-        sb = Scoreboard(sport="NBA", date=target_date)
-        if not hasattr(sb, "games") or not sb.games:
-            return {}
-        
-        lines = {}
-        for game in sb.games:
-            # SBR format is usually "Away @ Home"
-            key = f"{game.get('away_team')} @ {game.get('home_team')}"
-            
-            # Prefer fanduel, then draftkings, then first available
-            game_lines = {}
-            
-            # 1. Total (O/U)
-            total_data = game.get('total', {})
-            if total_data:
-                val = total_data.get('fanduel') or total_data.get('draftkings') or next(iter(total_data.values()), None)
-                if val is not None:
-                    game_lines['total'] = float(val)
-            
-            # 2. Spread (Away spread)
-            spread_data = game.get('away_spread', {})
-            if spread_data:
-                val = spread_data.get('fanduel') or spread_data.get('draftkings') or next(iter(spread_data.values()), None)
-                if val is not None:
-                    game_lines['spread'] = float(val)
-            
-            if game_lines:
-                lines[key] = game_lines
-        
-        return lines
-    except Exception as e:
-        logger.warning(f"Failed to fetch SBR lines for {target_date}: {e}")
-        return {}
-
-
-async def update_historical_odds_task(conn, days_back: int = 7, progress_callback=None):
-    """Supplemental task to backfill closing lines into results metadata."""
-    if progress_callback:
-        progress_callback(f"Backfilling NBA closing lines for last {days_back} days...")
-    
-    # Get NBA sport id
-    sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = 'nba'")
-    if not sport_id:
-        return
-        
-    for i in range(days_back):
-        target_date = date.today() - timedelta(days=i+1)
-        day_lines = await fetch_closing_lines_via_sbr(target_date)
-        
-        if not day_lines:
-            continue
-        
-        # Find games in DB for this date
-        date_str = target_date.strftime('%Y-%m-%d')
-        rows = await conn.fetch(
-            "SELECT id, home_team, away_team, metadata FROM results WHERE sport_id = $1 AND game_date LIKE $2",
-            sport_id, f"{date_str}%"
-        )
-        
-        updated_count = 0
-        for row in rows:
-            # Need to handle potential naming variations between DB and SBR
-            # For now try exact, then simple fuzzy
-            match_key = f"{row['away_team']} @ {row['home_team']}"
-            line_data = day_lines.get(match_key)
-            
-            if not line_data:
-                # Try simple fuzzy (contains)
-                for key, data in day_lines.items():
-                    if row['home_team'] in key and row['away_team'] in key:
-                        line_data = data
-                        break
-            
-            if line_data:
-                try:
-                    meta = json.loads(row['metadata'] or '{}')
-                except:
-                    meta = {}
-                
-                # Update if changed/new
-                changed = False
-                if 'total' in line_data and meta.get('closing_total') != line_data['total']:
-                    meta['closing_total'] = line_data['total']
-                    changed = True
-                
-                if 'spread' in line_data and meta.get('closing_spread') != line_data['spread']:
-                    meta['closing_spread'] = line_data['spread']
-                    changed = True
-                
-                if changed:
-                    meta['odds_source'] = 'sbrscrape'
-                    await conn.execute(
-                        "UPDATE results SET metadata = $1 WHERE id = $2",
-                        json.dumps(meta), row['id']
-                    )
-                    updated_count += 1
-        
-        if updated_count > 0 and progress_callback:
-            progress_callback(f"  Added lines for {updated_count} games on {date_str}")
-
 
 if __name__ == "__main__":
     async def test_import():
