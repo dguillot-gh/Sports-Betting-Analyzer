@@ -6,7 +6,7 @@ Caches odds and analysis data so late night games persist on refresh.
 Rules:
 1. Fresh API data ALWAYS takes priority
 2. Cache only fills gaps for games that disappeared from API
-3. Games expire 12 hours after game time
+3. Games expire 48 hours after game time for morning-after persistence
 4. Predictions/model training NOT affected (uses nflverse/hoopR data)
 """
 
@@ -97,9 +97,9 @@ class OddsCacheService:
                     except:
                         pass
                 
-                # Set expiration: 12 hours after game time, or 24 hours from now if no date
+                # Set expiration: 48 hours after game time, or 24 hours from now if no date
                 if game_date:
-                    expires_at = game_date + timedelta(hours=12)
+                    expires_at = game_date + timedelta(hours=48)
                 else:
                     expires_at = datetime.utcnow() + timedelta(hours=24)
                 
