@@ -694,6 +694,13 @@
         </MudContainer>
     </DialogContent>
     <DialogActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveToCache" Disabled="@_isSaving">
+            @if (_isSaving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Save to Daily Cache
+        </MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -725,6 +732,59 @@
     
     private bool _isEnsembleLoading = false;
     private KyleskomEnsembleResult? _ensembleResult;
+    
+    // Save State
+    private bool _isSaving = false;
+
+    private async Task SaveToCache()
+    {
+        _isSaving = true;
+        try
+        {
+            // Build a summary object to cache
+            var analysisData = new Dictionary<string, object>
+            {
+                ["projected_total"] = _projectedTotal,
+                ["projected_spread"] = _projectedSpread,
+                ["total_edge"] = _totalEdge,
+                ["spread_edge"] = _spreadEdge
+            };
+            
+            if (_ensembleResult != null)
+            {
+                analysisData["win_prob"] = _ensembleResult.HomeWinProbability;
+                analysisData["consensus_winner"] = _ensembleResult.PredictedWinner ?? Event.HomeTeam;
+            }
+            else if (_ncaabComparison != null)
+            {
+                var xgb = _ncaabComparison.GetXgbResult();
+                if (xgb != null)
+                {
+                    analysisData["win_prob"] = xgb.WinProb;
+                    analysisData["consensus_winner"] = xgb.Winner;
+                    analysisData["total_proj"] = xgb.Total;
+                }
+            }
+            
+            var success = await MLService.SaveAnalysisAsync(Sport, Event.HomeTeam, Event.AwayTeam, analysisData);
+            if (success)
+            {
+                Snackbar.Add("Analysis saved to daily cache!", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to save analysis", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {

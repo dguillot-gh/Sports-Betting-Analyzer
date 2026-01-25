@@ -117,6 +117,48 @@ public class PredictResponse
     public string? Series { get; set; }
 }
 
+public class AnalysisSaveRequest
+{
+    [JsonPropertyName("sport")]
+    public string Sport { get; set; } = "";
+    
+    [JsonPropertyName("home_team")]
+    public string HomeTeam { get; set; } = "";
+    
+    [JsonPropertyName("away_team")]
+    public string AwayTeam { get; set; } = "";
+    
+    [JsonPropertyName("analysis")]
+    public object Analysis { get; set; } = default!;
+}
+
+public class AnalysisCacheListResponse
+{
+    [JsonPropertyName("count")]
+    public int Count { get; set; }
+    
+    [JsonPropertyName("analyses")]
+    public List<CachedAnalysisEntry> Analyses { get; set; } = new();
+}
+
+public class CachedAnalysisEntry
+{
+    [JsonPropertyName("sport")]
+    public string Sport { get; set; } = "";
+    
+    [JsonPropertyName("home_team")]
+    public string HomeTeam { get; set; } = "";
+    
+    [JsonPropertyName("away_team")]
+    public string AwayTeam { get; set; } = "";
+    
+    [JsonPropertyName("timestamp")]
+    public string Timestamp { get; set; } = "";
+    
+    [JsonPropertyName("analysis")]
+    public JsonElement Analysis { get; set; }
+}
+
 public class NcaabComparisonResponse
 {
     [JsonPropertyName("home_team")]
@@ -1459,6 +1501,41 @@ public class PythonMLServiceClient
         {
             _logger.LogError(ex, "Error triggering import");
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Save a manual analysis result for the day.
+    /// </summary>
+    public async Task<bool> SaveAnalysisAsync(string sport, string home, string away, object analysis)
+    {
+        try
+        {
+            var request = new AnalysisSaveRequest { Sport = sport, HomeTeam = home, AwayTeam = away, Analysis = analysis };
+            var response = await _httpClient.PostAsJsonAsync("/cache/analysis", request);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving analysis to daily cache");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Get all analysis results stored today.
+    /// </summary>
+    public async Task<AnalysisCacheListResponse> GetTodaysAnalysesAsync()
+    {
+        try
+        {
+            var response = await _httpClient.GetFromJsonAsync<AnalysisCacheListResponse>("/cache/analysis/today");
+            return response ?? new AnalysisCacheListResponse();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting today's analyses from cache");
+            return new AnalysisCacheListResponse();
         }
     }
 }
