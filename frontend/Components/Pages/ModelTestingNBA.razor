@@ -42,11 +42,6 @@
                             <span>Analyze Games</span>
                         }
                     </MudButton>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Info"
-                               StartIcon="@Icons.Material.Filled.Cached"
-                               OnClick="@RunCachedAnalysis" Disabled="@_isTraining">
-                        @(_isTraining ? "Caching..." : "Analyze + Cache")
-                    </MudButton>
                     <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
                                StartIcon="@Icons.Material.Filled.History"
                                Href="/daily-analysis">
@@ -1061,6 +1056,15 @@
                 ["ev_home"] = game.XgbModel?.EvHome ?? 0,
                 ["kelly_home"] = game.XgbModel?.KellyHome ?? 0
             };
+            
+            // Snapshot current AI insight if available
+            if (game.GeminiAnalysis?.LlmInsight != null)
+            {
+                analysisData["ai_rationale"] = game.GeminiAnalysis.LlmInsight.Rationale;
+                analysisData["ai_key_factor"] = game.GeminiAnalysis.LlmInsight.KeyFactor;
+                analysisData["ai_confidence"] = game.GeminiAnalysis.LlmInsight.Confidence;
+                analysisData["ai_winner"] = game.GeminiAnalysis.LlmInsight.Winner;
+            }
 
             var success = await MLServiceClient.SaveAnalysisAsync("nba", game.HomeTeam, game.AwayTeam, analysisData);
             if (success)

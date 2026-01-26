@@ -778,6 +778,15 @@
                 ["spread"] = game.Spread ?? 0
             };
 
+            // Snapshot current AI insight if available
+            if (game.GeminiAnalysis?.LlmInsight != null)
+            {
+                analysisData["ai_rationale"] = game.GeminiAnalysis.LlmInsight.Rationale;
+                analysisData["ai_key_factor"] = game.GeminiAnalysis.LlmInsight.KeyFactor;
+                analysisData["ai_confidence"] = game.GeminiAnalysis.LlmInsight.Confidence;
+                analysisData["ai_winner"] = game.GeminiAnalysis.LlmInsight.Winner;
+            }
+
             var success = await MLServiceClient.SaveAnalysisAsync("ncaab", game.HomeTeam, game.AwayTeam, analysisData);
             if (success)
             {
