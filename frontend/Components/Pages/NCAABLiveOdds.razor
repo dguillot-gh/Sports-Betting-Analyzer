@@ -363,6 +363,22 @@
                                         </div>
                                     }
                                 </div>
+                                
+                                <!-- Save to Cache Button -->
+                                <MudDivider Class="my-2" />
+                                <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small" FullWidth="true"
+                                           StartIcon="@Icons.Material.Filled.Save"
+                                           OnClick="@(() => SaveGameToCache(game))" Disabled="@game.IsSaving">
+                                    @if (game.IsSaving)
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                        <span>Saving...</span>
+                                    }
+                                    else
+                                    {
+                                        <span>Save to Daily Cache</span>
+                                    }
+                                </MudButton>
                             </MudCardContent>
                         </MudCard>
                     </MudItem>
@@ -683,6 +699,7 @@
         public PredictionData? Prediction { get; set; }
         public AiAnalysisReport? GeminiAnalysis { get; set; }
         public bool IsAnalyzing { get; set; }
+        public bool IsSaving { get; set; }
     }
 
     private class PredictionData
@@ -736,6 +753,43 @@
         finally
         {
             game.IsAnalyzing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveGameToCache(GameData game)
+    {
+        game.IsSaving = true;
+        StateHasChanged();
+
+        try
+        {
+            var analysisData = new Dictionary<string, object>
+            {
+                ["consensus_winner"] = game.Prediction?.PredictedWinner ?? game.HomeTeam,
+                ["win_prob"] = game.Prediction?.HomeWinProbability ?? 0.5,
+                ["total_proj"] = game.Prediction?.PredictedTotal ?? 0,
+                ["v2_total"] = game.Prediction?.V2Total ?? 0,
+                ["spread"] = game.Spread ?? 0
+            };
+
+            var success = await MLServiceClient.SaveAnalysisAsync("ncaab", game.HomeTeam, game.AwayTeam, analysisData);
+            if (success)
+            {
+                Snackbar.Add($"Saved {game.AwayTeam} @ {game.HomeTeam} to cache!", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to save to cache", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            game.IsSaving = false;
             StateHasChanged();
         }
     }
