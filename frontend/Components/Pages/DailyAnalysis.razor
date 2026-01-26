@@ -1,0 +1,179 @@
+@page "/daily-analysis"
+@using System.Text.Json
+@inject PythonMLServiceClient MLService
+@inject ISnackbar Snackbar
+
+<PageTitle>Daily Analysis | Sports Betting Analyzer</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <div>
+            <MudText Typo="Typo.h4" GutterBottom="true">
+                <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-2" />
+                Daily Analysis Cache
+            </MudText>
+            <MudText Typo="Typo.body1" Color="Color.Secondary">
+                Review all games you've analyzed and saved today across all sports.
+            </MudText>
+        </div>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadAnalysis" StartIcon="@Icons.Material.Filled.Refresh">
+            Refresh
+        </MudButton>
+    </div>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+    }
+    else if (!_analyses.Any())
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
+            No analysis saved for today yet. Go to any "Live Odds" page and click "Save to Daily Cache" on a game to see it here.
+        </MudAlert>
+    }
+    else
+    {
+        <MudGrid>
+            @foreach (var group in _analyses.GroupBy(a => a.Sport).OrderBy(g => g.Key))
+            {
+                <MudItem xs="12">
+                    <MudText Typo="Typo.h5" Class="mt-4 mb-2" Color="Color.Primary">
+                        @FormatSportName(group.Key)
+                    </MudText>
+                    <MudDivider Class="mb-4" />
+                </MudItem>
+
+                @foreach (var entry in group.OrderByDescending(x => x.Timestamp))
+                {
+                    <MudItem xs="12" md="6" lg="4">
+                        <MudCard Elevation="3" Class="h-100">
+                             <MudCardHeader Style="@GetCardHeaderStyle(group.Key)">
+                                <CardHeaderContent>
+                                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                        <MudText Typo="Typo.h6" Style="color: white; font-size: 1.1rem;">@entry.AwayTeam @@ @entry.HomeTeam</MudText>
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined" Style="color: white; border-color: rgba(255,255,255,0.5);">
+                                            @DateTime.Parse(entry.Timestamp).ToLocalTime().ToString("t")
+                                        </MudChip>
+                                    </MudStack>
+                                </CardHeaderContent>
+                            </MudCardHeader>
+                            <MudCardContent>
+                                <MudList T="string" Dense="true" DisablePadding="true">
+                                    <MudListItem Icon="@Icons.Material.Filled.EmojiEvents" IconColor="Color.Warning">
+                                        <div class="d-flex justify-space-between">
+                                            <MudText><strong>Winner:</strong></MudText>
+                                            <MudText>@GetJsonString(entry.Analysis, "consensus_winner")</MudText>
+                                        </div>
+                                    </MudListItem>
+                                    <MudListItem Icon="@Icons.Material.Filled.Insights" IconColor="Color.Info">
+                                        <div class="d-flex justify-space-between">
+                                            <MudText><strong>Win Prob:</strong></MudText>
+                                            <MudText>@GetJsonDouble(entry.Analysis, "win_prob", true)</MudText>
+                                        </div>
+                                    </MudListItem>
+                                    
+                                     @if (HasProperty(entry.Analysis, "total_proj"))
+                                     {
+                                        <MudListItem Icon="@Icons.Material.Filled.Numbers" IconColor="Color.Default">
+                                            <div class="d-flex justify-space-between">
+                                                <MudText><strong>Proj Total:</strong></MudText>
+                                                <MudText>@GetJsonDouble(entry.Analysis, "total_proj")</MudText>
+                                            </div>
+                                        </MudListItem>
+                                     }
+                                     
+                                     @if (HasProperty(entry.Analysis, "ev_home"))
+                                     {
+                                         var ev = GetJsonValue(entry.Analysis, "ev_home");
+                                         <MudListItem Icon="@Icons.Material.Filled.TrendingUp" IconColor="@(ev > 0 ? Color.Success : Color.Error)">
+                                            <div class="d-flex justify-space-between">
+                                                <MudText><strong>EV (Home):</strong></MudText>
+                                                <MudText Color="@(ev > 0 ? Color.Success : Color.Error)">@ev.ToString("+0.00;-0.00")</MudText>
+                                            </div>
+                                        </MudListItem>
+                                     }
+                                </MudList>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                }
+            }
+        </MudGrid>
+    }
+
+</MudContainer>
+
+@code {
+    private bool _isLoading = false;
+    private List<CachedAnalysisEntry> _analyses = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAnalysis();
+    }
+
+    private async Task LoadAnalysis()
+    {
+        _isLoading = true;
+        try
+        {
+            var response = await MLService.GetTodaysAnalysesAsync();
+            _analyses = response.Analyses;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading analysis: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private string FormatSportName(string sport) => sport.ToLower() switch
+    {
+        "nba" or "basketball_nba" => "🏀 NBA",
+        "nfl" or "americanfootball_nfl" => "🏈 NFL",
+        "ncaab" or "basketball_ncaab" => "🎓 NCAAB",
+        "college_baseball" => "⚾ College Baseball",
+        "mlb" or "baseball_mlb" => "⚾ MLB",
+        "nhl" or "icehockey_nhl" => "🏒 NHL",
+        "nascar" or "motorsports_nascar_cup" => "🏎️ NASCAR",
+        _ => sport.ToUpper()
+    };
+
+    private string GetCardHeaderStyle(string sport) => sport.ToLower() switch
+    {
+        "nba" => "background: linear-gradient(135deg, #1a237e 0%, #0d47a1 100%);",
+        "nfl" => "background: linear-gradient(135deg, #212121 0%, #424242 100%);",
+        "ncaab" => "background: linear-gradient(135deg, #e65100 0%, #ef6c00 100%);",
+        "college_baseball" => "background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 100%);",
+        _ => "background: linear-gradient(135deg, #546e7a 0%, #78909c 100%);"
+    };
+
+    private string GetJsonString(JsonElement element, string key)
+    {
+        if (element.TryGetProperty(key, out var prop))
+            return prop.ToString();
+        return "-";
+    }
+
+    private string GetJsonDouble(JsonElement element, string key, bool isPercent = false)
+    {
+        if (element.TryGetProperty(key, out var prop) && prop.TryGetDouble(out var val))
+            return isPercent ? val.ToString("P1") : val.ToString("F1");
+        return "-";
+    }
+    
+    private double GetJsonValue(JsonElement element, string key)
+    {
+         if (element.TryGetProperty(key, out var prop) && prop.TryGetDouble(out var val))
+            return val;
+        return 0;
+    }
+
+    private bool HasProperty(JsonElement element, string key)
+    {
+        return element.TryGetProperty(key, out _);
+    }
+}

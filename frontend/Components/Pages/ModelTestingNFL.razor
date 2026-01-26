@@ -47,6 +47,11 @@
                                OnClick="@RunCachedAnalysis" Disabled="@_isTraining">
                         @(_isTraining ? "Caching..." : "Analyze + Cache")
                     </MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
+                               StartIcon="@Icons.Material.Filled.History"
+                               Href="/daily-analysis">
+                        View Cache
+                    </MudButton>
                 </MudStack>
             </MudStack>
         </MudPaper>
@@ -216,6 +221,21 @@
                                                     </MudChip>
                                                 }
                                             </MudStack>
+                                            <!-- Save to Cache Button -->
+                                            <MudDivider Class="my-2" />
+                                            <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small" FullWidth="true"
+                                                       StartIcon="@Icons.Material.Filled.Save"
+                                                       OnClick="@(() => SaveGameToCache(game))" Disabled="@game.IsSaving">
+                                                @if (game.IsSaving)
+                                                {
+                                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                                    <span>Saving...</span>
+                                                }
+                                                else
+                                                {
+                                                    <span>Save to Daily Cache</span>
+                                                }
+                                            </MudButton>
                                         </MudStack>
                                     </MudCardContent>
                                 </MudCard>
@@ -702,6 +722,7 @@
         public AiAnalysisReport? GeminiAnalysis { get; set; }
         public bool IsGeneratingAi { get; set; }
         public bool IsCached { get; set; } = false;
+        public bool IsSaving { get; set; }
     }
 
     private class ModelResult
@@ -841,6 +862,44 @@
         finally
         {
             game.IsGeneratingAi = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveGameToCache(GamePrediction game)
+    {
+        game.IsSaving = true;
+        StateHasChanged();
+
+        try
+        {
+            var analysisData = new Dictionary<string, object>
+            {
+                ["consensus_winner"] = game.XgbModel?.PredictedWinner ?? game.SimpleModel?.PredictedWinner ?? game.HomeTeam,
+                ["win_prob"] = game.XgbModel?.HomeWinProb ?? game.SimpleModel?.HomeWinProb ?? 0.5,
+                ["simple_prob"] = game.SimpleModel?.HomeWinProb ?? 0,
+                ["xgb_prob"] = game.XgbModel?.HomeWinProb ?? 0,
+                ["ev_home"] = game.XgbModel?.EvHome ?? 0,
+                ["kelly_home"] = game.XgbModel?.KellyHome ?? 0
+            };
+
+            var success = await MLServiceClient.SaveAnalysisAsync("nfl", game.HomeTeam, game.AwayTeam, analysisData);
+            if (success)
+            {
+                Snackbar.Add($"Saved {game.AwayTeam} @ {game.HomeTeam} to cache!", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to save to cache", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            game.IsSaving = false;
             StateHasChanged();
         }
     }
