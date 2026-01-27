@@ -27,7 +27,7 @@ nba_api
 sbrscrape
 pynascar
 joblib
-collegebaseball @ git+https://github.com/nathanblumenfeld/collegebaseball
+ncaa-bbStats
 google-genai
 shap
 mlflow

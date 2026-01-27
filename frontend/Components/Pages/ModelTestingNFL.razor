@@ -42,6 +42,19 @@
                             <span>Analyze Games</span>
                         }
                     </MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Success"
+                               StartIcon="@Icons.Material.Filled.Save"
+                               OnClick="@SaveAllToCache" Disabled="@(!_games.Any() || _isSavingAll)">
+                        @if (_isSavingAll)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            <span>Saving...</span>
+                        }
+                        else
+                        {
+                            <span>Snapshot Results</span>
+                        }
+                    </MudButton>
                     <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
                                StartIcon="@Icons.Material.Filled.History"
                                Href="/daily-analysis">
@@ -216,21 +229,6 @@
                                                     </MudChip>
                                                 }
                                             </MudStack>
-                                            <!-- Save to Cache Button -->
-                                            <MudDivider Class="my-2" />
-                                            <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small" FullWidth="true"
-                                                       StartIcon="@Icons.Material.Filled.Save"
-                                                       OnClick="@(() => SaveGameToCache(game))" Disabled="@game.IsSaving">
-                                                @if (game.IsSaving)
-                                                {
-                                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                                                    <span>Saving...</span>
-                                                }
-                                                else
-                                                {
-                                                    <span>Save to Daily Cache</span>
-                                                }
-                                            </MudButton>
                                         </MudStack>
                                     </MudCardContent>
                                 </MudCard>
@@ -462,6 +460,7 @@
 
 @code {
     private bool _isLoading = false;
+    private bool _isSavingAll = false;
     private bool _isTraining = false;
     private string? _error = null;
     private string _selectedSportsbook = "fanduel";
@@ -861,49 +860,58 @@
         }
     }
 
-    private async Task SaveGameToCache(GamePrediction game)
+    private async Task SaveAllToCache()
     {
-        game.IsSaving = true;
+        if (!_games.Any()) return;
+
+        _isSavingAll = true;
         StateHasChanged();
+        
+        int successCount = 0;
 
         try
         {
-            var analysisData = new Dictionary<string, object>
+            // Save in parallel
+            var tasks = _games.Select(async game => 
             {
-                ["consensus_winner"] = game.XgbModel?.PredictedWinner ?? game.SimpleModel?.PredictedWinner ?? game.HomeTeam,
-                ["win_prob"] = game.XgbModel?.HomeWinProb ?? game.SimpleModel?.HomeWinProb ?? 0.5,
-                ["simple_prob"] = game.SimpleModel?.HomeWinProb ?? 0,
-                ["xgb_prob"] = game.XgbModel?.HomeWinProb ?? 0,
-                ["ev_home"] = game.XgbModel?.EvHome ?? 0,
-                ["kelly_home"] = game.XgbModel?.KellyHome ?? 0
-            };
+                var analysisData = new Dictionary<string, object>
+                {
+                    ["consensus_winner"] = game.XgbModel?.PredictedWinner ?? game.SimpleModel?.PredictedWinner ?? game.HomeTeam,
+                    ["win_prob"] = game.XgbModel?.HomeWinProb ?? game.SimpleModel?.HomeWinProb ?? 0.5,
+                    ["simple_prob"] = game.SimpleModel?.HomeWinProb ?? 0,
+                    ["xgb_prob"] = game.XgbModel?.HomeWinProb ?? 0,
+                    ["ev_home"] = game.XgbModel?.EvHome ?? 0,
+                    ["kelly_home"] = game.XgbModel?.KellyHome ?? 0
+                };
+                
+                if (game.GeminiAnalysis?.LlmInsight != null)
+                {
+                    analysisData["ai_rationale"] = game.GeminiAnalysis.LlmInsight.Rationale;
+                    analysisData["ai_key_factor"] = game.GeminiAnalysis.LlmInsight.KeyFactor;
+                    analysisData["ai_confidence"] = game.GeminiAnalysis.LlmInsight.Confidence;
+                    analysisData["ai_winner"] = game.GeminiAnalysis.LlmInsight.Winner;
+                }
 
-            // Snapshot current AI insight if available
-            if (game.GeminiAnalysis?.LlmInsight != null)
-            {
-                analysisData["ai_rationale"] = game.GeminiAnalysis.LlmInsight.Rationale;
-                analysisData["ai_key_factor"] = game.GeminiAnalysis.LlmInsight.KeyFactor;
-                analysisData["ai_confidence"] = game.GeminiAnalysis.LlmInsight.Confidence;
-                analysisData["ai_winner"] = game.GeminiAnalysis.LlmInsight.Winner;
-            }
+                if (await MLServiceClient.SaveAnalysisAsync("nfl", game.HomeTeam, game.AwayTeam, analysisData))
+                {
+                    System.Threading.Interlocked.Increment(ref successCount);
+                }
+            });
 
-            var success = await MLServiceClient.SaveAnalysisAsync("nfl", game.HomeTeam, game.AwayTeam, analysisData);
-            if (success)
-            {
-                Snackbar.Add($"Saved {game.AwayTeam} @ {game.HomeTeam} to cache!", Severity.Success);
-            }
+            await Task.WhenAll(tasks);
+            
+            if (successCount == _games.Count)
+                Snackbar.Add($"All {successCount} games saved to daily cache!", Severity.Success);
             else
-            {
-                Snackbar.Add("Failed to save to cache", Severity.Warning);
-            }
+                Snackbar.Add($"Saved {successCount}/{_games.Count} games to cache.", Severity.Warning);
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+             Snackbar.Add($"Error saving snapshot: {ex.Message}", Severity.Error);
         }
         finally
         {
-            game.IsSaving = false;
+            _isSavingAll = false;
             StateHasChanged();
         }
     }

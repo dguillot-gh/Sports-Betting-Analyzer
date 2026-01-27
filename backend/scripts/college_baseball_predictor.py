@@ -47,17 +47,63 @@ class CollegeBaseballPredictor:
         if team_name in self._team_stats_cache:
             return self._team_stats_cache[team_name]
         
-        # Default stats (baseline)
-        stats = {
-            'runs_per_game': 6.5,
-            'runs_allowed': 6.5,
-            'win_pct': 0.5,
-            'home_win_pct': 0.60, # Strong home field in college baseball
-            'away_win_pct': 0.40,
-        }
-        
-        self._team_stats_cache[team_name] = stats
-        return stats
+        # Try to load from CSV stats
+        # We need to find the stats file for this team
+        # The importer saves as {sanitized_name}_stats.csv
+        try:
+            # Simple sanitization to match importer
+            safe_id = "".join([c if c.isalnum() else "_" for c in team_name]).strip("_")
+            
+            # Look in standard data paths
+            # Try finding the data dir relative to this script
+            from pathlib import Path
+            data_dir = Path("/app/data/baseball/stats")
+            if not data_dir.exists():
+                # Try local relative path (dev env)
+                data_dir = Path(__file__).parent.parent / "data" / "baseball" / "stats"
+            
+            stats_file = data_dir / f"{safe_id}_stats.csv"
+            
+            if stats_file.exists():
+                df = pd.read_csv(stats_file)
+                if not df.empty:
+                    row = df.iloc[0]
+                    games = row.get('G', 0)
+                    if games > 0:
+                        # Map ncaa-bbStats columns to model features
+                        # Using .get for robustness if columns change
+                        runs_scored = row.get('R (Batting)', row.get('R', 0))
+                        runs_allowed = row.get('R (Pitching)', 0) # Pitching runs allowed
+                        
+                        # If runs allowed is missing (0), try to estimate from ERA
+                        if runs_allowed == 0 and 'ERA' in row:
+                            # ERA * Innings / 9 approx Runs? Or just ERA * G?
+                            # ERA is earned runs per 9 innings. 
+                            # Runs allowed includes unearned. Factor of ~1.1 is typical.
+                            # ip = row.get('IP', games * 9)
+                            runs_allowed = row.get('ERA', 6.0) * (games * 9) / 9 * 1.15
+                        
+                        rpg = float(runs_scored) / games
+                        rapg = float(runs_allowed) / games
+                        
+                        stats = {
+                            'runs_per_game': rpg,
+                            'runs_allowed': rapg,
+                            'win_pct': row.get('W', 0) / games,
+                            'home_win_pct': 0.65, # Keep defaults for splits if not in data
+                            'away_win_pct': 0.45,
+                            'sample_size': games
+                        }
+                        
+                        # Cache and return
+                        self._team_stats_cache[team_name] = stats
+                        return stats
+        except Exception as e:
+            logger.warning(f"Could not load stats for {team_name}: {e}")
+
+        # If file not found or empty, return None to indicate missing data
+        # We generally do not want to use hardcoded defaults for live predictions
+        return None
     
     def predict_game(self, home_team: str, away_team: str, 
                      spread: float = None, over_under: float = None) -> Dict[str, Any]:
@@ -66,6 +112,15 @@ class CollegeBaseballPredictor:
         """
         home_stats = self.get_team_stats(home_team)
         away_stats = self.get_team_stats(away_team)
+        
+        if not home_stats or not away_stats:
+            logger.warning(f"Missing stats for {home_team} or {away_team}")
+            return {
+                'home_team': home_team,
+                'away_team': away_team,
+                'error': 'Insufficient data',
+                'description': 'Team stats not found in database. Please run import.'
+            }
         
         # Home court advantage (typically 0.5-1.0 runs)
         home_advantage = 0.8

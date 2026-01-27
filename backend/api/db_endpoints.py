@@ -552,6 +552,115 @@ async def run_ncaab_import(start_year: int, end_year: int):
             await conn.close()
 
 
+
+@router.post("/import/college-baseball")
+async def import_college_baseball(
+    background_tasks: BackgroundTasks, 
+    start_year: int = Query(2022), 
+    end_year: int = Query(2025),
+    division: int = Query(1),
+    source: str = Query("auto") # auto, python, r, both
+):
+    """Start College Baseball data import in the background."""
+    import_status["baseball"] = {
+        "status": "running",
+        "started_at": datetime.now().isoformat(),
+        "completed_at": None,
+        "progress": [f"Import started for D{division} {start_year}-{end_year}"],
+        "result": None,
+        "error": None
+    }
+    
+    background_tasks.add_task(run_college_baseball_import_task, start_year, end_year, division, source)
+    
+    return {
+        "status": "started",
+        "message": f"College Baseball import started for D{division} {start_year}-{end_year} ({source})",
+        "years": f"{start_year}-{end_year}",
+        "division": division
+    }
+
+
+@router.get("/import/college-baseball/status")
+async def get_college_baseball_import_status():
+    """Get the current status of College Baseball import."""
+    return import_status["baseball"]
+
+
+async def run_college_baseball_import_task(start_year: int, end_year: int, division: int, source: str):
+    """Background task to run College Baseball import."""
+    import asyncpg
+    conn = None
+    log_id = None
+    start_time = datetime.now()
+    
+    try:
+        from scripts.college_baseball_importer import run_college_baseball_import
+        
+        # 1. Create IN_PROGRESS log
+        conn = await asyncpg.connect(DATABASE_URL)
+        log_id = await conn.fetchval("""
+            INSERT INTO import_logs (sport, status, start_time)
+            VALUES ('college_baseball', 'IN_PROGRESS', NOW())
+            RETURNING id
+        """)
+        
+        import_status["baseball"]["progress"].append(f"Starting import using source={source}")
+        
+        total_rows = 0
+        final_result = {}
+        
+        for year in range(start_year, end_year + 1):
+            import_status["baseball"]["progress"].append(f"Importing {year}...")
+            
+            # Call the unified importer
+            result = await run_college_baseball_import(division=division, year=year, source=source)
+            
+            if result.get("success"):
+                rows = result.get("rows", 0)
+                total_rows += rows
+                import_status["baseball"]["progress"].append(f"✅ {year}: Imported {rows} teams")
+            else:
+                err = result.get("message", "Unknown error")
+                import_status["baseball"]["progress"].append(f"⚠️ {year}: {err}")
+                
+            final_result[year] = result
+        
+        status = "COMPLETED"
+        import_status["baseball"]["status"] = status.lower()
+        import_status["baseball"]["result"] = {**final_result, "rows": total_rows}
+        import_status["baseball"]["progress"].append(f"✅ Import Complete! Total teams: {total_rows}")
+        
+        # 3. Update DB Log
+        duration = (datetime.now() - start_time).total_seconds()
+        
+        await conn.execute("""
+            UPDATE import_logs 
+            SET status = $2, end_time = NOW(), duration_seconds = $3, 
+                rows_imported = $4
+            WHERE id = $1
+        """, log_id, status, duration, total_rows)
+        
+    except Exception as e:
+        logger.error(f"College Baseball import failed: {e}")
+        import_status["baseball"]["status"] = "failed"
+        import_status["baseball"]["error"] = str(e)
+        import_status["baseball"]["progress"].append(f"❌ Critical Error: {e}")
+        
+        if conn and log_id:
+            duration = (datetime.now() - start_time).total_seconds()
+            await conn.execute("""
+                UPDATE import_logs 
+                SET status = 'FAILED', end_time = NOW(), duration_seconds = $2, 
+                    error_message = $3
+                WHERE id = $1
+            """, log_id, duration, str(e))
+    finally:
+        import_status["baseball"]["completed_at"] = datetime.now().isoformat()
+        if conn:
+            await conn.close()
+
+
 @router.delete("/clear/{sport}")
 async def clear_sport_data(sport: str):
     """Clear all data for a sport (careful!)."""
@@ -1802,9 +1911,45 @@ async def get_sport_profiles(
     limit: int = 1000  # Increased default to support NFL player lists
 ):
     """Get list of players/teams for a sport."""
-    if sport not in ["nfl", "nba", "nascar"]:
+    if sport not in ["nfl", "nba", "nascar", "college_baseball"]:
         raise HTTPException(status_code=400, detail=f"Invalid sport: {sport}")
     
+    # Special handling for file-based College Baseball
+    if sport == "college_baseball":
+        try:
+            from scripts.college_baseball_importer import get_teams
+            # division could be a param, default to 1
+            teams = get_teams(division=1) 
+            
+            entities = []
+            for t in teams:
+                entities.append({
+                    "id": t.get("team_id"), # safe_id string
+                    "name": t.get("ncaa_name"),
+                    "type": t.get("type", "team"),
+                    "series": f"D{t.get('division', 1)}" if t.get('type') == 'team' else t.get('team_name'),
+                    "metadata": {
+                        "league": t.get("league"),
+                        "team": t.get("team_name") if t.get("type") == "player" else None
+                    }
+                })
+            
+            # Filter by entity_type if requested
+            if entity_type:
+                entities = [e for e in entities if e["type"] == entity_type]
+            
+            # Filter if search
+            if search:
+                entities = [e for e in entities if search.lower() in e["name"].lower()]
+                
+            return {
+                "entities": entities[:limit],
+                "count": len(entities)
+            }
+        except Exception as e:
+            logger.error(f"Error fetching baseball profiles: {e}")
+            return {"entities": [], "count": 0, "error": str(e)}
+
     conn = await get_db_connection()
     try:
         sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
@@ -1853,9 +1998,52 @@ async def get_player_profile(sport: str, name: str):
     2. Fuzzy ILIKE match in entities  
     3. Fallback to results metadata if no entity found
     """
-    if sport not in ["nfl", "nba", "nascar"]:
+    if sport not in ["nfl", "nba", "nascar", "college_baseball"]:
         raise HTTPException(status_code=400, detail=f"Invalid sport: {sport}")
     
+    # Special handling for College Baseball (File-based)
+    if sport == "college_baseball":
+        try:
+            from scripts.college_baseball_importer import get_team_stats
+            
+            # Simple sanitization to match importer if name is raw
+            safe_id = "".join([c if c.isalnum() else "_" for c in name]).strip("_")
+            
+            # Try player first, then team
+            stats = get_team_stats(safe_id, entity_type="player")
+            if not stats: 
+                stats = get_team_stats(safe_id, entity_type="team")
+            if not stats:
+                 # Try raw name
+                stats = get_team_stats(name, entity_type="player") or get_team_stats(name, entity_type="team")
+                
+            if not stats:
+                return {"error": "Entity not found", "not_found": True}
+                
+            # Format for Profile.razor
+            season = str(stats.get("season", "2024"))
+            entity_type = stats.get("type", "team")
+            
+            return {
+                "id": safe_id,
+                "name": stats.get("player_name") or stats.get("team_name") or name,
+                "type": entity_type,
+                "series": str(stats.get("team_name", f"D{stats.get('division', 1)}")),
+                "metadata": {
+                    "league": stats.get("league"),
+                    "division": stats.get("division"),
+                    "position": stats.get("position"),
+                    "team": stats.get("team")
+                },
+                "stats": {
+                    season: stats # Put all flat stats here
+                },
+                "recent_games": []
+            }
+        except Exception as e:
+            logger.error(f"Error fetching baseball profile: {e}")
+            return {"error": str(e)}
+
     conn = await get_db_connection()
     try:
         sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)

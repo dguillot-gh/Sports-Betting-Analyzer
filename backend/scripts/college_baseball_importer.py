@@ -13,6 +13,29 @@ from datetime import datetime
 from typing import Dict, Optional, List, Literal
 import time
 import pandas as pd
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+# Monkey-patch requests.Session to ensure User-Agent and robustness
+_original_session_init = requests.Session.__init__
+
+def patched_session_init(self, *args, **kwargs):
+    _original_session_init(self, *args, **kwargs)
+    self.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://stats.ncaa.org/',
+    })
+    # Add retry logic
+    retries = Retry(total=5, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
+    self.mount('https://', HTTPAdapter(max_retries=retries))
+
+requests.Session.__init__ = patched_session_init
+
+import asyncpg
+from src.config import DATABASE_URL
 
 logger = logging.getLogger(__name__)
 
@@ -70,13 +93,46 @@ def get_teams(division: int = 1) -> List[Dict]:
     return []
 
 
-def get_team_stats(team_id: int, stat_type: str = "batting") -> Optional[Dict]:
-    """Get team stats (batting or pitching)."""
-    stats_file = DATA_DIR / "stats" / f"{team_id}_{stat_type}.csv"
+
+def get_team_player_stats(team_id: str, stat_type: str = "batting", year: int = 2024) -> List[Dict]:
+    """Get list of players for a team (Mocking roster from leaderboards for now)."""
+    # For full parity, we'd read {team_id}_batting.csv
+    # Currently we only have division-wide leaderboards in 'players/'
+    # Filter players/ for matches on team
+    players = []
+    player_dir = DATA_DIR / "players"
+    if player_dir.exists():
+        for p_file in player_dir.glob("*.csv"):
+            try:
+                df = pd.read_csv(p_file)
+                if not df.empty:
+                    row = df.iloc[0].to_dict()
+                    # Fuzzy match or exact match on team name?
+                    # The leaderboards have 'team' column
+                    if str(row.get('team', '')).lower() in str(team_id).lower():
+                        players.append(row)
+            except:
+                continue
+    return players
+def get_team_stats(team_id: str, stat_type: str = "stats", entity_type: str = "team") -> Optional[Dict]:
+    """Get team or player stats (merged batting/pitching/fielding)."""
+    # Check stats/ for teams, players/ for players
+    sub_dir = "players" if entity_type == "player" else "stats"
+    stats_file = DATA_DIR / sub_dir / f"{team_id}_stats.csv"
+    
+    if not stats_file.exists():
+        # Fallback to legacy naming OR check the other directory
+        other_dir = "stats" if entity_type == "player" else "players"
+        stats_file = DATA_DIR / other_dir / f"{team_id}_stats.csv"
+        
+    if not stats_file.exists():
+        # Try legacy naming
+        stats_file = DATA_DIR / sub_dir / f"{team_id}_{stat_type}.csv"
+        
     if stats_file.exists():
         try:
             df = pd.read_csv(stats_file)
-            return df.to_dict(orient="records")
+            return df.to_dict(orient="records")[0] if not df.empty else {}
         except Exception as e:
             logger.error(f"Error reading stats: {e}")
     return None
@@ -112,85 +168,132 @@ def get_import_summary(division: int = 1) -> Optional[Dict]:
 
 def _import_via_python(division: int, year: int, progress_callback=None) -> Dict:
     """
-    Import college baseball data using the collegebaseball Python package.
-    Returns dict with success status and imported data.
+    Import college baseball data using ncaa-bbStats package.
+    Fetches bulk leaderboards (Batting, Pitching, Fielding) and merges them.
     """
     try:
-        from collegebaseball import ncaa_scraper
-        import os
-        import collegebaseball
+        import ncaa_bbStats.team_stats as team_stats
+        import ncaa_bbStats.player_stats as player_stats
     except ImportError:
-        logger.warning("collegebaseball package not installed")
-        return {"error": True, "message": "collegebaseball package not installed. Run: pip install git+https://github.com/nathanblumenfeld/collegebaseball"}
+        logger.warning("ncaa-bbStats package not installed")
+        return {"error": True, "message": "ncaa-bbStats package not installed. Run: pip install ncaa-bbStats"}
     
-    _update_status("Loading schools from collegebaseball...", 10, source="python")
+    _update_status("Fetching D{division} stats from ncaa-bbStats...", 10, source="python")
+    
+    imported_count = 0
     
     try:
-        # Robustly load schools from package CSV
-        pkg_path = os.path.dirname(collegebaseball.__file__)
-        schools_path = os.path.join(pkg_path, 'data', 'schools.csv')
+        # 1. Fetch Batting Stats (The 'batting_average' function returns a dict of all teams)
+        # It actually returns a dict keyed by (Team, League) -> {stats dict}
+        logger.info(f"Fetching Batting Stats for D{division} {year}...")
+        _update_status("Fetching Batting Stats...", 20, source="python")
+        batting_data = team_stats.batting_average(year=year, division=division)
         
-        if not os.path.exists(schools_path):
-             return {"error": True, "message": f"Schools data not found at {schools_path}"}
-             
-        schools_df = pd.read_csv(schools_path)
+        if not batting_data:
+             return {"error": True, "message": "Failed to fetch batting stats (empty result). Check logs/403 errors."}
+
+        # 2. Fetch Pitching Stats (ERA)
+        logger.info(f"Fetching Pitching Stats/ERA for D{division} {year}...")
+        _update_status("Fetching Pitching Stats...", 40, source="python")
+        pitching_data = team_stats.earned_run_average(year=year, division=division)
         
-        # Filter by division
-        if 'division' in schools_df.columns:
-            div_schools = schools_df[schools_df['division'] == division]
-        else:
-            div_schools = schools_df
+        # 3. Fetch Fielding Stats
+        logger.info(f"Fetching Fielding Stats for D{division} {year}...")
+        _update_status("Fetching Fielding Stats...", 60, source="python")
+        fielding_data = team_stats.fielding_percentage(year=year, division=division)
         
-        if len(div_schools) == 0:
-            return {"error": True, "message": f"No schools found for division {division}"}
+        # Merge Data
+        _update_status("Merging and saving team data...", 80, source="python")
         
-        _update_status(f"Found {len(div_schools)} schools for D{division}", 15, source="python")
+        # Master list of keys (Team, League)
+        all_keys = set(batting_data.keys()) | set(pitching_data.keys()) | set(fielding_data.keys())
         
-        # Save teams list
-        teams_data = div_schools.to_dict(orient="records")
+        teams_list = []
+        
+        # Create directories
+        (DATA_DIR / "stats").mkdir(exist_ok=True, parents=True)
+        
+        for key in all_keys:
+            team_name, league = key
+            
+            # Use Team Name as ID (sanitized) or hash it
+            # Using sanitized name is readable
+            safe_id = "".join([c if c.isalnum() else "_" for c in team_name]).strip("_")
+            
+            # Combine stats
+            combined = {}
+            if key in batting_data:
+                combined.update(batting_data[key])
+            if key in pitching_data:
+                combined.update(pitching_data[key])
+            if key in fielding_data:
+                combined.update(fielding_data[key])
+            
+            # Add metadata
+            combined["team_name"] = team_name
+            combined["league"] = league
+            combined["season"] = year
+            combined["division"] = division
+            
+            # Save individual team CSV (simulating per-team stats file)
+            # We save separate CSVs for 'batting', etc if consumers expect it, or one big one.
+            # detailed_importer saved "{id}_batting.csv".
+            # The predictor likely needs specific columns. The merged dict has 'BA', 'ERA', etc.
+            
+            # Save unified stats
+            team_df = pd.DataFrame([combined])
+            team_df.to_csv(DATA_DIR / "stats" / f"{safe_id}_stats.csv", index=False)
+            
+            # Also save as _batting.csv for legacy compat if needed (but merged is better)
+            # We'll point get_team_stats to read _stats.csv
+            
+            teams_list.append({
+                "team_id": safe_id, # String ID
+                "ncaa_name": team_name,
+                "league": league,
+                "division": division,
+                "type": "team"
+            })
+            
+            imported_count += 1
+            
+        # 4. Fetch and Save Player Stats
+        _update_status("Fetching Player Stats...", 85, source="python")
+        try:
+            p_batting = player_stats.batting_average(year=year, division=division)
+            for (p_name, team, league), s in p_batting.items():
+                p_id = "".join([c if c.isalnum() else "_" for c in p_name]).strip("_")
+                (DATA_DIR / "players").mkdir(exist_ok=True, parents=True)
+                # Add metadata
+                s.update({"player_name": p_name, "team": team, "league": league, "type": "player"})
+                pd.DataFrame([s]).to_csv(DATA_DIR / "players" / f"{p_id}_stats.csv", index=False)
+                # Add to teams_list for generic profile search
+                # Profiles search usually looks for 'entities'
+                teams_list.append({
+                    "team_id": p_id,
+                    "ncaa_name": p_name,
+                    "team_name": team,
+                    "league": league,
+                    "division": division,
+                    "type": "player"
+                })
+        except Exception as pe:
+            logger.warning(f"Failed to fetch player stats: {pe}")
+
+        # Save Teams List (Entities list)
         teams_file = DATA_DIR / f"teams_d{division}.json"
         with open(teams_file, 'w') as f:
-            json.dump(teams_data, f, indent=2)
-        
-        logger.info(f"Saved {len(teams_data)} teams to {teams_file}")
-        
-        # Create stats directories
-        (DATA_DIR / "stats").mkdir(exist_ok=True)
-        (DATA_DIR / "schedules").mkdir(exist_ok=True)
-        
-        # Import stats for teams (limit to first 50 to avoid rate limits)
-        teams_to_import = div_schools.head(50)
-        total = len(teams_to_import)
-        imported_count = 0
-        
-        for idx, row in teams_to_import.iterrows():
-            team_id = row.get('school_id')
-            team_name = row.get('ncaa_name', row.get('bd_name', 'Unknown'))
+            json.dump(teams_list, f, indent=2)
             
-            progress = int(20 + (idx / total * 70))
-            _update_status(f"[{idx+1}/{total}] Importing {team_name}...", progress, source="python")
-            
-            try:
-                # Fetch team stats (Batting) as a test
-                stats_df = ncaa_scraper.ncaa_team_stats(team_id, year, variant='batting')
-                if stats_df is not None and not stats_df.empty:
-                    stats_file = DATA_DIR / "stats" / f"{team_id}_batting.csv"
-                    stats_df.to_csv(stats_file, index=False)
-                    imported_count += 1
-                
-                # Sleep briefly to avoid aggressive rate limiting
-                time.sleep(0.5)
-                
-            except Exception as e:
-                logger.warning(f"Could not import stats for {team_name}: {e}")
-        
+        logger.info(f"Saved {len(teams_list)} teams")
+
         # Save summary
         summary = {
             "division": division,
             "year": year,
-            "total_teams": len(div_schools),
+            "total_teams": len(teams_list),
             "imported_teams": imported_count,
-            "source": "python-collegebaseball",
+            "source": "python-ncaa-bbStats",
             "generated_at": datetime.now().isoformat()
         }
         
@@ -202,7 +305,7 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
         return {"success": True, "source": "python", **summary}
         
     except Exception as e:
-        logger.error(f"Python import failed: {e}")
+        logger.error(f"Python import failed: {e}", exc_info=True)
         return {"error": True, "message": str(e)}
 
 
@@ -358,17 +461,107 @@ async def run_college_baseball_import(
     # Determine success
     if results.get("python", {}).get("success") or results.get("r", {}).get("success"):
         results["success"] = True
-        results["primary_source"] = "python" if results.get("python", {}).get("success") else "r"
-        # Add flat fields for easier dashboard consumption
-        results["rows"] = (results.get("python", {}).get("imported_teams", 0) + 
-                          results.get("r", {}).get("imported_teams", 0))
-    else:
-        results["success"] = False
-        results["message"] = "All import sources failed"
-        results["rows"] = 0
-        _update_status("Import failed - no data sources available", 0, True, division)
-    
+    # 3. Sync to Database (Optional Parity)
+    if results.get("success"):
+        try:
+            logger.info("Syncing imported data to PostgreSQL...")
+            await sync_to_postgresql(results)
+            results["synced_to_db"] = True
+        except Exception as se:
+            logger.error(f"Database sync failed: {se}")
+            results["synced_to_db"] = False
+            results["db_error"] = str(se)
+
     return results
+
+
+def compute_hash(data: Dict) -> str:
+    """Compute deterministic hash for upsert protection."""
+    s = json.dumps(data, sort_keys=True)
+    return hashlib.sha256(s.encode()).hexdigest()
+
+import hashlib
+
+async def sync_to_postgresql(import_results: Dict):
+    """Sync file-based stats to PostgreSQL tables."""
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        # 1. Ensure sport exists
+        sport_id = await conn.fetchval(
+            "INSERT INTO sports (name, display_name) VALUES ('college_baseball', 'College Baseball') "
+            "ON CONFLICT (name) DO UPDATE SET display_name = EXCLUDED.display_name RETURNING id"
+        )
+        
+        # 2. Sync Teams
+        division = import_results.get("division", 1)
+        teams = get_teams(division)
+        
+        for t in teams:
+            team_name = t.get("ncaa_name")
+            team_id = t.get("team_id")
+            
+            # Entity row
+            metadata = {"league": t.get("league"), "division": division}
+            content_hash = compute_hash({"sport": "college_baseball", "team_id": team_id})
+            
+            entity_id = await conn.fetchval(
+                """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
+                   VALUES ($1, $2, 'team', $3, $4, $5)
+                   ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                   DO UPDATE SET name = EXCLUDED.name, metadata = EXCLUDED.metadata
+                   RETURNING id""",
+                sport_id, team_name, f"D{division}", json.dumps(metadata), content_hash
+            )
+            
+            # Stats row
+            stats = get_team_stats(team_id, entity_type="team")
+            if stats:
+                season = stats.get("season", 2024)
+                await conn.execute(
+                    """INSERT INTO stats (entity_id, season, stat_type, stats)
+                       VALUES ($1, $2, 'season_summary', $3)
+                       ON CONFLICT (entity_id, season, stat_type)
+                       DO UPDATE SET stats = EXCLUDED.stats""",
+                    entity_id, season, json.dumps(stats)
+                )
+
+        # 3. Sync Players (from leaderboard/top N)
+        # We look in the 'players' directory
+        player_dir = DATA_DIR / "players"
+        if player_dir.exists():
+            for p_file in player_dir.glob("*_stats.csv"):
+                try:
+                    df = pd.read_csv(p_file)
+                    if not df.empty:
+                        s = df.iloc[0].to_dict()
+                        p_name = s.get("player_name")
+                        p_id = p_file.stem.replace("_stats", "")
+                        
+                        p_hash = compute_hash({"sport": "college_baseball", "player_id": p_id})
+                        p_meta = {"team": s.get("team"), "league": s.get("league")}
+                        
+                        p_entity_id = await conn.fetchval(
+                            """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
+                               VALUES ($1, $2, 'player', 'college_baseball', $3, $4)
+                               ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                               DO UPDATE SET metadata = EXCLUDED.metadata
+                               RETURNING id""",
+                            sport_id, p_name, json.dumps(p_meta), p_hash
+                        )
+                        
+                        season = s.get("season", 2024)
+                        await conn.execute(
+                            """INSERT INTO stats (entity_id, season, stat_type, stats)
+                               VALUES ($1, $2, 'season_summary', $3)
+                               ON CONFLICT (entity_id, season, stat_type)
+                               DO UPDATE SET stats = EXCLUDED.stats""",
+                            p_entity_id, season, json.dumps(s)
+                        )
+                except Exception as pe:
+                    logger.debug(f"Error syncing player {p_file}: {pe}")
+
+    finally:
+        await conn.close()
 
 
 # Alias for API compatibility

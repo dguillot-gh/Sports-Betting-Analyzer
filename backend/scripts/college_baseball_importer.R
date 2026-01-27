@@ -14,9 +14,19 @@ cat(sprintf("Output directory: %s\n", output_dir))
 
 # Install/load packages
 tryCatch({
+  # Install remotes for GitHub packages
+  if (!require("remotes", quietly = TRUE)) {
+    install.packages("remotes", repos = "https://cloud.r-project.org", quiet = TRUE)
+  }
+
   if (!require("baseballr", quietly = TRUE)) {
-    cat("Installing baseballr...\n")
-    install.packages("baseballr", repos = "https://cloud.r-project.org", quiet = TRUE)
+    cat("Installing baseballr (from GitHub)...\n")
+    tryCatch({
+        remotes::install_github("BillPetti/baseballr", upgrade = "never", quiet = TRUE)
+    }, error = function(e) {
+        cat(sprintf("GitHub install failed (%s). Falling back to CRAN...\n", e$message))
+        install.packages("baseballr", repos = "https://cloud.r-project.org", quiet = TRUE)
+    })
   }
   library(baseballr)
   

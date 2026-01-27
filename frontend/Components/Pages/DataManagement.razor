@@ -1052,7 +1052,7 @@
                 TimeSpan.FromSeconds(2)
             );
             
-            var response = await http.PostAsync($"http://backend:8000/baseball/ncaa/import?division={_baseballDivision}&year={_baseballYear}&source={_baseballSource}", null);
+            var response = await http.PostAsync($"/db/import/college-baseball?division={_baseballDivision}&start_year={_baseballYear}&end_year={_baseballYear}&source={_baseballSource}", null);
             
             if (response.IsSuccessStatusCode)
             {
@@ -1087,7 +1087,7 @@
             using var http = HttpClientFactory.CreateClient("PythonMLServiceClient");
             http.Timeout = TimeSpan.FromSeconds(5);
             
-            var status = await http.GetFromJsonAsync<BaseballImportStatus>("http://backend:8000/baseball/ncaa/status");
+            var status = await http.GetFromJsonAsync<BaseballImportStatus>("/db/import/college-baseball/status");
             if (status != null)
             {
                 _baseballStatus = status;

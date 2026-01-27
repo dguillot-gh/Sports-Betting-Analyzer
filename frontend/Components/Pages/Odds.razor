@@ -28,6 +28,7 @@
                 </MudTooltip>
             }
             <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportOdds" Disabled="@(!_events.Any())">Export CSV</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.History" Href="/daily-analysis">View Daily Cache</MudButton>
         </div>
     </div>
 
@@ -282,53 +283,6 @@
 
         </MudTabPanel>
 
-        <MudTabPanel Text="Daily Analysis" Icon="@Icons.Material.Filled.History" OnClick="LoadDailyCache">
-            <MudText Typo="Typo.h6" Class="mb-4">Analyses Saved Today</MudText>
-            
-            @if (_isCacheLoading)
-            {
-                <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
-            }
-            else if (!_cachedAnalyses.Any())
-            {
-                <MudAlert Severity="Severity.Info">No analyses saved today yet. Use the 'Analyze' button on live games to save them here.</MudAlert>
-            }
-            else
-            {
-                <MudGrid>
-                    @foreach (var entry in _cachedAnalyses)
-                    {
-                        <MudItem xs="12" md="6" lg="4">
-                            <MudCard Elevation="2" Class="pa-4">
-                                <div class="d-flex justify-space-between">
-                                    <MudText Typo="Typo.subtitle1"><b>@entry.AwayTeam @@ @entry.HomeTeam</b></MudText>
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Info">@entry.Sport.ToUpper()</MudChip>
-                                </div>
-                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-2">@DateTime.Parse(entry.Timestamp).ToLocalTime().ToString("t")</MudText>
-                                
-                                <MudDivider Class="my-2" />
-                                
-                                <div class="d-flex flex-column gap-1">
-                                    @if (entry.Analysis.TryGetProperty("consensus_winner", out var cw))
-                                    {
-                                        <MudText Typo="Typo.body2">Pick: <b>@cw.GetString()</b></MudText>
-                                    }
-                                    @if (entry.Analysis.TryGetProperty("win_prob", out var wp))
-                                    {
-                                        <MudText Typo="Typo.body2">Win Prob: @(wp.GetDouble().ToString("P1"))</MudText>
-                                    }
-                                    @if (entry.Analysis.TryGetProperty("total_proj", out var tp))
-                                    {
-                                        <MudText Typo="Typo.body2">Proj Total: @tp.GetDouble().ToString("F1")</MudText>
-                                    }
-                                </div>
-                            </MudCard>
-                        </MudItem>
-                    }
-                </MudGrid>
-            }
-        </MudTabPanel>
-
         <MudTabPanel Text="ESPN Predictions" Icon="@Icons.Material.Filled.Psychology">
             <div class="d-flex gap-4 mb-4 align-center">
                 <MudSelect T="string" Label="League" @bind-Value="_espnSport" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Class="flex-grow-0" Style="width: 200px;">
@@ -449,23 +403,6 @@
     private bool _isTraining = false;
     private string? _trainingMessage;
 
-    // Cache State
-    private List<CachedAnalysisEntry> _cachedAnalyses = new();
-    private bool _isCacheLoading = false;
-
-    private async Task LoadDailyCache()
-    {
-        _isCacheLoading = true;
-        try
-        {
-            var resp = await PythonMLService.GetTodaysAnalysesAsync();
-            _cachedAnalyses = resp.Analyses;
-        }
-        finally
-        {
-            _isCacheLoading = false;
-        }
-    }
 
     private async Task TrainNcaabModel()
     {

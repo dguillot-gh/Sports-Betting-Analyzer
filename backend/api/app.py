@@ -3284,7 +3284,7 @@ async def get_ncaa_baseball_teams(
 
 @app.get("/baseball/ncaa/stats/{team_id}")
 async def get_ncaa_baseball_stats(
-    team_id: int, 
+    team_id: str, 
     stat_type: str = Query("batting"),
     year: int = Query(2025, description="Season year")
 ):
@@ -3293,9 +3293,9 @@ async def get_ncaa_baseball_stats(
     stat_type: 'batting' or 'pitching'
     """
     try:
-        from scripts.college_baseball_importer import get_team_stats
+        from scripts.college_baseball_importer import get_team_player_stats
         
-        stats = get_team_stats(team_id, stat_type)
+        stats = get_team_player_stats(str(team_id), stat_type, year)
         
         if not stats:
             # Try importing this team's stats
@@ -3329,7 +3329,7 @@ async def get_ncaa_baseball_stats(
 
 
 @app.get("/baseball/ncaa/schedule/{team_id}")
-async def get_ncaa_baseball_schedule(team_id: int):
+async def get_ncaa_baseball_schedule(team_id: str):
     """Get team schedule/results."""
     try:
         from scripts.college_baseball_importer import get_team_schedule
