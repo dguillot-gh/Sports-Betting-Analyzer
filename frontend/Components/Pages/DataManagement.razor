@@ -230,6 +230,7 @@
                         }
                         
                         <MudSelect T="int" Label="Division" @bind-Value="_baseballDivision" Variant="Variant.Outlined" Dense="true">
+                            <MudSelectItem Value="0">All Divisions</MudSelectItem>
                             <MudSelectItem Value="1">Division I</MudSelectItem>
                             <MudSelectItem Value="2">Division II</MudSelectItem>
                             <MudSelectItem Value="3">Division III</MudSelectItem>
@@ -256,7 +257,7 @@
                                StartIcon="@Icons.Material.Filled.CloudDownload"
                                OnClick="@OpenBaseballImportDialog"
                                Disabled="@(_isUpdating || _isBaseballImporting)">
-                        Import D@(_baseballDivision)
+                        Import @(_baseballDivision == 0 ? "All Divisions" : $"D{_baseballDivision}")
                     </MudButton>
                     <MudButton Variant="Variant.Outlined" Color="Color.Default"
                                StartIcon="@Icons.Material.Filled.List"
@@ -526,7 +527,7 @@
     <TitleContent>
         <MudText Typo="Typo.h6">
             <MudIcon Icon="@Icons.Material.Filled.SportsBaseball" Class="mr-2" />
-            Import NCAA Baseball - Division @_baseballDivision
+            Import NCAA Baseball - @(_baseballDivision == 0 ? "All Divisions" : $"Division {_baseballDivision}")
         </MudText>
     </TitleContent>
     <DialogContent>
@@ -534,7 +535,7 @@
         {
             <MudStack Spacing="3">
                 <MudText Typo="Typo.body2">
-                    This will download NCAA Division @_baseballDivision baseball data for @_baseballYear:
+                    This will download NCAA @(_baseballDivision == 0 ? "All Divisions" : $"Division {_baseballDivision}") baseball data for @_baseballYear:
                 </MudText>
                 <MudList T="string" Dense="true">
                     <MudListItem Icon="@Icons.Material.Filled.Groups" Dense="true">Team rosters</MudListItem>
@@ -1041,7 +1042,7 @@
         
         try
         {
-            using var http = HttpClientFactory.CreateClient("PythonMLServiceClient");
+            using var http = HttpClientFactory.CreateClient("PythonML");
             http.Timeout = TimeSpan.FromMinutes(10);
             
             // Start polling for status
@@ -1059,7 +1060,7 @@
                 var result = await response.Content.ReadFromJsonAsync<BaseballImportSummary>();
                 _baseballSummary = result;
                 _baseballStatus = new BaseballImportStatus { Status = "completed", Message = "Import complete!" };
-                Snackbar.Add($"College baseball D{_baseballDivision} import complete!", Severity.Success);
+                Snackbar.Add($"College baseball {(_baseballDivision == 0 ? "All Divisions" : $"D{_baseballDivision}")} import complete!", Severity.Success);
             }
             else
             {
@@ -1084,7 +1085,7 @@
     {
         try
         {
-            using var http = HttpClientFactory.CreateClient("PythonMLServiceClient");
+            using var http = HttpClientFactory.CreateClient("PythonML");
             http.Timeout = TimeSpan.FromSeconds(5);
             
             var status = await http.GetFromJsonAsync<BaseballImportStatus>("/db/import/college-baseball/status");
@@ -1110,7 +1111,7 @@
     {
         try
         {
-            using var http = HttpClientFactory.CreateClient("PythonMLServiceClient");
+            using var http = HttpClientFactory.CreateClient("PythonML");
             var summary = await http.GetFromJsonAsync<BaseballImportSummary>($"http://backend:8000/baseball/ncaa/summary?division={_baseballDivision}");
             _baseballSummary = summary;
         }
