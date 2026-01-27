@@ -794,9 +794,11 @@
         
         try
         {
-            var client = HttpClientFactory.CreateClient("PythonML");
-            var url = $"/db/import/nascar/rda?series={_rdaSeries}&year_start={_rdaYearStart}&year_end={_rdaYearEnd}&clear_existing={_rdaClearExisting.ToString().ToLower()}";
-            var response = await client.PostAsync(url, null);
+            using var http = new HttpClient();
+            http.Timeout = TimeSpan.FromMinutes(30);
+            
+            var url = $"http://backend:8000/db/import/nascar/rda?series={_rdaSeries}&year_start={_rdaYearStart}&year_end={_rdaYearEnd}&clear_existing={_rdaClearExisting.ToString().ToLower()}";
+            var response = await http.PostAsync(url, null);
             
             if (response.IsSuccessStatusCode)
             {
@@ -807,6 +809,26 @@
             {
                 var error = await response.Content.ReadAsStringAsync();
                 _rdaStatus = new RdaImportStatus { Status = "failed", Error = error };
+            }
+        }
+        catch (HttpRequestException)
+        {
+            // Try localhost
+            try
+            {
+                using var http2 = new HttpClient();
+                http2.Timeout = TimeSpan.FromMinutes(30);
+                var url = $"http://localhost:8000/db/import/nascar/rda?series={_rdaSeries}&year_start={_rdaYearStart}&year_end={_rdaYearEnd}&clear_existing={_rdaClearExisting.ToString().ToLower()}";
+                var response = await http2.PostAsync(url, null);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    _rdaPollTimer = new System.Threading.Timer(async _ => await PollRdaStatus(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2));
+                }
+            }
+            catch (Exception ex)
+            {
+                _rdaStatus = new RdaImportStatus { Status = "failed", Error = ex.Message };
             }
         }
         catch (Exception ex)
@@ -821,8 +843,17 @@
     {
         try
         {
-            var client = HttpClientFactory.CreateClient("PythonML");
-            RdaImportStatus? status = await client.GetFromJsonAsync<RdaImportStatus>("/db/import/nascar/status");
+            using var http = new HttpClient();
+            RdaImportStatus? status = null;
+            
+            try
+            {
+                status = await http.GetFromJsonAsync<RdaImportStatus>("http://backend:8000/db/import/nascar/status");
+            }
+            catch
+            {
+                status = await http.GetFromJsonAsync<RdaImportStatus>("http://localhost:8000/db/import/nascar/status");
+            }
             
             if (status != null)
             {
@@ -912,8 +943,6 @@
             
             if (_sportImportTarget == "ncaab")
             {
-                url = "/trends/ncaab/import"; // Adjusted to match potential backend mirror if applicable, or keep /ncaab/import
-                // Wait, I saw @app.post('/ncaab/import') in app.py. Let's use that.
                 url = "/ncaab/import";
             }
             
@@ -952,9 +981,7 @@
         try
         {
             var http = HttpClientFactory.CreateClient("PythonML");
-            string statusUrl = $"/db/import/{_sportImportTarget}/status";
-            if (_sportImportTarget == "ncaab") statusUrl = "/db/import/ncaab/status";
-            var response = await http.GetAsync(statusUrl);
+            var response = await http.GetAsync($"/db/import/{_sportImportTarget}/status");
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
@@ -1045,10 +1072,11 @@
         {
             _baseballStatus = new BaseballImportStatus { Status = "error", Message = ex.Message };
             Logger.LogError(ex, "Error importing college baseball");
-            _isBaseballImporting = false;
         }
         finally
         {
+            _baseballPollTimer?.Dispose();
+            _baseballPollTimer = null;
             StateHasChanged();
         }
     }
@@ -1084,7 +1112,7 @@
         try
         {
             using var http = HttpClientFactory.CreateClient("PythonML");
-            var summary = await http.GetFromJsonAsync<BaseballImportSummary>($"/baseball/ncaa/summary?division={_baseballDivision}");
+            var summary = await http.GetFromJsonAsync<BaseballImportSummary>($"http://backend:8000/baseball/ncaa/summary?division={_baseballDivision}");
             _baseballSummary = summary;
         }
         catch
