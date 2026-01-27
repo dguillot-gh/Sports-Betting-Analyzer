@@ -462,6 +462,93 @@ public class RetrainResponse
     public Dictionary<string, object>? Metrics { get; set; }
 }
 
+public class BaseballImportStartedResponse
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "";
+
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = "";
+
+    [JsonPropertyName("division")]
+    public int Division { get; set; }
+    
+    [JsonPropertyName("years")]
+    public string Years { get; set; } = "";
+}
+
+public class BaseballImportStatus
+{
+    [JsonPropertyName("status")]
+    public string? Status { get; set; }
+
+    [JsonPropertyName("message")]
+    public string? Message { get; set; }
+
+    [JsonPropertyName("progress")]
+    public int Progress { get; set; }
+}
+
+public class BaseballImportSummary
+{
+    [JsonPropertyName("division")]
+    public int Division { get; set; }
+
+    [JsonPropertyName("year")]
+    public int Year { get; set; }
+
+    [JsonPropertyName("total_teams")]
+    public int TotalTeams { get; set; }
+
+    [JsonPropertyName("imported_teams")]
+    public int ImportedTeams { get; set; }
+
+    [JsonPropertyName("generated_at")]
+    public string? GeneratedAt { get; set; }
+}
+
+public class RdaImportStatus
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "idle";
+
+    [JsonPropertyName("started_at")]
+    public string? StartedAt { get; set; }
+
+    [JsonPropertyName("completed_at")]
+    public string? CompletedAt { get; set; }
+
+    [JsonPropertyName("progress")]
+    public List<string>? Progress { get; set; }
+
+    [JsonPropertyName("result")]
+    public object? Result { get; set; }
+
+    [JsonPropertyName("error")]
+    public string? Error { get; set; }
+}
+
+public class SportImportStatus
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "idle";
+
+    [JsonPropertyName("started_at")]
+    public string? StartedAt { get; set; }
+
+    [JsonPropertyName("completed_at")]
+    public string? CompletedAt { get; set; }
+
+    [JsonPropertyName("progress")]
+    public List<string>? Progress { get; set; }
+
+    [JsonPropertyName("result")]
+    public object? Result { get; set; }
+
+    [JsonPropertyName("error")]
+    public string? Error { get; set; }
+}
+
 /// <summary>
 /// Client for Python ML Service FastAPI
 /// </summary>
@@ -1536,6 +1623,107 @@ public class PythonMLServiceClient
         {
             _logger.LogError(ex, "Error getting today's analyses from cache");
             return new AnalysisCacheListResponse();
+        }
+    }
+
+    public async Task<BaseballImportStartedResponse?> StartCollegeBaseballImportAsync(int division, int year, string source = "auto")
+    {
+        try
+        {
+            var url = $"/import/college-baseball?division={division}&start_year={year}&end_year={year}&source={source}";
+            var response = await _httpClient.PostAsync(url, null);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<BaseballImportStartedResponse>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error starting college baseball import");
+            throw;
+        }
+    }
+
+    public async Task<BaseballImportStatus?> GetBaseballImportStatusAsync()
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<BaseballImportStatus>("/import/college-baseball/status");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting baseball import status");
+            return null;
+        }
+    }
+
+    public async Task<BaseballImportSummary?> GetBaseballImportSummaryAsync(int division)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<BaseballImportSummary>($"/baseball/ncaa/summary?division={division}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting baseball import summary");
+            return null;
+        }
+    }
+
+    public async Task<DataUpdateResponse> StartNascarRdaImportAsync(string series, int yearStart, int yearEnd, bool clearExisting)
+    {
+        try
+        {
+            var url = $"/import/nascar/rda?series={series}&year_start={yearStart}&year_end={yearEnd}&clear_existing={clearExisting.ToString().ToLower()}";
+            var response = await _httpClient.PostAsync(url, null);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<DataUpdateResponse>() ?? new DataUpdateResponse { Success = false, Message = "Failed to parse response" };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error starting NASCAR RDA import");
+            return new DataUpdateResponse { Success = false, Message = ex.Message };
+        }
+    }
+
+    public async Task<RdaImportStatus?> GetNascarRdaImportStatusAsync()
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<RdaImportStatus>("/import/nascar/status");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting NASCAR RDA import status");
+            return null;
+        }
+    }
+
+    public async Task<bool> StartSportImportAsync(string sport, bool clearExisting)
+    {
+        try
+        {
+            string url = $"/import/csv/{sport}?clear_existing={clearExisting.ToString().ToLower()}";
+            if (sport == "ncaab") url = "/ncaab/import";
+            
+            var response = await _httpClient.PostAsync(url, null);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error starting {Sport} import", sport);
+            return false;
+        }
+    }
+
+    public async Task<SportImportStatus?> GetSportImportStatusAsync(string sport)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<SportImportStatus>($"/import/{sport}/status");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting {Sport} import status", sport);
+            return null;
         }
     }
 }
