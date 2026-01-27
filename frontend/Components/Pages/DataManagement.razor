@@ -794,61 +794,87 @@
         
         try
         {
-            var result = await MLClient.StartNascarRdaImportAsync(_rdaSeries, _rdaYearStart, _rdaYearEnd, _rdaClearExisting);
+            using var http = new HttpClient();
+            http.Timeout = TimeSpan.FromMinutes(30);
             
-            if (result.Success)
+            var url = $"http://backend:8000/db/import/nascar/rda?series={_rdaSeries}&year_start={_rdaYearStart}&year_end={_rdaYearEnd}&clear_existing={_rdaClearExisting.ToString().ToLower()}";
+            var response = await http.PostAsync(url, null);
+            
+            if (response.IsSuccessStatusCode)
             {
                 // Start polling for status
-                _rdaPollTimer = new System.Threading.Timer(
-                    async _ => await PollRdaStatus(),
-                    null,
-                    TimeSpan.FromSeconds(1),
-                    TimeSpan.FromSeconds(2)
-                );
+                _rdaPollTimer = new System.Threading.Timer(async _ => await PollRdaStatus(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2));
             }
             else
             {
-                _rdaStatus = new RdaImportStatus { Status = "failed", Error = result.Message };
-                _isRdaImporting = false;
+                var error = await response.Content.ReadAsStringAsync();
+                _rdaStatus = new RdaImportStatus { Status = "failed", Error = error };
+            }
+        }
+        catch (HttpRequestException)
+        {
+            // Try localhost
+            try
+            {
+                using var http2 = new HttpClient();
+                http2.Timeout = TimeSpan.FromMinutes(30);
+                var url = $"http://localhost:8000/db/import/nascar/rda?series={_rdaSeries}&year_start={_rdaYearStart}&year_end={_rdaYearEnd}&clear_existing={_rdaClearExisting.ToString().ToLower()}";
+                var response = await http2.PostAsync(url, null);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    _rdaPollTimer = new System.Threading.Timer(async _ => await PollRdaStatus(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2));
+                }
+            }
+            catch (Exception ex)
+            {
+                _rdaStatus = new RdaImportStatus { Status = "failed", Error = ex.Message };
             }
         }
         catch (Exception ex)
         {
             _rdaStatus = new RdaImportStatus { Status = "failed", Error = ex.Message };
-            _isRdaImporting = false;
         }
-        finally
-        {
-            StateHasChanged();
-        }
+        
+        StateHasChanged();
     }
     
     private async Task PollRdaStatus()
     {
         try
         {
-            var status = await MLClient.GetNascarRdaImportStatusAsync();
+            using var http = new HttpClient();
+            RdaImportStatus? status = null;
+            
+            try
+            {
+                status = await http.GetFromJsonAsync<RdaImportStatus>("http://backend:8000/db/import/nascar/status");
+            }
+            catch
+            {
+                status = await http.GetFromJsonAsync<RdaImportStatus>("http://localhost:8000/db/import/nascar/status");
+            }
+            
             if (status != null)
             {
                 _rdaStatus = status;
+                await InvokeAsync(StateHasChanged);
                 
+                // Stop polling when complete or failed
                 if (status.Status == "completed" || status.Status == "failed")
                 {
                     _rdaPollTimer?.Dispose();
                     _rdaPollTimer = null;
-                    _isRdaImporting = false;
                     
                     if (status.Status == "completed")
                     {
                         await InvokeAsync(async () =>
                         {
                             Snackbar.Add("RDA import completed successfully!", Severity.Success);
-                            await LoadStatus(); 
+                            await LoadStatus();
                         });
                     }
                 }
-                
-                await InvokeAsync(StateHasChanged);
             }
         }
         catch (Exception ex)
@@ -857,6 +883,27 @@
         }
     }
     
+    // Model for RDA import status
+    public class RdaImportStatus
+    {
+        public string Status { get; set; } = "idle";
+        public string? StartedAt { get; set; }
+        public string? CompletedAt { get; set; }
+        public List<string>? Progress { get; set; }
+        public object? Result { get; set; }
+        public string? Error { get; set; }
+    }
+    
+    // Model for NFL/NBA import status (same structure)
+    public class SportImportStatus
+    {
+        public string Status { get; set; } = "idle";
+        public string? StartedAt { get; set; }
+        public string? CompletedAt { get; set; }
+        public List<string>? Progress { get; set; }
+        public object? Result { get; set; }
+        public string? Error { get; set; }
+    }
     
     // Sport Import Methods
     private void OpenSportImportDialog(string sport)
@@ -883,31 +930,38 @@
     private async Task StartSportImport()
     {
         if (string.IsNullOrEmpty(_sportImportTarget)) return;
-
-        _isSportImporting = true;
-        _sportStatus = new SportImportStatus { Status = "running", Progress = new List<string> { $"Starting {_sportImportTarget.ToUpper()} import..." } };
-        StateHasChanged();
         
         try
         {
-            var success = await MLClient.StartSportImportAsync(_sportImportTarget, _sportClearExisting);
+            _isSportImporting = true;
+            _sportStatus = new SportImportStatus { Status = "running", Progress = new List<string> { $"Starting {_sportImportTarget.ToUpper()} import..." } };
+            StateHasChanged();
             
-            if (success)
+            // Call the import API
+            var http = HttpClientFactory.CreateClient("PythonML");
+            string url = $"/db/import/{_sportImportTarget}?clear_existing={_sportClearExisting.ToString().ToLower()}";
+            
+            if (_sportImportTarget == "ncaab")
             {
-                // Start polling
-                _sportPollTimer = new System.Threading.Timer(
-                    async _ => await PollSportStatus(),
-                    null,
-                    TimeSpan.FromSeconds(2),
-                    TimeSpan.FromSeconds(2)
-                );
+                url = "/ncaab/import";
             }
-            else
+            
+            var response = await http.PostAsync(url, null);
+            
+            if (!response.IsSuccessStatusCode)
             {
                 _sportStatus.Status = "failed";
                 _sportStatus.Error = "Failed to start import";
-                _isSportImporting = false;
+                return;
             }
+            
+            // Start polling
+            _sportPollTimer = new System.Threading.Timer(
+                async _ => await PollSportStatus(),
+                null,
+                TimeSpan.FromSeconds(2),
+                TimeSpan.FromSeconds(2)
+            );
         }
         catch (Exception ex)
         {
@@ -917,11 +971,6 @@
                 Error = ex.Message,
                 Progress = new List<string> { $"Error: {ex.Message}" }
             };
-            _isSportImporting = false;
-        }
-        finally
-        {
-            StateHasChanged();
         }
     }
     
@@ -931,29 +980,37 @@
         
         try
         {
-            var status = await MLClient.GetSportImportStatusAsync(_sportImportTarget);
-            if (status != null)
+            var http = HttpClientFactory.CreateClient("PythonML");
+            var response = await http.GetAsync($"/db/import/{_sportImportTarget}/status");
+            if (response.IsSuccessStatusCode)
             {
-                _sportStatus = status;
+                var json = await response.Content.ReadAsStringAsync();
+                var status = System.Text.Json.JsonSerializer.Deserialize<SportImportStatus>(json, new System.Text.Json.JsonSerializerOptions 
+                { 
+                    PropertyNameCaseInsensitive = true 
+                });
                 
-                // Stop polling when complete or failed
-                if (status.Status == "completed" || status.Status == "failed")
+                if (status != null)
                 {
-                    _sportPollTimer?.Dispose();
-                    _sportPollTimer = null;
-                    _isSportImporting = false;
+                    _sportStatus = status;
+                    await InvokeAsync(StateHasChanged);
                     
-                    if (status.Status == "completed")
+                    // Stop polling when complete or failed
+                    if (status.Status == "completed" || status.Status == "failed")
                     {
-                        await InvokeAsync(async () =>
+                        _sportPollTimer?.Dispose();
+                        _sportPollTimer = null;
+                        
+                        if (status.Status == "completed")
                         {
-                            Snackbar.Add($"{_sportImportTarget?.ToUpper()} import completed successfully!", Severity.Success);
-                            await LoadStatus();
-                        });
+                            await InvokeAsync(async () =>
+                            {
+                                Snackbar.Add($"{_sportImportTarget?.ToUpper()} import completed successfully!", Severity.Success);
+                                await LoadStatus();
+                            });
+                        }
                     }
                 }
-                
-                await InvokeAsync(StateHasChanged);
             }
         }
         catch (Exception ex)
@@ -985,34 +1042,41 @@
         
         try
         {
-            var result = await MLClient.StartCollegeBaseballImportAsync(_baseballDivision, _baseballYear, _baseballSource);
+            using var http = HttpClientFactory.CreateClient("PythonML");
+            http.Timeout = TimeSpan.FromMinutes(10);
             
-            if (result != null && result.Status == "started")
+            // Start polling for status
+            _baseballPollTimer = new System.Threading.Timer(
+                async _ => await PollBaseballStatus(),
+                null,
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromSeconds(2)
+            );
+            
+            var response = await http.PostAsync($"/db/import/college-baseball?division={_baseballDivision}&start_year={_baseballYear}&end_year={_baseballYear}&source={_baseballSource}", null);
+            
+            if (response.IsSuccessStatusCode)
             {
-                // Start polling for status
-                _baseballPollTimer = new System.Threading.Timer(
-                    async _ => await PollBaseballStatus(),
-                    null,
-                    TimeSpan.FromSeconds(1),
-                    TimeSpan.FromSeconds(2)
-                );
-                
-                Snackbar.Add($"College baseball {(_baseballDivision == 0 ? "All Divisions" : $"D{_baseballDivision}")} import started!", Severity.Info);
+                var result = await response.Content.ReadFromJsonAsync<BaseballImportSummary>();
+                _baseballSummary = result;
+                _baseballStatus = new BaseballImportStatus { Status = "completed", Message = "Import complete!" };
+                Snackbar.Add($"College baseball {(_baseballDivision == 0 ? "All Divisions" : $"D{_baseballDivision}")} import complete!", Severity.Success);
             }
             else
             {
-                _baseballStatus = new BaseballImportStatus { Status = "error", Message = "Failed to start import." };
-                _isBaseballImporting = false;
+                var error = await response.Content.ReadAsStringAsync();
+                _baseballStatus = new BaseballImportStatus { Status = "error", Message = error };
             }
         }
         catch (Exception ex)
         {
             _baseballStatus = new BaseballImportStatus { Status = "error", Message = ex.Message };
-            Logger.LogError(ex, "Error starting college baseball import");
-            _isBaseballImporting = false;
+            Logger.LogError(ex, "Error importing college baseball");
         }
         finally
         {
+            _baseballPollTimer?.Dispose();
+            _baseballPollTimer = null;
             StateHasChanged();
         }
     }
@@ -1021,19 +1085,13 @@
     {
         try
         {
-            var status = await MLClient.GetBaseballImportStatusAsync();
+            using var http = HttpClientFactory.CreateClient("PythonML");
+            http.Timeout = TimeSpan.FromSeconds(5);
+            
+            var status = await http.GetFromJsonAsync<BaseballImportStatus>("/db/import/college-baseball/status");
             if (status != null)
             {
                 _baseballStatus = status;
-                
-                if (status.Status == "completed" || status.Status == "error" || status.Status == "failed")
-                {
-                    _baseballPollTimer?.Dispose();
-                    _baseballPollTimer = null;
-                    _isBaseballImporting = false;
-                    await LoadBaseballSummary();
-                }
-                
                 await InvokeAsync(StateHasChanged);
             }
         }
@@ -1053,7 +1111,9 @@
     {
         try
         {
-            _baseballSummary = await MLClient.GetBaseballImportSummaryAsync(_baseballDivision);
+            using var http = HttpClientFactory.CreateClient("PythonML");
+            var summary = await http.GetFromJsonAsync<BaseballImportSummary>($"http://backend:8000/baseball/ncaa/summary?division={_baseballDivision}");
+            _baseballSummary = summary;
         }
         catch
         {
@@ -1061,5 +1121,21 @@
         }
     }
     
+    // Model classes for Baseball
+    private class BaseballImportStatus
+    {
+        public string? Status { get; set; }
+        public string? Message { get; set; }
+        public int Progress { get; set; }
+    }
+    
+    private class BaseballImportSummary
+    {
+        public int Division { get; set; }
+        public int Year { get; set; }
+        public int TotalTeams { get; set; }
+        public int ImportedTeams { get; set; }
+        public string? GeneratedAt { get; set; }
+    }
 }
 
