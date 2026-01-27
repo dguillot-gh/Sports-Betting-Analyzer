@@ -462,7 +462,6 @@ async def run_rda_import(series: str, year_start: int, year_end: int, clear_exis
     finally:
         if conn:
             await conn.close()
-        raise
         
 @router.post("/import/ncaab")
 async def import_ncaab(background_tasks: BackgroundTasks, start_year: int = Query(2018), end_year: int = Query(2025)):
