@@ -12,23 +12,23 @@
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
     <MudStack Spacing="4">
         <!-- Header -->
-        <MudPaper Class="pa-4" Elevation="2">
-            <div class="d-flex align-center justify-space-between flex-wrap" style="gap: 16px;">
-                <div class="d-flex align-center">
-                    <MudIcon Icon="@Icons.Material.Filled.SportsBaseball" Size="Size.Large" Color="Color.Info" Class="mr-3" />
+        <MudPaper Class="pa-4 mb-4" Elevation="1" Style="background: linear-gradient(135deg, #002d72 0%, #ce1141 100%);">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudStack Row="true" AlignItems="AlignItems.Center">
+                    <MudIcon Icon="@Icons.Material.Filled.SportsBaseball" Size="Size.Large" Style="color: white;" Class="mr-3" />
                     <div>
-                        <MudText Typo="Typo.h5">College Baseball Stats</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">NCAA Division I, II, III batting and pitching statistics</MudText>
+                        <MudText Typo="Typo.h5" Style="color: white;">College Baseball Analytics</MudText>
+                        <MudText Typo="Typo.subtitle2" Style="color: rgba(255,255,255,0.8);">NCAA Division I, II, III batting and pitching statistics</MudText>
                     </div>
-                </div>
-                <div class="d-flex" style="gap: 8px;">
-                    <MudChip T="string" Color="Color.Info" Size="Size.Small">D@_selectedDivision</MudChip>
-                    @if (_teams.Any())
-                    {
-                        <MudChip T="string" Color="Color.Success" Size="Size.Small">@_teams.Count Teams</MudChip>
-                    }
-                </div>
-            </div>
+                </MudStack>
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Warning" StartIcon="@Icons.Material.Filled.PersonSearch"
+                               Href="/college-baseball-player-profiles">
+                        Player Profiles
+                    </MudButton>
+                    <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled">D@_selectedDivision</MudChip>
+                </MudStack>
+            </MudStack>
         </MudPaper>
         
         <!-- Team Selection -->
@@ -136,8 +136,11 @@
                             <RowTemplate>
                                 <MudTd DataLabel="Player">
                                     <div class="d-flex align-center">
-                                        <MudAvatar Color="Color.Info" Size="Size.Small" Class="mr-2">@context.Name.Substring(0, 1)</MudAvatar>
-                                        <MudText Typo="Typo.body2">@context.Name</MudText>
+                                        <MudAvatar Color="Color.Primary" Size="Size.Small" Class="mr-2">@(string.IsNullOrEmpty(context.Name) ? "?" : context.Name[0].ToString())</MudAvatar>
+                                        <MudLink Href="@($"/college-baseball-player-profiles?player={Uri.EscapeDataString(context.Name)}")" 
+                                                 Underline="Underline.Hover" Color="Color.Primary">
+                                            @context.Name
+                                        </MudLink>
                                     </div>
                                 </MudTd>
                                 <MudTd DataLabel="Pos">@context.Position</MudTd>
@@ -190,8 +193,11 @@
                             <RowTemplate>
                                 <MudTd DataLabel="Player">
                                     <div class="d-flex align-center">
-                                        <MudAvatar Color="Color.Warning" Size="Size.Small" Class="mr-2">@context.Name.Substring(0, 1)</MudAvatar>
-                                        <MudText Typo="Typo.body2">@context.Name</MudText>
+                                        <MudAvatar Color="Color.Secondary" Size="Size.Small" Class="mr-2">@(string.IsNullOrEmpty(context.Name) ? "?" : context.Name[0].ToString())</MudAvatar>
+                                        <MudLink Href="@($"/college-baseball-player-profiles?player={Uri.EscapeDataString(context.Name)}")" 
+                                                 Underline="Underline.Hover" Color="Color.Secondary">
+                                            @context.Name
+                                        </MudLink>
                                     </div>
                                 </MudTd>
                                 <MudTd DataLabel="W">@context.W</MudTd>

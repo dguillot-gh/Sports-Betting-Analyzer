@@ -556,17 +556,18 @@ async def run_ncaab_import(start_year: int, end_year: int):
 @router.post("/import/college-baseball")
 async def import_college_baseball(
     background_tasks: BackgroundTasks, 
-    start_year: int = Query(2022), 
+    start_year: int = Query(2025), 
     end_year: int = Query(2025),
-    division: int = Query(1),
+    division: int = Query(0, description="NCAA Division (1, 2, or 3). Use 0 for ALL/Bulk."),
     source: str = Query("auto") # auto, python, r, both
 ):
     """Start College Baseball data import in the background."""
+    div_label = f"D{division}" if division > 0 else "ALL Divisions"
     import_status["baseball"] = {
         "status": "running",
         "started_at": datetime.now().isoformat(),
         "completed_at": None,
-        "progress": [f"Import started for D{division} {start_year}-{end_year}"],
+        "progress": [f"Import started for {div_label} {start_year}-{end_year}"],
         "result": None,
         "error": None
     }
@@ -575,7 +576,7 @@ async def import_college_baseball(
     
     return {
         "status": "started",
-        "message": f"College Baseball import started for D{division} {start_year}-{end_year} ({source})",
+        "message": f"College Baseball import started for {div_label} {start_year}-{end_year} ({source})",
         "years": f"{start_year}-{end_year}",
         "division": division
     }
@@ -613,13 +614,13 @@ async def run_college_baseball_import_task(start_year: int, end_year: int, divis
         for year in range(start_year, end_year + 1):
             import_status["baseball"]["progress"].append(f"Importing {year}...")
             
-            # Call the unified importer
+            # Call the unified importer (supports division=0)
             result = await run_college_baseball_import(division=division, year=year, source=source)
             
             if result.get("success"):
-                rows = result.get("rows", 0)
+                rows = result.get("total_teams", 0)
                 total_rows += rows
-                import_status["baseball"]["progress"].append(f"✅ {year}: Imported {rows} teams")
+                import_status["baseball"]["progress"].append(f"✅ {year}: Imported {rows} teams from divisions {result.get('divisions')}")
             else:
                 err = result.get("message", "Unknown error")
                 import_status["baseball"]["progress"].append(f"⚠️ {year}: {err}")
@@ -1990,7 +1991,7 @@ async def get_sport_profiles(
 
 
 @router.get("/profiles/{sport}/{name}")
-async def get_player_profile(sport: str, name: str):
+async def get_player_profile(sport: str, name: str, season: Optional[int] = Query(None)):
     """Get detailed player profile with stats.
     
     Uses 3-tier lookup:
@@ -2001,49 +2002,6 @@ async def get_player_profile(sport: str, name: str):
     if sport not in ["nfl", "nba", "nascar", "college_baseball"]:
         raise HTTPException(status_code=400, detail=f"Invalid sport: {sport}")
     
-    # Special handling for College Baseball (File-based)
-    if sport == "college_baseball":
-        try:
-            from scripts.college_baseball_importer import get_team_stats
-            
-            # Simple sanitization to match importer if name is raw
-            safe_id = "".join([c if c.isalnum() else "_" for c in name]).strip("_")
-            
-            # Try player first, then team
-            stats = get_team_stats(safe_id, entity_type="player")
-            if not stats: 
-                stats = get_team_stats(safe_id, entity_type="team")
-            if not stats:
-                 # Try raw name
-                stats = get_team_stats(name, entity_type="player") or get_team_stats(name, entity_type="team")
-                
-            if not stats:
-                return {"error": "Entity not found", "not_found": True}
-                
-            # Format for Profile.razor
-            season = str(stats.get("season", "2024"))
-            entity_type = stats.get("type", "team")
-            
-            return {
-                "id": safe_id,
-                "name": stats.get("player_name") or stats.get("team_name") or name,
-                "type": entity_type,
-                "series": str(stats.get("team_name", f"D{stats.get('division', 1)}")),
-                "metadata": {
-                    "league": stats.get("league"),
-                    "division": stats.get("division"),
-                    "position": stats.get("position"),
-                    "team": stats.get("team")
-                },
-                "stats": {
-                    season: stats # Put all flat stats here
-                },
-                "recent_games": []
-            }
-        except Exception as e:
-            logger.error(f"Error fetching baseball profile: {e}")
-            return {"error": str(e)}
-
     conn = await get_db_connection()
     try:
         sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
@@ -2071,59 +2029,31 @@ async def get_player_profile(sport: str, name: str):
         
         # Tier 3: Fallback to results metadata if no entity found
         if not entity:
-            # Search results table for player_name in metadata
             result_row = await conn.fetchrow(
-                """SELECT metadata
+                """SELECT metadata, season
                    FROM results
                    WHERE sport_id = $1 
-                     AND (metadata->>'player_name' ILIKE $2 OR metadata->>'player_name' ILIKE $3)
+                     AND (metadata->>'player_name' ILIKE $2 OR metadata->>'player_name' ILIKE $3 OR metadata->>'driver' ILIKE $2)
                    ORDER BY season DESC
                    LIMIT 1""",
                 sport_id, name, f"%{name}%"
             )
             
             if result_row and result_row["metadata"]:
-                # Construct synthetic entity from results metadata
                 meta = json.loads(result_row["metadata"]) if isinstance(result_row["metadata"], str) else result_row["metadata"]
-                player_name = meta.get("player_name", name)
-                
-                # Get all results for this player to build stats
-                all_results = await conn.fetch(
-                    """SELECT season, metadata
-                       FROM results
-                       WHERE sport_id = $1 AND metadata->>'player_name' = $2
-                       ORDER BY season DESC
-                       LIMIT 50""",
-                    sport_id, player_name
-                )
-                
-                # Build stats from results
-                stats = {}
-                recent_games = []
-                for row in all_results:
-                    row_meta = json.loads(row["metadata"]) if isinstance(row["metadata"], str) else row["metadata"]
-                    season = row["season"]
-                    if season not in stats:
-                        stats[season] = {}
-                    # Merge stats from this result
-                    for k, v in row_meta.items():
-                        if k not in ["player_id", "player_name", "position", "team"]:
-                            stats[season][k] = v
-                    
-                    if len(recent_games) < 10:
-                        recent_games.append({"season": season, **row_meta})
-                
+                # Construct synthetic entity
                 return {
-                    "id": 0,  # Synthetic entity
-                    "name": player_name,
-                    "type": "player",
-                    "series": sport,
-                    "metadata": {
-                        "position": meta.get("position"),
-                        "team": meta.get("team"),
+                    "entity": {
+                        "id": 0,
+                        "name": meta.get("player_name") or meta.get("driver") or name,
+                        "type": "player",
+                        "series": meta.get("team_name") or meta.get("team") or "",
+                        "metadata": meta
                     },
-                    "stats": stats,
-                    "recent_games": recent_games
+                    "sport": sport,
+                    "available_seasons": [result_row["season"]],
+                    "stats": {},
+                    "recent_results": []
                 }
             
             # No data found anywhere - return empty profile instead of crashing
@@ -2138,29 +2068,43 @@ async def get_player_profile(sport: str, name: str):
                 "not_found": True
             }
         
-        # Entity found - get stats from stats table first
-        stats_rows = await conn.fetch(
-            """SELECT season, stat_type, stats
-               FROM stats
-               WHERE entity_id = $1
-               ORDER BY season DESC""",
-            entity["id"]
-        )
+        # Entity found - get stats
+        entity_id = entity["id"]
+        entity_meta = json.loads(entity["metadata"]) if isinstance(entity["metadata"], str) else (entity["metadata"] or {})
         
-        # Format stats by season
-        stats = {}
+        query = "SELECT season, stat_type, stats FROM stats WHERE entity_id = $1"
+        params = [entity_id]
+        if season:
+            query += " AND season = $2"
+            params.append(season)
+        query += " ORDER BY season DESC"
+        
+        stats_rows = await conn.fetch(query, *params)
+        
+        stats_dict = {}
+        available_seasons = set()
         for row in stats_rows:
-            season = row["season"]
-            if season not in stats:
-                stats[season] = {}
-            stats[season].update(json.loads(row["stats"]) if row["stats"] else {})
-        
-        # Get entity's gsis_id from metadata for cross-referencing results
-        entity_meta = json.loads(entity["metadata"]) if entity["metadata"] else {}
+            curr_season = row["season"]
+            available_seasons.add(curr_season)
+            s_str = str(curr_season)
+            if s_str not in stats_dict:
+                stats_dict[s_str] = {}
+            
+            val = row["stats"]
+            if isinstance(val, str):
+                try: val = json.loads(val)
+                except: pass
+            
+            if isinstance(val, dict):
+                stats_dict[s_str].update(val)
+            else:
+                stats_dict[s_str][row["stat_type"]] = val
+
+        # Get Recent Results
         gsis_id = entity_meta.get("gsis_id")
+        p_id = entity_meta.get("player_id")
         
-        # Get recent games (from results) - search by entity name AND gsis_id
-        recent_games = await conn.fetch(
+        recent_games_rows = await conn.fetch(
             """SELECT season, metadata
                FROM results
                WHERE sport_id = $1 
@@ -2169,38 +2113,44 @@ async def get_player_profile(sport: str, name: str):
                      OR metadata->>'player_display_name' ILIKE $2
                      OR metadata->>'player_id' = $3
                      OR metadata->>'gsis_id' = $3
+                     OR metadata->>'driver' ILIKE $2
                  )
                ORDER BY season DESC, (metadata->>'week')::int DESC NULLS LAST
                LIMIT 10""",
-            sport_id, f"%{entity['name']}%", gsis_id or ""
+            sport_id, f"%{entity['name']}%", str(gsis_id or p_id or "")
         )
         
-        # If stats table is empty, build stats from results metadata (NFL stores stats in results)
-        if not stats and recent_games:
-            for row in recent_games:
-                row_meta = json.loads(row["metadata"]) if isinstance(row["metadata"], str) else (row["metadata"] or {})
-                season = row["season"]
-                if season not in stats:
-                    stats[season] = {}
-                # Merge relevant stats (exclude identifier fields)
-                for k, v in row_meta.items():
-                    if k not in ["player_id", "player_name", "player_display_name", "gsis_id"]:
-                        stats[season][k] = v
-        
+        recent_results = []
+        for row in recent_games_rows:
+            res_meta = json.loads(row["metadata"]) if isinstance(row["metadata"], str) else (row["metadata"] or {})
+            recent_results.append({
+                "season": row["season"],
+                **res_meta
+            })
+            available_seasons.add(row["season"])
+
+        # Fallback: Populate stats from results if stats table is empty
+        if not stats_dict and recent_results:
+            for res in recent_results:
+                s_str = str(res["season"])
+                if s_str not in stats_dict:
+                    stats_dict[s_str] = {}
+                for k, v in res.items():
+                    if k not in ["player_id", "player_name", "player_display_name", "gsis_id", "season"]:
+                        stats_dict[s_str][k] = v
+
         return {
-            "id": entity["id"],
-            "name": entity["name"],
-            "type": entity["type"],
-            "series": entity["series"],
-            "metadata": entity_meta,
-            "stats": stats,
-            "recent_games": [
-                {
-                    "season": row["season"],
-                    **(json.loads(row["metadata"]) if row["metadata"] else {})
-                }
-                for row in recent_games
-            ]
+            "entity": {
+                "id": entity["id"],
+                "name": entity["name"],
+                "type": entity["type"],
+                "series": entity["series"],
+                "metadata": entity_meta
+            },
+            "sport": sport,
+            "available_seasons": sorted(list(available_seasons), reverse=True),
+            "stats": stats_dict,
+            "recent_results": recent_results
         }
     finally:
         await conn.close()

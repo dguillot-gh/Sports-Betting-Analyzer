@@ -1,0 +1,286 @@
+@page "/college-baseball-player-profiles"
+@rendermode InteractiveServer
+@using MudBlazor
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>College Baseball Player Profiles</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">
+        <MudIcon Icon="@Icons.Material.Filled.SportsBaseball" Class="mr-2" />
+        College Baseball Player Profiles
+    </MudText>
+
+    <MudGrid>
+        <!-- Search & Selection -->
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" Class="mb-3">Find Player</MudText>
+                
+                <MudAutocomplete T="string" Label="Search Player"
+                                 Value="_selectedPlayer"
+                                 ValueChanged="OnPlayerSelected"
+                                 SearchFunc="SearchPlayers"
+                                 MaxItems="100"
+                                 MaxHeight="400"
+                                 AdornmentIcon="@Icons.Material.Filled.Search"
+                                 Variant="Variant.Outlined"
+                                 Dense="true"
+                                 DebounceInterval="300"
+                                 Placeholder="Type player name..." />
+                
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-3" FullWidth="true"
+                           OnClick="LoadProfile" Disabled="@(string.IsNullOrEmpty(_selectedPlayer) || _isLoading)">
+                    @if (_isLoading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Load Profile
+                </MudButton>
+            </MudPaper>
+            
+            <MudAlert Severity="Severity.Info" Class="mt-2">
+                Search for NCAA Baseball players across D1, D2, and D3 to view their career stats.
+            </MudAlert>
+        </MudItem>
+
+        <!-- Profile Display -->
+        <MudItem xs="12" md="8">
+            @if (_profile != null)
+            {
+                <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+                    <!-- Overview Tab -->
+                    <MudTabPanel Text="Overview" Icon="@Icons.Material.Filled.Person">
+                        <MudPaper Class="pa-4 mb-4" Elevation="1" Style="background: linear-gradient(135deg, #002d72 0%, #ce1141 100%);">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
+                                <MudAvatar Size="Size.Large" Color="Color.Warning">
+                                    @(string.IsNullOrEmpty(_profile.Entity.Name) ? "?" : _profile.Entity.Name[0].ToString())
+                                </MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.h5" Style="color: white;">@_profile.Entity.Name</MudText>
+                                    <MudText Typo="Typo.subtitle1" Style="color: rgba(255,255,255,0.8);">
+                                        @(_profile.Entity.Metadata?.GetValueOrDefault("position")?.ToString() ?? "NCAA Baseball") • 
+                                        @(_profile.Entity.Metadata?.GetValueOrDefault("team")?.ToString() ?? _profile.Entity.Series ?? "")
+                                    </MudText>
+                                </div>
+                                <MudSpacer />
+                                <MudChip T="string" Color="Color.Warning" Size="Size.Small">NCAA</MudChip>
+                            </MudStack>
+                        </MudPaper>
+
+                        <!-- Stats by Season -->
+                        @if (_profile.Stats != null && _profile.Stats.Any())
+                        {
+                            <MudText Typo="Typo.h6" Class="mb-2">Season Statistics</MudText>
+                            @foreach (var seasonStats in _profile.Stats.OrderByDescending(s => s.Key))
+                            {
+                                <MudPaper Class="pa-4 mb-4" Elevation="1">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+                                        <MudText Typo="Typo.h6" Color="Color.Primary">@seasonStats.Key Season</MudText>
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">
+                                            @(_profile.Entity.Metadata?.GetValueOrDefault("team") ?? _profile.Entity.Series)
+                                        </MudChip>
+                                    </MudStack>
+                                    
+                                    <MudGrid>
+                                        @foreach (var stat in seasonStats.Value.Where(s => ShouldShowStat(s.Key)).OrderByDescending(s => IsPriorityStat(s.Key)).Take(16))
+                                        {
+                                            <MudItem xs="6" sm="4" md="3">
+                                                <MudPaper Class="pa-2 text-center" Elevation="0" Style="background: var(--mud-palette-background-grey);">
+                                                    <MudText Typo="Typo.h6" Color="Color.Secondary">@stat.Value</MudText>
+                                                    <MudText Typo="Typo.caption">@FormatStatName(stat.Key)</MudText>
+                                                </MudPaper>
+                                            </MudItem>
+                                        }
+                                    </MudGrid>
+                                </MudPaper>
+                            }
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Info">No stats available for this player.</MudAlert>
+                        }
+                    </MudTabPanel>
+                </MudTabs>
+            }
+            else if (_isLoading)
+            {
+                <MudPaper Class="pa-8 d-flex flex-column align-center justify-center">
+                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+                    <MudText Class="mt-4">Loading profile...</MudText>
+                </MudPaper>
+            }
+            else if (_notFound)
+            {
+                <MudAlert Severity="Severity.Warning">
+                    Player "@_selectedPlayer" not found. Try searching for a different name.
+                </MudAlert>
+            }
+            else
+            {
+                <MudPaper Class="pa-8 d-flex flex-column align-center justify-center" Elevation="1">
+                    <MudIcon Icon="@Icons.Material.Filled.PersonSearch" Size="Size.Large" Color="Color.Secondary" />
+                    <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mt-2">Search for a player</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Type a player name to view their profile</MudText>
+                </MudPaper>
+            }
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    private string _selectedPlayer = "";
+    private bool _isLoading = false;
+    private bool _notFound = false;
+    
+    private List<string> _playerList = new();
+    private PlayerProfile? _profile;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var uri = new Uri(Navigation.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        
+        var playerParam = query["player"];
+        
+        await LoadPlayerList();
+        
+        if (!string.IsNullOrEmpty(playerParam))
+        {
+            _selectedPlayer = playerParam;
+            await LoadProfile();
+        }
+    }
+
+    private async Task LoadPlayerList()
+    {
+        try
+        {
+            var url = $"http://backend:8000/db/profiles/college_baseball/list?entity_type=player&limit=5000";
+            var response = await Http.GetFromJsonAsync<ProfileListResponse>(url);
+            if (response?.Entities != null)
+            {
+                _playerList = response.Entities.Select(e => e.Name).Distinct().OrderBy(n => n).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading players: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    private Task<IEnumerable<string>> SearchPlayers(string value, CancellationToken token)
+    {
+        if (string.IsNullOrEmpty(value))
+            return Task.FromResult(_playerList.Take(100).AsEnumerable());
+        
+        return Task.FromResult(_playerList
+            .Where(d => d.Contains(value, StringComparison.OrdinalIgnoreCase))
+            .Take(100)
+            .AsEnumerable());
+    }
+
+    private async Task OnPlayerSelected(string player)
+    {
+        _selectedPlayer = player;
+        if (!string.IsNullOrEmpty(player))
+        {
+            await LoadProfile();
+        }
+    }
+
+    private async Task LoadProfile()
+    {
+        if (string.IsNullOrEmpty(_selectedPlayer)) return;
+        
+        _isLoading = true;
+        _notFound = false;
+        _profile = null;
+        StateHasChanged();
+        
+        try
+        {
+            var url = $"http://backend:8000/db/profiles/college_baseball/{Uri.EscapeDataString(_selectedPlayer)}";
+            _profile = await Http.GetFromJsonAsync<PlayerProfile>(url);
+            
+            if (_profile?.NotFound == true)
+            {
+                _notFound = true;
+                _profile = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading profile: {ex.Message}", Severity.Error);
+            _notFound = true;
+            _profile = null;
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private bool ShouldShowStat(string key)
+    {
+        var skipKeys = new[] { "player_id", "player_name", "position", "team", "season", "slug", "source", "type", "team_name" };
+        return !skipKeys.Contains(key.ToLower());
+    }
+
+    private bool IsPriorityStat(string key) => key.ToLower() switch
+    {
+        "avg" or "ba" or "era" or "w" or "l" or "hr" or "rbi" or "k" or "so" => true,
+        _ => false
+    };
+
+    private string FormatStatName(string key) => key.ToLower() switch
+    {
+        "avg" or "ba" => "AVG",
+        "obp" => "OBP",
+        "slg" => "SLG",
+        "ops" => "OPS",
+        "hr" => "HR",
+        "rbi" => "RBI",
+        "r" => "Runs",
+        "h" => "Hits",
+        "era" => "ERA",
+        "w" => "Win",
+        "l" => "Loss",
+        "sv" => "Save",
+        "ip" => "IP",
+        "k" or "so" => "SO",
+        "bb" => "BB",
+        "whip" => "WHIP",
+        "games" or "gp" or "g" => "GP",
+        "ab" => "AB",
+        "sb" => "SB",
+        _ => key.Replace("_", " ").ToUpperInvariant()
+    };
+
+    private class ProfileListResponse
+    {
+        public List<EntityInfo> Entities { get; set; } = new();
+    }
+
+    private class EntityInfo
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string? Series { get; set; }
+        public Dictionary<string, object>? Metadata { get; set; }
+    }
+
+    private class PlayerProfile
+    {
+        public EntityInfo Entity { get; set; } = new();
+        public string Sport { get; set; } = "";
+        public List<int> AvailableSeasons { get; set; } = new();
+        public Dictionary<string, Dictionary<string, object>>? Stats { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("not_found")]
+        public bool? NotFound { get; set; }
+    }
+}

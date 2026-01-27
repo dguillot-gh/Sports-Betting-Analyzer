@@ -408,71 +408,79 @@ async def run_college_baseball_import(
     Run college baseball import using specified data source.
     
     Args:
-        division: NCAA division (1, 2, or 3)
+        division: NCAA division (1, 2, or 3). Use 0 for ALL divisions.
         year: Season year (defaults to current year)
         team_id: Optional specific team to import
         source: Data source preference
-            - 'auto': Try Python first, fallback to R
-            - 'python': Use collegebaseball package only
-            - 'r': Use baseballr R script only
-            - 'both': Run both sources and merge results
-    
-    Returns:
-        dict with import results
     """
     if year is None:
         year = datetime.now().year
     
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     
-    logger.info(f"Starting college baseball import: D{division}, {year}, source={source}")
+    # Handle Bulk Division (All)
+    divisions_to_import = [1, 2, 3] if division == 0 else [division]
     
-    results = {"division": division, "year": year, "sources_tried": []}
+    logger.info(f"Starting college baseball import: Divisions {divisions_to_import}, Year {year}, Source {source}")
     
-    if source in ("auto", "python", "both"):
-        # Try Python first
-        logger.info("Attempting Python import via collegebaseball...")
-        python_result = await asyncio.to_thread(_import_via_python, division, year)
-        results["sources_tried"].append("python")
+    overall_results = {
+        "success": False,
+        "divisions": divisions_to_import,
+        "year": year,
+        "total_teams": 0,
+        "results_per_division": {},
+        "synced_to_db": False
+    }
+
+    for div in divisions_to_import:
+        _update_status(f"Importing D{div}...", 0, division=div, source=source)
         
-        if python_result.get("success"):
-            results["python"] = python_result
-            if source == "python":
-                return {**results, "success": True, "primary_source": "python"}
-        else:
-            results["python_error"] = python_result.get("message")
-            logger.warning(f"Python import failed: {python_result.get('message')}")
-    
-    if source in ("auto", "r", "both"):
-        # Try R (or use as fallback)
-        if source == "auto" and results.get("python", {}).get("success"):
-            logger.info("Python succeeded, skipping R fallback")
-        else:
-            logger.info("Attempting R import via baseballr...")
-            r_result = await asyncio.to_thread(_import_via_r, division, year, team_id)
-            results["sources_tried"].append("r")
+        div_results = {"division": div, "year": year, "sources_tried": []}
+        
+        if source in ("auto", "python", "both"):
+            logger.info(f"Attempting Python import via ncaa-bbStats for D{div}...")
+            python_result = await asyncio.to_thread(_import_via_python, div, year)
+            div_results["sources_tried"].append("python")
+            
+            if python_result.get("success"):
+                div_results["python"] = python_result
+                div_results["success"] = True
+            else:
+                div_results["python_error"] = python_result.get("message")
+        
+        if source in ("r", "both") or (source == "auto" and not div_results.get("success")):
+            logger.info(f"Attempting R import via baseballr for D{div}...")
+            r_result = await asyncio.to_thread(_import_via_r, div, year, team_id)
+            div_results["sources_tried"].append("r")
             
             if r_result.get("success"):
-                results["r"] = r_result
+                div_results["r"] = r_result
+                div_results["success"] = True
             else:
-                results["r_error"] = r_result.get("message")
-                logger.warning(f"R import failed: {r_result.get('message')}")
-    
-    # Determine success
-    if results.get("python", {}).get("success") or results.get("r", {}).get("success"):
-        results["success"] = True
-    # 3. Sync to Database (Optional Parity)
-    if results.get("success"):
+                div_results["r_error"] = r_result.get("message")
+
+        overall_results["results_per_division"][div] = div_results
+        if div_results.get("success"):
+            overall_results["success"] = True
+            overall_results["total_teams"] += div_results.get("python", {}).get("total_teams", 0) or div_results.get("r", {}).get("total_teams", 0)
+
+    # 3. Sync to Database (Standard Parity)
+    if overall_results.get("success"):
         try:
             logger.info("Syncing imported data to PostgreSQL...")
-            await sync_to_postgresql(results)
-            results["synced_to_db"] = True
+            # We sync one by one or bulk? sync_to_postgresql currently reads from files.
+            # It takes import_results as dict, mostly for division info.
+            # We'll call it for each division that succeeded.
+            for div, res in overall_results["results_per_division"].items():
+                if res.get("success"):
+                    await sync_to_postgresql(res)
+            overall_results["synced_to_db"] = True
         except Exception as se:
             logger.error(f"Database sync failed: {se}")
-            results["synced_to_db"] = False
-            results["db_error"] = str(se)
+            overall_results["synced_to_db"] = False
+            overall_results["db_error"] = str(se)
 
-    return results
+    return overall_results
 
 
 def compute_hash(data: Dict) -> str:
@@ -542,11 +550,11 @@ async def sync_to_postgresql(import_results: Dict):
                         
                         p_entity_id = await conn.fetchval(
                             """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
-                               VALUES ($1, $2, 'player', 'college_baseball', $3, $4)
+                               VALUES ($1, $2, 'player', $3, $4, $5)
                                ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                               DO UPDATE SET metadata = EXCLUDED.metadata
+                               DO UPDATE SET metadata = EXCLUDED.metadata, series = EXCLUDED.series
                                RETURNING id""",
-                            sport_id, p_name, json.dumps(p_meta), p_hash
+                            sport_id, p_name, s.get("team"), json.dumps(p_meta), p_hash
                         )
                         
                         season = s.get("season", 2024)
