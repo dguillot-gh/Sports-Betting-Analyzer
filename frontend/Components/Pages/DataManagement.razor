@@ -1075,8 +1075,6 @@
         }
         finally
         {
-            _baseballPollTimer?.Dispose();
-            _baseballPollTimer = null;
             StateHasChanged();
         }
     }
@@ -1093,6 +1091,21 @@
             {
                 _baseballStatus = status;
                 await InvokeAsync(StateHasChanged);
+                
+                // Stop polling when complete or error
+                if (status.Status == "completed" || status.Status == "error")
+                {
+                    _baseballPollTimer?.Dispose();
+                    _baseballPollTimer = null;
+                    
+                    if (status.Status == "completed")
+                    {
+                        await InvokeAsync(async () => {
+                            await LoadStatus();
+                            await LoadBaseballSummary();
+                        });
+                    }
+                }
             }
         }
         catch (Exception ex)
@@ -1112,7 +1125,7 @@
         try
         {
             using var http = HttpClientFactory.CreateClient("PythonML");
-            var summary = await http.GetFromJsonAsync<BaseballImportSummary>($"http://backend:8000/baseball/ncaa/summary?division={_baseballDivision}");
+            var summary = await http.GetFromJsonAsync<BaseballImportSummary>($"/baseball/ncaa/summary?division={_baseballDivision}");
             _baseballSummary = summary;
         }
         catch
