@@ -229,27 +229,10 @@
                             </MudAlert>
                         }
                         
-                        <MudSelect T="int" Label="Division" @bind-Value="_baseballDivision" Variant="Variant.Outlined" Dense="true">
-                            <MudSelectItem Value="0">All Divisions</MudSelectItem>
-                            <MudSelectItem Value="1">Division I</MudSelectItem>
-                            <MudSelectItem Value="2">Division II</MudSelectItem>
-                            <MudSelectItem Value="3">Division III</MudSelectItem>
-                        </MudSelect>
-                        
-                        <MudNumericField T="int" Label="Year" @bind-Value="_baseballYear" 
-                                         Variant="Variant.Outlined" Dense="true" Min="2015" Max="2030" />
-                        
-                        <MudSelect T="string" Label="Data Source" @bind-Value="_baseballSource" Variant="Variant.Outlined" Dense="true">
-                            <MudSelectItem Value="@("auto")">Auto (Python first, R fallback)</MudSelectItem>
-                            <MudSelectItem Value="@("both")">Both Sources</MudSelectItem>
-                            <MudSelectItem Value="@("python")">Python Only (collegebaseball)</MudSelectItem>
-                            <MudSelectItem Value="@("r")">R Only (baseballr)</MudSelectItem>
-                        </MudSelect>
-                        
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        <MudAlert Severity="Severity.Info" Dense="true">
                             <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="mr-1" />
-                            Uses collegebaseball (Python) + baseballr (R) for team rosters, batting, pitching stats
-                        </MudText>
+                            Fetches all divisions (D1, D2, D3) and current season rosters/stats.
+                        </MudAlert>
                     </MudStack>
                 </MudCardContent>
                 <MudCardActions>
@@ -257,7 +240,7 @@
                                StartIcon="@Icons.Material.Filled.CloudDownload"
                                OnClick="@OpenBaseballImportDialog"
                                Disabled="@(_isUpdating || _isBaseballImporting)">
-                        Import @(_baseballDivision == 0 ? "All Divisions" : $"D{_baseballDivision}")
+                        Full Import (All Divisions)
                     </MudButton>
                     <MudButton Variant="Variant.Outlined" Color="Color.Default"
                                StartIcon="@Icons.Material.Filled.List"
@@ -620,8 +603,8 @@
     // College Baseball Import
     private bool _showBaseballImportDialog = false;
     private bool _isBaseballImporting = false;
-    private int _baseballDivision = 1;
-    private int _baseballYear = DateTime.Now.Year;
+    private int _baseballDivision = 0;
+    private int _baseballYear = 0;
     private string _baseballSource = "auto";
     private BaseballImportStatus? _baseballStatus;
     private BaseballImportSummary? _baseballSummary;

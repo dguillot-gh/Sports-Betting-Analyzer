@@ -555,8 +555,8 @@ async def run_ncaab_import(start_year: int, end_year: int):
 @router.post("/import/college-baseball")
 async def import_college_baseball(
     background_tasks: BackgroundTasks, 
-    start_year: int = Query(2025), 
-    end_year: int = Query(2025),
+    start_year: int = Query(0), 
+    end_year: int = Query(0),
     division: int = Query(0, description="NCAA Division (1, 2, or 3). Use 0 for ALL/Bulk."),
     source: str = Query("auto") # auto, python, r, both
 ):
@@ -610,7 +610,15 @@ async def run_college_baseball_import_task(start_year: int, end_year: int, divis
         total_rows = 0
         final_result = {}
         
-        for year in range(start_year, end_year + 1):
+        # Smart Year Range: If 0, import current year and previous year
+        if start_year == 0 or end_year == 0:
+            current_year = datetime.now().year
+            years_to_import = [current_year - 1, current_year]
+            import_status["baseball"]["progress"].append(f"Auto-detected relevant years: {years_to_import}")
+        else:
+            years_to_import = range(start_year, end_year + 1)
+            
+        for year in years_to_import:
             import_status["baseball"]["progress"].append(f"Importing {year}...")
             
             # Call the unified importer (supports division=0)
