@@ -12,7 +12,6 @@ pyreadr
 httpx
 aiohttp
 python-multipart
-tensorflow==2.14.0
 tf2onnx
 
 asyncpg>=0.29.0
