@@ -600,9 +600,14 @@
     // Models
     private class TeamsResponse
     {
-        public int Division { get; set; }
-        public int Count { get; set; }
-        public List<TeamInfo> Teams { get; set; } = new();
+        public int division { get; set; }
+        public int count { get; set; }
+        public List<TeamInfo> teams { get; set; } = new();
+        public string? last_import { get; set; }
+        
+        // PascalCase convenience getters
+        public int Count => count;
+        public List<TeamInfo> Teams => teams;
     }
     
     private class TeamInfo
@@ -610,6 +615,7 @@
         public string TeamId { get; set; } = "";
         public string TeamName { get; set; } = "";
         public string Conference { get; set; } = "";
+        public int Division { get; set; }
     }
     
     private class StatsResponse

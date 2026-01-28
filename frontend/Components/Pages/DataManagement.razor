@@ -537,8 +537,18 @@
                 <MudProgressLinear Color="@(_baseballStatus?.Status == "completed" ? Color.Success : Color.Info)" 
                                     Indeterminate="@(_baseballStatus?.Status == "running")" />
                 <MudText Typo="Typo.body2">
-                    Status: @(_baseballStatus?.Message ?? "starting...")
+                    Status: @(_baseballStatus?.Status ?? "starting...")
                 </MudText>
+                
+                @if (_baseballStatus?.Progress?.Any() == true)
+                {
+                    <MudPaper Class="pa-2" Style="max-height: 200px; overflow-y: auto; background: var(--mud-palette-background-grey);">
+                        @foreach (var msg in _baseballStatus.Progress.TakeLast(10))
+                        {
+                            <MudText Typo="Typo.caption" Style="font-family: monospace;">@msg</MudText>
+                        }
+                    </MudPaper>
+                }
                 
                 @if (_baseballStatus?.Status == "completed")
                 {
@@ -546,10 +556,10 @@
                         Import completed successfully!
                     </MudAlert>
                 }
-                @if (_baseballStatus?.Status == "error")
+                @if (_baseballStatus?.Status == "error" || _baseballStatus?.Status == "failed")
                 {
                     <MudAlert Severity="Severity.Error" Dense="true">
-                        @_baseballStatus?.Message
+                        @(_baseballStatus?.Error ?? _baseballStatus?.Message ?? "Import failed")
                     </MudAlert>
                 }
             </MudStack>
@@ -563,7 +573,7 @@
                 Start Import
             </MudButton>
         }
-        else if (_baseballStatus?.Status == "completed" || _baseballStatus?.Status == "error")
+        else if (_baseballStatus?.Status == "completed" || _baseballStatus?.Status == "error" || _baseballStatus?.Status == "failed")
         {
             <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@CloseBaseballImportDialog">
                 Close
@@ -1075,8 +1085,8 @@
                 _baseballStatus = status;
                 await InvokeAsync(StateHasChanged);
                 
-                // Stop polling when complete or error
-                if (status.Status == "completed" || status.Status == "error")
+                // Stop polling when complete or error/failed
+                if (status.Status == "completed" || status.Status == "error" || status.Status == "failed")
                 {
                     _baseballPollTimer?.Dispose();
                     _baseballPollTimer = null;
@@ -1122,7 +1132,9 @@
     {
         public string? Status { get; set; }
         public string? Message { get; set; }
-        public int Progress { get; set; }
+        public List<string>? Progress { get; set; }
+        public string? Error { get; set; }
+        public string? CompletedAt { get; set; }
     }
     
     private class BaseballImportSummary
