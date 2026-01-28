@@ -96,7 +96,8 @@
                                Variant="Variant.Outlined" Dense="true" Style="width: 120px;">
                         @for (int y = DateTime.Now.Year; y >= 2015; y--)
                         {
-                            <MudSelectItem Value="@y">@y</MudSelectItem>
+                            var year = y;  @* Local copy to avoid closure capture bug *@
+                            <MudSelectItem Value="@year">@year</MudSelectItem>
                         }
                     </MudSelect>
                     <MudButton Variant="Variant.Filled" Color="Color.Info" OnClick="LoadTeamStats"

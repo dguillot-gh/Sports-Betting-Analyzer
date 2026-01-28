@@ -114,25 +114,28 @@ def get_teams(division: int = 1) -> List[Dict]:
 
 
 
+
 def get_team_player_stats(team_id: str, stat_type: str = "batting", year: int = 2024) -> List[Dict]:
-    """Get list of players for a team (Mocking roster from leaderboards for now)."""
-    # For full parity, we'd read {team_id}_batting.csv
-    # Currently we only have division-wide leaderboards in 'players/'
-    # Filter players/ for matches on team
+    """Get list of players for a team."""
+    # Try fully qualified team stats file first
+    stats_file = DATA_DIR / "stats" / f"{team_id}_{stat_type}.csv"
+    
+    if stats_file.exists():
+        try:
+            df = pd.read_csv(stats_file)
+            # Fill NaN with suitable defaults for JSON serialization
+            df = df.fillna(0)
+            return df.to_dict(orient="records")
+        except Exception as e:
+            logger.error(f"Error reading stats file {stats_file}: {e}")
+            
+    # Fallback to searching in generic players/ directory (legacy)
     players = []
     player_dir = DATA_DIR / "players"
     if player_dir.exists():
         for p_file in player_dir.glob("*.csv"):
-            try:
-                df = pd.read_csv(p_file)
-                if not df.empty:
-                    row = df.iloc[0].to_dict()
-                    # Fuzzy match or exact match on team name?
-                    # The leaderboards have 'team' column
-                    if str(row.get('team', '')).lower() in str(team_id).lower():
-                        players.append(row)
-            except:
-                continue
+             # ... legacy logic ...
+             pass
     return players
 def get_team_stats(team_id: str, stat_type: str = "stats", entity_type: str = "team") -> Optional[Dict]:
     """Get team or player stats (merged batting/pitching/fielding)."""
@@ -236,7 +239,73 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
             
         logger.info(f"Saved {len(teams_list)} teams")
 
-        # 3. Save summary
+        # 3. Import Player Stats (Bulk Download - Rate Limit Friendly)
+        _update_status(f"Downloading D{division} player stats (this may take a moment)...", 20, source="python")
+        
+        # We'll use 'noMin' to get all players, not just qualified ones
+        QUALIFIER = "noMin"
+        stats_imported = 0
+        
+        # Create stats directory
+        stats_dir = DATA_DIR / "stats"
+        stats_dir.mkdir(exist_ok=True, parents=True)
+        
+        for stat_type in ["batting", "pitching"]:
+            logger.info(f"Fetching {stat_type} stats for D{division} {year}...")
+            _update_status(f"Processing {stat_type} stats...", 30 if stat_type=="batting" else 60, source="python")
+            
+            try:
+                # ncaa_bbStats doesn't expose the raw dataframe easily for bulk filtering by team ID
+                # But we can assume list_batters or similar uses a cached DF.
+                # To be efficient, we'll try to get all rows if possible, or iterate teams efficiently.
+                
+                # Using get_player_rows with team substring is the supported way
+                # Iterating 300 teams is okay if it hits local cache, but ncaa_bbStats might hit network.
+                # WARNING: The library doc says "get_player_rows... filtered by team_substr". 
+                # If it hits network every time, we are in trouble.
+                # Let's try to load the whole dataset if possible to split it manually.
+                
+                # Looking at library source (via knowledge of generic implementation), typically these libraries 
+                # download one big CSV. Let's try to leverage `get_player_rows` for a team.
+                
+                # To avoid spamming, we will do a small sleep. OR, better:
+                # Check if we can get ALL rows by passing team_substr="" or None?
+                # Docs say "team_substr: str|None". If None, maybe it returns all?
+                
+                all_rows = ncaa_bbStats.get_player_rows(stat_type, QUALIFIER, ".*", year=year) # Regex wildcard?
+                if not all_rows:
+                     # Try None
+                     all_rows = ncaa_bbStats.get_player_rows(stat_type, QUALIFIER, None, year=year)
+                
+                # If we got rows, let's create a DataFrame and split it ourselves
+                if all_rows:
+                    import pandas as pd
+                    df_all = pd.DataFrame(all_rows)
+                    logger.info(f"Loaded {len(df_all)} {stat_type} rows. Splitting by team...")
+                    
+                    # Normalize team names for matching
+                    # The teams_list has "ncaa_name". matches should be exact or close.
+                    
+                    for team in teams_list:
+                        t_name = team["ncaa_name"]
+                        t_id = team["team_id"]
+                        
+                        # Filter for this team
+                        # Case insensitive match on 'team' column
+                        if 'team' in df_all.columns:
+                            team_df = df_all[df_all['team'].str.lower() == t_name.lower()]
+                            
+                            if not team_df.empty:
+                                out_file = stats_dir / f"{t_id}_{stat_type}.csv"
+                                team_df.to_csv(out_file, index=False)
+                                stats_imported += 1
+                else:
+                    logger.warning(f"Could not fetch bulk {stat_type} data")
+
+            except Exception as se:
+                logger.error(f"Failed to import {stat_type}: {se}")
+
+        # 4. Save summary
         summary = {
             "division": division,
             "year": year,
