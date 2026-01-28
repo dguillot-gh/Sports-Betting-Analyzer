@@ -269,15 +269,41 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
                 # User requested to always pull fresh files from GitHub
                 try:
                     logger.info("Attempting to fetch fresh stats from GitHub...")
-                    # URL structure based on CodeMateo15/CollegeBaseballStatsPackage repo
-                    github_url = f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/data/player_stats_cache/{stat_type}/{stat_type}_noMin.csv" # Always use noMin for bulk
                     
-                    resp = requests.get(github_url, timeout=30)
-                    resp.raise_for_status()
+                    # Possible URL patterns for the raw data
+                    candidate_urls = [
+                        # Path 1: src/data/... (CONFIRMED via repo inspection)
+                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/src/data/player_stats_cache/{stat_type}/{stat_type}_noMin.csv",
+                        # Path 2: ncaa_bbStats/data/player_stats_cache/{stat_type}/{stat_type}_noMin.csv (Likely correct nested structure)
+                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/ncaa_bbStats/data/player_stats_cache/{stat_type}/{stat_type}_noMin.csv",
+                        # Path 3: ncaa_bbStats/data/{stat_type}_noMin.csv
+                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/ncaa_bbStats/data/{stat_type}_noMin.csv",
+                        # Path 3: root data/player_stats_cache/{stat_type}/{stat_type}_noMin.csv
+                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/data/player_stats_cache/{stat_type}/{stat_type}_noMin.csv",
+                        # Path 4: root data/{stat_type}_noMin.csv
+                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/data/{stat_type}_noMin.csv",
+                        # Path 5: legacy path attempting original qualifer logic just in case
+                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/data/player_stats_cache/{stat_type}/{stat_type}_{QUALIFIER}.csv"
+                    ]
                     
-                    from io import StringIO
-                    df_all = pd.read_csv(StringIO(resp.text))
-                    logger.info(f"Downloaded {len(df_all)} rows from GitHub.")
+                    df_all = pd.DataFrame()
+                    success_url = ""
+                    
+                    for github_url in candidate_urls:
+                        try:
+                            # logger.info(f"Trying {github_url}...")
+                            resp = requests.get(github_url, timeout=30)
+                            if resp.status_code == 200:
+                                from io import StringIO
+                                df_all = pd.read_csv(StringIO(resp.text))
+                                success_url = github_url
+                                logger.info(f"Downloaded {len(df_all)} rows from {github_url}")
+                                break # Found it!
+                        except:
+                            continue
+
+                    if df_all.empty:
+                        raise Exception("All GitHub URL candidates failed")
                     
                     # Filter by year if the CSV contains multiple years (it likely does)
                     if 'year' in df_all.columns:
@@ -310,19 +336,51 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
                 if not df_all.empty:
                     logger.info(f"Splitting {stat_type} data by team...")
                     
-                    # Normalize team names for matching
+                    # Normalize columns
+                    # The CSV likely has 'team name' (full) and 'team' (abbrev).
+                    # We prefer 'team name' to match with our ncaa_name.
+                    # Normalize column names to lowercase for checking
+                    df_all.columns = [c.lower().strip() for c in df_all.columns]
+                    
+                    target_col = 'team'
+                    if 'team name' in df_all.columns:
+                        target_col = 'team name'
+                    elif 'team_name' in df_all.columns:
+                        target_col = 'team_name'
+                    
+                    logger.info(f"Using column '{target_col}' for team matching")
+                    
+                    import re
+                    match_count = 0
+                    
                     for team in teams_list:
-                        t_name = team["ncaa_name"]
+                        t_name_full = team["ncaa_name"]
                         t_id = team["team_id"]
                         
+                        # Clean the name: "LSU (SEC)" -> "LSU"
+                        # Remove content in parentheses and trailing spaces
+                        t_name_clean = re.sub(r'\s*\(.*?\)', '', t_name_full).strip()
+                        
+                        # Special case handling if needed
+                        # e.g. "Western Ky." -> "Western Kentucky" might be needed but let's try direct first
+                        
                         # Filter for this team
-                        if 'team' in df_all.columns:
-                            team_df = df_all[df_all['team'].str.lower() == t_name.lower()]
+                        if target_col in df_all.columns:
+                            # Exact match on cleaned name
+                            team_df = df_all[df_all[target_col].str.lower() == t_name_clean.lower()]
                             
+                            # Fallback: Try regex/substring if exact match fails
+                            if team_df.empty:
+                                # Try matching purely on the 'team' (abbrev) column if available and length is short?
+                                # Or loose match
+                                pass
+
                             if not team_df.empty:
                                 out_file = stats_dir / f"{t_id}_{stat_type}.csv"
                                 team_df.to_csv(out_file, index=False)
-                                stats_imported += 1
+                                match_count += 1
+                                
+                    logger.info(f"Matched {match_count} / {len(teams_list)} teams for {stat_type}")
                 else:
                     logger.warning(f"Could not fetch bulk {stat_type} data")
 
