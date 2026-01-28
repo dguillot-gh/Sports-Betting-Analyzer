@@ -600,21 +600,31 @@
     // Models
     private class TeamsResponse
     {
-        public int division { get; set; }
-        public int count { get; set; }
-        public List<TeamInfo> teams { get; set; } = new();
-        public string? last_import { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("division")]
+        public int Division { get; set; }
         
-        // PascalCase convenience getters
-        public int Count => count;
-        public List<TeamInfo> Teams => teams;
+        [System.Text.Json.Serialization.JsonPropertyName("count")]
+        public int Count { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("teams")]
+        public List<TeamInfo> Teams { get; set; } = new();
+        
+        [System.Text.Json.Serialization.JsonPropertyName("last_import")]
+        public string? LastImport { get; set; }
     }
     
     private class TeamInfo
     {
+        [System.Text.Json.Serialization.JsonPropertyName("TeamId")]
         public string TeamId { get; set; } = "";
+        
+        [System.Text.Json.Serialization.JsonPropertyName("TeamName")]
         public string TeamName { get; set; } = "";
+        
+        [System.Text.Json.Serialization.JsonPropertyName("Conference")]
         public string Conference { get; set; } = "";
+        
+        [System.Text.Json.Serialization.JsonPropertyName("Division")]
         public int Division { get; set; }
     }
     
