@@ -3022,18 +3022,19 @@ def get_college_baseball_status():
 
 
 @app.get('/baseball/ncaa/schedule/{team_id}')
-def get_college_baseball_schedule(team_id: int):
+def get_college_baseball_schedule(team_id: str, year: int = Query(2025, description="Season year")):
     """Get schedule/results for a team."""
+    """Get schedule/results for a team. team_id can be string like 'LSU__SEC'."""
     try:
         from scripts.college_baseball_importer import get_team_schedule
+        # team_id can be string (e.g., 'LSU__SEC') or numeric string
         schedule = get_team_schedule(team_id)
-        if schedule:
-            return {
-                "team_id": team_id,
-                "count": len(schedule),
-                "games": schedule
-            }
-        return {"error": True, "message": f"No schedule found for team {team_id}"}
+        return {
+            "team_id": team_id,
+            "year": year,
+            "games": schedule or [],
+            "count": len(schedule) if schedule else 0
+        }
     except Exception as e:
         logger.error(f"Error getting schedule: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -3305,7 +3306,7 @@ async def get_ncaa_baseball_stats(
     stat_type: 'batting' or 'pitching'
     """
     try:
-        from scripts.college_baseball_importer import get_team_player_stats
+        from scripts.college_baseball_importer import get_team_player_stats, get_team_stats
         
         stats = get_team_player_stats(str(team_id), stat_type, year)
         
@@ -3340,23 +3341,7 @@ async def get_ncaa_baseball_stats(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/baseball/ncaa/schedule/{team_id}")
-async def get_ncaa_baseball_schedule(team_id: str):
-    """Get team schedule/results."""
-    try:
-        from scripts.college_baseball_importer import get_team_schedule
-        
-        schedule = get_team_schedule(team_id)
-        
-        return {
-            "team_id": team_id,
-            "games": schedule or [],
-            "count": len(schedule) if schedule else 0
-        }
-        
-    except Exception as e:
-        logger.error(f"Error fetching schedule: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# Duplicate schedule endpoint removed - consolidated with /baseball/ncaa/schedule/{team_id} above
 
 
 

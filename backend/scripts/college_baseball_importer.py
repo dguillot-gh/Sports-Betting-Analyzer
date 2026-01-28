@@ -50,8 +50,8 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 STATUS_FILE = DATA_DIR / "import_status.json"
 
-# Division import order: D1 and D3 work reliably, D2 often has NCAA restrictions
-DIVISION_PRIORITY = [1, 3, 2]
+# Division import order: D1 only (D2/D3 disabled - NCAA lacks reliable D2/D3 data)
+DIVISION_PRIORITY = [1]
 
 # D2 fallback years to try if current year fails
 D2_FALLBACK_YEARS = [2024, 2023]
@@ -158,9 +158,11 @@ def get_team_stats(team_id: str, stat_type: str = "stats", entity_type: str = "t
     return None
 
 
-def get_team_schedule(team_id: int) -> Optional[List[Dict]]:
-    """Get team schedule/results."""
-    schedule_file = DATA_DIR / "schedules" / f"{team_id}_schedule.csv"
+def get_team_schedule(team_id) -> Optional[List[Dict]]:
+    """Get team schedule/results. team_id can be int or string."""
+    # Convert to string for file lookup - handle both 'LSU__SEC' and numeric IDs
+    team_id_str = str(team_id)
+    schedule_file = DATA_DIR / "schedules" / f"{team_id_str}_schedule.csv"
     if schedule_file.exists():
         try:
             df = pd.read_csv(schedule_file)
