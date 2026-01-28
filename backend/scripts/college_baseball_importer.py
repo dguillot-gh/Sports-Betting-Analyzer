@@ -353,32 +353,54 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
                     import re
                     match_count = 0
                     
+                    # Manual mappings for known discrepancies
+                    # key: ncaa_name (from teams_d1.json), value: CSV name (team or team name)
+                    TEAM_NAME_MAPPINGS = {
+                        "LSU (SEC)": "LSU",
+                        "Ole Miss (SEC)": "Ole Miss",
+                        "Miami (FL) (ACC)": "Miami (FL)"
+                    }
+                    
                     for team in teams_list:
                         t_name_full = team["ncaa_name"]
                         t_id = team["team_id"]
                         
-                        # Clean the name: "LSU (SEC)" -> "LSU"
-                        # Remove content in parentheses and trailing spaces
-                        t_name_clean = re.sub(r'\s*\(.*?\)', '', t_name_full).strip()
+                        # 1. Try Manual Mapping
+                        if t_name_full in TEAM_NAME_MAPPINGS:
+                            t_name_clean = TEAM_NAME_MAPPINGS[t_name_full]
+                        else:
+                            # 2. Default: Clean the name: "LSU (SEC)" -> "LSU"
+                            # Remove content in parentheses and trailing spaces
+                            t_name_clean = re.sub(r'\s*\(.*?\)', '', t_name_full).strip()
                         
                         # Special case handling if needed
                         # e.g. "Western Ky." -> "Western Kentucky" might be needed but let's try direct first
                         
                         # Filter for this team
-                        if target_col in df_all.columns:
-                            # Exact match on cleaned name
-                            team_df = df_all[df_all[target_col].str.lower() == t_name_clean.lower()]
+                        mask = pd.Series([False] * len(df_all))
+                        
+                        # Check match against 'team name' (Full Name)
+                        if 'team name' in df_all.columns:
+                            mask |= (df_all['team name'].str.lower() == t_name_clean.lower())
+                        elif 'team_name' in df_all.columns:
+                            mask |= (df_all['team_name'].str.lower() == t_name_clean.lower())
                             
-                            # Fallback: Try regex/substring if exact match fails
-                            if team_df.empty:
-                                # Try matching purely on the 'team' (abbrev) column if available and length is short?
-                                # Or loose match
-                                pass
+                        # Check match against 'team' (Abbreviation/Short Name)
+                        if 'team' in df_all.columns:
+                            mask |= (df_all['team'].str.lower() == t_name_clean.lower())
+                        
+                        team_df = df_all[mask]
 
-                            if not team_df.empty:
-                                out_file = stats_dir / f"{t_id}_{stat_type}.csv"
-                                team_df.to_csv(out_file, index=False)
-                                match_count += 1
+                        # Fallback: Try regex/substring if exact match fails
+                        if team_df.empty:
+                            # Try simple substring matching if highly confident (e.g. if name is long enough)
+                            # Avoiding for now to prevent false positives
+                            pass
+
+                        if not team_df.empty:
+                            out_file = stats_dir / f"{t_id}_{stat_type}.csv"
+                            team_df.to_csv(out_file, index=False)
+                            match_count += 1
                                 
                     logger.info(f"Matched {match_count} / {len(teams_list)} teams for {stat_type}")
                 else:
