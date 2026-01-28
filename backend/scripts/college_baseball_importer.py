@@ -377,7 +377,8 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
                         # e.g. "Western Ky." -> "Western Kentucky" might be needed but let's try direct first
                         
                         # Filter for this team
-                        mask = pd.Series([False] * len(df_all))
+                        # Initialize mask with False using the dataframe's index to ensure alignment
+                        mask = pd.Series(False, index=df_all.index)
                         
                         # Check match against 'team name' (Full Name)
                         if 'team name' in df_all.columns:
