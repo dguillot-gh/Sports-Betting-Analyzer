@@ -40,20 +40,30 @@ tryCatch({
   }
   library(dplyr, warn.conflicts = FALSE)
   
+  if (!require("jsonlite", quietly = TRUE)) {
+    install.packages("jsonlite", repos = "https://cloud.r-project.org", quiet = TRUE)
+  }
+  library(jsonlite)
   if (!require("httr", quietly = TRUE)) {
     install.packages("httr", repos = "https://cloud.r-project.org", quiet = TRUE)
   }
   library(httr)
   
-  # Set global user agent to bypass bot detection (403 Forbidden)
-  ua <- "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  # Set global headers to bypass bot detection (403 Forbidden)
+  ua <- "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
   options(HTTPUserAgent = ua)
   httr::set_config(httr::add_headers(
     `User-Agent` = ua,
-    `Accept` = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    `Accept` = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
     `Accept-Language` = "en-US,en;q=0.9",
-    `Referer` = "https://stats.ncaa.org/"
+    `Referer` = "https://stats.ncaa.org/",
+    `Connection` = "keep-alive",
+    `Upgrade-Insecure-Requests` = "1",
+    `Cache-Control` = "max-age=0"
   ))
+  
+  # Also set options for the underlying curl if possible
+  options(download.file.extra = sprintf('--header "User-Agent: %s"', ua))
   
 }, error = function(e) {
   cat(sprintf("Package install error: %s\n", e$message))
@@ -85,24 +95,40 @@ safe_fetch <- function(expr, description) {
 # 1. Fetch all teams for division
 cat(sprintf("\n=== Fetching Division %d Teams ===\n", division))
 
+# Try to get a session cookie first
+cat("Performing session handshake...\n")
+handshake <- tryCatch({
+  httr::GET("https://stats.ncaa.org/", httr::timeout(10))
+}, error = function(e) return(NULL))
+
 teams <- tryCatch({
   cat(sprintf("Calling baseballr::ncaa_teams(division=%d, year=%d)...\n", division, year))
   result <- baseballr::ncaa_teams(division = division, year = year)
   cat(sprintf("  -> Got %d rows\n", if(!is.null(result)) nrow(result) else 0))
   result
 }, error = function(e) {
-  cat(sprintf("ERROR calling ncaa_teams: %s\n", e$message))
-  cat("This could be due to:\n")
-  cat("  1. NCAA website is down or blocking requests\n")
-  cat("  2. Network connectivity issues\n")
-  cat("  3. baseballr package needs updating\n")
-  cat("  4. Invalid division/year combination\n")
+  cat(sprintf("ERROR calling ncaa_teams for %d: %s\n", year, e$message))
   return(NULL)
 })
 
+# Automatic fallback to previous year if current year fails
+if ((is.null(teams) || nrow(teams) == 0) && year >= 2025) {
+  fallback_year <- 2024
+  cat(sprintf("Falling back to %d data...\n", fallback_year))
+  year <- fallback_year # Update global year for subsequent calls
+  teams <- tryCatch({
+    result <- baseballr::ncaa_teams(division = division, year = year)
+    cat(sprintf("  -> Got %d rows for fallback year %d\n", if(!is.null(result)) nrow(result) else 0, year))
+    result
+  }, error = function(e) {
+    cat(sprintf("ERROR calling ncaa_teams for fallback %d: %s\n", year, e$message))
+    return(NULL)
+  })
+}
+
 if (is.null(teams) || nrow(teams) == 0) {
-  cat(sprintf("ERROR: No teams found for Division %d, Year %d!\n", division, year))
-  cat("Try a different year (e.g., 2024) or check network connectivity.\n")
+  cat(sprintf("ERROR: No teams found for Division %d, Year %d (or fallback)!\n", division, year))
+  cat("Check network connectivity or if the NCAA site has changed its structure.\n")
   quit(status = 1)
 }
 

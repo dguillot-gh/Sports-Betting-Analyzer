@@ -605,16 +605,22 @@ async def run_college_baseball_import_task(start_year: int, end_year: int, divis
             RETURNING id
         """)
         
+        # Reset transient status for this run
+        if "baseball" not in import_status:
+            import_status["baseball"] = {"progress": []}
+        else:
+            import_status["baseball"]["progress"] = []
+            
+        import_status["baseball"]["status"] = "running"
         import_status["baseball"]["progress"].append(f"Starting import using source={source}")
         
         total_rows = 0
         final_result = {}
         
-        # Smart Year Range: If 0, import current year and previous year
+        # Smart Year Range: Priority 2024 (full baseline) and 2025 (transition)
         if start_year == 0 or end_year == 0:
-            current_year = datetime.now().year
-            years_to_import = [current_year - 1, current_year]
-            import_status["baseball"]["progress"].append(f"Auto-detected relevant years: {years_to_import}")
+            years_to_import = [2024, 2025]
+            import_status["baseball"]["progress"].append(f"Auto-detected stable year range: {years_to_import}")
         else:
             years_to_import = range(start_year, end_year + 1)
             
@@ -634,10 +640,15 @@ async def run_college_baseball_import_task(start_year: int, end_year: int, divis
                 
             final_result[year] = result
         
-        status = "COMPLETED"
-        import_status["baseball"]["status"] = status.lower()
-        import_status["baseball"]["result"] = {**final_result, "rows": total_rows}
-        import_status["baseball"]["progress"].append(f"✅ Import Complete! Total teams: {total_rows}")
+        # Determine final status
+        if total_rows == 0 and any("⚠️" in msg for msg in import_status["baseball"]["progress"]):
+            status = "FAILED"
+            import_status["baseball"]["status"] = "failed"
+            import_status["baseball"]["progress"].append("❌ Import failed: No data was collected for any year.")
+        else:
+            status = "COMPLETED"
+            import_status["baseball"]["status"] = "completed"
+            import_status["baseball"]["progress"].append(f"✅ Import Complete! Total teams: {total_rows}")
         
         # 3. Update DB Log
         duration = (datetime.now() - start_time).total_seconds()

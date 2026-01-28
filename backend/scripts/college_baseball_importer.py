@@ -168,132 +168,59 @@ def get_import_summary(division: int = 1) -> Optional[Dict]:
 
 def _import_via_python(division: int, year: int, progress_callback=None) -> Dict:
     """
-    Import college baseball data using ncaa-bbStats package.
-    Fetches bulk leaderboards (Batting, Pitching, Fielding) and merges them.
+    Import college baseball data using ncaa_bbStats package.
     """
     try:
-        import ncaa_bbStats.team_stats as team_stats
-        import ncaa_bbStats.player_stats as player_stats
+        import ncaa_bbStats
     except ImportError:
-        logger.warning("ncaa-bbStats package not installed")
-        return {"error": True, "message": "ncaa-bbStats package not installed. Run: pip install ncaa-bbStats"}
+        logger.warning("ncaa_bbStats package not installed")
+        return {"error": True, "message": "ncaa_bbStats package not installed."}
     
-    _update_status("Fetching D{division} stats from ncaa-bbStats...", 10, source="python")
+    _update_status(f"Fetching D{division} stats from ncaa_bbStats...", 10, source="python")
     
     imported_count = 0
     
     try:
-        # 1. Fetch Batting Stats (The 'batting_average' function returns a dict of all teams)
-        # It actually returns a dict keyed by (Team, League) -> {stats dict}
-        logger.info(f"Fetching Batting Stats for D{division} {year}...")
-        _update_status("Fetching Batting Stats...", 20, source="python")
-        batting_data = team_stats.batting_average(year=year, division=division)
-        
-        if not batting_data:
-             return {"error": True, "message": "Failed to fetch batting stats (empty result). Check logs/403 errors."}
+        # 1. Fetch Team List
+        logger.info(f"Fetching Team List for D{division} {year}...")
+        try:
+            teams = ncaa_bbStats.list_all_teams(year=year, division=division)
+        except Exception as e:
+            logger.error(f"Failed to list teams for {year} D{division}: {e}")
+            return {"error": True, "message": f"NCAA site error: {e}"}
 
-        # 2. Fetch Pitching Stats (ERA)
-        logger.info(f"Fetching Pitching Stats/ERA for D{division} {year}...")
-        _update_status("Fetching Pitching Stats...", 40, source="python")
-        pitching_data = team_stats.earned_run_average(year=year, division=division)
-        
-        # 3. Fetch Fielding Stats
-        logger.info(f"Fetching Fielding Stats for D{division} {year}...")
-        _update_status("Fetching Fielding Stats...", 60, source="python")
-        fielding_data = team_stats.fielding_percentage(year=year, division=division)
-        
-        # Merge Data
-        _update_status("Merging and saving team data...", 80, source="python")
-        
-        # Master list of keys (Team, League)
-        all_keys = set(batting_data.keys()) | set(pitching_data.keys()) | set(fielding_data.keys())
-        
+        if not teams:
+             return {"error": True, "message": "No teams found for this year/division."}
+
         teams_list = []
-        
-        # Create directories
         (DATA_DIR / "stats").mkdir(exist_ok=True, parents=True)
         
-        for key in all_keys:
-            team_name, league = key
-            
-            # Use Team Name as ID (sanitized) or hash it
-            # Using sanitized name is readable
+        # Populate basic team profiles
+        for team_name in teams:
             safe_id = "".join([c if c.isalnum() else "_" for c in team_name]).strip("_")
-            
-            # Combine stats
-            combined = {}
-            if key in batting_data:
-                combined.update(batting_data[key])
-            if key in pitching_data:
-                combined.update(pitching_data[key])
-            if key in fielding_data:
-                combined.update(fielding_data[key])
-            
-            # Add metadata
-            combined["team_name"] = team_name
-            combined["league"] = league
-            combined["season"] = year
-            combined["division"] = division
-            
-            # Save individual team CSV (simulating per-team stats file)
-            # We save separate CSVs for 'batting', etc if consumers expect it, or one big one.
-            # detailed_importer saved "{id}_batting.csv".
-            # The predictor likely needs specific columns. The merged dict has 'BA', 'ERA', etc.
-            
-            # Save unified stats
-            team_df = pd.DataFrame([combined])
-            team_df.to_csv(DATA_DIR / "stats" / f"{safe_id}_stats.csv", index=False)
-            
-            # Also save as _batting.csv for legacy compat if needed (but merged is better)
-            # We'll point get_team_stats to read _stats.csv
-            
             teams_list.append({
-                "team_id": safe_id, # String ID
+                "team_id": safe_id,
                 "ncaa_name": team_name,
-                "league": league,
                 "division": division,
-                "type": "team"
+                "type": "team",
+                "season": year
             })
-            
             imported_count += 1
             
-        # 4. Fetch and Save Player Stats
-        _update_status("Fetching Player Stats...", 85, source="python")
-        try:
-            p_batting = player_stats.batting_average(year=year, division=division)
-            for (p_name, team, league), s in p_batting.items():
-                p_id = "".join([c if c.isalnum() else "_" for c in p_name]).strip("_")
-                (DATA_DIR / "players").mkdir(exist_ok=True, parents=True)
-                # Add metadata
-                s.update({"player_name": p_name, "team": team, "league": league, "type": "player"})
-                pd.DataFrame([s]).to_csv(DATA_DIR / "players" / f"{p_id}_stats.csv", index=False)
-                # Add to teams_list for generic profile search
-                # Profiles search usually looks for 'entities'
-                teams_list.append({
-                    "team_id": p_id,
-                    "ncaa_name": p_name,
-                    "team_name": team,
-                    "league": league,
-                    "division": division,
-                    "type": "player"
-                })
-        except Exception as pe:
-            logger.warning(f"Failed to fetch player stats: {pe}")
-
-        # Save Teams List (Entities list)
+        # 2. Save Teams List (Entities list)
         teams_file = DATA_DIR / f"teams_d{division}.json"
         with open(teams_file, 'w') as f:
             json.dump(teams_list, f, indent=2)
             
         logger.info(f"Saved {len(teams_list)} teams")
 
-        # Save summary
+        # 3. Save summary
         summary = {
             "division": division,
             "year": year,
             "total_teams": len(teams_list),
             "imported_teams": imported_count,
-            "source": "python-ncaa-bbStats",
+            "source": "python-ncaa_bbStats",
             "generated_at": datetime.now().isoformat()
         }
         
@@ -301,7 +228,7 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
         with open(summary_file, 'w') as f:
             json.dump(summary, f, indent=2)
         
-        _update_status("Import complete!", 100, source="python")
+        _update_status(f"Imported {len(teams_list)} team names!", 50, source="python")
         return {"success": True, "source": "python", **summary}
         
     except Exception as e:
