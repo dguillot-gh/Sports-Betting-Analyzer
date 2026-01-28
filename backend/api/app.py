@@ -3274,8 +3274,8 @@ async def get_ncaa_baseball_teams(
         formatted_teams = []
         for team in teams:
             formatted_teams.append({
-                "TeamId": team.get("team_id") or team.get("school_id"),
-                "TeamName": team.get("team_name") or team.get("school"),
+                "TeamId": team.get("team_id") or team.get("school_id") or "",
+                "TeamName": team.get("ncaa_name") or team.get("team_name") or team.get("school") or "",
                 "Conference": team.get("conference", ""),
                 "Division": division
             })
