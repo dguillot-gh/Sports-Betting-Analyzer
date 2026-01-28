@@ -265,33 +265,57 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
                 # If it hits network every time, we are in trouble.
                 # Let's try to load the whole dataset if possible to split it manually.
                 
-                # Looking at library source (via knowledge of generic implementation), typically these libraries 
-                # download one big CSV. Let's try to leverage `get_player_rows` for a team.
-                
-                # To avoid spamming, we will do a small sleep. OR, better:
-                # Check if we can get ALL rows by passing team_substr="" or None?
-                # Docs say "team_substr: str|None". If None, maybe it returns all?
-                
-                all_rows = ncaa_bbStats.get_player_rows(stat_type, QUALIFIER, ".*", year=year) # Regex wildcard?
-                if not all_rows:
-                     # Try None
-                     all_rows = ncaa_bbStats.get_player_rows(stat_type, QUALIFIER, None, year=year)
-                
-                # If we got rows, let's create a DataFrame and split it ourselves
-                if all_rows:
-                    import pandas as pd
-                    df_all = pd.DataFrame(all_rows)
-                    logger.info(f"Loaded {len(df_all)} {stat_type} rows. Splitting by team...")
+                # 1. Try to download fresh data from GitHub (PRIORITY)
+                # User requested to always pull fresh files from GitHub
+                try:
+                    logger.info("Attempting to fetch fresh stats from GitHub...")
+                    # URL structure based on CodeMateo15/CollegeBaseballStatsPackage repo
+                    github_url = f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/data/player_stats_cache/{stat_type}/{stat_type}_noMin.csv" # Always use noMin for bulk
+                    
+                    resp = requests.get(github_url, timeout=30)
+                    resp.raise_for_status()
+                    
+                    from io import StringIO
+                    df_all = pd.read_csv(StringIO(resp.text))
+                    logger.info(f"Downloaded {len(df_all)} rows from GitHub.")
+                    
+                    # Filter by year if the CSV contains multiple years (it likely does)
+                    if 'year' in df_all.columns:
+                        df_all = df_all[df_all['year'] == year]
+                        logger.info(f"Filtered to {len(df_all)} rows for year {year}.")
+                    
+                    if df_all.empty:
+                        logger.warning(f"No data found for year {year} in GitHub CSV")
+                        
+                except Exception as gh_err:
+                    logger.warning(f"GitHub download failed: {gh_err}. Falling back to local ncaa_bbStats cache...")
+                    
+                    # 2. Fallback: Use ncaa_bbStats (local cache)
+                    try:
+                        all_rows = ncaa_bbStats.get_player_rows(stat_type, QUALIFIER, ".*", year=year)
+                        if not all_rows:
+                            all_rows = ncaa_bbStats.get_player_rows(stat_type, QUALIFIER, None, year=year)
+                        
+                        if all_rows:
+                            df_all = pd.DataFrame(all_rows)
+                            logger.info(f"Loaded {len(df_all)} {stat_type} rows via ncaa_bbStats.")
+                        else:
+                            raise Exception("No data returned from ncaa_bbStats")
+    
+                    except Exception as lib_err:
+                         logger.error(f"Local ncaa_bbStats fallback also failed: {lib_err}")
+                         df_all = pd.DataFrame() # Empty
+
+                # If we have data, split it by team
+                if not df_all.empty:
+                    logger.info(f"Splitting {stat_type} data by team...")
                     
                     # Normalize team names for matching
-                    # The teams_list has "ncaa_name". matches should be exact or close.
-                    
                     for team in teams_list:
                         t_name = team["ncaa_name"]
                         t_id = team["team_id"]
                         
                         # Filter for this team
-                        # Case insensitive match on 'team' column
                         if 'team' in df_all.columns:
                             team_df = df_all[df_all['team'].str.lower() == t_name.lower()]
                             

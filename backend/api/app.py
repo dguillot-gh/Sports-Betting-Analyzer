@@ -3311,23 +3311,20 @@ async def get_ncaa_baseball_stats(
         stats = get_team_player_stats(str(team_id), stat_type, year)
         
         if not stats:
-            # Try importing this team's stats
-            import subprocess
-            from pathlib import Path
+            # Try importing this team's stats using our robust Python importer
+            # This will fetch the bulk data from GitHub and extract the team
+            from scripts.college_baseball_importer import run_college_baseball_import
             
-            r_script = Path(__file__).parent.parent / "scripts" / "college_baseball_importer.R"
-            data_dir = Path("/app/data/baseball")
+            # We await it to ensure data is ready for this request
+            # Note: This might take a few seconds on first run, but subsequent team lookups
+            # will be fast if they share the same bulk file cache (if we implemented local caching, 
+            # but currently we re-download. Actually, we might want to suppress re-download 
+            # if files are recent, but user asked for "fresh on every import".
+            # For a single page load, maybe 2-3 seconds is acceptable.)
+            await run_college_baseball_import(division=1, year=year, team_id=int(team_id) if team_id.isdigit() else None, source="python")
             
-            try:
-                # Import specific team (4th arg)
-                subprocess.run(
-                    ["Rscript", str(r_script), "1", str(year), str(data_dir), str(team_id)],
-                    capture_output=True,
-                    timeout=60
-                )
-                stats = get_team_stats(team_id, stat_type)
-            except Exception as e:
-                logger.warning(f"Could not import team stats: {e}")
+            # Reload stats after import
+            stats = get_team_player_stats(str(team_id), stat_type, year)
         
         return {
             "team_id": team_id,
