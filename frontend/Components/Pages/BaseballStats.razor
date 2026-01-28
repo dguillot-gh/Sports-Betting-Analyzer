@@ -57,11 +57,14 @@
                     </MudButton>
                 </MudItem>
                 <MudItem xs="12" md="3">
-                    <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="ImportDataFromR"
-                               Disabled="@_isImporting" FullWidth="true" Size="Size.Medium">
-                        @if (_isImporting) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
-                        Import from NCAA
-                    </MudButton>
+                    <MudTooltip Text="Imports all divisions (D1, D3, D2) with smart year detection">
+                        <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="ImportAllTeams"
+                                   Disabled="@_isImporting" FullWidth="true" Size="Size.Medium"
+                                   StartIcon="@Icons.Material.Filled.CloudDownload">
+                            @if (_isImporting) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                            Import All Teams
+                        </MudButton>
+                    </MudTooltip>
                 </MudItem>
             </MudGrid>
             
@@ -75,7 +78,7 @@
             {
                 <MudAlert Severity="Severity.Warning" Class="mt-3">
                     <strong>No team data found for D@_selectedDivision.</strong> 
-                    Click "Import from NCAA" to fetch teams. This requires R and baseballr to be installed.
+                    Click "Import All Teams" to fetch all divisions automatically.
                 </MudAlert>
             }
         </MudPaper>
@@ -365,22 +368,23 @@
         }
     }
     
-    private async Task ImportDataFromR()
+    private async Task ImportAllTeams()
     {
         _isImporting = true;
-        _importStatus = $"Starting import for D{_selectedDivision}...";
+        _importStatus = "Starting one-click import for all divisions (D1, D3, D2)...";
         StateHasChanged();
         
         try
         {
+            // One-click import: division=0 (all), year=0 (smart detection)
             var response = await Http.PostAsync(
-                $"http://backend:8000/baseball/ncaa/import?division={_selectedDivision}", 
+                "http://backend:8000/baseball/ncaa/import", 
                 null);
             
             if (response.IsSuccessStatusCode)
             {
-                _importStatus = "Import started! This runs in the background. Check status below, then click 'Load Teams' when ready.";
-                Snackbar.Add("Import started in background", Severity.Success);
+                _importStatus = "One-click import started! Importing D1, D3, D2 with automatic year detection. Check status below.";
+                Snackbar.Add("Import started for all divisions", Severity.Success);
                 
                 // Start polling for status
                 _ = PollImportStatus();

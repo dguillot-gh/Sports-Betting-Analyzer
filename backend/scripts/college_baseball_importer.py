@@ -50,6 +50,26 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 STATUS_FILE = DATA_DIR / "import_status.json"
 
+# Division import order: D1 and D3 work reliably, D2 often has NCAA restrictions
+DIVISION_PRIORITY = [1, 3, 2]
+
+# D2 fallback years to try if current year fails
+D2_FALLBACK_YEARS = [2024, 2023]
+
+
+def get_smart_year() -> int:
+    """
+    Determine the appropriate season year based on college baseball calendar.
+    
+    College baseball season runs approximately Feb-June.
+    - Before February: Use previous year (most recent completed season)
+    - February onward: Use current year (season in progress or upcoming)
+    """
+    now = datetime.now()
+    # If we're in January, the most recent completed season is last year
+    if now.month < 2:
+        return now.year - 1
+    return now.year
 
 def _update_status(message: str, progress: int = 0, is_error: bool = False, 
                    division: int = 1, source: str = ""):
@@ -325,89 +345,150 @@ def _import_via_r(division: int, year: int, team_id: Optional[int] = None) -> Di
 # Main Import Function (Hybrid)
 # ============================================================
 
+async def _import_division_with_fallback(
+    division: int,
+    year: int,
+    team_id: Optional[int],
+    source: str
+) -> Dict:
+    """
+    Import a single division with fallback logic for D2.
+    D2 often has NCAA restrictions, so we try fallback years.
+    """
+    years_to_try = [year]
+    
+    # For D2, add fallback years if the primary year fails
+    if division == 2:
+        for fallback_year in D2_FALLBACK_YEARS:
+            if fallback_year not in years_to_try:
+                years_to_try.append(fallback_year)
+    
+    div_results = {"division": division, "year": year, "sources_tried": [], "fallback_used": False}
+    
+    for try_year in years_to_try:
+        if try_year != year:
+            logger.info(f"D{division}: Trying fallback year {try_year}...")
+            _update_status(f"D{division}: Trying fallback year {try_year}...", 30, division=division, source=source)
+            div_results["fallback_used"] = True
+            div_results["fallback_year"] = try_year
+        
+        # Try Python source first (ncaa-bbStats)
+        if source in ("auto", "python", "both"):
+            logger.info(f"D{division}: Attempting Python import via ncaa_bbStats for year {try_year}...")
+            python_result = await asyncio.to_thread(_import_via_python, division, try_year)
+            div_results["sources_tried"].append("python")
+            
+            if python_result.get("success"):
+                div_results["python"] = python_result
+                div_results["success"] = True
+                div_results["year"] = try_year
+                return div_results
+            else:
+                div_results["python_error"] = python_result.get("message")
+        
+        # Try R source (baseballr) as fallback
+        if source in ("r", "both") or (source == "auto" and not div_results.get("success")):
+            logger.info(f"D{division}: Attempting R import via baseballr for year {try_year}...")
+            r_result = await asyncio.to_thread(_import_via_r, division, try_year, team_id)
+            div_results["sources_tried"].append("r")
+            
+            if r_result.get("success"):
+                div_results["r"] = r_result
+                div_results["success"] = True
+                div_results["year"] = try_year
+                return div_results
+            else:
+                div_results["r_error"] = r_result.get("message")
+    
+    # All attempts failed
+    div_results["success"] = False
+    return div_results
+
+
 async def run_college_baseball_import(
-    division: int = 1,
-    year: Optional[int] = None,
+    division: int = 0,  # Default to ALL divisions
+    year: Optional[int] = None,  # Default to smart year detection
     team_id: Optional[int] = None,
     source: Literal["auto", "python", "r", "both"] = "auto"
 ) -> Dict:
     """
     Run college baseball import using specified data source.
     
+    This is the "one-click" dynamic importer that:
+    - Auto-detects the appropriate season year
+    - Imports all divisions (D1, D3, D2) in priority order
+    - Falls back to previous years for D2 if current year fails
+    
     Args:
-        division: NCAA division (1, 2, or 3). Use 0 for ALL divisions.
-        year: Season year (defaults to current year)
+        division: NCAA division (1, 2, or 3). Use 0 for ALL divisions (default).
+        year: Season year. Use None or 0 for smart year detection (default).
         team_id: Optional specific team to import
-        source: Data source preference
+        source: Data source preference: 'auto', 'python' (ncaa_bbStats), 'r' (baseballr), 'both'
+    
+    Reference packages:
+        - Python: https://github.com/JohnJustinn/ncaa-bbStats
+        - R: https://github.com/BillPetti/baseballr
     """
-    if year is None:
-        year = datetime.now().year
+    # Smart year detection
+    if year is None or year == 0:
+        year = get_smart_year()
+        logger.info(f"Smart year detection: using {year}")
     
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     
-    # Handle Bulk Division (All)
-    divisions_to_import = [1, 2, 3] if division == 0 else [division]
+    # Handle Bulk Division (All) - use priority order (D1, D3, D2)
+    if division == 0:
+        divisions_to_import = DIVISION_PRIORITY
+    else:
+        divisions_to_import = [division]
     
-    logger.info(f"Starting college baseball import: Divisions {divisions_to_import}, Year {year}, Source {source}")
+    logger.info(f"Starting dynamic college baseball import: Divisions {divisions_to_import}, Year {year}, Source {source}")
+    _update_status(f"Starting one-click import for {len(divisions_to_import)} divisions...", 5, source=source)
     
     overall_results = {
         "success": False,
         "divisions": divisions_to_import,
         "year": year,
+        "smart_year_used": True,
         "total_teams": 0,
         "results_per_division": {},
         "synced_to_db": False
     }
 
-    for div in divisions_to_import:
-        _update_status(f"Importing D{div}...", 0, division=div, source=source)
+    for idx, div in enumerate(divisions_to_import):
+        progress = 10 + int((idx / len(divisions_to_import)) * 70)
+        _update_status(f"Importing D{div}...", progress, division=div, source=source)
         
-        div_results = {"division": div, "year": year, "sources_tried": []}
+        div_results = await _import_division_with_fallback(div, year, team_id, source)
         
-        if source in ("auto", "python", "both"):
-            logger.info(f"Attempting Python import via ncaa-bbStats for D{div}...")
-            python_result = await asyncio.to_thread(_import_via_python, div, year)
-            div_results["sources_tried"].append("python")
-            
-            if python_result.get("success"):
-                div_results["python"] = python_result
-                div_results["success"] = True
-            else:
-                div_results["python_error"] = python_result.get("message")
-        
-        if source in ("r", "both") or (source == "auto" and not div_results.get("success")):
-            logger.info(f"Attempting R import via baseballr for D{div}...")
-            r_result = await asyncio.to_thread(_import_via_r, div, year, team_id)
-            div_results["sources_tried"].append("r")
-            
-            if r_result.get("success"):
-                div_results["r"] = r_result
-                div_results["success"] = True
-            else:
-                div_results["r_error"] = r_result.get("message")
-
         overall_results["results_per_division"][div] = div_results
         if div_results.get("success"):
             overall_results["success"] = True
-            overall_results["total_teams"] += div_results.get("python", {}).get("total_teams", 0) or div_results.get("r", {}).get("total_teams", 0)
+            team_count = div_results.get("python", {}).get("total_teams", 0) or div_results.get("r", {}).get("total_teams", 0)
+            overall_results["total_teams"] += team_count
+            logger.info(f"D{div}: Successfully imported {team_count} teams")
+        else:
+            logger.warning(f"D{div}: Import failed - {div_results.get('python_error') or div_results.get('r_error')}")
 
-    # 3. Sync to Database (Standard Parity)
+    # Sync to Database
     if overall_results.get("success"):
         try:
+            _update_status("Syncing to database...", 90, source=source)
             logger.info("Syncing imported data to PostgreSQL...")
-            # We sync one by one or bulk? sync_to_postgresql currently reads from files.
-            # It takes import_results as dict, mostly for division info.
-            # We'll call it for each division that succeeded.
             for div, res in overall_results["results_per_division"].items():
                 if res.get("success"):
                     await sync_to_postgresql(res)
             overall_results["synced_to_db"] = True
+            _update_status(f"Complete! Imported {overall_results['total_teams']} teams", 100, source=source)
         except Exception as se:
             logger.error(f"Database sync failed: {se}")
             overall_results["synced_to_db"] = False
             overall_results["db_error"] = str(se)
+    else:
+        _update_status("Import failed for all divisions", 0, is_error=True, source=source)
 
     return overall_results
+
 
 
 def compute_hash(data: Dict) -> str:

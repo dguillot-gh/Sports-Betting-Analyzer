@@ -2970,27 +2970,39 @@ async def run_baseball_import_with_logging(division, year, team_id, source):
 
 @app.post('/baseball/ncaa/import')
 async def import_college_baseball(
-    division: int = Query(1, description="NCAA Division (1, 2, or 3)"),
-    year: int = Query(2025, description="Season year (use 2024 for most recent completed season)"),
+    division: int = Query(0, description="NCAA Division (1, 2, or 3). Use 0 for ALL divisions (default: one-click import)"),
+    year: int = Query(0, description="Season year. Use 0 for smart year detection (default: auto-detect based on season calendar)"),
     team_id: Optional[int] = Query(None, description="Optional specific team ID"),
-    source: str = Query("auto", description="Data source: auto, python, r, both"),
+    source: str = Query("auto", description="Data source: auto, python (ncaa_bbStats), r (baseballr), both"),
     background_tasks: BackgroundTasks = BackgroundTasks()
 ):
     """
-    Import college baseball data using baseballr or collegebaseball.
-    Runs in background to avoid timeout.
+    One-click dynamic college baseball importer.
+    
+    This endpoint automatically:
+    - Detects the appropriate season year (smart year detection)
+    - Imports all divisions in priority order (D1, D3, D2)
+    - Falls back to previous years for D2 if current year fails
+    
+    Reference packages:
+    - Python: https://github.com/JohnJustinn/ncaa-bbStats
+    - R: https://github.com/BillPetti/baseballr
     """
     try:
-        logger.info(f"Starting college baseball import: D{division}, Year {year}, Source: {source}")
+        year_desc = "smart detection" if year == 0 else str(year)
+        div_desc = "ALL" if division == 0 else f"D{division}"
+        logger.info(f"Starting dynamic college baseball import: {div_desc}, Year: {year_desc}, Source: {source}")
         
-        # Run in background with logging wrapper
-        background_tasks.add_task(run_baseball_import_with_logging, division, year, team_id, source)
+        # Run in background with logging wrapper (year=0 triggers smart detection in importer)
+        background_tasks.add_task(run_baseball_import_with_logging, division, year if year != 0 else None, team_id, source)
         
         return {
             "status": "started", 
-            "message": f"Started import for Division {division}, Year {year}",
+            "message": f"One-click import started for {div_desc}, Year: {year_desc}",
             "division": division,
-            "year": year
+            "year": year,
+            "smart_year": year == 0,
+            "all_divisions": division == 0
         }
     except Exception as e:
         logger.error(f"Error starting import: {e}")
