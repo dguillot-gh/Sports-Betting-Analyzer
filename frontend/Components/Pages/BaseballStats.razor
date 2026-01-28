@@ -458,6 +458,8 @@
                 var battingResponse = await Http.GetFromJsonAsync<StatsResponse>($"http://backend:8000/baseball/ncaa/stats/{_selectedTeam.TeamId}?stat_type=batting&year={_selectedYear}");
                 if (battingResponse?.Stats != null)
                 {
+                    _battingStats = battingResponse.Stats.Select(s => new BattingPlayer
+                    {
                         Name = GetString(s, "name", GetString(s, "player_name", "Unknown")),
                         Position = GetString(s, "pos", "-"),
                         GP = GetInt(s, "g", GetInt(s, "GP")),
@@ -487,7 +489,7 @@
                 {
                     _pitchingStats = pitchingResponse.Stats.Select(s => new PitchingPlayer
                     {
-                        Name = GetString(s, "player_name", s.GetValueOrDefault("Name")?.ToString() ?? "Unknown"),
+                        Name = GetString(s, "name", GetString(s, "player_name", "Unknown")),
                         W = GetInt(s, "W"),
                         L = GetInt(s, "L"),
                         ERA = GetDouble(s, "ERA"),
