@@ -8,6 +8,7 @@ division <- ifelse(length(args) >= 1, as.integer(args[1]), 1)
 year <- ifelse(length(args) >= 2, as.integer(args[2]), as.integer(format(Sys.Date(), "%Y")))
 output_dir <- ifelse(length(args) >= 3, args[3], "/app/data/baseball")
 team_id <- ifelse(length(args) >= 4, as.integer(args[4]), NA)  # Optional: import specific team only
+custom_id <- ifelse(length(args) >= 5, args[5], NA)  # Optional: use this ID for filenames instead of team_id
 
 cat(sprintf("College Baseball Importer - Division %d, Year %d\n", division, year))
 cat(sprintf("Output directory: %s\n", output_dir))
@@ -161,13 +162,16 @@ for (i in 1:nrow(teams_to_import)) {
   
   cat(sprintf("\n[%d/%d] %s (ID: %d)\n", i, nrow(teams_to_import), team_name, tid))
   
+  # Determine filename ID
+  file_id <- if(!is.na(custom_id)) custom_id else as.character(tid)
+  
   # Batting stats
   batting <- safe_fetch(
     baseballr::ncaa_team_player_stats(team_id = tid, year = year, type = "batting"),
     "batting stats"
   )
   if (!is.null(batting) && nrow(batting) > 0) {
-    write.csv(batting, file.path(output_dir, "stats", sprintf("%d_batting.csv", tid)), row.names = FALSE)
+    write.csv(batting, file.path(output_dir, "stats", sprintf("%s_batting.csv", file_id)), row.names = FALSE)
   }
   
   # Pitching stats
@@ -176,7 +180,7 @@ for (i in 1:nrow(teams_to_import)) {
     "pitching stats"
   )
   if (!is.null(pitching) && nrow(pitching) > 0) {
-    write.csv(pitching, file.path(output_dir, "stats", sprintf("%d_pitching.csv", tid)), row.names = FALSE)
+    write.csv(pitching, file.path(output_dir, "stats", sprintf("%s_pitching.csv", file_id)), row.names = FALSE)
   }
   
   # Schedule/results
@@ -185,7 +189,7 @@ for (i in 1:nrow(teams_to_import)) {
     "schedule"
   )
   if (!is.null(schedule) && nrow(schedule) > 0) {
-    write.csv(schedule, file.path(output_dir, "schedules", sprintf("%d_schedule.csv", tid)), row.names = FALSE)
+    write.csv(schedule, file.path(output_dir, "schedules", sprintf("%s_schedule.csv", file_id)), row.names = FALSE)
   }
   
   # Small delay to avoid rate limiting

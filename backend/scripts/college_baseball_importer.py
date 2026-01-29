@@ -115,11 +115,31 @@ def get_teams(division: int = 1) -> List[Dict]:
 
 
 
-def get_team_player_stats(team_id: str, stat_type: str = "batting", year: int = 2024) -> List[Dict]:
-    """Get list of players for a team."""
-    # Try fully qualified team stats file first
-    stats_file = DATA_DIR / "stats" / f"{team_id}_{stat_type}.csv"
+def get_team_player_stats(team_id: str, stat_type: str = "batting", year: int = 2024, division: int = 1) -> List[Dict]:
+    """Get list of players for a team with on-demand fallback."""
+    team_id_str = str(team_id)
+    stats_file = DATA_DIR / "stats" / f"{team_id_str}_{stat_type}.csv"
     
+    # Try fully qualified team stats file first
+    if not stats_file.exists():
+        logger.info(f"Stats file {stats_file.name} missing. Triggering on-demand import for {team_id_str}")
+        
+        # Resolve numeric ID for R script
+        ncaa_id = None
+        if team_id_str.isdigit():
+            ncaa_id = int(team_id_str)
+        else:
+            # Note: get_teams(division) loads from teams_d1.json
+            teams = get_teams(division)
+            for t in teams:
+                if t.get("team_id") == team_id_str:
+                    ncaa_id = t.get("ncaa_id")
+                    break
+        
+        if ncaa_id:
+            # This fetches batting, pitching, and schedules in one R call
+            _import_via_r(division=division, year=year, team_id=ncaa_id, custom_id=team_id_str)
+
     if stats_file.exists():
         try:
             df = pd.read_csv(stats_file)
@@ -129,14 +149,7 @@ def get_team_player_stats(team_id: str, stat_type: str = "batting", year: int = 
         except Exception as e:
             logger.error(f"Error reading stats file {stats_file}: {e}")
             
-    # Fallback to searching in generic players/ directory (legacy)
-    players = []
-    player_dir = DATA_DIR / "players"
-    if player_dir.exists():
-        for p_file in player_dir.glob("*.csv"):
-             # ... legacy logic ...
-             pass
-    return players
+    return []
 def get_team_stats(team_id: str, stat_type: str = "stats", entity_type: str = "team") -> Optional[Dict]:
     """Get team or player stats (merged batting/pitching/fielding)."""
     # Check stats/ for teams, players/ for players
@@ -161,11 +174,45 @@ def get_team_stats(team_id: str, stat_type: str = "stats", entity_type: str = "t
     return None
 
 
-def get_team_schedule(team_id) -> Optional[List[Dict]]:
+def get_team_schedule(team_id, year: int = 2024) -> Optional[List[Dict]]:
     """Get team schedule/results. team_id can be int or string."""
     # Convert to string for file lookup - handle both 'LSU__SEC' and numeric IDs
     team_id_str = str(team_id)
     schedule_file = DATA_DIR / "schedules" / f"{team_id_str}_schedule.csv"
+    
+    if not schedule_file.exists():
+        # Fallback: Try to fetch it on-demand using the R script (baseballr)
+        logger.info(f"Schedule for {team_id} missing. Triggering R-script fallback...")
+        
+        # Determine division from id (usually LSU__SEC -> we might need to look it up)
+        # For now, assume D1 or look up from teams list
+        division = 1
+        
+        # Resolve numeric ID for R script if possible
+        # If team_id is 'LSU__SEC', the R script might need the numeric 365.
+        # However, our teams_d1.json might have the numeric ID?
+        # Let's check the teams list.
+        
+        ncaa_id = None
+        if "__" in team_id_str:
+            # Try to find numeric id in teams_d1.json
+            teams = get_teams(division)
+            for t in teams:
+                if t.get("team_id") == team_id_str:
+                    ncaa_id = t.get("ncaa_id") # We might need to add this during team import
+                    break
+        
+        # If we can't find a numeric ID, the R script might fail for a specific team.
+        # But if team_id_str is already a number, use it.
+        try:
+            target_id = int(team_id_str)
+        except:
+            target_id = ncaa_id
+            
+        if target_id:
+            # Run R import for just this team (synchronous fallback for the API call)
+            _import_via_r(division=division, year=year, team_id=target_id, custom_id=team_id_str)
+            
     if schedule_file.exists():
         try:
             df = pd.read_csv(schedule_file)
@@ -221,10 +268,14 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
         (DATA_DIR / "stats").mkdir(exist_ok=True, parents=True)
         
         # Populate basic team profiles
-        for team_name in teams:
+        is_dict = isinstance(teams, dict)
+        for team_name in (teams.keys() if is_dict else teams):
             safe_id = "".join([c if c.isalnum() else "_" for c in team_name]).strip("_")
+            ncaa_id = teams[team_name] if is_dict else None
+            
             teams_list.append({
                 "team_id": safe_id,
+                "ncaa_id": ncaa_id,
                 "ncaa_name": team_name,
                 "division": division,
                 "type": "team",
@@ -245,6 +296,7 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
         # We'll use 'noMin' to get all players, not just qualified ones
         QUALIFIER = "noMin"
         stats_imported = 0
+        player_inventory = {}  # { name: { team_id: { team_name, stat_types: [], division } } }
         
         # Create stats directory
         stats_dir = DATA_DIR / "stats"
@@ -272,18 +324,20 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
                     
                     # Possible URL patterns for the raw data
                     candidate_urls = [
-                        # Path 1: src/data/... (CONFIRMED via repo inspection)
-                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/src/data/player_stats_cache/{stat_type}/{stat_type}_noMin.csv",
-                        # Path 2: ncaa_bbStats/data/player_stats_cache/{stat_type}/{stat_type}_noMin.csv (Likely correct nested structure)
+                        # Path 1: src/ncaa_bbStats/data/... (NEWLY CONFIRMED via user hint)
+                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/src/ncaa_bbStats/data/player_stats_cache/{stat_type}/{stat_type}_noMin.csv",
+                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/src/ncaa_bbStats/data/player_stats_cache/{stat_type}/2025/{stat_type}_noMin.csv",
+                        
+                        # Path 2: ncaa_bbStats/data/... (Legacy/Standard package structure)
                         f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/ncaa_bbStats/data/player_stats_cache/{stat_type}/{stat_type}_noMin.csv",
-                        # Path 3: ncaa_bbStats/data/{stat_type}_noMin.csv
-                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/ncaa_bbStats/data/{stat_type}_noMin.csv",
-                        # Path 3: root data/player_stats_cache/{stat_type}/{stat_type}_noMin.csv
+                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/ncaa_bbStats/data/player_stats_cache/{stat_type}/2025/{stat_type}_noMin.csv",
+                        
+                        # Path 3: src/data/... (Alternative structure)
+                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/src/data/player_stats_cache/{stat_type}/{stat_type}_noMin.csv",
+                        
+                        # Path 4: root data/... 
                         f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/data/player_stats_cache/{stat_type}/{stat_type}_noMin.csv",
-                        # Path 4: root data/{stat_type}_noMin.csv
-                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/data/{stat_type}_noMin.csv",
-                        # Path 5: legacy path attempting original qualifer logic just in case
-                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/data/player_stats_cache/{stat_type}/{stat_type}_{QUALIFIER}.csv"
+                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/data/{stat_type}_noMin.csv"
                     ]
                     
                     df_all = pd.DataFrame()
@@ -402,6 +456,30 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
                             out_file = stats_dir / f"{t_id}_{stat_type}.csv"
                             team_df.to_csv(out_file, index=False)
                             match_count += 1
+                            
+                            # Update player inventory
+                            # Find name column (case-insensitive)
+                            name_col = 'name'
+                            if 'player_name' in team_df.columns: name_col = 'player_name'
+                            elif 'Name' in team_df.columns: name_col = 'Name'
+                            
+                            for p_name in team_df[name_col].unique():
+                                p_name_str = str(p_name)
+                                if p_name_str == 'nan' or not p_name_str: continue
+                                
+                                if p_name_str not in player_inventory:
+                                    player_inventory[p_name_str] = {}
+                                
+                                if t_id not in player_inventory[p_name_str]:
+                                    player_inventory[p_name_str][t_id] = {
+                                        "team_name": t_name_full,
+                                        "stat_types": [],
+                                        "division": division,
+                                        "year": year
+                                    }
+                                
+                                if stat_type not in player_inventory[p_name_str][t_id]["stat_types"]:
+                                    player_inventory[p_name_str][t_id]["stat_types"].append(stat_type)
                                 
                     logger.info(f"Matched {match_count} / {len(teams_list)} teams for {stat_type}")
                 else:
@@ -423,8 +501,29 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
         summary_file = DATA_DIR / f"import_summary_d{division}.json"
         with open(summary_file, 'w') as f:
             json.dump(summary, f, indent=2)
+            
+        # 5. Save Player Inventory
+        inventory_file = DATA_DIR / "players_inventory.json"
+        # If it exists, merge it (so we keep other divisions if we import one by one)
+        existing_inventory = {}
+        if inventory_file.exists():
+            try:
+                with open(inventory_file, 'r') as f:
+                    existing_inventory = json.load(f)
+            except: pass
+            
+        # Merge new into existing
+        for p_name, teams in player_inventory.items():
+            if p_name not in existing_inventory:
+                existing_inventory[p_name] = teams
+            else:
+                for t_id, info in teams.items():
+                    existing_inventory[p_name][t_id] = info
+                    
+        with open(inventory_file, 'w') as f:
+            json.dump(existing_inventory, f, indent=2)
         
-        _update_status(f"Imported {len(teams_list)} team names!", 50, source="python")
+        _update_status(f"Imported {len(teams_list)} team names and {len(player_inventory)} players!", 50, source="python")
         return {"success": True, "source": "python", **summary}
         
     except Exception as e:
@@ -436,7 +535,7 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
 # R Import (baseballr via subprocess)
 # ============================================================
 
-def _import_via_r(division: int, year: int, team_id: Optional[int] = None) -> Dict:
+def _import_via_r(division: int, year: int, team_id: Optional[int] = None, custom_id: Optional[str] = None) -> Dict:
     """Run R import script and capture output."""
     import re
     
@@ -453,6 +552,8 @@ def _import_via_r(division: int, year: int, team_id: Optional[int] = None) -> Di
         
         if team_id:
             cmd.append(str(team_id))
+            if custom_id:
+                cmd.append(str(custom_id))
         
         process = subprocess.Popen(
             cmd,

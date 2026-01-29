@@ -3028,7 +3028,7 @@ def get_college_baseball_schedule(team_id: str, year: int = Query(2025, descript
     try:
         from scripts.college_baseball_importer import get_team_schedule
         # team_id can be string (e.g., 'LSU__SEC') or numeric string
-        schedule = get_team_schedule(team_id)
+        schedule = get_team_schedule(team_id, year=year)
         return {
             "team_id": team_id,
             "year": year,
@@ -3308,23 +3308,10 @@ async def get_ncaa_baseball_stats(
     try:
         from scripts.college_baseball_importer import get_team_player_stats, get_team_stats
         
-        stats = get_team_player_stats(str(team_id), stat_type, year)
+        # team_id can be string (e.g., 'LSU__SEC') or numeric string
+        # get_team_player_stats now has internal on-demand fallback via R script
+        stats = get_team_player_stats(str(team_id), stat_type, year=year)
         
-        if not stats:
-            # Try importing this team's stats using our robust Python importer
-            # This will fetch the bulk data from GitHub and extract the team
-            from scripts.college_baseball_importer import run_college_baseball_import
-            
-            # We await it to ensure data is ready for this request
-            # Note: This might take a few seconds on first run, but subsequent team lookups
-            # will be fast if they share the same bulk file cache (if we implemented local caching, 
-            # but currently we re-download. Actually, we might want to suppress re-download 
-            # if files are recent, but user asked for "fresh on every import".
-            # For a single page load, maybe 2-3 seconds is acceptable.)
-            await run_college_baseball_import(division=1, year=year, team_id=int(team_id) if team_id.isdigit() else None, source="python")
-            
-            # Reload stats after import
-            stats = get_team_player_stats(str(team_id), stat_type, year)
         
         return {
             "team_id": team_id,

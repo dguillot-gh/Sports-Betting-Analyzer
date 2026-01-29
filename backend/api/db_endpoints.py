@@ -720,6 +720,45 @@ async def get_profile_list(sport: str, entity_type: str = None, series: str = No
     """
     conn = await get_db_connection()
     try:
+        if sport == 'college_baseball':
+            from pathlib import Path
+            import json
+            
+            # Use relative path that works locally, fallback to Docker path
+            _local_data_dir = Path(__file__).parent.parent / "data" / "baseball"
+            _docker_data_dir = Path("/app/data/baseball")
+            data_dir = _local_data_dir if _local_data_dir.exists() or not _docker_data_dir.exists() else _docker_data_dir
+            
+            inventory_file = data_dir / "players_inventory.json"
+            if inventory_file.exists():
+                with open(inventory_file, 'r') as f:
+                    inventory = json.load(f)
+                
+                entities = []
+                for idx, (p_name, teams) in enumerate(inventory.items()):
+                    if search and search.lower() not in p_name.lower():
+                        continue
+                    
+                    # Get the first team for metadata
+                    first_team_id = next(iter(teams))
+                    team_info = teams[first_team_id]
+                    
+                    entities.append({
+                        "id": idx + 10000,
+                        "name": p_name,
+                        "type": "player",
+                        "series": team_info.get("team_name", ""),
+                        "metadata": {"team": team_info.get("team_name", ""), "team_id": first_team_id}
+                    })
+                
+                return {
+                    "sport": sport,
+                    "entity_type": "player",
+                    "count": len(entities),
+                    "entities": entities[:limit]
+                }
+            return {"sport": sport, "entity_type": "player", "count": 0, "entities": []}
+
         # Auto-create sport entry if it doesn't exist
         sport_id = await ensure_sport_exists(conn, sport)
         
@@ -785,6 +824,80 @@ async def get_entity_profile(sport: str, name: str, series: str = None, season: 
     """
     conn = await get_db_connection()
     try:
+        if sport == 'college_baseball':
+            from pathlib import Path
+            import json
+            import pandas as pd
+            
+            # Use relative path that works locally, fallback to Docker path
+            _local_data_dir = Path(__file__).parent.parent / "data" / "baseball"
+            _docker_data_dir = Path("/app/data/baseball")
+            data_dir = _local_data_dir if _local_data_dir.exists() or not _docker_data_dir.exists() else _docker_data_dir
+            
+            inventory_file = data_dir / "players_inventory.json"
+            if inventory_file.exists():
+                with open(inventory_file, 'r') as f:
+                    inventory = json.load(f)
+                
+                player_key = None
+                if name in inventory:
+                    player_key = name
+                else:
+                    # Case insensitive search
+                    for k in inventory.keys():
+                        if k.lower() == name.lower():
+                            player_key = k
+                            break
+                
+                if player_key:
+                    teams = inventory[player_key]
+                    first_team_id = next(iter(teams))
+                    team_info = teams[first_team_id]
+                    
+                    profile = {
+                        "entity": {
+                            "id": 10000,
+                            "name": player_key,
+                            "type": "player",
+                            "series": team_info.get("team_name", ""),
+                            "metadata": {"team": team_info.get("team_name", ""), "team_id": first_team_id}
+                        },
+                        "sport": sport,
+                        "available_seasons": [2025],
+                        "stats": {}
+                    }
+                    
+                    # Load stats from CSVs
+                    for t_id, t_details in teams.items():
+                        year = t_details.get("year", 2025)
+                        season_key = str(year)
+                        if season_key not in profile["stats"]:
+                            profile["stats"][season_key] = {}
+                        
+                        for s_type in t_details.get("stat_types", []):
+                            csv_path = data_dir / "stats" / f"{t_id}_{s_type}.csv"
+                            if csv_path.exists():
+                                try:
+                                    df = pd.read_csv(csv_path)
+                                    df.columns = [c.lower() for c in df.columns]
+                                    
+                                    mask = (df['name'].astype(str).str.lower() == player_key.lower())
+                                    if 'player_name' in df.columns:
+                                        mask |= (df['player_name'].astype(str).str.lower() == player_key.lower())
+                                    
+                                    player_row = df[mask]
+                                    if not player_row.empty:
+                                        row_dict = player_row.iloc[0].to_dict()
+                                        for k, v in row_dict.items():
+                                            if k not in ["name", "player_name", "team", "team_name", "year"]:
+                                                profile["stats"][season_key][k] = v
+                                except Exception as e:
+                                    logger.error(f"Error reading CSV for profile: {e}")
+                    
+                    return profile
+            
+            return {"not_found": True, "message": f"Player '{name}' not found in college baseball data."}
+
         # Auto-create sport entry if it doesn't exist
         sport_id = await ensure_sport_exists(conn, sport)
         
