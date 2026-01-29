@@ -1,4 +1,5 @@
 # api/app.py
+import src.patch_xgboost  # Monkeypatch for legacy sportsdataverse models
 from pathlib import Path
 import sys
 import json
@@ -30,6 +31,8 @@ from api.ai_endpoints import router as ai_router
 from api.ncaab_endpoints import router as ncaab_router
 from api.scheduler_endpoints import router as scheduler_router
 from api.analysis_cache_endpoints import router as analysis_cache_router
+from api.cfb_endpoints import router as cfb_router
+from api.nascar_live_endpoints import router as nascar_live_router
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 # import pandas as pd  <-- Moved to local function scope
@@ -76,6 +79,8 @@ app.include_router(ai_router)  # Unified AI Advisor (Multi-engine + LLM)
 app.include_router(ncaab_router)  # NCAAB Trends
 app.include_router(scheduler_router)  # Import Scheduler & Logs
 app.include_router(analysis_cache_router) # Manual Analysis Cache
+app.include_router(cfb_router)  # College Football Data
+app.include_router(nascar_live_router)  # NASCAR Live Dashboard Logic
 
 # Dev CORS. Tighten for production.
 app.add_middleware(
@@ -2970,27 +2975,39 @@ async def run_baseball_import_with_logging(division, year, team_id, source):
 
 @app.post('/baseball/ncaa/import')
 async def import_college_baseball(
-    division: int = Query(1, description="NCAA Division (1, 2, or 3)"),
-    year: int = Query(2025, description="Season year (use 2024 for most recent completed season)"),
+    division: int = Query(0, description="NCAA Division (1, 2, or 3). Use 0 for ALL divisions (default: one-click import)"),
+    year: int = Query(0, description="Season year. Use 0 for smart year detection (default: auto-detect based on season calendar)"),
     team_id: Optional[int] = Query(None, description="Optional specific team ID"),
-    source: str = Query("auto", description="Data source: auto, python, r, both"),
+    source: str = Query("auto", description="Data source: auto, python (ncaa_bbStats), r (baseballr), both"),
     background_tasks: BackgroundTasks = BackgroundTasks()
 ):
     """
-    Import college baseball data using baseballr or collegebaseball.
-    Runs in background to avoid timeout.
+    One-click dynamic college baseball importer.
+    
+    This endpoint automatically:
+    - Detects the appropriate season year (smart year detection)
+    - Imports all divisions in priority order (D1, D3, D2)
+    - Falls back to previous years for D2 if current year fails
+    
+    Reference packages:
+    - Python: https://github.com/JohnJustinn/ncaa-bbStats
+    - R: https://github.com/BillPetti/baseballr
     """
     try:
-        logger.info(f"Starting college baseball import: D{division}, Year {year}, Source: {source}")
+        year_desc = "smart detection" if year == 0 else str(year)
+        div_desc = "ALL" if division == 0 else f"D{division}"
+        logger.info(f"Starting dynamic college baseball import: {div_desc}, Year: {year_desc}, Source: {source}")
         
-        # Run in background with logging wrapper
-        background_tasks.add_task(run_baseball_import_with_logging, division, year, team_id, source)
+        # Run in background with logging wrapper (year=0 triggers smart detection in importer)
+        background_tasks.add_task(run_baseball_import_with_logging, division, year if year != 0 else None, team_id, source)
         
         return {
             "status": "started", 
-            "message": f"Started import for Division {division}, Year {year}",
+            "message": f"One-click import started for {div_desc}, Year: {year_desc}",
             "division": division,
-            "year": year
+            "year": year,
+            "smart_year": year == 0,
+            "all_divisions": division == 0
         }
     except Exception as e:
         logger.error(f"Error starting import: {e}")
@@ -3010,18 +3027,19 @@ def get_college_baseball_status():
 
 
 @app.get('/baseball/ncaa/schedule/{team_id}')
-def get_college_baseball_schedule(team_id: int):
+def get_college_baseball_schedule(team_id: str, year: int = Query(2025, description="Season year")):
     """Get schedule/results for a team."""
+    """Get schedule/results for a team. team_id can be string like 'LSU__SEC'."""
     try:
         from scripts.college_baseball_importer import get_team_schedule
-        schedule = get_team_schedule(team_id)
-        if schedule:
-            return {
-                "team_id": team_id,
-                "count": len(schedule),
-                "games": schedule
-            }
-        return {"error": True, "message": f"No schedule found for team {team_id}"}
+        # team_id can be string (e.g., 'LSU__SEC') or numeric string
+        schedule = get_team_schedule(team_id, year=year)
+        return {
+            "team_id": team_id,
+            "year": year,
+            "games": schedule or [],
+            "count": len(schedule) if schedule else 0
+        }
     except Exception as e:
         logger.error(f"Error getting schedule: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -3262,8 +3280,8 @@ async def get_ncaa_baseball_teams(
         formatted_teams = []
         for team in teams:
             formatted_teams.append({
-                "TeamId": team.get("team_id") or team.get("school_id"),
-                "TeamName": team.get("team_name") or team.get("school"),
+                "TeamId": team.get("team_id") or team.get("school_id") or "",
+                "TeamName": team.get("ncaa_name") or team.get("team_name") or team.get("school") or "",
                 "Conference": team.get("conference", ""),
                 "Division": division
             })
@@ -3293,28 +3311,12 @@ async def get_ncaa_baseball_stats(
     stat_type: 'batting' or 'pitching'
     """
     try:
-        from scripts.college_baseball_importer import get_team_player_stats
+        from scripts.college_baseball_importer import get_team_player_stats, get_team_stats
         
-        stats = get_team_player_stats(str(team_id), stat_type, year)
+        # team_id can be string (e.g., 'LSU__SEC') or numeric string
+        # get_team_player_stats now has internal on-demand fallback via R script
+        stats = get_team_player_stats(str(team_id), stat_type, year=year)
         
-        if not stats:
-            # Try importing this team's stats
-            import subprocess
-            from pathlib import Path
-            
-            r_script = Path(__file__).parent.parent / "scripts" / "college_baseball_importer.R"
-            data_dir = Path("/app/data/baseball")
-            
-            try:
-                # Import specific team (4th arg)
-                subprocess.run(
-                    ["Rscript", str(r_script), "1", str(year), str(data_dir), str(team_id)],
-                    capture_output=True,
-                    timeout=60
-                )
-                stats = get_team_stats(team_id, stat_type)
-            except Exception as e:
-                logger.warning(f"Could not import team stats: {e}")
         
         return {
             "team_id": team_id,
@@ -3328,23 +3330,7 @@ async def get_ncaa_baseball_stats(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/baseball/ncaa/schedule/{team_id}")
-async def get_ncaa_baseball_schedule(team_id: str):
-    """Get team schedule/results."""
-    try:
-        from scripts.college_baseball_importer import get_team_schedule
-        
-        schedule = get_team_schedule(team_id)
-        
-        return {
-            "team_id": team_id,
-            "games": schedule or [],
-            "count": len(schedule) if schedule else 0
-        }
-        
-    except Exception as e:
-        logger.error(f"Error fetching schedule: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# Duplicate schedule endpoint removed - consolidated with /baseball/ncaa/schedule/{team_id} above
 
 
 

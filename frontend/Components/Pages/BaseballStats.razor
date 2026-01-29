@@ -57,11 +57,14 @@
                     </MudButton>
                 </MudItem>
                 <MudItem xs="12" md="3">
-                    <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="ImportDataFromR"
-                               Disabled="@_isImporting" FullWidth="true" Size="Size.Medium">
-                        @if (_isImporting) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
-                        Import from NCAA
-                    </MudButton>
+                    <MudTooltip Text="Imports all divisions (D1, D3, D2) with smart year detection">
+                        <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="ImportAllTeams"
+                                   Disabled="@_isImporting" FullWidth="true" Size="Size.Medium"
+                                   StartIcon="@Icons.Material.Filled.CloudDownload">
+                            @if (_isImporting) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                            Import All Teams
+                        </MudButton>
+                    </MudTooltip>
                 </MudItem>
             </MudGrid>
             
@@ -75,7 +78,7 @@
             {
                 <MudAlert Severity="Severity.Warning" Class="mt-3">
                     <strong>No team data found for D@_selectedDivision.</strong> 
-                    Click "Import from NCAA" to fetch teams. This requires R and baseballr to be installed.
+                    Click "Import All Teams" to fetch all divisions automatically.
                 </MudAlert>
             }
         </MudPaper>
@@ -93,7 +96,8 @@
                                Variant="Variant.Outlined" Dense="true" Style="width: 120px;">
                         @for (int y = DateTime.Now.Year; y >= 2015; y--)
                         {
-                            <MudSelectItem Value="@y">@y</MudSelectItem>
+                            var year = y;  @* Local copy to avoid closure capture bug *@
+                            <MudSelectItem Value="@year">@year</MudSelectItem>
                         }
                     </MudSelect>
                     <MudButton Variant="Variant.Filled" Color="Color.Info" OnClick="LoadTeamStats"
@@ -222,7 +226,7 @@
                         <MudAlert Severity="Severity.Info">Select a team and click "Load Stats" to view pitching statistics.</MudAlert>
                     }
                 </MudTabPanel>
-                
+
                 <!-- Schedule Tab -->
                 <MudTabPanel Text="Schedule" Icon="@Icons.Material.Filled.CalendarMonth">
                     @if (_schedule.Any())
@@ -365,22 +369,23 @@
         }
     }
     
-    private async Task ImportDataFromR()
+    private async Task ImportAllTeams()
     {
         _isImporting = true;
-        _importStatus = $"Starting import for D{_selectedDivision}...";
+        _importStatus = "Starting one-click import for all divisions (D1, D3, D2)...";
         StateHasChanged();
         
         try
         {
+            // One-click import: division=0 (all), year=0 (smart detection)
             var response = await Http.PostAsync(
-                $"http://backend:8000/baseball/ncaa/import?division={_selectedDivision}", 
+                "http://backend:8000/baseball/ncaa/import", 
                 null);
             
             if (response.IsSuccessStatusCode)
             {
-                _importStatus = "Import started! This runs in the background. Check status below, then click 'Load Teams' when ready.";
-                Snackbar.Add("Import started in background", Severity.Success);
+                _importStatus = "One-click import started! Importing D1, D3, D2 with automatic year detection. Check status below.";
+                Snackbar.Add("Import started for all divisions", Severity.Success);
                 
                 // Start polling for status
                 _ = PollImportStatus();
@@ -455,19 +460,19 @@
                 {
                     _battingStats = battingResponse.Stats.Select(s => new BattingPlayer
                     {
-                        Name = GetString(s, "player_name", s.GetValueOrDefault("Name")?.ToString() ?? "Unknown"),
-                        Position = GetString(s, "Pos", ""),
-                        GP = GetInt(s, "GP"),
-                        AB = GetInt(s, "AB"),
-                        R = GetInt(s, "R"),
-                        H = GetInt(s, "H"),
-                        Doubles = GetInt(s, "2B"),
-                        Triples = GetInt(s, "3B"),
-                        HR = GetInt(s, "HR"),
-                        RBI = GetInt(s, "RBI"),
-                        AVG = GetDouble(s, "BA", GetDouble(s, "AVG")),
-                        OBP = GetDouble(s, "OBPct", GetDouble(s, "OBP")),
-                        SLG = GetDouble(s, "SlgPct", GetDouble(s, "SLG"))
+                        Name = GetString(s, "name", GetString(s, "player_name", "Unknown")),
+                        Position = GetString(s, "pos", "-"),
+                        GP = GetInt(s, "g", GetInt(s, "GP")),
+                        AB = GetInt(s, "ab", GetInt(s, "AB")),
+                        R = GetInt(s, "r", GetInt(s, "R")),
+                        H = GetInt(s, "h", GetInt(s, "H")),
+                        Doubles = GetInt(s, "2b", GetInt(s, "2B")),
+                        Triples = GetInt(s, "3b", GetInt(s, "3B")),
+                        HR = GetInt(s, "hr", GetInt(s, "HR")),
+                        RBI = GetInt(s, "rbi", GetInt(s, "RBI")),
+                        AVG = GetDouble(s, "avg", GetDouble(s, "BA")),
+                        OBP = GetDouble(s, "obp", GetDouble(s, "OBPct")),
+                        SLG = GetDouble(s, "slg", GetDouble(s, "SlgPct"))
                     }).ToList();
                 }
             }
@@ -484,7 +489,7 @@
                 {
                     _pitchingStats = pitchingResponse.Stats.Select(s => new PitchingPlayer
                     {
-                        Name = GetString(s, "player_name", s.GetValueOrDefault("Name")?.ToString() ?? "Unknown"),
+                        Name = GetString(s, "name", GetString(s, "player_name", "Unknown")),
                         W = GetInt(s, "W"),
                         L = GetInt(s, "L"),
                         ERA = GetDouble(s, "ERA"),
@@ -504,7 +509,7 @@
             {
                 Logger.LogWarning("Error loading pitching: {Error}", ex.Message);
             }
-            
+
             // Load schedule
             try
             {
@@ -556,16 +561,33 @@
     // Helper methods
     private string GetString(Dictionary<string, object> dict, string key, string fallback = "")
     {
+        // Try exact match
         if (dict.TryGetValue(key, out var val) && val != null)
             return val.ToString() ?? fallback;
+            
+        // Try case-insensitive match
+        var keyMatch = dict.Keys.FirstOrDefault(k => k.Equals(key, StringComparison.OrdinalIgnoreCase));
+        if (keyMatch != null && dict.TryGetValue(keyMatch, out var val2) && val2 != null)
+             return val2.ToString() ?? fallback;
+
         return fallback;
     }
     
     private int GetInt(Dictionary<string, object> dict, string key, int fallback = 0)
     {
-        if (dict.TryGetValue(key, out var val) && val != null)
+        object? val = null;
+        if (dict.TryGetValue(key, out var v)) val = v;
+        else 
         {
-            if (val is JsonElement je && je.TryGetInt32(out var i)) return i;
+             var keyMatch = dict.Keys.FirstOrDefault(k => k.Equals(key, StringComparison.OrdinalIgnoreCase));
+             if (keyMatch != null) dict.TryGetValue(keyMatch, out val);
+        }
+
+        if (val != null)
+        {
+            if (val is System.Text.Json.JsonElement je && je.ValueKind == System.Text.Json.JsonValueKind.Number && je.TryGetInt32(out var i)) return i;
+            if (val is int iVal) return iVal;
+            if (val is long lVal) return (int)lVal;
             if (int.TryParse(val.ToString(), out var parsed)) return parsed;
         }
         return fallback;
@@ -573,9 +595,18 @@
     
     private double GetDouble(Dictionary<string, object> dict, string key, double fallback = 0)
     {
-        if (dict.TryGetValue(key, out var val) && val != null)
+        object? val = null;
+        if (dict.TryGetValue(key, out var v)) val = v;
+        else 
         {
-            if (val is JsonElement je && je.TryGetDouble(out var d)) return d;
+             var keyMatch = dict.Keys.FirstOrDefault(k => k.Equals(key, StringComparison.OrdinalIgnoreCase));
+             if (keyMatch != null) dict.TryGetValue(keyMatch, out val);
+        }
+
+        if (val != null)
+        {
+            if (val is System.Text.Json.JsonElement je && je.ValueKind == System.Text.Json.JsonValueKind.Number && je.TryGetDouble(out var d)) return d;
+            if (val is double dVal) return dVal;
             if (double.TryParse(val.ToString(), out var parsed)) return parsed;
         }
         return fallback;

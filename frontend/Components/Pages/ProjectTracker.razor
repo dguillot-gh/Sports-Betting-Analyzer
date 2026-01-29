@@ -1,0 +1,398 @@
+@page "/project-tracker"
+@using MudBlazor
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IConfiguration Configuration
+@rendermode InteractiveServer
+
+<PageTitle>Project Tracker - Sports Betting Analyzer</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudStack Spacing="4">
+        <MudPaper Class="pa-4" Elevation="3" Style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <div>
+                    <MudText Typo="Typo.h4" Style="color: white;">
+                        <MudIcon Icon="@Icons.Material.Filled.RocketLaunch" Class="mr-2" />
+                        Project Tracker
+                    </MudText>
+                    <MudText Typo="Typo.subtitle1" Style="color: #94a3b8;">Track bugs, feature requests, and the product roadmap.</MudText>
+                </div>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenAddDialog">
+                    New Item
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+
+        <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6" Color="Color.Surface">
+            @* Roadmap Tab *@
+            <MudTabPanel Text="Roadmap" Icon="@Icons.Material.Filled.Map">
+                <MudText Typo="Typo.h6" Class="mb-3" Style="color: #60a5fa;">
+                    <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Class="mr-1" /> Feature Requests & Ideas
+                </MudText>
+                <MudDataGrid T="TrackerItem" Items="@_items.Where(b => b.Type == "Feature")" Filterable="true" SortMode="SortMode.Multiple" Hover="true" Dense="true">
+                    <Columns>
+                        <PropertyColumn Property="x => x.Priority" Title="Priority">
+                            <CellTemplate>
+                                <MudChip T="string" Color="@GetPriorityColor(context.Item.Priority)" Size="Size.Small" Variant="Variant.Filled">@context.Item.Priority</MudChip>
+                            </CellTemplate>
+                        </PropertyColumn>
+                        <PropertyColumn Property="x => x.Title" Title="Feature" />
+                        <PropertyColumn Property="x => x.Description" Title="Description" />
+                        <TemplateColumn Title="Status">
+                            <CellTemplate>
+                                <MudSelect T="string" Value="@context.Item.Status" ValueChanged="@(v => UpdateStatus(context.Item.Id, v))" Dense="true" Variant="Variant.Text" Margin="Margin.None">
+                                    <MudSelectItem Value="@("New")">📋 Backlog</MudSelectItem>
+                                    <MudSelectItem Value="@("In Progress")">🚀 In Progress</MudSelectItem>
+                                    <MudSelectItem Value="@("Testing")">🧪 Testing</MudSelectItem>
+                                    <MudSelectItem Value="@("Resolved")">✅ Done</MudSelectItem>
+                                </MudSelect>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn CellClass="d-flex justify-end">
+                            <CellTemplate>
+                                <MudTooltip Text="Generate Gemini Prompt">
+                                    <MudIconButton Size="@Size.Small" Icon="@Icons.Material.Filled.AutoFixHigh" Color="Color.Secondary" OnClick="@(() => GenerateGeminiPrompt(context.Item))" />
+                                </MudTooltip>
+                                <MudIconButton Size="@Size.Small" Icon="@Icons.Material.Filled.Edit" OnClick="@(() => OpenEditDialog(context.Item))" />
+                                <MudIconButton Size="@Size.Small" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteItem(context.Item.Id))" />
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                    <NoRecordsContent>
+                        <MudText>No feature requests yet. Add one to get started!</MudText>
+                    </NoRecordsContent>
+                </MudDataGrid>
+            </MudTabPanel>
+
+            @* Bugs Tab *@
+            <MudTabPanel Text="Active Bugs" Icon="@Icons.Material.Filled.BugReport">
+                <MudDataGrid T="TrackerItem" Items="@_items.Where(b => b.Type == "Bug" && b.Status != "Resolved")" Filterable="true" SortMode="SortMode.Multiple" Hover="true">
+                    <Columns>
+                        <PropertyColumn Property="x => x.Severity" Title="Severity">
+                            <CellTemplate>
+                                <MudChip T="string" Color="@GetSeverityColor(context.Item.Severity)" Size="Size.Small" Variant="Variant.Filled">@context.Item.Severity</MudChip>
+                            </CellTemplate>
+                        </PropertyColumn>
+                        <PropertyColumn Property="x => x.Title" Title="Title" />
+                        <PropertyColumn Property="x => x.CreatedAt" Title="Reported" />
+                        <TemplateColumn Title="Status">
+                            <CellTemplate>
+                                <MudSelect T="string" Value="@context.Item.Status" ValueChanged="@(v => UpdateStatus(context.Item.Id, v))" Dense="true" Variant="Variant.Text" Margin="Margin.None">
+                                    <MudSelectItem Value="@("New")">New</MudSelectItem>
+                                    <MudSelectItem Value="@("In Progress")">In Progress</MudSelectItem>
+                                    <MudSelectItem Value="@("Testing")">Testing</MudSelectItem>
+                                    <MudSelectItem Value="@("Resolved")">Resolved</MudSelectItem>
+                                </MudSelect>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn CellClass="d-flex justify-end">
+                            <CellTemplate>
+                                <MudIconButton Size="@Size.Small" Icon="@Icons.Material.Filled.Edit" OnClick="@(() => OpenEditDialog(context.Item))" />
+                                <MudIconButton Size="@Size.Small" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteItem(context.Item.Id))" />
+                                <MudIconButton Size="@Size.Small" Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" OnClick="@(() => UpdateStatus(context.Item.Id, "Resolved"))" Title="Quick Resolve" />
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                    <NoRecordsContent>
+                        <MudText>No active bugs found. Great job!</MudText>
+                    </NoRecordsContent>
+                </MudDataGrid>
+            </MudTabPanel>
+            
+            @* Resolved Tab *@
+            <MudTabPanel Text="Completed" Icon="@Icons.Material.Filled.CheckCircle">
+                <MudDataGrid T="TrackerItem" Items="@_items.Where(b => b.Status == "Resolved")" Hover="true">
+                    <Columns>
+                        <PropertyColumn Property="x => x.Type" Title="Type" />
+                        <PropertyColumn Property="x => x.Title" Title="Item" />
+                        <PropertyColumn Property="x => x.CreatedAt" Title="Created" />
+                        <TemplateColumn Title="Actions">
+                            <CellTemplate>
+                                <MudButton Size="@Size.Small" Variant="Variant.Outlined" OnClick="@(() => UpdateStatus(context.Item.Id, "New"))">Re-open</MudButton>
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                </MudDataGrid>
+            </MudTabPanel>
+        </MudTabs>
+    </MudStack>
+</MudContainer>
+
+@* Add/Edit Dialog *@
+<MudDialog @bind-Visible="_dialogOpen" Options="new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true }">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_isEdit ? "Edit Item" : "New Item")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_currentItem.Title" Label="Title" Required="true" Variant="Variant.Outlined" Placeholder="e.g. CLV Tracker Dashboard" />
+            <MudTextField @bind-Value="_currentItem.Description" Label="Description" Lines="3" Variant="Variant.Outlined" Placeholder="Describe the feature or bug..." />
+            <MudSelect @bind-Value="_currentItem.Type" Label="Type" Variant="Variant.Outlined">
+                <MudSelectItem Value="@("Bug")">🐛 Bug</MudSelectItem>
+                <MudSelectItem Value="@("Feature")">✨ Feature Request</MudSelectItem>
+                <MudSelectItem Value="@("UI")">🎨 UI Tweak</MudSelectItem>
+            </MudSelect>
+            @if (_currentItem.Type == "Feature")
+            {
+                <MudSelect @bind-Value="_currentItem.Priority" Label="Priority" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("Critical")">🔥 Critical</MudSelectItem>
+                    <MudSelectItem Value="@("High")">⬆️ High</MudSelectItem>
+                    <MudSelectItem Value="@("Medium")">➡️ Medium</MudSelectItem>
+                    <MudSelectItem Value="@("Low")">⬇️ Low</MudSelectItem>
+                </MudSelect>
+            }
+            else
+            {
+                <MudSelect @bind-Value="_currentItem.Severity" Label="Severity" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("Low")">Low</MudSelectItem>
+                    <MudSelectItem Value="@("Medium")">Medium</MudSelectItem>
+                    <MudSelectItem Value="@("High")">High</MudSelectItem>
+                    <MudSelectItem Value="@("Critical")">Critical</MudSelectItem>
+                </MudSelect>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _dialogOpen = false)">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveItem">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@* Gemini Prompt Dialog *@
+<MudDialog @bind-Visible="_promptDialogOpen" Options="new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true }">
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center">
+            <MudIcon Icon="@Icons.Material.Filled.AutoFixHigh" Color="Color.Secondary" Class="mr-2" />
+            <MudText Typo="Typo.h6">LLM Implementation Prompt</MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-2" Style="color: #94a3b8;">Copy this prompt into Gemini or your AI assistant to implement this feature:</MudText>
+        <MudPaper Class="pa-4" Elevation="0" Style="background: #1e293b; border-radius: 8px;">
+            <MudText Style="font-family: monospace; white-space: pre-wrap; color: #e2e8f0; font-size: 0.85rem;">@_generatedPrompt</MudText>
+        </MudPaper>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _promptDialogOpen = false)">Close</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.ContentCopy" OnClick="CopyPromptToClipboard">Copy to Clipboard</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<TrackerItem> _items = new();
+    private bool _dialogOpen = false;
+    private bool _promptDialogOpen = false;
+    private bool _isEdit = false;
+    private TrackerItem _currentItem = new();
+    private string _generatedPrompt = "";
+    private string _apiBaseUrl = "http://backend:8000";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _apiBaseUrl = Configuration["PythonApiUrl"] ?? "http://backend:8000";
+        await LoadItems();
+    }
+
+    private async Task LoadItems()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<ItemResponse>($"{_apiBaseUrl}/bugs");
+            if (response != null) 
+            {
+                _items = response.Bugs.Select(b => new TrackerItem
+                {
+                    Id = b.Id,
+                    Title = b.Title,
+                    Description = b.Description,
+                    Severity = b.Severity,
+                    Type = b.Type,
+                    Status = b.Status,
+                    Priority = b.Severity, // Use severity as priority for features
+                    CreatedAt = b.CreatedAt
+                }).ToList();
+            }
+        }
+        catch (Exception) 
+        {
+            // Silent fail if endpoint doesn't exist yet
+        }
+    }
+
+    private void OpenAddDialog()
+    {
+        _isEdit = false;
+        _currentItem = new TrackerItem { Severity = "Medium", Status = "New", Type = "Feature", Priority = "Medium" };
+        _dialogOpen = true;
+    }
+
+    private void OpenEditDialog(TrackerItem item)
+    {
+        _isEdit = true;
+        _currentItem = new TrackerItem 
+        { 
+            Id = item.Id, 
+            Title = item.Title, 
+            Description = item.Description, 
+            Severity = item.Severity, 
+            Status = item.Status,
+            Type = item.Type,
+            Priority = item.Priority
+        };
+        _dialogOpen = true;
+    }
+
+    private async Task SaveItem()
+    {
+        if (string.IsNullOrWhiteSpace(_currentItem.Title)) return;
+
+        // Map priority to severity for backend compatibility
+        if (_currentItem.Type == "Feature")
+        {
+            _currentItem.Severity = _currentItem.Priority;
+        }
+
+        try
+        {
+            HttpResponseMessage response;
+            var payload = new { 
+                title = _currentItem.Title, 
+                description = _currentItem.Description, 
+                severity = _currentItem.Severity, 
+                type = _currentItem.Type, 
+                status = _currentItem.Status 
+            };
+
+            if (_isEdit)
+                response = await Http.PutAsJsonAsync($"{_apiBaseUrl}/bugs/{_currentItem.Id}", payload);
+            else
+                response = await Http.PostAsJsonAsync($"{_apiBaseUrl}/bugs", payload);
+
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add(_isEdit ? "Item updated" : "Item created", Severity.Success);
+                _dialogOpen = false;
+                await LoadItems();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task UpdateStatus(int id, string status)
+    {
+        try
+        {
+            var response = await Http.PatchAsJsonAsync($"{_apiBaseUrl}/bugs/{id}/status", new { status = status });
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadItems();
+                Snackbar.Add($"Status updated to {status}", Severity.Info);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error updating status: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DeleteItem(int id)
+    {
+        var confirm = await DialogService.ShowMessageBox("Delete Item", "Are you sure you want to delete this item?", yesText: "Delete", cancelText: "Cancel");
+        if (confirm == true)
+        {
+            try
+            {
+                await Http.DeleteAsync($"{_apiBaseUrl}/bugs/{id}");
+                await LoadItems();
+                Snackbar.Add("Item deleted", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private void GenerateGeminiPrompt(TrackerItem item)
+    {
+        _generatedPrompt = $@"I need you to implement a new feature in my Sports Betting Analyzer application.
+
+## Feature Request
+**Title:** {item.Title}
+**Priority:** {item.Priority}
+**Description:** {item.Description}
+
+## Project Context
+- **Frontend:** Blazor WebAssembly with MudBlazor UI components
+- **Backend:** Python FastAPI with PostgreSQL database
+- **Location:** d:\repo (frontend in /frontend, backend in /backend)
+
+## Instructions
+1. First, explore the existing codebase to understand the patterns used.
+2. Create any necessary API endpoints in the backend.
+3. Create or modify the frontend pages/components.
+4. Follow the existing code style and conventions.
+5. Ensure the feature integrates smoothly with existing functionality.
+
+Please start by examining the relevant files and then provide an implementation plan before making changes.";
+
+        _promptDialogOpen = true;
+    }
+
+    private async Task CopyPromptToClipboard()
+    {
+        // Note: Clipboard API requires JS interop in Blazor
+        Snackbar.Add("Prompt ready to copy (use Ctrl+A, Ctrl+C in the text area)", Severity.Info);
+    }
+
+    private Color GetSeverityColor(string severity) => severity switch
+    {
+        "Critical" => Color.Error,
+        "High" => Color.Warning,
+        "Medium" => Color.Info,
+        _ => Color.Default
+    };
+
+    private Color GetPriorityColor(string priority) => priority switch
+    {
+        "Critical" => Color.Error,
+        "High" => Color.Warning,
+        "Medium" => Color.Primary,
+        "Low" => Color.Default,
+        _ => Color.Default
+    };
+
+    public class TrackerItem
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string Severity { get; set; } = "Medium";
+        public string Priority { get; set; } = "Medium";
+        public string Status { get; set; } = "New";
+        public string Type { get; set; } = "Feature";
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
+    }
+
+    public class BugDto
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string Severity { get; set; } = "Medium";
+        public string Type { get; set; } = "Bug";
+        public string Status { get; set; } = "New";
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
+    }
+
+    public class ItemResponse
+    {
+        public List<BugDto> Bugs { get; set; } = new();
+    }
+}

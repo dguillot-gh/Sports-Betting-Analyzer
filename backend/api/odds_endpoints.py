@@ -821,6 +821,10 @@ async def update_torvik_data():
         logger.error(f"Torvik update error: {e}")
         return {"status": "error", "message": str(e)}
 
+
+
+
+
 @router.post("/ncaab/upload-torvik")
 async def upload_torvik_csv(
     file: UploadFile = File(...)
@@ -844,3 +848,70 @@ async def upload_torvik_csv(
     except Exception as e:
         logger.error(f"Upload failed: {e}")
         return {"status": "error", "message": str(e)}
+
+
+# ========================================================
+# College Football (CFB/NCAAF) Endpoints
+# ========================================================
+
+@router.post("/cfb/analyze-all")
+async def analyze_all_cfb_games(
+    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from")
+):
+    """
+    Fetch today's College Football games and run predictions.
+    Uses The Odds API (americanfootball_ncaaf) with quota tracking.
+    """
+    from scripts.cfb_predictor import get_todays_cfb_odds, analyze_cfb_matchup_dual
+    
+    # 1. Fetch Odds
+    odds_data = await get_todays_cfb_odds(sportsbook)
+    
+    if odds_data.get("error") or not odds_data.get("games"):
+        return odds_data
+    
+    # 2. Analyze Games
+    analyzed_games = []
+    for game in odds_data["games"]:
+        try:
+            # Dual analysis (Simple + XGB placeholder)
+            prediction = await analyze_cfb_matchup_dual(
+                home_team=game.get("home_team", ""),
+                away_team=game.get("away_team", ""),
+                spread=game.get("spread"),
+                over_under=game.get("over_under"),
+                home_ml=game.get("home_moneyline"),
+                away_ml=game.get("away_moneyline")
+            )
+            
+            analyzed_game = {**game, **prediction}
+            analyzed_games.append(analyzed_game)
+        except Exception as e:
+            logger.error(f"Error analyzing CFB game: {e}")
+            analyzed_games.append({**game, "prediction_error": str(e)})
+            
+    # 3. Return Response (including quota)
+    return {
+        "date": odds_data.get("date"),
+        "sportsbook": sportsbook,
+        "games": analyzed_games,
+        "count": len(analyzed_games),
+        "source": odds_data.get("source"),
+        "api_quota": odds_data.get("api_quota"), # Pass through quota info
+        "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False)),
+    }
+
+@router.post("/cfb/predict-dual")
+async def predict_cfb_dual(
+    home_team: str = Query(..., description="Home team name"),
+    away_team: str = Query(..., description="Away team name"),
+    spread: float = Query(None, description="Point spread"),
+    over_under: float = Query(None, description="Over/under total"),
+    home_ml: int = Query(None, description="Home team moneyline"),
+    away_ml: int = Query(None, description="Away team moneyline")
+):
+    """
+    Predict CFB game with simple model (XGB placeholder).
+    """
+    from scripts.cfb_predictor import analyze_cfb_matchup_dual
+    return await analyze_cfb_matchup_dual(home_team, away_team, spread, over_under, home_ml, away_ml)

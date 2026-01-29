@@ -1,0 +1,370 @@
+@page "/college-football"
+@using MudBlazor
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject IConfiguration Configuration
+@using System.Text.Json.Serialization
+@rendermode InteractiveServer
+
+<PageTitle>College Football - Sports Betting Analyzer</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudStack Spacing="4">
+        @* Header *@
+        <MudPaper Class="pa-4" Elevation="3" Style="background: linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%); border-left: 4px solid #ffc107;">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <div>
+                    <MudText Typo="Typo.h4" Style="color: white;">
+                        <MudIcon Icon="@Icons.Material.Filled.SportsFootball" Class="mr-2" />
+                        College Football Stats
+                    </MudText>
+                    <MudText Typo="Typo.subtitle1" Style="color: #94a3b8;">@_currentSeason Season • Powered by CollegeFootballData.com</MudText>
+                </div>
+                <MudStack Row="true" Spacing="2">
+                    <MudSelect T="int" Value="@_selectedYear" ValueChanged="OnYearChanged" Label="Season" Variant="Variant.Outlined" Dense="true" Style="width: 120px; background: rgba(255,255,255,0.1);">
+                        @foreach (var y in _availableYears)
+                        {
+                            <MudSelectItem Value="@y">@y</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudButton Variant="Variant.Filled" Color="Color.Warning" StartIcon="@Icons.Material.Filled.Refresh" OnClick="ImportData" Disabled="@_isLoading">
+                        @(_isLoading ? "Importing..." : "Import Data")
+                    </MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+
+        @* Status Alert *@
+        @if (!_apiAvailable)
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Filled">
+                <strong>CFB API Key Required:</strong> Add CFBD_API_KEY to your .env file. 
+                <MudLink Href="https://collegefootballdata.com/key" Target="_blank" Style="color: white;">Get a free key here</MudLink>
+            </MudAlert>
+        }
+
+        @* Stats Summary Cards *@
+        <MudGrid>
+            <MudItem xs="12" sm="4">
+                <MudPaper Class="pa-4" Elevation="2" Style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                    <MudStack AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Large" />
+                        <MudText Typo="Typo.h4">@_teams.Count</MudText>
+                        <MudText Typo="Typo.subtitle2">Teams Loaded</MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudPaper Class="pa-4" Elevation="2" Style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white;">
+                    <MudStack AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.Event" Size="Size.Large" />
+                        <MudText Typo="Typo.h4">@_games.Count</MudText>
+                        <MudText Typo="Typo.subtitle2">Games</MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudPaper Class="pa-4" Elevation="2" Style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
+                    <MudStack AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" />
+                        <MudText Typo="Typo.h4">@_players.Count</MudText>
+                        <MudText Typo="Typo.subtitle2">Player Stats</MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        @* Main Content Tabs *@
+        <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4" Color="Color.Primary">
+            @* Teams Tab *@
+            <MudTabPanel Text="Teams" Icon="@Icons.Material.Filled.Groups">
+                <MudStack Spacing="2">
+                    <MudStack Row="true" Spacing="2">
+                        <MudTextField @bind-Value="_teamSearch" Label="Search Teams" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Clearable="true" Immediate="true" />
+                        <MudSelect T="string" @bind-Value="_conferenceFilter" Label="Conference" Variant="Variant.Outlined" Clearable="true" Style="min-width: 200px;">
+                            @foreach (var conf in _conferences)
+                            {
+                                <MudSelectItem Value="@conf">@conf</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudStack>
+                    
+                    <MudDataGrid T="TeamInfo" Items="@FilteredTeams" Filterable="false" SortMode="SortMode.Multiple" Hover="true" Dense="true">
+                        <Columns>
+                            <PropertyColumn Property="x => x.School" Title="Team" />
+                            <PropertyColumn Property="x => x.Conference" Title="Conference" />
+                            <PropertyColumn Property="x => x.Division" Title="Division" />
+                            <PropertyColumn Property="x => x.Mascot" Title="Mascot" />
+                            <TemplateColumn Title="Colors">
+                                <CellTemplate>
+                                    <MudStack Row="true" Spacing="1">
+                                        <div style="width: 20px; height: 20px; border-radius: 4px; background: @(context.Item.Color ?? "#333");"></div>
+                                        <div style="width: 20px; height: 20px; border-radius: 4px; background: @(context.Item.AltColor ?? "#666");"></div>
+                                    </MudStack>
+                                </CellTemplate>
+                            </TemplateColumn>
+                        </Columns>
+                        <NoRecordsContent>
+                            <MudText>No teams found. Click "Import Data" to fetch teams.</MudText>
+                        </NoRecordsContent>
+                    </MudDataGrid>
+                </MudStack>
+            </MudTabPanel>
+
+            @* Games Tab *@
+            <MudTabPanel Text="Schedule" Icon="@Icons.Material.Filled.EventNote">
+                <MudStack Spacing="2">
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                        <MudSelect T="int?" @bind-Value="_weekFilter" Label="Week" Variant="Variant.Outlined" Clearable="true" Style="min-width: 120px;">
+                            @for (int w = 1; w <= 15; w++)
+                            {
+                                <MudSelectItem Value="@((int?)w)">Week @w</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudTextField @bind-Value="_gameTeamSearch" Label="Search Team" Variant="Variant.Outlined" Clearable="true" Immediate="true" />
+                    </MudStack>
+                    
+                    <MudDataGrid T="GameInfo" Items="@FilteredGames" Filterable="false" SortMode="SortMode.Multiple" Hover="true" Dense="true">
+                        <Columns>
+                            <PropertyColumn Property="x => x.Week" Title="Week" />
+                            <PropertyColumn Property="x => x.HomeTeam" Title="Home" />
+                            <PropertyColumn Property="x => x.AwayTeam" Title="Away" />
+                            <TemplateColumn Title="Score">
+                                <CellTemplate>
+                                    @if (context.Item.HomePoints.HasValue)
+                                    {
+                                        <MudText>@context.Item.HomePoints - @context.Item.AwayPoints</MudText>
+                                    }
+                                    else
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info">Upcoming</MudChip>
+                                    }
+                                </CellTemplate>
+                            </TemplateColumn>
+                            <PropertyColumn Property="x => x.Venue" Title="Venue" />
+                        </Columns>
+                        <NoRecordsContent>
+                            <MudText>No games found for selected filters.</MudText>
+                        </NoRecordsContent>
+                    </MudDataGrid>
+                </MudStack>
+            </MudTabPanel>
+
+            @* Player Stats Tab *@
+            <MudTabPanel Text="Player Stats" Icon="@Icons.Material.Filled.Person">
+                <MudStack Spacing="2">
+                    <MudStack Row="true" Spacing="2">
+                        <MudTextField @bind-Value="_playerSearch" Label="Search Player" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Clearable="true" Immediate="true" />
+                        <MudSelect T="string" @bind-Value="_positionFilter" Label="Position" Variant="Variant.Outlined" Clearable="true" Style="min-width: 150px;">
+                            <MudSelectItem Value="@("QB")">Quarterback</MudSelectItem>
+                            <MudSelectItem Value="@("RB")">Running Back</MudSelectItem>
+                            <MudSelectItem Value="@("WR")">Wide Receiver</MudSelectItem>
+                            <MudSelectItem Value="@("TE")">Tight End</MudSelectItem>
+                            <MudSelectItem Value="@("LB")">Linebacker</MudSelectItem>
+                            <MudSelectItem Value="@("DB")">Defensive Back</MudSelectItem>
+                        </MudSelect>
+                    </MudStack>
+                    
+                    <MudDataGrid T="PlayerStat" Items="@FilteredPlayers" Filterable="false" SortMode="SortMode.Multiple" Hover="true" Dense="true">
+                        <Columns>
+                            <PropertyColumn Property="x => x.Player" Title="Player" />
+                            <PropertyColumn Property="x => x.Team" Title="Team" />
+                            <PropertyColumn Property="x => x.Position" Title="Pos" />
+                            <PropertyColumn Property="x => x.Category" Title="Category" />
+                            <PropertyColumn Property="x => x.StatType" Title="Stat" />
+                            <PropertyColumn Property="x => x.Stat" Title="Value" />
+                        </Columns>
+                        <NoRecordsContent>
+                            <MudText>No player stats found. Click "Import Data" to fetch stats.</MudText>
+                        </NoRecordsContent>
+                    </MudDataGrid>
+                </MudStack>
+            </MudTabPanel>
+        </MudTabs>
+    </MudStack>
+</MudContainer>
+
+@code {
+    private string _apiBaseUrl = "http://backend:8000";
+    private bool _apiAvailable = true;
+    private bool _isLoading = false;
+    private int _selectedYear;
+    private int _currentSeason;
+    private List<int> _availableYears = new(); // [NEW]
+
+    // Data
+    private List<TeamInfo> _teams = new();
+    private List<GameInfo> _games = new();
+    private List<PlayerStat> _players = new();
+    private List<string> _conferences = new();
+    
+    // Filters
+    private string _teamSearch = "";
+    private string _conferenceFilter = "";
+    private int? _weekFilter;
+    private string _gameTeamSearch = "";
+    private string _playerSearch = "";
+    private string _positionFilter = "";
+    
+    protected override async Task OnInitializedAsync()
+    {
+        _apiBaseUrl = Configuration["PythonApiUrl"] ?? "http://backend:8000";
+        _currentSeason = DateTime.Now.Month >= 8 ? DateTime.Now.Year : DateTime.Now.Year - 1;
+        _selectedYear = _currentSeason;
+        
+        // Populate available years
+        for (int y = _currentSeason; y >= 2015; y--)
+        {
+            _availableYears.Add(y);
+        }
+
+        await CheckApiStatus();
+        await LoadData();
+    }
+    
+    private async Task CheckApiStatus()
+    {
+        try
+        {
+            var status = await Http.GetFromJsonAsync<CfbStatus>($"{_apiBaseUrl}/cfb/status");
+            _apiAvailable = status?.Available ?? false;
+            // Only update current season if API is explicitly available and returns robust data
+            if (status != null && status.CurrentSeason > 0) 
+            {
+               // _currentSeason = status.CurrentSeason; // Keep the local calc as safer default for now
+            }
+        }
+        catch { _apiAvailable = false; }
+    }
+    
+    private async Task OnYearChanged(int year)
+    {
+        _selectedYear = year;
+        await LoadData();
+    }
+    
+    private async Task LoadData()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        
+        try
+        {
+            // Load teams
+            var teamsResp = await Http.GetFromJsonAsync<TeamsResponse>($"{_apiBaseUrl}/cfb/teams?year={_selectedYear}");
+            if (teamsResp != null) _teams = teamsResp.Teams;
+            
+            // Extract conferences
+            _conferences = _teams.Where(t => !string.IsNullOrEmpty(t.Conference))
+                                 .Select(t => t.Conference!)
+                                 .Distinct()
+                                 .OrderBy(c => c)
+                                 .ToList();
+            
+            // Load games
+            var gamesResp = await Http.GetFromJsonAsync<GamesResponse>($"{_apiBaseUrl}/cfb/games?year={_selectedYear}");
+            if (gamesResp != null) _games = gamesResp.Games;
+            
+            // Load player stats
+            var playersResp = await Http.GetFromJsonAsync<PlayersResponse>($"{_apiBaseUrl}/cfb/stats/players?year={_selectedYear}&limit=500");
+            if (playersResp != null) _players = playersResp.Players;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading data: {ex.Message}", Severity.Error);
+        }
+        
+        _isLoading = false;
+        StateHasChanged();
+    }
+    
+    private async Task ImportData()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        
+        try
+        {
+            var result = await Http.PostAsync($"{_apiBaseUrl}/cfb/import?year={_selectedYear}&import_type=all", null);
+            var response = await result.Content.ReadFromJsonAsync<ImportResponse>();
+            
+            if (response?.Success == true)
+            {
+                Snackbar.Add($"Imported {response.TeamsImported} teams, {response.GamesImported} games, {response.PlayersImported} player stats", Severity.Success);
+                await LoadData();
+            }
+            else
+            {
+                Snackbar.Add(response?.Message ?? "Import failed", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Import error: {ex.Message}", Severity.Error);
+        }
+        
+        _isLoading = false;
+    }
+    
+    // Filtered collections
+    private IEnumerable<TeamInfo> FilteredTeams => _teams
+        .Where(t => string.IsNullOrEmpty(_teamSearch) || t.School?.Contains(_teamSearch, StringComparison.OrdinalIgnoreCase) == true)
+        .Where(t => string.IsNullOrEmpty(_conferenceFilter) || t.Conference == _conferenceFilter);
+    
+    private IEnumerable<GameInfo> FilteredGames => _games
+        .Where(g => !_weekFilter.HasValue || g.Week == _weekFilter)
+        .Where(g => string.IsNullOrEmpty(_gameTeamSearch) || 
+                    g.HomeTeam?.Contains(_gameTeamSearch, StringComparison.OrdinalIgnoreCase) == true ||
+                    g.AwayTeam?.Contains(_gameTeamSearch, StringComparison.OrdinalIgnoreCase) == true);
+    
+    private IEnumerable<PlayerStat> FilteredPlayers => _players
+        .Where(p => string.IsNullOrEmpty(_playerSearch) || p.Player?.Contains(_playerSearch, StringComparison.OrdinalIgnoreCase) == true)
+        .Where(p => string.IsNullOrEmpty(_positionFilter) || p.Position?.Contains(_positionFilter, StringComparison.OrdinalIgnoreCase) == true);
+    
+
+
+    // DTOs
+    private class CfbStatus { public bool Available { get; set; } public int CurrentSeason { get; set; } }
+    private class TeamsResponse { [JsonPropertyName("teams")] public List<TeamInfo> Teams { get; set; } = new(); }
+    private class GamesResponse { [JsonPropertyName("games")] public List<GameInfo> Games { get; set; } = new(); }
+    private class PlayersResponse { [JsonPropertyName("players")] public List<PlayerStat> Players { get; set; } = new(); }
+    private class ImportResponse { 
+        [JsonPropertyName("success")] public bool Success { get; set; } 
+        [JsonPropertyName("message")] public string? Message { get; set; } 
+        [JsonPropertyName("teams_imported")] public int TeamsImported { get; set; } 
+        [JsonPropertyName("games_imported")] public int GamesImported { get; set; } 
+        [JsonPropertyName("players_imported")] public int PlayersImported { get; set; } 
+    }
+    
+    private class TeamInfo
+    {
+        [JsonPropertyName("id")] public int? Id { get; set; }
+        [JsonPropertyName("school")] public string? School { get; set; }
+        [JsonPropertyName("mascot")] public string? Mascot { get; set; }
+        [JsonPropertyName("conference")] public string? Conference { get; set; }
+        [JsonPropertyName("division")] public string? Division { get; set; }
+        [JsonPropertyName("color")] public string? Color { get; set; }
+        [JsonPropertyName("alt_color")] public string? AltColor { get; set; }
+    }
+    
+    private class GameInfo
+    {
+        [JsonPropertyName("week")] public int? Week { get; set; }
+        [JsonPropertyName("home_team")] public string? HomeTeam { get; set; }
+        [JsonPropertyName("away_team")] public string? AwayTeam { get; set; }
+        [JsonPropertyName("home_points")] public double? HomePoints { get; set; }
+        [JsonPropertyName("away_points")] public double? AwayPoints { get; set; }
+        [JsonPropertyName("venue")] public string? Venue { get; set; }
+    }
+    
+    private class PlayerStat
+    {
+        [JsonPropertyName("player")] public string? Player { get; set; }
+        [JsonPropertyName("team")] public string? Team { get; set; }
+        [JsonPropertyName("position")] public string? Position { get; set; }
+        [JsonPropertyName("category")] public string? Category { get; set; }
+        [JsonPropertyName("stat_type")] public string? StatType { get; set; }
+        [JsonPropertyName("stat")] public string? Stat { get; set; }
+    }
+}
