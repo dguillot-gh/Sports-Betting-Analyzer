@@ -2880,6 +2880,7 @@
     <Folder Include="tests\" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include=".env" />
     <Content Include="api\__pycache__\app.cpython-313.pyc" />
     <Content Include="configs\nascar_config.yaml" />
     <Content Include="configs\nba_config.yaml" />

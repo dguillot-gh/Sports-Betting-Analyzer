@@ -30,6 +30,7 @@ from api.ai_endpoints import router as ai_router
 from api.ncaab_endpoints import router as ncaab_router
 from api.scheduler_endpoints import router as scheduler_router
 from api.analysis_cache_endpoints import router as analysis_cache_router
+from api.cfb_endpoints import router as cfb_router
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 # import pandas as pd  <-- Moved to local function scope
@@ -76,6 +77,7 @@ app.include_router(ai_router)  # Unified AI Advisor (Multi-engine + LLM)
 app.include_router(ncaab_router)  # NCAAB Trends
 app.include_router(scheduler_router)  # Import Scheduler & Logs
 app.include_router(analysis_cache_router) # Manual Analysis Cache
+app.include_router(cfb_router)  # College Football Data
 
 # Dev CORS. Tighten for production.
 app.add_middleware(

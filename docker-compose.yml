@@ -35,9 +35,18 @@ services:
     container_name: sports-ml-backend
     ports:
       - "8003:8000"
+    env_file:
+      # Use ONE of these (comment out the other):
+      # Local dev: ./backend/.env
+      # Server persistent: /opt/sports-betting/.env (create once, survives deploys)
+      - ./backend/.env
     environment:
       - DATABASE_URL=postgresql://sports_user:${DB_PASSWORD:-sportsbetting2024}@postgres:5432/sports_betting
       - REDIS_URL=redis://redis:6379  # Optional, for caching
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - ODDS_API_KEY=${ODDS_API_KEY:-}
+      - CFBD_API_KEY=${CFBD_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
     volumes:
       - ./backend/data:/app/data
       - ./backend/scripts/models:/app/models
