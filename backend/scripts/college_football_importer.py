@@ -3,6 +3,13 @@ College Football Data Importer
 Uses sportsdataverse-py to fetch CFB data from CollegeFootballData.com API.
 """
 
+
+import sys
+from pathlib import Path
+# Add backend root to path to allow imports if run as script
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+import src.patch_xgboost  # Monkeypatch for legacy models BEFORE importing sportsdataverse
 import os
 import json
 import logging
@@ -19,7 +26,7 @@ DATA_DIR = SCRIPT_DIR.parent / "data" / "college_football"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 # Import config
-from src.config import CFBD_API_KEY, DATABASE_URL
+from src.config import COLLEGE_FOOTBALL_API_KEY, DATABASE_URL
 
 
 def get_current_season() -> int:
@@ -46,14 +53,14 @@ async def run_college_football_import(
     Returns:
         Dict with import results
     """
-    if not CFBD_API_KEY:
+    if not COLLEGE_FOOTBALL_API_KEY:
         return {
             "success": False,
-            "message": "CFBD_API_KEY not configured. Add it to your .env file."
+            "message": "COLLEGE_FOOTBALL_API_KEY not configured. Add it to your .env file."
         }
     
     # Set the API key for sportsdataverse
-    os.environ["CFBD_API_KEY"] = CFBD_API_KEY
+    os.environ["CFBD_API_KEY"] = COLLEGE_FOOTBALL_API_KEY
     
     year = year or get_current_season()
     results = {

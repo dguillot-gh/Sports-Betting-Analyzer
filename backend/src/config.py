@@ -37,8 +37,8 @@ if not ODDS_API_KEY:
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
 # College Football Data API (required for CFB features)
-CFBD_API_KEY = os.getenv("CFBD_API_KEY", "")
-if not CFBD_API_KEY:
+COLLEGE_FOOTBALL_API_KEY = os.getenv("COLLEGE_FOOTBALL_API_KEY", "")
+if not COLLEGE_FOOTBALL_API_KEY:
     import logging
-    logging.warning("CFBD_API_KEY not set - College Football features will be disabled")
+    logging.warning("COLLEGE_FOOTBALL_API_KEY not set - College Football features will be disabled")
 

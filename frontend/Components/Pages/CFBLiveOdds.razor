@@ -1,0 +1,357 @@
+@page "/cfb-live-odds"
+@using System.Text.Json
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject ILogger<CFBLiveOdds> Logger
+@inject PythonMLServiceClient MLServiceClient
+@rendermode InteractiveServer
+
+<PageTitle>CFB Live Odds</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+    <MudStack Spacing="4">
+        <!-- Header -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <div>
+                    <MudText Typo="Typo.h4">
+                        <MudIcon Icon="@Icons.Material.Filled.SportsFootball" Class="mr-2" />
+                        CFB Live Odds
+                    </MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        College Football predictions with value detection
+                    </MudText>
+                </div>
+                <MudStack Row="true" Spacing="2">
+                    <MudSelect T="string" @bind-Value="_selectedSportsbook" Label="Sportsbook" 
+                               Variant="Variant.Outlined" Dense="true" Style="width: 150px;">
+                        <MudSelectItem Value="@("fanduel")">FanDuel</MudSelectItem>
+                        <MudSelectItem Value="@("draftkings")">DraftKings</MudSelectItem>
+                        <MudSelectItem Value="@("betmgm")">BetMGM</MudSelectItem>
+                    </MudSelect>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Refresh"
+                               OnClick="@RunAnalysis" Disabled="@_isLoading">
+                        @if (_isLoading)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            <span>Analyzing...</span>
+                        }
+                        else
+                        {
+                            <span>Analyze Games</span>
+                        }
+                    </MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+
+        @if (_error != null)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Filled">@_error</MudAlert>
+        }
+
+        <ApiQuotaTracker />
+
+        <!-- Summary Stats -->
+        @if (_games.Any())
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.body1">
+                        <strong>@_games.Count</strong> games found · 
+                        <strong>@_valueBets</strong> value bets detected
+                    </MudText>
+                    <MudChip T="string" Color="Color.Info" Size="Size.Small">@_source</MudChip>
+                </MudStack>
+            </MudPaper>
+        }
+
+        <!-- Games Grid -->
+        @if (_games.Any())
+        {
+            <MudGrid Spacing="3">
+                @foreach (var game in _games)
+                {
+                    <MudItem xs="12" md="6" lg="4">
+                        <MudCard Elevation="3" Class="h-100">
+                            <MudCardHeader Style="@GetCardStyle(game)">
+                                <CardHeaderContent>
+                                    <MudText Typo="Typo.h6">@game.AwayTeam</MudText>
+                                    <MudText Typo="Typo.caption">at</MudText>
+                                    <MudText Typo="Typo.h6">@game.HomeTeam</MudText>
+                                </CardHeaderContent>
+                                 <CardHeaderActions>
+                                     @if (game.HasValue)
+                                     {
+                                         <MudChip T="string" Color="Color.Success" Size="Size.Small">VALUE</MudChip>
+                                     }
+                                 </CardHeaderActions>
+                            </MudCardHeader>
+                            <MudCardContent>
+                                <MudSimpleTable Dense="true" Hover="true">
+                                    <tbody>
+                                        @if (game.HomeMoneyline.HasValue && game.AwayMoneyline.HasValue)
+                                        {
+                                            <tr>
+                                                <td><strong>Moneyline</strong></td>
+                                                <td>@FormatOdds(game.HomeMoneyline) / @FormatOdds(game.AwayMoneyline)</td>
+                                            </tr>
+                                        }
+                                        @if (game.Spread.HasValue)
+                                        {
+                                            <tr>
+                                                <td><strong>Spread</strong></td>
+                                                <td>@game.Spread.Value.ToString("+0.0;-0.0")</td>
+                                            </tr>
+                                        }
+                                        @if (game.OverUnder.HasValue)
+                                        {
+                                            <tr>
+                                                <td><strong>O/U</strong></td>
+                                                <td>@game.OverUnder.Value</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+
+                                <!-- Model Predictions Section -->
+                                <MudText Typo="Typo.subtitle2" Class="mt-3 mb-1" Style="font-weight:700;">Predictions</MudText>
+                                <MudSimpleTable Dense="true" Hover="true" Style="background: transparent; border: 1px solid #e0e0e0; border-radius: 4px;">
+                                    <thead>
+                                        <tr style="background: rgba(0,0,0,0.05);">
+                                            <th>Model</th>
+                                            <th>Winner</th>
+                                            <th>Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Simple Model -->
+                                        <tr>
+                                            <td><MudText Typo="Typo.caption" Style="font-weight:600;">Simple Stats</MudText></td>
+                                            <td>
+                                                @if (game.Prediction != null)
+                                                {
+                                                    <strong style="color: @(game.Prediction.HomeWinProbability > 0.5 ? "#4caf50" : "#f44336")">
+                                                        @(game.Prediction.HomeWinProbability > 0.5 ? "Home" : "Away")
+                                                    </strong>
+                                                    <span style="font-size: 0.75em;"> (@(game.Prediction.HomeWinProbability.ToString("P0")))</span>
+                                                }
+                                                else { <span>-</span> }
+                                            </td>
+                                            <td>@(game.Prediction?.PredictedTotal.ToString("F1") ?? "-")</td>
+                                        </tr>
+
+                                        <!-- XGBoost Placeholder (Future) -->
+                                        <tr>
+                                            <td><MudText Typo="Typo.caption" Style="font-weight:600;">XGBoost (ML)</MudText></td>
+                                            <td colspan="2" style="text-align:center;">
+                                                <MudText Typo="Typo.caption" Color="Color.Default" Style="font-style:italic;">Coming Soon</MudText>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </MudSimpleTable>
+
+                                <MudDivider Class="my-2" />
+                                <div class="mt-2">
+                                    @if (game.GeminiAnalysis == null)
+                                    {
+                                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Size="Size.Small"
+                                                   StartIcon="@Icons.Material.Filled.AutoFixHigh"
+                                                   OnClick="@(() => GetGeminiAnalysis(game))" Disabled="@game.IsAnalyzing">
+                                            @if (game.IsAnalyzing)
+                                            {
+                                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                                <span>Analyzing...</span>
+                                            }
+                                            else
+                                            {
+                                                <span>AI Rationale</span>
+                                            }
+                                        </MudButton>
+                                    }
+                                    else
+                                    {
+                                        <div class="mt-2">
+                                            <MudPaper Class="pa-3 mt-2" Style="background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px;">
+                                                <div class="d-flex align-center mb-2">
+                                                    <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Small" Color="Color.Secondary" Class="mr-2" />
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary"><strong>AI Rationale</strong></MudText>
+                                                </div>
+                                                <div style="font-family: 'Inter', 'Roboto', sans-serif; font-size: 0.85rem; line-height: 1.7; color: #37474f;">
+                                                    @((MarkupString)(game.GeminiAnalysis.LlmInsight?.Rationale ?? ""))
+                                                </div>
+                                            </MudPaper>
+                                        </div>
+                                    }
+                                </div>
+                                
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+        else if (!_isLoading)
+        {
+            <MudAlert Severity="Severity.Info">
+                No College Football games found for today. Click "Analyze Games" to fetch live odds from The-Odds-API.
+            </MudAlert>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    private bool _isLoading = false;
+    private string? _error = null;
+    private string _selectedSportsbook = "fanduel";
+    private List<GameData> _games = new();
+    private int _valueBets = 0;
+    private string _source = "";
+
+    private async Task RunAnalysis()
+    {
+        _isLoading = true;
+        _error = null;
+        _games.Clear();
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsync(
+                $"http://backend:8000/odds/cfb/analyze-all?sportsbook={_selectedSportsbook}", 
+                null);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                if (root.TryGetProperty("error", out var err))
+                {
+                    _error = err.GetString();
+                }
+                else
+                {
+                    _source = root.TryGetProperty("source", out var src) ? src.GetString() ?? "" : "";
+                    _valueBets = root.TryGetProperty("value_bets_found", out var vb) ? vb.GetInt32() : 0;
+
+                    if (root.TryGetProperty("games", out var gamesArr))
+                    {
+                        foreach (var g in gamesArr.EnumerateArray())
+                        {
+                            _games.Add(ParseGame(g));
+                        }
+                    }
+                }
+            }
+            else
+            {
+                _error = $"API Error: {response.StatusCode}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = $"Error: {ex.Message}";
+            Logger.LogError(ex, "Error fetching CFB odds");
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private GameData ParseGame(JsonElement g)
+    {
+        var game = new GameData
+        {
+            HomeTeam = g.TryGetProperty("home_team", out var h) ? h.GetString() ?? "" : "",
+            AwayTeam = g.TryGetProperty("away_team", out var a) ? a.GetString() ?? "" : "",
+            HasValue = g.TryGetProperty("has_value", out var hv) && hv.GetBoolean(),
+        };
+
+        if (g.TryGetProperty("home_moneyline", out var hml) && hml.ValueKind == JsonValueKind.Number)
+            game.HomeMoneyline = (int)Math.Round(hml.GetDouble());
+        if (g.TryGetProperty("away_moneyline", out var aml) && aml.ValueKind == JsonValueKind.Number)
+            game.AwayMoneyline = (int)Math.Round(aml.GetDouble());
+        if (g.TryGetProperty("spread", out var sp) && sp.ValueKind == JsonValueKind.Number)
+            game.Spread = sp.GetDecimal();
+        if (g.TryGetProperty("over_under", out var ou) && ou.ValueKind == JsonValueKind.Number)
+            game.OverUnder = ou.GetDecimal();
+
+        if (g.TryGetProperty("simple_model", out var pred) && pred.ValueKind == JsonValueKind.Object)
+        {
+            game.Prediction = new PredictionData
+            {
+                PredictedWinner = pred.TryGetProperty("predicted_winner", out var pw) ? pw.GetString() ?? "" : "",
+                HomeWinProbability = pred.TryGetProperty("home_win_probability", out var hwp) ? hwp.GetDouble() : 0.5,
+                PredictedTotal = pred.TryGetProperty("predicted_total", out var pt) ? pt.GetDouble() : 0,
+                Confidence = pred.TryGetProperty("confidence", out var c) ? c.GetDouble() : 0.5,
+                OuPick = pred.TryGetProperty("ou_pick", out var oup) ? oup.GetString() ?? "" : "",
+            };
+        }
+
+        return game;
+    }
+
+    private string FormatOdds(int? odds) => odds switch
+    {
+        null => "-",
+        > 0 => $"+{odds}",
+        _ => odds.ToString() ?? "-"
+    };
+
+    private string GetCardStyle(GameData game) => game.HasValue
+        ? "background: linear-gradient(135deg, #1565c0 0%, #1e88e5 100%); color: white;"
+        : "";
+
+    private class GameData
+    {
+        public string HomeTeam { get; set; } = "";
+        public string AwayTeam { get; set; } = "";
+        public int? HomeMoneyline { get; set; }
+        public int? AwayMoneyline { get; set; }
+        public decimal? Spread { get; set; }
+        public decimal? OverUnder { get; set; }
+        public bool HasValue { get; set; }
+        public PredictionData? Prediction { get; set; }
+        public AiAnalysisReport? GeminiAnalysis { get; set; }
+        public bool IsAnalyzing { get; set; }
+    }
+
+    private class PredictionData
+    {
+        public string PredictedWinner { get; set; } = "";
+        public double HomeWinProbability { get; set; }
+        public double PredictedTotal { get; set; }
+        public double Confidence { get; set; }
+        public string OuPick { get; set; } = "";
+    }
+
+    private async Task GetGeminiAnalysis(GameData game)
+    {
+        game.IsAnalyzing = true;
+        StateHasChanged();
+
+        try
+        {
+            var result = await MLServiceClient.GetAiAnalysisAsync("cfb", game.HomeTeam, game.AwayTeam);
+            if (result != null)
+            {
+                game.GeminiAnalysis = result;
+                Snackbar.Add($"Gemini insight loaded for {game.HomeTeam}", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Gemini Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            game.IsAnalyzing = false;
+            StateHasChanged();
+        }
+    }
+}

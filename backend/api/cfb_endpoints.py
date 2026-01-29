@@ -22,11 +22,11 @@ from scripts.college_football_importer import (
 @router.get("/status")
 async def cfb_status():
     """Check if CFB features are available (API key configured)."""
-    from src.config import CFBD_API_KEY
+    from src.config import COLLEGE_FOOTBALL_API_KEY
     return {
-        "available": bool(CFBD_API_KEY),
+        "available": bool(COLLEGE_FOOTBALL_API_KEY),
         "current_season": get_current_season(),
-        "message": "CFB features ready" if CFBD_API_KEY else "CFBD_API_KEY not configured"
+        "message": "CFB features ready" if COLLEGE_FOOTBALL_API_KEY else "COLLEGE_FOOTBALL_API_KEY not configured"
     }
 
 
