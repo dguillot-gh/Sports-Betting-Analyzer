@@ -227,8 +227,6 @@
                     }
                 </MudTabPanel>
 
-                </MudTabPanel>
-
                 <!-- Schedule Tab -->
                 <MudTabPanel Text="Schedule" Icon="@Icons.Material.Filled.CalendarMonth">
                     @if (_schedule.Any())
@@ -331,7 +329,6 @@
     private List<TeamInfo> _teams = new();
     private List<BattingPlayer> _battingStats = new();
     private List<PitchingPlayer> _pitchingStats = new();
-    private List<FieldingPlayer> _fieldingStats = new();
     private List<GameInfo> _schedule = new();
     
     protected override async Task OnInitializedAsync()
@@ -718,21 +715,5 @@
         public bool IsHome { get; set; }
         public string Result { get; set; } = "";
         public string Score { get; set; } = "";
-    }
-    
-    private class FieldingPlayer
-    {
-        public string Name { get; set; } = "";
-        public string Position { get; set; } = "";
-        public int GP { get; set; }
-        public int GS { get; set; }
-        public int PO { get; set; }
-        public int A { get; set; }
-        public int E { get; set; }
-        public double FldPct { get; set; }
-        public int DP { get; set; }
-        public int CBA { get; set; }  // Caught Stealing (Against)
-        public int SBA { get; set; }  // Stolen Bases (Against)
-        public int RCS { get; set; }  // Running Game % / Caught Stealing Base
     }
 }
