@@ -1,0 +1,103 @@
+Original Name | Cleaned Name | Normalized
+--------------------------------------------------------------------------------
+Northeastern (CAA) | Northeastern | northeastern
+Coastal Carolina (Sun Belt) | Coastal Carolina | coastalcarolina
+LSU (SEC) | LSU | lsu
+Arkansas (SEC) | Arkansas | arkansas
+Western Ky. (CUSA) | Western Ky. | westernky
+Austin Peay (ASUN) | Austin Peay | austinpeay
+Texas (SEC) | Texas | texas
+UTSA (The American) | UTSA | utsa
+North Carolina (ACC) | North Carolina | northcarolina
+Oregon St. (DI Independent) | Oregon St. | oregonst
+Southern Miss. (Sun Belt) | Southern Miss. | southernmiss
+West Virginia (Big 12) | West Virginia | westvirginia
+Creighton (Big East) | Creighton | creighton
+UCLA (Big Ten) | UCLA | ucla
+Florida St. (ACC) | Florida St. | floridast
+Oregon (Big Ten) | Oregon | oregon
+Murray St. (MVC) | Murray St. | murrayst
+Georgia (SEC) | Georgia | georgia
+Kansas (Big 12) | Kansas | kansas
+UC Irvine (Big West) | UC Irvine | ucirvine
+Clemson (ACC) | Clemson | clemson
+Tennessee (SEC) | Tennessee | tennessee
+ETSU (SoCon) | ETSU | etsu
+Vanderbilt (SEC) | Vanderbilt | vanderbilt
+Southeastern La. (Southland) | Southeastern La. | southeasternla
+Lamar University (Southland) | Lamar University | lamaruniversity
+Alabama (SEC) | Alabama | alabama
+DBU (CUSA) | DBU | dbu
+Cal Poly (Big West) | Cal Poly | calpoly
+Yale (Ivy League) | Yale | yale
+Georgia Tech (ACC) | Georgia Tech | georgiatech
+Kent St. (MAC) | Kent St. | kentst
+Arizona (Big 12) | Arizona | arizona
+Fairfield (MAAC) | Fairfield | fairfield
+High Point (Big South) | High Point | highpoint
+Auburn (SEC) | Auburn | auburn
+Ole Miss (SEC) | Ole Miss | olemiss
+UC Santa Barbara (Big West) | UC Santa Barbara | ucsantabarbara
+UTRGV (Southland) | UTRGV | utrgv
+Duke (ACC) | Duke | duke
+TCU (Big 12) | TCU | tcu
+George Mason (Atlantic 10) | George Mason | georgemason
+Wright St. (Horizon) | Wright St. | wrightst
+Rider (MAAC) | Rider | rider
+Bryant (America East) | Bryant | bryant
+Stetson (ASUN) | Stetson | stetson
+Troy (Sun Belt) | Troy | troy
+Southern Ill. (MVC) | Southern Ill. | southernill
+Tennessee Tech (OVC) | Tennessee Tech | tennesseetech
+Central Conn. St. (NEC) | Central Conn. St. | centralconnst
+McNeese (Southland) | McNeese | mcneese
+UConn (Big East) | UConn | uconn
+Virginia (ACC) | Virginia | virginia
+Florida (SEC) | Florida | florida
+Wake Forest (ACC) | Wake Forest | wakeforest
+Fla. Atlantic (The American) | Fla. Atlantic | flaatlantic
+Louisville (ACC) | Louisville | louisville
+Richmond (Atlantic 10) | Richmond | richmond
+Oklahoma (SEC) | Oklahoma | oklahoma
+Rhode Island (Atlantic 10) | Rhode Island | rhodeisland
+Col. of Charleston (CAA) | Col. of Charleston | colofcharleston
+Oral Roberts (Summit League) | Oral Roberts | oralroberts
+Hawaii (Big West) | Hawaii | hawaii
+NC State (ACC) | NC State | ncstate
+Northwestern St. (Southland) | Northwestern St. | northwesternst
+Ball St. (MAC) | Ball St. | ballst
+Charlotte (The American) | Charlotte | charlotte
+Bethune-Cookman (SWAC) | Bethune-Cookman | bethunecookman
+Southern California (Big Ten) | Southern California | southerncalifornia
+Columbia (Ivy League) | Columbia | columbia
+Mississippi St. (SEC) | Mississippi St. | mississippist
+Notre Dame (ACC) | Notre Dame | notredame
+LIU (NEC) | LIU | liu
+Miami (OH) (MAC) | Miami (OH) | miamioh
+Arizona St. (Big 12) | Arizona St. | arizonast
+Baylor (Big 12) | Baylor | baylor
+Bowling Green (MAC) | Bowling Green | bowlinggreen
+Iowa (Big Ten) | Iowa | iowa
+Jacksonville St. (CUSA) | Jacksonville St. | jacksonvillest
+Abilene Christian (WAC) | Abilene Christian | abilenechristian
+Nevada (Mountain West) | Nevada | nevada
+USC Upstate (Big South) | USC Upstate | uscupstate
+Michigan (Big Ten) | Michigan | michigan
+Penn St. (Big Ten) | Penn St. | pennst
+Jackson St. (SWAC) | Jackson St. | jacksonst
+UNCW (CAA) | UNCW | uncw
+Charleston So. (Big South) | Charleston So. | charlestonso
+Eastern Ill. (OVC) | Eastern Ill. | easternill
+Wagner (NEC) | Wagner | wagner
+Mercer (SoCon) | Mercer | mercer
+Saint Mary's (CA) (WCC) | Saint Mary's (CA) | saintmarysca
+Purdue (Big Ten) | Purdue | purdue
+UNLV (Mountain West) | UNLV | unlv
+Indiana (Big Ten) | Indiana | indiana
+Florida A&M (SWAC) | Florida A&M | floridaam
+Tulane (The American) | Tulane | tulane
+New Mexico (Mountain West) | New Mexico | newmexico
+East Carolina (The American) | East Carolina | eastcarolina
+Miami (FL) (ACC) | Miami (FL) | miamifl
+Houston Christian (Southland) | Houston Christian | houstonchristian
+... and 200+ more teams.

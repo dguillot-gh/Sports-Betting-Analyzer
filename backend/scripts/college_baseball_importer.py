@@ -10,7 +10,7 @@ import logging
 import asyncio
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Optional, List, Literal
+from typing import Dict, Optional, List, Literal, Union
 import time
 import pandas as pd
 import requests
@@ -70,6 +70,7 @@ def get_smart_year() -> int:
     if now.month < 2:
         return now.year - 1
     return now.year
+
 
 def _update_status(message: str, progress: int = 0, is_error: bool = False, 
                    division: int = 1, source: str = ""):
@@ -139,6 +140,9 @@ def get_team_player_stats(team_id: str, stat_type: str = "batting", year: int = 
         if ncaa_id:
             # This fetches batting, pitching, and schedules in one R call
             _import_via_r(division=division, year=year, team_id=ncaa_id, custom_id=team_id_str)
+        else:
+            # Fallback: Pass the string ID (name-like) and let R resolve it
+            _import_via_r(division=division, year=year, team_id=team_id_str, custom_id=team_id_str)
 
     if stats_file.exists():
         try:
@@ -209,9 +213,10 @@ def get_team_schedule(team_id, year: int = 2024) -> Optional[List[Dict]]:
         except:
             target_id = ncaa_id
             
-        if target_id:
+        if target_id or team_id_str:
             # Run R import for just this team (synchronous fallback for the API call)
-            _import_via_r(division=division, year=year, team_id=target_id, custom_id=team_id_str)
+            # Pass the target_id if we have it, otherwise pass team_id_str for R to resolve
+            _import_via_r(division=division, year=year, team_id=target_id if target_id else team_id_str, custom_id=team_id_str)
             
     if schedule_file.exists():
         try:
@@ -324,20 +329,14 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
                     
                     # Possible URL patterns for the raw data
                     candidate_urls = [
-                        # Path 1: src/ncaa_bbStats/data/... (NEWLY CONFIRMED via user hint)
-                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/src/ncaa_bbStats/data/player_stats_cache/{stat_type}/{stat_type}_noMin.csv",
-                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/src/ncaa_bbStats/data/player_stats_cache/{stat_type}/2025/{stat_type}_noMin.csv",
+                        # USER VERIFIED PATHS (Gold Standard)
+                        "https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/src/data/player_stats_cache/batting/batting_noMin.csv" if stat_type == "batting" else
+                        "https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/src/data/player_stats_cache/pitching/pitching_noMin.csv",
                         
-                        # Path 2: ncaa_bbStats/data/... (Legacy/Standard package structure)
-                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/ncaa_bbStats/data/player_stats_cache/{stat_type}/{stat_type}_noMin.csv",
-                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/ncaa_bbStats/data/player_stats_cache/{stat_type}/2025/{stat_type}_noMin.csv",
+                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/src/data/player_stats_cache/{stat_type}/{stat_type}_qualified.csv",
                         
-                        # Path 3: src/data/... (Alternative structure)
-                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/src/data/player_stats_cache/{stat_type}/{stat_type}_noMin.csv",
-                        
-                        # Path 4: root data/... 
-                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/data/player_stats_cache/{stat_type}/{stat_type}_noMin.csv",
-                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/data/{stat_type}_noMin.csv"
+                        # Fallbacks
+                        f"https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/src/data/{stat_type}_noMin.csv",
                     ]
                     
                     df_all = pd.DataFrame()
@@ -352,6 +351,8 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
                                 df_all = pd.read_csv(StringIO(resp.text))
                                 success_url = github_url
                                 logger.info(f"Downloaded {len(df_all)} rows from {github_url}")
+                                logger.info(f"CSV Columns: {list(df_all.columns)}")
+                                logger.info(f"First few rows:\n{df_all.head(3).to_string()}")
                                 break # Found it!
                         except:
                             continue
@@ -408,41 +409,67 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
                     match_count = 0
                     
                     # Manual mappings for known discrepancies
-                    # key: ncaa_name (from teams_d1.json), value: CSV name (team or team name)
+                    # Key: ncaa_name (from ncaa site via teams_d1.json)
+                    # Value: Name found in the GitHub CSV
                     TEAM_NAME_MAPPINGS = {
                         "LSU (SEC)": "LSU",
                         "Ole Miss (SEC)": "Ole Miss",
-                        "Miami (FL) (ACC)": "Miami (FL)"
+                        "Miami (FL) (ACC)": "Miami (FL)",
+                        "Florida (SEC)": "Florida",
+                        "Arkansas (SEC)": "Arkansas",
+                        "Texas (SEC)": "Texas",
+                        # The cleaning logic handles most of these, but explicit is better for stability
                     }
                     
+                    # Fetch external mapping from GitHub if possible (experimental)
+                    try:
+                        map_url = "https://raw.githubusercontent.com/CodeMateo15/CollegeBaseballStatsPackage/main/src/data/team_names_stats/team_name_mapping.csv"
+                        m_resp = requests.get(map_url, timeout=10)
+                        if m_resp.status_code == 200:
+                            for lines in m_resp.text.splitlines()[1:]:
+                                parts = lines.split(',')
+                                if len(parts) >= 4:
+                                    # parts[2] is common name, parts[3] is official name
+                                    # We can add them to our mappings
+                                    TEAM_NAME_MAPPINGS[parts[3]] = parts[2]
+                    except: pass
+
                     for team in teams_list:
                         t_name_full = team["ncaa_name"]
                         t_id = team["team_id"]
                         
+                        # Helper for robust normalization: Alphanumeric only, lowercase
+                        def robust_normalize(s):
+                            if not isinstance(s, str): return ""
+                            return re.sub(r'[^a-z0-9]', '', s.lower())
+
                         # 1. Try Manual Mapping
                         if t_name_full in TEAM_NAME_MAPPINGS:
                             t_name_clean = TEAM_NAME_MAPPINGS[t_name_full]
                         else:
-                            # 2. Default: Clean the name: "LSU (SEC)" -> "LSU"
-                            # Remove content in parentheses and trailing spaces
+                            # 2. Default: Clean the name: "Arkansas (SEC)" -> "Arkansas"
                             t_name_clean = re.sub(r'\s*\(.*?\)', '', t_name_full).strip()
                         
-                        # Special case handling if needed
-                        # e.g. "Western Ky." -> "Western Kentucky" might be needed but let's try direct first
+                        t_norm = robust_normalize(t_name_clean)
+                        t_norm_full = robust_normalize(t_name_full)
                         
                         # Filter for this team
-                        # Initialize mask with False using the dataframe's index to ensure alignment
                         mask = pd.Series(False, index=df_all.index)
                         
-                        # Check match against 'team name' (Full Name)
-                        if 'team name' in df_all.columns:
-                            mask |= (df_all['team name'].str.lower() == t_name_clean.lower())
-                        elif 'team_name' in df_all.columns:
-                            mask |= (df_all['team_name'].str.lower() == t_name_clean.lower())
+                        # 3. Check against 'team name', 'team_name', 'team' columns
+                        for col in [c for c in ['team name', 'team_name', 'team'] if c in df_all.columns]:
+                             col_norm = df_all[col].apply(robust_normalize)
+                             mask |= (col_norm == t_norm)
+                             mask |= (col_norm == t_norm_full)
+                             
+                             # Also try checking if the CSV team name contains our clean name
+                             if not any(mask):
+                                 mask |= (df_all[col].str.contains(t_name_clean, case=False, na=False, regex=False))
                             
-                        # Check match against 'team' (Abbreviation/Short Name)
-                        if 'team' in df_all.columns:
-                            mask |= (df_all['team'].str.lower() == t_name_clean.lower())
+                        # 2. Try matching the "Nice ID" directly (e.g. Arkansas__SEC)
+                        t_id_norm = robust_normalize(t_id)
+                        for col in [c for c in ['team name', 'team_name', 'team'] if c in df_all.columns]:
+                            mask |= (df_all[col].apply(robust_normalize) == t_id_norm)
                         
                         team_df = df_all[mask]
 
@@ -535,7 +562,7 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
 # R Import (baseballr via subprocess)
 # ============================================================
 
-def _import_via_r(division: int, year: int, team_id: Optional[int] = None, custom_id: Optional[str] = None) -> Dict:
+def _import_via_r(division: int, year: int, team_id: Union[int, str, None] = None, custom_id: Optional[str] = None) -> Dict:
     """Run R import script and capture output."""
     import re
     
@@ -718,6 +745,11 @@ async def run_college_baseball_import(
         divisions_to_import = DIVISION_PRIORITY
     else:
         divisions_to_import = [division]
+    
+    # If source is auto, we'll try Python first for speed.
+    # Since we've fixed the Python GitHub paths and matching, it's the best bulk option.
+    if source == "auto":
+        source = "python"
     
     logger.info(f"Starting dynamic college baseball import: Divisions {divisions_to_import}, Year {year}, Source {source}")
     _update_status(f"Starting one-click import for {len(divisions_to_import)} divisions...", 5, source=source)
