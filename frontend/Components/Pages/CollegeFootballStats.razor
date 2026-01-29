@@ -4,6 +4,7 @@
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject IConfiguration Configuration
+@using System.Text.Json.Serialization
 @rendermode InteractiveServer
 
 <PageTitle>College Football - Sports Betting Analyzer</PageTitle>
@@ -22,7 +23,7 @@
                 </div>
                 <MudStack Row="true" Spacing="2">
                     <MudSelect T="int" Value="@_selectedYear" ValueChanged="OnYearChanged" Label="Season" Variant="Variant.Outlined" Dense="true" Style="width: 120px; background: rgba(255,255,255,0.1);">
-                        @for (int y = DateTime.Now.Year; y >= 2015; y--)
+                        @foreach (var y in _availableYears)
                         {
                             <MudSelectItem Value="@y">@y</MudSelectItem>
                         }
@@ -190,7 +191,8 @@
     private bool _isLoading = false;
     private int _selectedYear;
     private int _currentSeason;
-    
+    private List<int> _availableYears = new(); // [NEW]
+
     // Data
     private List<TeamInfo> _teams = new();
     private List<GameInfo> _games = new();
@@ -211,6 +213,12 @@
         _currentSeason = DateTime.Now.Month >= 8 ? DateTime.Now.Year : DateTime.Now.Year - 1;
         _selectedYear = _currentSeason;
         
+        // Populate available years
+        for (int y = _currentSeason; y >= 2015; y--)
+        {
+            _availableYears.Add(y);
+        }
+
         await CheckApiStatus();
         await LoadData();
     }
@@ -221,7 +229,11 @@
         {
             var status = await Http.GetFromJsonAsync<CfbStatus>($"{_apiBaseUrl}/cfb/status");
             _apiAvailable = status?.Available ?? false;
-            if (status != null) _currentSeason = status.CurrentSeason;
+            // Only update current season if API is explicitly available and returns robust data
+            if (status != null && status.CurrentSeason > 0) 
+            {
+               // _currentSeason = status.CurrentSeason; // Keep the local calc as safer default for now
+            }
         }
         catch { _apiAvailable = false; }
     }
@@ -310,41 +322,49 @@
         .Where(p => string.IsNullOrEmpty(_playerSearch) || p.Player?.Contains(_playerSearch, StringComparison.OrdinalIgnoreCase) == true)
         .Where(p => string.IsNullOrEmpty(_positionFilter) || p.Position?.Contains(_positionFilter, StringComparison.OrdinalIgnoreCase) == true);
     
+
+
     // DTOs
     private class CfbStatus { public bool Available { get; set; } public int CurrentSeason { get; set; } }
-    private class TeamsResponse { public List<TeamInfo> Teams { get; set; } = new(); }
-    private class GamesResponse { public List<GameInfo> Games { get; set; } = new(); }
-    private class PlayersResponse { public List<PlayerStat> Players { get; set; } = new(); }
-    private class ImportResponse { public bool Success { get; set; } public string? Message { get; set; } public int TeamsImported { get; set; } public int GamesImported { get; set; } public int PlayersImported { get; set; } }
+    private class TeamsResponse { [JsonPropertyName("teams")] public List<TeamInfo> Teams { get; set; } = new(); }
+    private class GamesResponse { [JsonPropertyName("games")] public List<GameInfo> Games { get; set; } = new(); }
+    private class PlayersResponse { [JsonPropertyName("players")] public List<PlayerStat> Players { get; set; } = new(); }
+    private class ImportResponse { 
+        [JsonPropertyName("success")] public bool Success { get; set; } 
+        [JsonPropertyName("message")] public string? Message { get; set; } 
+        [JsonPropertyName("teams_imported")] public int TeamsImported { get; set; } 
+        [JsonPropertyName("games_imported")] public int GamesImported { get; set; } 
+        [JsonPropertyName("players_imported")] public int PlayersImported { get; set; } 
+    }
     
     private class TeamInfo
     {
-        public int? Id { get; set; }
-        public string? School { get; set; }
-        public string? Mascot { get; set; }
-        public string? Conference { get; set; }
-        public string? Division { get; set; }
-        public string? Color { get; set; }
-        public string? AltColor { get; set; }
+        [JsonPropertyName("id")] public int? Id { get; set; }
+        [JsonPropertyName("school")] public string? School { get; set; }
+        [JsonPropertyName("mascot")] public string? Mascot { get; set; }
+        [JsonPropertyName("conference")] public string? Conference { get; set; }
+        [JsonPropertyName("division")] public string? Division { get; set; }
+        [JsonPropertyName("color")] public string? Color { get; set; }
+        [JsonPropertyName("alt_color")] public string? AltColor { get; set; }
     }
     
     private class GameInfo
     {
-        public int? Week { get; set; }
-        public string? HomeTeam { get; set; }
-        public string? AwayTeam { get; set; }
-        public int? HomePoints { get; set; }
-        public int? AwayPoints { get; set; }
-        public string? Venue { get; set; }
+        [JsonPropertyName("week")] public int? Week { get; set; }
+        [JsonPropertyName("home_team")] public string? HomeTeam { get; set; }
+        [JsonPropertyName("away_team")] public string? AwayTeam { get; set; }
+        [JsonPropertyName("home_points")] public double? HomePoints { get; set; }
+        [JsonPropertyName("away_points")] public double? AwayPoints { get; set; }
+        [JsonPropertyName("venue")] public string? Venue { get; set; }
     }
     
     private class PlayerStat
     {
-        public string? Player { get; set; }
-        public string? Team { get; set; }
-        public string? Position { get; set; }
-        public string? Category { get; set; }
-        public string? StatType { get; set; }
-        public string? Stat { get; set; }
+        [JsonPropertyName("player")] public string? Player { get; set; }
+        [JsonPropertyName("team")] public string? Team { get; set; }
+        [JsonPropertyName("position")] public string? Position { get; set; }
+        [JsonPropertyName("category")] public string? Category { get; set; }
+        [JsonPropertyName("stat_type")] public string? StatType { get; set; }
+        [JsonPropertyName("stat")] public string? Stat { get; set; }
     }
 }
