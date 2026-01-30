@@ -649,14 +649,18 @@ async def get_bet_stats(
     
     conn = await asyncpg.connect(DATABASE_URL)
     try:
-        conditions = ["created_at > NOW() - INTERVAL '%s days'" % days]
+        if days > 0:
+            conditions = ["created_at > NOW() - INTERVAL '%s days'" % days]
+        else:
+            conditions = []
+        
         params = []
         
         if sport:
             conditions.append("sport = $1")
             params.append(sport)
         
-        where_clause = "WHERE " + " AND ".join(conditions)
+        where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
         
         query = f"""
             SELECT 
@@ -714,10 +718,12 @@ async def get_chart_data(
     
     conn = await asyncpg.connect(DATABASE_URL)
     try:
-        sport_filter = "AND sport = $2" if sport else ""
-        params = [days] if not sport else [days, sport]
+        if days > 0:
+            date_filter = f"WHERE created_at > NOW() - INTERVAL '{days} days'"
+        else:
+            date_filter = "WHERE 1=1"
         
-        # Daily profit/loss
+        sport_filter = "AND sport = $2" if sport else ""
         daily_query = f"""
             SELECT 
                 DATE(created_at) as bet_date,
@@ -728,14 +734,15 @@ async def get_chart_data(
                 SUM(CASE WHEN outcome = 'loss' THEN 1 ELSE 0 END) as losses,
                 SUM(CASE WHEN outcome = 'cashout' THEN 1 ELSE 0 END) as cashouts
             FROM bets
-            WHERE created_at > NOW() - INTERVAL '{days} days'
+            {date_filter}
                 AND outcome != 'pending'
                 {sport_filter}
             GROUP BY DATE(created_at)
             ORDER BY bet_date ASC
         """
         
-        daily_rows = await conn.fetch(daily_query, *params) if sport else await conn.fetch(daily_query)
+        daily_params = []
+        if sport: daily_params.append(sport)
         
         # Build daily data with cumulative ROI
         daily_data = []
@@ -769,13 +776,13 @@ async def get_chart_data(
                 COUNT(*) as count,
                 COALESCE(SUM(profit), 0) as profit
             FROM bets
-            WHERE created_at > NOW() - INTERVAL '{days} days'
+            {date_filter}
                 AND outcome != 'pending'
                 {sport_filter}
             GROUP BY outcome
         """
         
-        totals_rows = await conn.fetch(totals_query, *params) if sport else await conn.fetch(totals_query)
+        totals_rows = await conn.fetch(totals_query, *daily_params) if sport else await conn.fetch(totals_query)
         
         outcome_distribution = {
             "wins": 0,

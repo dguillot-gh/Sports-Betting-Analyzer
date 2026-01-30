@@ -172,7 +172,7 @@
                                 <tr><th>Type</th><th>Game</th><th>Bet</th><th>Stake</th><th>Odds</th><th>Result</th><th></th></tr>
                             </thead>
                             <tbody>
-                                @foreach (var b in _bets.Take(10))
+                                @foreach (var b in _bets)
                                 {
                                     <tr>
                                         <td>
@@ -229,6 +229,7 @@
                             <MudSelectItem Value="7">7 Days</MudSelectItem>
                             <MudSelectItem Value="30">30 Days</MudSelectItem>
                             <MudSelectItem Value="90">90 Days</MudSelectItem>
+                            <MudSelectItem Value="0">All Time</MudSelectItem>
                         </MudSelect>
                     </MudStack>
 
@@ -652,7 +653,7 @@
     {
         try
         {
-            var content = await Http.GetStringAsync("http://backend:8000/bets?limit=20");
+            var content = await Http.GetStringAsync("http://backend:8000/bets?limit=1000");
             using var doc = JsonDocument.Parse(content);
             if (doc.RootElement.TryGetProperty("bets", out var arr))
             {
