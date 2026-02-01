@@ -1,0 +1,338 @@
+@page "/all-sports"
+@using MudBlazor
+@using System.Text.Json
+@using SportsBettingAnalyzer.Services
+@using SportsBettingAnalyzer.Models
+@inject DataCollectionService DataCollectionService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@rendermode InteractiveServer
+
+<PageTitle>All Sports Analysis</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-8">
+    <MudPaper Class="pa-6 mb-6" Elevation="3" Style="background: linear-gradient(135deg, #1a237e 0%, #0d47a1 100%); color: white;">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <div>
+                <MudText Typo="Typo.h4" Style="font-weight: 700;">Multi-Sport Dashboard</MudText>
+                <MudText Typo="Typo.subtitle1">Running AI analysis across all live markets simultaneously.</MudText>
+            </div>
+            <MudStack Row="true" Spacing="2">
+                <MudSelect T="string" @bind-Value="_selectedSportsbook" Label="Sportsbook" Variant="Variant.Filled" Dense="true" Style="background: rgba(255,255,255,0.1); color: white; width: 150px;">
+                    <MudSelectItem Value="@("fanduel")">FanDuel</MudSelectItem>
+                    <MudSelectItem Value="@("draftkings")">DraftKings</MudSelectItem>
+                    <MudSelectItem Value="@("betmgm")">BetMGM</MudSelectItem>
+                </MudSelect>
+                <MudButton Variant="Variant.Filled" 
+                           Color="Color.Secondary" 
+                           StartIcon="@Icons.Material.Filled.Search" 
+                           Size="Size.Large"
+                           OnClick="RunFullAnalysis" 
+                           Disabled="@_isLoading"
+                           Style="font-weight: 600;">
+                    @(_isLoading ? "Scanning..." : "Scan All Sports")
+                </MudButton>
+                @if (_games.Any(g => g.HasValue))
+                {
+                    <MudButton Variant="Variant.Filled" 
+                               Color="Color.Info" 
+                               StartIcon="@Icons.Material.Filled.Bolt" 
+                               Size="Size.Large"
+                               OnClick="RunDeepAiScan" 
+                               Disabled="@_isLoading"
+                               Style="font-weight: 600;">
+                        Deep AI Scan
+                    </MudButton>
+                }
+            </MudStack>
+        </MudStack>
+
+        @if (_analysisResult != null)
+        {
+            <MudGrid Class="mt-6">
+                <MudItem xs="12" sm="4">
+                    <MudPaper Class="pa-4 bg-glass" Elevation="0">
+                        <MudText Typo="Typo.caption" Style="opacity: 0.7;">Total Games Scanned</MudText>
+                        <MudText Typo="Typo.h3">@_analysisResult.TotalGames</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudPaper Class="pa-4 bg-glass" Elevation="0">
+                        <MudText Typo="Typo.caption" Style="opacity: 0.7;">Value Bets Found</MudText>
+                        <MudText Typo="Typo.h3" Color="Color.Secondary">@_analysisResult.TotalValueBets</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudPaper Class="pa-4 bg-glass" Elevation="0">
+                        <MudText Typo="Typo.caption" Style="opacity: 0.7;">Last Updated</MudText>
+                        <MudText Typo="Typo.h5" Class="mt-2">@(_lastUpdate?.ToString("HH:mm:ss"))</MudText>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+        }
+    </MudPaper>
+
+    @if (_isLoading)
+    {
+        <MudPaper Class="pa-12 d-flex flex-column align-center justify-center" Elevation="2">
+            <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true" />
+            <MudText Typo="Typo.h6" Class="mt-4">Scanning Odds & Running AI Models...</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">This may take 10-20 seconds across all sports</MudText>
+        </MudPaper>
+    }
+    else if (_games.Any())
+    {
+        <MudTable Items="@_games" Hover="true" Striped="true" Filter="new Func<AnalyzedGame,bool>(FilterFunc)" Elevation="2">
+            <ToolBarContent>
+                <MudText Typo="Typo.h6">Consolidated Value Bets</MudText>
+                <MudSpacer />
+                <MudTextField @bind-Value="_searchString" Placeholder="Search teams or sports..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+                <MudSwitch T="bool" @bind-Value="_onlyValue" Color="Color.Info" Label="Only Show Value Bets" Class="ml-4" />
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh>Sport</MudTh>
+                <MudTh>Matchup</MudTh>
+                <MudTh>Odds (ML)</MudTh>
+                <MudTh>Analysis</MudTh>
+                <MudTh>Edge</MudTh>
+                <MudTh>Action</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Sport">
+                    <MudChip T="string" Color="@GetSportColor(context.SportKey)" Size="Size.Small" Variant="Variant.Text">
+                        @context.SportKey.ToUpper()
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Matchup">
+                    <div class="d-flex flex-column">
+                        <MudText Typo="Typo.body1" Style="font-weight: 500;">@context.AwayTeam vs @context.HomeTeam</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@context.GameTime</MudText>
+                    </div>
+                </MudTd>
+                <MudTd DataLabel="Odds">
+                    <MudStack Row="true" Spacing="1">
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@FormatML(context.AwayML)</MudChip>
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@FormatML(context.HomeML)</MudChip>
+                    </MudStack>
+                </MudTd>
+                <MudTd DataLabel="Analysis">
+                    @if (context.HasValue)
+                    {
+                        <MudChip T="string" Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.TrendingUp">GOOD BET</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Color="Color.Default" Size="Size.Small">Neutral</MudChip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Edge">
+                    @if (context.Edge > 0)
+                    {
+                        <MudText Color="Color.Success" Style="font-weight: 700;">+@context.Edge.ToString("F1")%</MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2">--</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Action">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" OnClick="@(() => OpenAnalysisDialog(context))">Analyze Details</MudButton>
+                </MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
+    }
+    else if (!_isLoading)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Class="mt-4">
+            No games found. Click "Scan All Sports" to fetch latest odds.
+        </MudAlert>
+    }
+</MudContainer>
+
+<style>
+    .bg-glass {
+        background: rgba(255, 255, 255, 0.15) !important;
+        backdrop-filter: blur(10px);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+</style>
+
+@code {
+    private bool _isLoading = false;
+    private string _selectedSportsbook = "fanduel";
+    private string _searchString = "";
+    private bool _onlyValue = true;
+    private DateTime? _lastUpdate;
+    private DataCollectionService.MultiSportAnalysisResponse? _analysisResult;
+    private List<AnalyzedGame> _games = new();
+
+    private async Task RunFullAnalysis()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            _analysisResult = await DataCollectionService.GetMultiSportAnalysisAsync(_selectedSportsbook);
+            if (_analysisResult != null)
+            {
+                _lastUpdate = DateTime.Now;
+                _games.Clear();
+
+                foreach (var g in _analysisResult.AllGames)
+                {
+                    try
+                    {
+                        var analyzed = ParseGame(g);
+                        analyzed.RawData = g; // Keep raw data for dialog
+                        _games.Add(analyzed);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error parsing game: {ex.Message}");
+                    }
+                }
+
+                Snackbar.Add($"Scan complete! Found {_analysisResult.TotalValueBets} value bets.", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Analysis failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private AnalyzedGame ParseGame(JsonElement g)
+    {
+        // Handle different property names (snake_case from API)
+        string home = g.TryGetProperty("home_team", out var h) ? h.GetString() ?? "Unknown" : "Unknown";
+        string away = g.TryGetProperty("away_team", out var a) ? a.GetString() ?? "Unknown" : "Unknown";
+        string gameTime = g.TryGetProperty("game_time", out var t) ? t.GetString() ?? "" : "";
+        string sport = g.TryGetProperty("sport_key", out var s) ? s.GetString() ?? "" : "";
+        
+        int homeML = g.TryGetProperty("home_moneyline", out var hml) ? (hml.ValueKind == JsonValueKind.Number ? hml.GetInt32() : 0) : 0;
+        int awayML = g.TryGetProperty("away_moneyline", out var aml) ? (aml.ValueKind == JsonValueKind.Number ? aml.GetInt32() : 0) : 0;
+        
+        bool hasValue = g.TryGetProperty("has_value", out var hv) && hv.GetBoolean();
+        
+        // Try to get edge from prediction object if it exists
+        double edge = 0;
+        if (g.TryGetProperty("prediction", out var pred))
+        {
+            if (pred.TryGetProperty("edge", out var e)) edge = e.GetDouble() * 100;
+        }
+        else if (g.TryGetProperty("edge", out var e))
+        {
+            edge = e.GetDouble() * 100;
+        }
+
+        return new AnalyzedGame
+        {
+            HomeTeam = home,
+            AwayTeam = away,
+            HomeML = homeML,
+            AwayML = awayML,
+            GameTime = gameTime,
+            SportKey = sport,
+            HasValue = hasValue,
+            Edge = (decimal)edge
+        };
+    }
+
+    private Color GetSportColor(string sport) => sport switch
+    {
+        "nfl" => Color.Warning,
+        "nba" => Color.Secondary,
+        "ncaab" => Color.Info,
+        "college-baseball" => Color.Success,
+        "cfb" => Color.Error,
+        _ => Color.Default
+    };
+
+    private string FormatML(int ml) => ml > 0 ? $"+{ml}" : ml.ToString();
+
+    private bool FilterFunc(AnalyzedGame element)
+    {
+        if (_onlyValue && !element.HasValue) return false;
+        if (string.IsNullOrWhiteSpace(_searchString)) return true;
+        if (element.HomeTeam.Contains(_searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        if (element.AwayTeam.Contains(_searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        if (element.SportKey.Contains(_searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    private async Task RunDeepAiScan()
+    {
+        var valueGames = _games.Where(g => g.HasValue).ToList();
+        if (!valueGames.Any()) return;
+
+        _isLoading = true;
+        Snackbar.Add($"Starting Deep AI Scan for {valueGames.Count} value bets...", Severity.Info);
+        StateHasChanged();
+
+        int successCount = 0;
+        foreach (var game in valueGames)
+        {
+            try
+            {
+                // Call AI analysis with short prompt flag
+                var aiResult = await DataCollectionService.GetAIAnalysisAsync(game.SportKey, game.HomeTeam, game.AwayTeam, shortPrompt: true);
+                if (aiResult.HasValue)
+                {
+                    // Merge AI result back into RawData
+                    game.AiSummary = aiResult.Value.TryGetProperty("llm_insight", out var insight) 
+                        && insight.TryGetProperty("rationale", out var rat) ? rat.GetString() : "No insight";
+                    successCount++;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Deep scan failed for {game.HomeTeam}: {ex.Message}");
+            }
+        }
+
+        _isLoading = false;
+        Snackbar.Add($"Deep Scan complete! Analyzed {successCount} games.", Severity.Success);
+        StateHasChanged();
+    }
+
+    private async Task OpenAnalysisDialog(AnalyzedGame game)
+    {
+        var parameters = new DialogParameters<Dialogs.AnalysisDialog>
+        {
+            { x => x.FullGameData, game.RawData },
+            { x => x.Sportsbook, _selectedSportsbook }
+        };
+
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+        await DialogService.ShowAsync<Dialogs.AnalysisDialog>("Detailed AI Matchup Analysis", parameters, options);
+    }
+
+    private void AddToSlip(AnalyzedGame game)
+    {
+        Snackbar.Add("Feature coming soon: Direct slip integration", Severity.Info);
+    }
+
+    public class AnalyzedGame
+    {
+        public string HomeTeam { get; set; } = "";
+        public string AwayTeam { get; set; } = "";
+        public int HomeML { get; set; }
+        public int AwayML { get; set; }
+        public string GameTime { get; set; } = "";
+        public string SportKey { get; set; } = "";
+        public bool HasValue { get; set; }
+        public decimal Edge { get; set; }
+        public JsonElement RawData { get; set; } // Store the raw JSON element for full analysis
+        public string? AiSummary { get; set; } // Cache for bulk scan results
+    }
+}

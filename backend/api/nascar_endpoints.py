@@ -3,12 +3,14 @@ NASCAR API Endpoints
 Fetches live race data, schedules, and results from NASCAR's official API
 """
 
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Query, BackgroundTasks, UploadFile, File
 from typing import Optional
 import httpx
 import asyncio
 import json
 from datetime import datetime
+from services.nascar_ocr_service import get_ocr_service
+from services.nascar_ai_service import get_nascar_ai_service
 
 router = APIRouter(prefix="/nascar", tags=["NASCAR"])
 
@@ -36,7 +38,111 @@ async def fetch_json(url: str, timeout: float = 10.0) -> dict:
             raise HTTPException(status_code=503, detail=f"Failed to reach NASCAR API: {str(e)}")
 
 
-@router.get("/live")
+@router.get("/odds")
+async def get_nascar_odds():
+    """
+    Get live NASCAR odds from DraftKings (via Apify or The Odds API).
+    """
+    from services.nascar_odds_service import NascarOddsService
+    service = NascarOddsService()
+    odds_data = await service.get_live_odds()
+    
+    # If data came from Apify, it's already in driver format
+    # If data came from Apify, it's already in driver format
+    if odds_data and isinstance(odds_data, list) and len(odds_data) > 0 and odds_data[0].get("driver_name"):
+        return {
+            "source": "draftkings",
+            "drivers": odds_data,
+            "count": len(odds_data)
+        }
+    
+    # Parse The Odds API format
+    drivers = []
+    if odds_data and isinstance(odds_data, list):
+        for event in odds_data:
+            if not isinstance(event, dict): continue
+            for bookmaker in event.get("bookmakers", []):
+                for market in bookmaker.get("markets", []):
+                    if market["key"] == "outrights_winner" or market["key"] == "outrights":
+                        for outcome in market.get("outcomes", []):
+                            price = outcome.get("price", 0)
+                            odds_str = f"+{price}" if price > 0 else str(price)
+                            drivers.append({
+                                "driver_name": outcome.get("name", ""),
+                                "market_odds": odds_str,
+                                "source": bookmaker.get("key", "unknown")
+                            })
+
+    return {
+        "source": "odds_api",
+        "drivers": drivers,
+        "count": len(drivers)
+    }
+
+@router.post("/upload-odds")
+async def upload_odds_image(file: UploadFile = File(...)):
+    """
+    Upload a screenshot of betting odds.
+    Uses OCR to extract driver names and odds.
+    """
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File must be an image")
+    
+    content = await file.read()
+    
+    try:
+        service = get_ocr_service()
+        odds_data = await service.extract_odds_from_image(content)
+        
+        return {
+            "status": "success",
+            "drivers": odds_data,
+            "count": len(odds_data)
+        }
+    except Exception as e:
+        print(f"OCR Upload failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/analyze-race")
+async def analyze_race(data: dict):
+    """
+    Perform a full field AI analysis based on XGBoost predictions and odds.
+    Expects: {"race_details": {...}, "drivers": [...]}
+    """
+    try:
+        race_details = data.get("race_details", {})
+        drivers = data.get("drivers", [])
+        
+        if not drivers:
+            raise HTTPException(status_code=400, detail="No driver data provided")
+            
+        service = get_nascar_ai_service()
+        analysis = await service.get_race_analysis(race_details, drivers)
+        
+        return {"analysis": analysis}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/manual-odds")
+async def submit_manual_odds(data: dict):
+    """
+    Receive manually entered odds from the frontend.
+    Expected format: {"drivers": [{"driver_name": "Kyle Larson", "market_odds": "+500"}, ...]}
+    """
+    try:
+        drivers = data.get("drivers", [])
+        if not drivers:
+            raise HTTPException(status_code=400, detail="No driver data provided")
+        
+        # Add timestamp and source
+        for d in drivers:
+            d["source"] = "manual_entry"
+            d["fetched_at"] = datetime.now().isoformat()
+            
+        return {"status": "success", "count": len(drivers), "drivers": drivers}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 async def get_live_feed():
     """
     Get real-time race data from NASCAR live feed.

@@ -3,6 +3,9 @@
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject DataCollectionService DataCollectionService
+@using SportsBettingAnalyzer.Services
+@using SportsBettingAnalyzer.Models
 
 <PageTitle>Bet Tracker</PageTitle>
 
@@ -17,12 +20,25 @@
                         Bet Tracker
                     </MudText>
                 </div>
-                <MudStack Row="true" Spacing="3">
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                     <MudChip T="string" Color="Color.Success" Size="Size.Small">@_wins W</MudChip>
                     <MudChip T="string" Color="Color.Error" Size="Size.Small">@_losses L</MudChip>
                     <MudChip T="string" Color="@(_netProfit >= 0 ? Color.Success : Color.Error)" Size="Size.Small">
                         @(_netProfit >= 0 ? "+" : "")$@_netProfit.ToString("F2")
                     </MudChip>
+                    <MudTooltip Text="Import from Excel/CSV">
+                        <MudFileUpload T="IBrowserFile" OnFilesChanged="OnImportFileSelected" Accept=".csv, .xlsx, .xls" Class="ml-2">
+                            <ActivatorContent>
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Info"
+                                           Size="Size.Small"
+                                           StartIcon="@Icons.Material.Filled.UploadFile"
+                                           Disabled="@_isImporting">
+                                    @(_isImporting ? "Processing..." : "Import")
+                                </MudButton>
+                            </ActivatorContent>
+                        </MudFileUpload>
+                    </MudTooltip>
                 </MudStack>
             </MudStack>
         </MudPaper>
@@ -346,6 +362,44 @@
     </MudStack>
 </MudContainer>
 
+<!-- Import Preview Dialog -->
+<MudDialog @bind-Visible="_importPreviewOpen" Options="new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true }">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Review Import: @_previewBets.Count BetsFound</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudAlert Severity="Severity.Info" Class="mb-4">Review the mapped data. We've automatically matched your spreadsheet columns.</MudAlert>
+        <MudTable Items="@_previewBets" Dense="true" Hover="true" FixedHeader="true" Height="400px">
+            <HeaderContent>
+                <MudTh>Date</MudTh>
+                <MudTh>Description</MudTh>
+                <MudTh>Sport</MudTh>
+                <MudTh>Stake</MudTh>
+                <MudTh>Odds</MudTh>
+                <MudTh>Result</MudTh>
+                <MudTh>Type</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.Date</MudTd>
+                <MudTd>@context.Description</MudTd>
+                <MudTd>@context.Sport</MudTd>
+                <MudTd>$@context.Stake.ToString("F2")</MudTd>
+                <MudTd>@FormatOdds(context.Odds)</MudTd>
+                <MudTd>
+                    <MudChip T="string" Size="Size.Small" Color="@(context.Outcome == "win" ? Color.Success : context.Outcome == "loss" ? Color.Error : Color.Warning)">
+                        @context.Outcome
+                    </MudChip>
+                </MudTd>
+                <MudTd>@context.BetType</MudTd>
+            </RowTemplate>
+        </MudTable>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _importPreviewOpen = false)">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="ConfirmImport">Confirm & Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
 <!-- Edit Bet Dialog -->
 <MudDialog @bind-Visible="_editDialogOpen" Options="new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true }">
     <TitleContent>
@@ -405,6 +459,11 @@
     private decimal _editStake = 10;
     private int _editOdds = -110;
     private string _editSportsbook = "fanduel";
+
+    // Import state
+    private bool _isImporting = false;
+    private bool _importPreviewOpen = false;
+    private List<DataCollectionService.ImportBetPreview> _previewBets = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -793,6 +852,64 @@
         catch (Exception ex)
         {
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task OnImportFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+
+        try
+        {
+            _isImporting = true;
+            StateHasChanged();
+
+            var previewResponse = await DataCollectionService.PreviewImportAsync(file);
+            if (previewResponse != null && previewResponse.Bets.Any())
+            {
+                _previewBets = previewResponse.Bets;
+                _importPreviewOpen = true;
+            }
+            else
+            {
+                Snackbar.Add("No bets found in the selected file.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Import Preview Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isImporting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ConfirmImport()
+    {
+        try
+        {
+            _importPreviewOpen = false;
+            _isImporting = true;
+            StateHasChanged();
+
+            await DataCollectionService.ConfirmImportAsync(_previewBets);
+            Snackbar.Add($"Successfully imported {_previewBets.Count} bets!", Severity.Success);
+            
+            await LoadBets();
+            await LoadStats();
+            await LoadChartData();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Import Save Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isImporting = false;
+            StateHasChanged();
         }
     }
 

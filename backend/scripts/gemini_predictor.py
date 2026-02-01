@@ -88,7 +88,7 @@ class GeminiPredictor:
             return self._get_mock_insight(sport, home_team, away_team, stats)
 
         try:
-            prompt = self._build_prompt(sport, home_team, away_team, stats, game_date)
+            prompt = self._build_prompt(sport, home_team, away_team, stats, game_date, short_prompt=kwargs.get('short_prompt', False))
             
             # Configure tools for Google Search grounding to get real-time info (like injuries)
             config = types.GenerateContentConfig(
@@ -131,7 +131,7 @@ class GeminiPredictor:
             logger.error(f"Gemini LLM error: {e}")
             return self._get_mock_insight(sport, home_team, away_team, stats)
 
-    def _build_prompt(self, sport: str, home_team: str, away_team: str, stats: Dict[str, Any], game_date: Optional[str] = None) -> str:
+    def _build_prompt(self, sport: str, home_team: str, away_team: str, stats: Dict[str, Any], game_date: Optional[str] = None, short_prompt: bool = False) -> str:
         date_str = game_date or datetime.now().strftime("%Y-%m-%d")
         sport_upper = sport.upper()
         
@@ -191,39 +191,48 @@ class GeminiPredictor:
             """
 
         # 3. Master Prompt Template
-        master_prompt = f"""
-        You are a professional sports betting analyst explaining market expectations. Analyze the following matchup:
-        League: {sport_upper}
-        Game Date: {date_str}
-        Away Team/Driver: {away_team}
-        Home Team/Track: {home_team}
-        Moneyline: {away_team} {ml_away}, {home_team} {ml_home}
-        Spread: {spread}
-        Over/Under: {ov_un}
+        if short_prompt:
+            master_prompt = f"""
+            Fast AI Scout: Analyze {away_team} @ {home_team} ({sport_upper}).
+            Odds: ML {ml_away}/{ml_home}, Spread {spread}, O/U {ov_un}.
+            
+            Provide a CONCISE 3-sentence analysis focusing on the #1 matchup factor and latest injury news.
+            Format 'rationale' as raw HTML (p, b, br). Keep it under 150 words.
+            """
+        else:
+            master_prompt = f"""
+            You are a professional sports betting analyst explaining market expectations. Analyze the following matchup:
+            League: {sport_upper}
+            Game Date: {date_str}
+            Away Team/Driver: {away_team}
+            Home Team/Track: {home_team}
+            Moneyline: {away_team} {ml_away}, {home_team} {ml_home}
+            Spread: {spread}
+            Over/Under: {ov_un}
 
-        Prioritize these factors for {sport_upper}:
-        {priorities}
+            Prioritize these factors for {sport_upper}:
+            {priorities}
 
-        Explain why the market favors one team over the other and why the projected Over/Under is set at this number.
-        Your analysis MUST include:
-        1. Market Rationale (Bookmaker perspective, win probability)
-        2. Injury Impact (Critical: Search for LATEST injury reports for {date_str}. Mention specific key players by name and their specific injury). 
-        3. Matchup Dynamics (Structural advantages, schematic impact of injuries)
-        4. Game Environment & Total (O/U explanation, pace, tendencies)
-        5. Situational Factors (Home/Away, rest, travel, recent form)
-        6. Summary (Concise tie-together explaining why this team is favored)
+            Explain why the market favors one team over the other and why the projected Over/Under is set at this number.
+            Your analysis MUST include:
+            1. Market Rationale (Bookmaker perspective, win probability)
+            2. Injury Impact (Critical: Search for LATEST injury reports for {date_str}. Mention specific key players by name and their specific injury). 
+            3. Matchup Dynamics (Structural advantages, schematic impact of injuries)
+            4. Game Environment & Total (O/U explanation, pace, tendencies)
+            5. Situational Factors (Home/Away, rest, travel, recent form)
+            6. Summary (Concise tie-together explaining why this team is favored)
 
-        - Avoid generic commentary. Use realistic on-field/on-court factors.
-        - Ensure injuries are current for {date_str}.
-        - **FORMATTING**: Provide the 'rationale' field as a **Raw HTML** string. 
-          - Use <h4> for section headers.
-          - Use <ul>Combined with <li> for lists.
-          - Use <b> for bold text.
-          - Use <p> for paragraphs.
-          - Do **NOT** use Markdown (no #, no *, no -).
-          - Use <br> only if necessary for extra spacing.
-          - Make it visually clean and easy to read.
-        """
+            - Avoid generic commentary. Use realistic on-field/on-court factors.
+            - Ensure injuries are current for {date_str}.
+            - **FORMATTING**: Provide the 'rationale' field as a **Raw HTML** string. 
+              - Use <h4> for section headers.
+              - Use <ul>Combined with <li> for lists.
+              - Use <b> for bold text.
+              - Use <p> for paragraphs.
+              - Do **NOT** use Markdown (no #, no *, no -).
+              - Use <br> only if necessary for extra spacing.
+              - Make it visually clean and easy to read.
+            """
 
         # 4. JSON Schema instruction
         prompt_metrics = """

@@ -1,0 +1,27 @@
+@using MudBlazor
+
+<MudDialog>
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center">
+            <MudIcon Icon="@Icons.Material.Filled.AutoGraph" Color="Color.Primary" />
+            <MudText Typo="Typo.h5">AI Betting Report</MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        <div style="max-height: 70vh; overflow-y: auto; padding: 10px;">
+            <MudText Typo="Typo.body1" Style="white-space: pre-wrap; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6;">
+                @AnalysisText
+            </MudText>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" OnClick="Close" Variant="Variant.Filled">Close Report</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance? MudDialog { get; set; }
+    [Parameter] public string AnalysisText { get; set; } = "";
+
+    private void Close() => MudDialog?.Close();
+}

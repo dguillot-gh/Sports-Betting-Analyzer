@@ -6,6 +6,7 @@ Fetches real-time betting lines from sportsbooks
 from fastapi import APIRouter, Query, UploadFile, File
 from typing import Optional
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -915,3 +916,70 @@ async def predict_cfb_dual(
     """
     from scripts.cfb_predictor import analyze_cfb_matchup_dual
     return await analyze_cfb_matchup_dual(home_team, away_team, spread, over_under, home_ml, away_ml)
+
+
+@router.get("/all-sports/analyze")
+async def analyze_all_sports(
+    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from")
+):
+    """
+    Run analysis on ALL sports concurrently.
+    Resilient: if one sport fails or has no games, the rest still return.
+    """
+    import asyncio
+    
+    async def safe_analyze(sport_name, func, *args, **kwargs):
+        try:
+            result = await func(*args, **kwargs)
+            # If the result is an error dict or has no games, normalize it
+            if not result or result.get("error") or not result.get("games"):
+                return {"sport": sport_name, "games": [], "count": 0, "value_bets_found": 0, "status": "no_games"}
+            
+            # Ensure it has the sport name
+            result["sport"] = sport_name
+            result["status"] = "success"
+            return result
+        except Exception as e:
+            logger.error(f"Error in safe_analyze for {sport_name}: {e}")
+            return {"sport": sport_name, "games": [], "count": 0, "value_bets_found": 0, "status": "failed", "error": str(e)}
+
+    # Gather all sports concurrently
+    tasks = [
+        safe_analyze("nba", analyze_all_games, sportsbook),
+        safe_analyze("nfl", analyze_all_nfl_games, sportsbook),
+        safe_analyze("ncaab", analyze_all_ncaab_games, sportsbook),
+        safe_analyze("college-baseball", analyze_all_college_baseball_games, sportsbook),
+        safe_analyze("cfb", analyze_all_cfb_games, sportsbook)
+    ]
+    
+    results = await asyncio.gather(*tasks)
+    
+    # Aggregate stats
+    total_games = sum(r.get("count", 0) for r in results)
+    total_value_bets = sum(r.get("value_bets_found", 0) for r in results)
+    
+    final_result = {
+        "timestamp": datetime.now().isoformat(),
+        "sportsbook": sportsbook,
+        "total_games": total_games,
+        "total_value_bets": total_value_bets,
+        "results_by_sport": {r["sport"]: r for r in results},
+        # Flattened games list for easier frontend display in a single table
+        "all_games": [
+            {**game, "sport_key": r["sport"]} 
+            for r in results 
+            for game in r.get("games", [])
+        ]
+    }
+
+    # Save Snapshot
+    try:
+        from src.odds_cache import get_cache_service
+        cache = get_cache_service()
+        # Ensure tables exist (lazy init)
+        await cache.ensure_table()
+        await cache.save_snapshot({**final_result, "sport": "all"})
+    except Exception as e:
+        logger.error(f"Failed to save historical snapshot: {e}")
+
+    return final_result
