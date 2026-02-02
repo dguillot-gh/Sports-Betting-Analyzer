@@ -214,15 +214,51 @@ async def get_todays_cfb_odds(sportsbook: str = "fanduel") -> Dict[str, Any]:
                          "games": []
                     }
                     
-        except Exception as e:
-            logger.error(f"The Odds API failed for CFB: {e}")
-            return {"error": str(e), "games": []}
+    # Fallback to sbrscrape
+    try:
+        from sbrscrape import Scoreboard
+        sb = Scoreboard(sport="CFB", date=today)
+        
+        if hasattr(sb, "games") and sb.games:
+            games = []
+            for game in sb.games:
+                try:
+                    game_data = {
+                        "home_team": game.get('home_team', 'Unknown'),
+                        "away_team": game.get('away_team', 'Unknown'),
+                        "game_time": str(game.get('game_time', '')),
+                        "status": "scheduled",
+                    }
+                    
+                    if 'total' in game and sportsbook in game.get('total', {}):
+                        game_data['over_under'] = game['total'][sportsbook]
+                    if 'away_spread' in game and sportsbook in game.get('away_spread', {}):
+                        game_data['spread'] = game['away_spread'][sportsbook]
+                    if 'home_ml' in game and sportsbook in game.get('home_ml', {}):
+                        game_data['home_moneyline'] = game['home_ml'][sportsbook]
+                    if 'away_ml' in game and sportsbook in game.get('away_ml', {}):
+                        game_data['away_moneyline'] = game['away_ml'][sportsbook]
+                        
+                    games.append(game_data)
+                except Exception as e:
+                    logger.warning(f"Error parsing CFB game from sbrscrape: {e}")
             
-    else:
-        return {
-            "error": "ODDS_API_KEY not configured",
-            "games": []
-        }
+            return {
+                "date": str(today),
+                "sportsbook": sportsbook,
+                "games": games,
+                "count": len(games),
+                "source": "sbrscrape"
+            }
+    except Exception as e:
+        logger.warning(f"sbrscrape fallback failed for CFB: {e}")
+
+    return {
+        "date": str(today),
+        "sportsbook": sportsbook,
+        "games": [],
+        "message": "No CFB games found"
+    }
 
 def _decimal_to_american(decimal_odds: float) -> int:
     """Convert decimal odds to American odds."""

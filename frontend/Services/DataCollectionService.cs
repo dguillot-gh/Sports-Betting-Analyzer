@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
-using System.Linq;
+using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Components.Forms;
 using SportsBettingAnalyzer.Models;
 
 namespace SportsBettingAnalyzer.Services
@@ -71,6 +72,36 @@ namespace SportsBettingAnalyzer.Services
             }
         }
 
+        public async Task DeleteBetAsync(int betId)
+        {
+            try
+            {
+                var response = await _http.DeleteAsync($"{_apiBaseUrl}/bets/{betId}");
+                response.EnsureSuccessStatusCode();
+                _logger.LogInformation("Deleted bet ID {Id}", betId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting bet via API");
+                throw;
+            }
+        }
+
+        public async Task ClearAllBetsAsync()
+        {
+            try
+            {
+                var response = await _http.DeleteAsync($"{_apiBaseUrl}/bets/all");
+                response.EnsureSuccessStatusCode();
+                _logger.LogInformation("Cleared all bet history");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error clearing all bets via API");
+                throw;
+            }
+        }
+
         public async Task<List<HistoricalBet>> GetHistoricalBetsAsync(int? limit = null)
         {
             try
@@ -136,6 +167,248 @@ namespace SportsBettingAnalyzer.Services
                 _logger.LogError(ex, "Error getting analytics from API");
                 return new Dictionary<string, object>();
             }
+        }
+
+        public async Task<ImportPreviewResponse?> PreviewImportAsync(IBrowserFile file)
+        {
+            try
+            {
+                using var content = new MultipartFormDataContent();
+                var fileContent = new StreamContent(file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024)); // 10MB max
+                content.Add(fileContent, "file", file.Name);
+
+                var response = await _http.PostAsync($"{_apiBaseUrl}/bets/preview-import", content);
+                response.EnsureSuccessStatusCode();
+
+                return await response.Content.ReadFromJsonAsync<ImportPreviewResponse>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error previewing import");
+                throw;
+            }
+        }
+
+        public async Task ConfirmImportAsync(List<ImportBetPreview> bets)
+        {
+            try
+            {
+                var response = await _http.PostAsJsonAsync($"{_apiBaseUrl}/bets/confirm-import", bets);
+                response.EnsureSuccessStatusCode();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error confirming import");
+                throw;
+            }
+        }
+
+        public async Task<MultiSportAnalysisResponse?> GetMultiSportAnalysisAsync(string sportsbook = "fanduel")
+        {
+            try
+            {
+                return await _http.GetFromJsonAsync<MultiSportAnalysisResponse>($"{_apiBaseUrl}/odds/all-sports/analyze?sportsbook={sportsbook}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching multi-sport analysis");
+                return null;
+            }
+        }
+
+        public async Task<JsonElement?> GetAIAnalysisAsync(string sport, string home, string away, string homeStats = "", string awayStats = "", bool shortPrompt = false)
+        {
+            try
+            {
+                var url = $"{_apiBaseUrl}/ai/analyze?sport={sport}&home_team={Uri.EscapeDataString(home)}&away_team={Uri.EscapeDataString(away)}";
+                if (!string.IsNullOrEmpty(homeStats)) url += $"&home_stats={Uri.EscapeDataString(homeStats)}";
+                if (!string.IsNullOrEmpty(awayStats)) url += $"&away_stats={Uri.EscapeDataString(awayStats)}";
+                if (shortPrompt) url += "&short_prompt=true";
+                
+                var response = await _http.PostAsync(url, null);
+                response.EnsureSuccessStatusCode();
+                return await response.Content.ReadFromJsonAsync<JsonElement>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching AI analysis for {Away} @ {Home}", away, home);
+                return null;
+            }
+        }
+
+        public async Task<JsonElement?> GetNascarPredictionsAsync(int raceId)
+        {
+            try
+            {
+                return await _http.GetFromJsonAsync<JsonElement>($"{_apiBaseUrl}/nascar/predictions/{raceId}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching NASCAR predictions for race {RaceId}", raceId);
+                return null;
+            }
+        }
+
+        public async Task<JsonElement?> GetNascarStatusAsync()
+        {
+            try
+            {
+                return await _http.GetFromJsonAsync<JsonElement>($"{_apiBaseUrl}/nascar/status");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching NASCAR status");
+                return null;
+            }
+        }
+
+        public async Task<JsonElement?> GetNascarOddsAsync()
+        {
+            try
+            {
+                return await _http.GetFromJsonAsync<JsonElement>($"{_apiBaseUrl}/nascar/odds");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching NASCAR odds");
+                return null;
+            }
+        }
+
+        public async Task<JsonElement?> UploadNascarOddsAsync(IBrowserFile file)
+        {
+            try
+            {
+                using var content = new MultipartFormDataContent();
+                var fileContent = new StreamContent(file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024)); // 10MB max
+                fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
+                content.Add(fileContent, "file", file.Name);
+
+                var response = await _http.PostAsync($"{_apiBaseUrl}/nascar/upload-odds", content);
+                if (response.IsSuccessStatusCode)
+                {
+                    return await response.Content.ReadFromJsonAsync<JsonElement>();
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    throw new Exception($"Server Error {response.StatusCode}: {errorContent}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error uploading odds image");
+                throw; // Rethrow to let UI handle it
+            }
+        }
+
+        public async Task<string> GetNascarRaceAnalysisAsync(List<DriverPrediction> drivers, string trackName)
+        {
+            try
+            {
+                var payload = new 
+                { 
+                    race_details = new { track = trackName, series = "NASCAR Cup Series" },
+                    drivers = drivers.Select(d => new { 
+                        driver_name = d.DriverName, 
+                        win_probability = d.WinProbability, 
+                        projected_finish = d.ProjectedFinish,
+                        market_odds = d.MarketOdds,
+                        confidence = d.Confidence
+                    }) 
+                };
+                
+                var response = await _http.PostAsJsonAsync($"{_apiBaseUrl}/nascar/analyze-race", payload);
+                if (response.IsSuccessStatusCode)
+                {
+                    var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+                    return result.GetProperty("analysis").GetString() ?? "No analysis returned.";
+                }
+                return $"Error: {await response.Content.ReadAsStringAsync()}";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting race analysis");
+                return $"Error: {ex.Message}";
+            }
+        }
+
+        public async Task<bool> SubmitManualOddsAsync(List<DriverPrediction> drivers)
+        {
+            try
+            {
+                var payload = new { drivers = drivers.Select(d => new { driver_name = d.DriverName, market_odds = d.MarketOdds }) };
+                var response = await _http.PostAsJsonAsync($"{_apiBaseUrl}/nascar/manual-odds", payload);
+                if (response.IsSuccessStatusCode)
+                {
+                    return true;
+                }
+                var error = await response.Content.ReadAsStringAsync();
+                _logger.LogError($"Failed to submit manual odds: {error}");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error submitting manual odds");
+                return false;
+            }
+        }
+
+        public class MultiSportAnalysisResponse
+        {
+            [System.Text.Json.Serialization.JsonPropertyName("timestamp")]
+            public string Timestamp { get; set; } = "";
+            
+            [System.Text.Json.Serialization.JsonPropertyName("total_games")]
+            public int TotalGames { get; set; }
+            
+            [System.Text.Json.Serialization.JsonPropertyName("total_value_bets")]
+            public int TotalValueBets { get; set; }
+            
+            [System.Text.Json.Serialization.JsonPropertyName("all_games")]
+            public List<JsonElement> AllGames { get; set; } = new();
+        }
+
+        public class ImportPreviewResponse
+        {
+            [System.Text.Json.Serialization.JsonPropertyName("bets")]
+            public List<ImportBetPreview> Bets { get; set; } = new();
+
+            [System.Text.Json.Serialization.JsonPropertyName("total_count")]
+            public int TotalCount { get; set; }
+        }
+
+        public class ImportBetPreview
+        {
+            [System.Text.Json.Serialization.JsonPropertyName("date")]
+            public string? Date { get; set; }
+
+            [System.Text.Json.Serialization.JsonPropertyName("sport")]
+            public string? Sport { get; set; }
+
+            [System.Text.Json.Serialization.JsonPropertyName("description")]
+            public string? Description { get; set; }
+
+            [System.Text.Json.Serialization.JsonPropertyName("stake")]
+            public double Stake { get; set; }
+
+            [System.Text.Json.Serialization.JsonPropertyName("odds")]
+            public int Odds { get; set; }
+
+            [System.Text.Json.Serialization.JsonPropertyName("outcome")]
+            public string? Outcome { get; set; }
+
+            [System.Text.Json.Serialization.JsonPropertyName("profit")]
+            public double Profit { get; set; }
+
+            [System.Text.Json.Serialization.JsonPropertyName("sportsbook")]
+            public string? Sportsbook { get; set; }
+
+            [System.Text.Json.Serialization.JsonPropertyName("bet_type")]
+            public string? BetType { get; set; }
+
+            [System.Text.Json.Serialization.JsonPropertyName("legs")]
+            public List<ImportBetPreview>? Legs { get; set; }
         }
 
         private class BetListResponse

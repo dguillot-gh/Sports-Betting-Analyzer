@@ -43,10 +43,6 @@ services:
     environment:
       - DATABASE_URL=postgresql://sports_user:${DB_PASSWORD:-sportsbetting2024}@postgres:5432/sports_betting
       - REDIS_URL=redis://redis:6379  # Optional, for caching
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - ODDS_API_KEY=${ODDS_API_KEY:-}
-      - CFBD_API_KEY=${CFBD_API_KEY:-}
-      - GROQ_API_KEY=${GROQ_API_KEY:-}
     volumes:
       - ./backend/data:/app/data
       - ./backend/scripts/models:/app/models

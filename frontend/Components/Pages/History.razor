@@ -14,9 +14,14 @@
         <MudText Typo="Typo.h4" GutterBottom="true">Bet History</MudText>
         <MudText Typo="Typo.body1">View your analyzed bets and track results.</MudText>
     </div>
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportHistory" Disabled="@(_historicalBets == null || !_historicalBets.Any())">
-        Export History
-    </MudButton>
+    <MudStack Row="true">
+        <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.DeleteSweep" OnClick="ClearAllHistory" Disabled="@(_historicalBets == null || !_historicalBets.Any())">
+            Clear All
+        </MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportHistory" Disabled="@(_historicalBets == null || !_historicalBets.Any())">
+            Export History
+        </MudButton>
+    </MudStack>
 </div>
 
 @if (_isLoading)
@@ -76,13 +81,16 @@
                 }
             </MudTd>
             <MudTd DataLabel="Actions">
-                @if (!context.Won.HasValue)
-                {
-                    <MudButtonGroup>
-                        <MudButton Size="Size.Small" Color="Color.Success" OnClick="@(() => UpdateResult(context.Id, true))">Won</MudButton>
-                        <MudButton Size="Size.Small" Color="Color.Error" OnClick="@(() => UpdateResult(context.Id, false))">Lost</MudButton>
-                    </MudButtonGroup>
-                }
+                <MudStack Row="true" Spacing="1">
+                    @if (!context.Won.HasValue)
+                    {
+                        <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                            <MudButton Color="Color.Success" OnClick="@(() => UpdateResult(context.Id, true))">WON</MudButton>
+                            <MudButton Color="Color.Error" OnClick="@(() => UpdateResult(context.Id, false))">LOST</MudButton>
+                        </MudButtonGroup>
+                    }
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteBet(context.Id))" />
+                </MudStack>
             </MudTd>
         </RowTemplate>
     </MudTable>
@@ -131,6 +139,55 @@ else if (!_isLoading)
         }
     }
 
+    private async Task DeleteBet(int betId)
+    {
+        bool? result = await DialogService.ShowMessageBox(
+            "Delete Bet", 
+            "Are you sure you want to delete this bet?", 
+            yesText:"Delete!", cancelText:"Cancel");
+
+        if (result == true)
+        {
+            try
+            {
+                await DataCollectionService.DeleteBetAsync(betId);
+                await LoadHistory();
+                Snackbar.Add("Bet deleted", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error deleting bet: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task ClearAllHistory()
+    {
+        bool? result = await DialogService.ShowMessageBox(
+            "Clear All History", 
+            "This will PERMANENTLY delete all bet history. Are you sure?", 
+            yesText:"Yes, Clear Everything", cancelText:"Cancel");
+
+        if (result == true)
+        {
+            try
+            {
+                _isLoading = true;
+                await DataCollectionService.ClearAllBetsAsync();
+                await LoadHistory();
+                Snackbar.Add("Bet history cleared", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error clearing history: {ex.Message}", Severity.Error);
+            }
+            finally
+            {
+                _isLoading = false;
+            }
+        }
+    }
+
     private async Task ExportHistory()
     {
         if (_historicalBets == null || !_historicalBets.Any()) return;
@@ -138,4 +195,6 @@ else if (!_isLoading)
         Snackbar.Add("History exported to CSV", Severity.Success);
     }
 }
+
+@inject IDialogService DialogService
 

@@ -12,7 +12,9 @@ from decimal import Decimal
 from typing import Optional, List, Union
 from pydantic import BaseModel, Field
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, File, UploadFile
+import io
+import csv
 
 import os
 
@@ -53,6 +55,7 @@ class CreateBetRequest(BaseModel):
     team2: Optional[str] = None
     player_name: Optional[str] = None
     game_date: Optional[str] = None
+    clv_percent: Optional[float] = None
 
 
 class UpdateOutcomeRequest(BaseModel):
@@ -88,6 +91,7 @@ class BetResponse(BaseModel):
     team2: Optional[str] = None
     player_name: Optional[str] = None
     game_date: Optional[str] = None
+    clv_percent: Optional[float] = None
 
 
 # ==================== SQL ====================
@@ -117,7 +121,8 @@ CREATE TABLE IF NOT EXISTS bets (
     team1 VARCHAR(200),
     team2 VARCHAR(200),
     player_name VARCHAR(200),
-    game_date TIMESTAMPTZ
+    game_date TIMESTAMPTZ,
+    clv_percent DECIMAL(5,2)
 );
 
 CREATE TABLE IF NOT EXISTS bet_legs (
@@ -230,6 +235,12 @@ async def ensure_tables():
                 await conn.execute("ALTER TABLE bets ADD COLUMN team2 VARCHAR(200)")
                 await conn.execute("ALTER TABLE bets ADD COLUMN player_name VARCHAR(200)")
                 await conn.execute("ALTER TABLE bets ADD COLUMN game_date TIMESTAMPTZ")
+            
+            # Check for clv_percent
+            val = await conn.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='bets' AND column_name='clv_percent'")
+            if not val:
+                logger.info("Adding clv_percent column to bets table")
+                await conn.execute("ALTER TABLE bets ADD COLUMN clv_percent DECIMAL(5,2)")
         except Exception as e:
             logger.error(f"Schema migration error: {e}")
             
@@ -301,15 +312,16 @@ async def create_bet(request: CreateBetRequest):
         # Insert bet
         row = await conn.fetchrow("""
             INSERT INTO bets (sport, bet_type, sportsbook, stake, odds, potential_payout, game_id, game_name, description, source, notes,
-                             expected_value, recommendation, confidence_score, team1, team2, player_name, game_date)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+                             expected_value, recommendation, confidence_score, team1, team2, player_name, game_date, clv_percent)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
             RETURNING *
         """, request.sport, request.bet_type, request.sportsbook, 
             request.stake, combined_odds, potential_payout, 
             request.game_id, request.game_name, description, request.source, request.notes,
             request.expected_value, request.recommendation, request.confidence_score,
             request.team1, request.team2, request.player_name, 
-            datetime.fromisoformat(request.game_date.replace("Z", "+00:00")) if request.game_date else None)
+            datetime.fromisoformat(request.game_date.replace("Z", "+00:00")) if request.game_date else None,
+            request.clv_percent)
         
         bet_id = row["id"]
         
@@ -347,7 +359,8 @@ async def create_bet(request: CreateBetRequest):
             team1=row["team1"],
             team2=row["team2"],
             player_name=row["player_name"],
-            game_date=row["game_date"].isoformat() if row["game_date"] else None
+            game_date=row["game_date"].isoformat() if row["game_date"] else None,
+            clv_percent=to_float(row["clv_percent"]) if row["clv_percent"] is not None else None
         )
     finally:
         await conn.close()
@@ -431,7 +444,8 @@ async def list_bets(
                 "team1": row["team1"],
                 "team2": row["team2"],
                 "player_name": row["player_name"],
-                "game_date": row["game_date"].isoformat() if row["game_date"] else None
+                "game_date": row["game_date"].isoformat() if row["game_date"] else None,
+                "clv_percent": to_float(row["clv_percent"]) if row["clv_percent"] is not None else None
             })
         
         return {"bets": bets, "count": len(bets)}
@@ -606,6 +620,19 @@ async def update_bet(bet_id: int, request: UpdateBetRequest):
         await conn.close()
 
 
+@router.delete("/all")
+async def clear_all_bets():
+    """Wipe all bet data."""
+    import asyncpg
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        await conn.execute("TRUNCATE TABLE bet_legs RESTART IDENTITY CASCADE;")
+        await conn.execute("TRUNCATE TABLE bets RESTART IDENTITY CASCADE;")
+        return {"status": "success", "message": "All bet history cleared"}
+    finally:
+        await conn.close()
+
+
 @router.delete("/{bet_id}")
 async def delete_bet(bet_id: int):
     """Delete a bet."""
@@ -635,14 +662,18 @@ async def get_bet_stats(
     
     conn = await asyncpg.connect(DATABASE_URL)
     try:
-        conditions = ["created_at > NOW() - INTERVAL '%s days'" % days]
+        if days > 0:
+            conditions = ["created_at > NOW() - INTERVAL '%s days'" % days]
+        else:
+            conditions = []
+        
         params = []
         
         if sport:
             conditions.append("sport = $1")
             params.append(sport)
         
-        where_clause = "WHERE " + " AND ".join(conditions)
+        where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
         
         query = f"""
             SELECT 
@@ -700,10 +731,12 @@ async def get_chart_data(
     
     conn = await asyncpg.connect(DATABASE_URL)
     try:
-        sport_filter = "AND sport = $2" if sport else ""
-        params = [days] if not sport else [days, sport]
+        if days > 0:
+            date_filter = f"WHERE created_at > NOW() - INTERVAL '{days} days'"
+        else:
+            date_filter = "WHERE 1=1"
         
-        # Daily profit/loss
+        sport_filter = "AND sport = $2" if sport else ""
         daily_query = f"""
             SELECT 
                 DATE(created_at) as bet_date,
@@ -714,14 +747,17 @@ async def get_chart_data(
                 SUM(CASE WHEN outcome = 'loss' THEN 1 ELSE 0 END) as losses,
                 SUM(CASE WHEN outcome = 'cashout' THEN 1 ELSE 0 END) as cashouts
             FROM bets
-            WHERE created_at > NOW() - INTERVAL '{days} days'
+            {date_filter}
                 AND outcome != 'pending'
                 {sport_filter}
             GROUP BY DATE(created_at)
             ORDER BY bet_date ASC
         """
         
-        daily_rows = await conn.fetch(daily_query, *params) if sport else await conn.fetch(daily_query)
+        daily_params = []
+        if sport: daily_params.append(sport)
+        
+        daily_rows = await conn.fetch(daily_query, *daily_params) if daily_params else await conn.fetch(daily_query)
         
         # Build daily data with cumulative ROI
         daily_data = []
@@ -755,13 +791,13 @@ async def get_chart_data(
                 COUNT(*) as count,
                 COALESCE(SUM(profit), 0) as profit
             FROM bets
-            WHERE created_at > NOW() - INTERVAL '{days} days'
+            {date_filter}
                 AND outcome != 'pending'
                 {sport_filter}
             GROUP BY outcome
         """
         
-        totals_rows = await conn.fetch(totals_query, *params) if sport else await conn.fetch(totals_query)
+        totals_rows = await conn.fetch(totals_query, *daily_params) if sport else await conn.fetch(totals_query)
         
         outcome_distribution = {
             "wins": 0,
@@ -796,5 +832,260 @@ async def get_chart_data(
                 "total_bets": sum(d["bets"] for d in daily_data)
             }
         }
+    finally:
+        await conn.close()
+
+
+@router.post("/import-csv")
+async def import_bets_csv(file: UploadFile = File(...)):
+    """Import bets from Juice Reel CSV (Legacy/Direct)."""
+    # ... (keeping existing logic for compatibility but can redirect to the new universal logic later)
+    # Actually, let's keep it as is for now and add the new one below.
+    # [Rest of existing import-csv code]
+    import asyncpg
+    from collections import defaultdict
+    import io
+    import csv
+    
+    content = await file.read()
+    string_content = content.decode('utf-8')
+    f = io.StringIO(string_content)
+    reader = csv.DictReader(f)
+    
+    # Group by juice_bet_id
+    bets_map = defaultdict(list)
+    for row in reader:
+        bets_map[row.get('juice_bet_id', 'unknown')].append(row)
+    
+    await ensure_tables()
+    conn = await asyncpg.connect(DATABASE_URL)
+    
+    imported_count = 0
+    errors = []
+    
+    try:
+        async with conn.transaction():
+            for bet_id, legs in bets_map.items():
+                try:
+                    first_leg = legs[0]
+                    num_legs = int(first_leg.get('number_of_legs', 1))
+                    stake = float(first_leg.get('risk_amount', 0))
+                    odds = int(first_leg.get('odds_american', 0))
+                    profit = float(first_leg.get('amount_won_or_lost', 0))
+                    outcome_raw = first_leg.get('bet_result', 'pending').lower()
+                    
+                    if outcome_raw == "cashedout": outcome = "cashout"
+                    elif outcome_raw in ["won", "loss", "pending"]: outcome = outcome_raw
+                    else: outcome = "pending"
+                        
+                    potential_payout = calculate_potential_payout(stake, odds)
+                    
+                    if num_legs == 1:
+                        sport_raw = first_leg.get('leg_sport', 'unknown').lower()
+                        league_raw = first_leg.get('leg_league', 'unknown').lower()
+                        if "nba" in league_raw: sport = "nba"
+                        elif "nfl" in league_raw: sport = "nfl"
+                        elif "mlb" in league_raw: sport = "mlb"
+                        elif "basketball" in sport_raw: sport = "nba"
+                        elif "football" in sport_raw: sport = "nfl"
+                        elif "racing" in sport_raw: sport = "nascar"
+                        else: sport = sport_raw[:20]
+                        
+                        game_name = first_leg.get('event_name', 'Unknown Event')
+                        description = first_leg.get('leg_description', '')
+                    else:
+                        sport = "parlay"
+                        game_name = f"{num_legs}-leg parlay"
+                        description = ", ".join([l.get('event_name', '') for l in legs])[:200]
+                    
+                    bet_row = await conn.fetchrow("""
+                        INSERT INTO bets (sport, bet_type, sportsbook, stake, odds, potential_payout, 
+                                         outcome, profit, game_name, description, source, 
+                                         game_date, clv_percent)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                        RETURNING id
+                    """, sport, "single" if num_legs == 1 else "parlay", first_leg.get('sportsbook', 'Unknown'),
+                        stake, odds, potential_payout, outcome, profit, game_name, description, 
+                        "import", datetime.fromisoformat(first_leg.get('date_placed', datetime.now().isoformat()).replace("+00", "+00:00")),
+                        float(first_leg['clv_percent']) if first_leg.get('clv_percent') else None)
+                    
+                    bet_db_id = bet_row['id']
+                    for leg in legs:
+                        await conn.execute("""
+                            INSERT INTO bet_legs (bet_id, description, odds, outcome)
+                            VALUES ($1, $2, $3, $4)
+                        """, bet_db_id, leg.get('leg_description', ''), int(leg.get('leg_vig', 0)), "pending") 
+                    
+                    imported_count += 1
+                except Exception as e:
+                    errors.append(f"Bet {bet_id}: {str(e)}")
+        
+        return {"status": "success", "imported_count": imported_count, "error_count": len(errors), "errors": errors[:10]}
+    finally:
+        await conn.close()
+
+
+# ==================== Universal Importer ====================
+
+class HeaderMapper:
+    """Intelligent header mapping for spreadsheets."""
+    MAPPINGS = {
+        "stake": ["stake", "risk", "amount", "wager", "risk_amount", "bet_amount"],
+        "odds": ["odds", "price", "line", "odds_american", "american_odds"],
+        "sport": ["sport", "league", "category", "leg_sport", "leg_league"],
+        "outcome": ["outcome", "result", "status", "bet_result"],
+        "date": ["date", "placed at", "timestamp", "date_placed", "datetime"],
+        "description": ["description", "teams/player", "event", "event_name", "bet", "leg_description"],
+        "sportsbook": ["sportsbook", "book", "site"],
+        "profit": ["profit", "net", "amount_won_or_lost", "win/loss"],
+    }
+
+    @classmethod
+    def map_headers(cls, df_columns):
+        mapped = {}
+        cols = [c.lower().strip() for c in df_columns]
+        for field, aliases in cls.MAPPINGS.items():
+            for alias in aliases:
+                if alias in cols:
+                    # Find original column name
+                    idx = cols.index(alias)
+                    mapped[field] = df_columns[idx]
+                    break
+        return mapped
+
+def sanitize_value(val, type_to):
+    """Clean and convert values."""
+    if val is None or (isinstance(val, float) and os.path.isfile(str(val))): # Handle NaN
+        return None
+    
+    s_val = str(val).strip().replace("$", "").replace(",", "")
+    
+    if type_to == "float":
+        try: return float(s_val)
+        except: return 0.0
+    if type_to == "int":
+        try: return int(float(s_val))
+        except: return 0
+    if type_to == "outcome":
+        low = s_val.lower()
+        if "won" in low or "win" in low or "w" == low: return "win"
+        if "loss" in low or "lost" in low or "l" == low: return "loss"
+        if "cash" in low or "cashed" in low: return "cashout"
+        return "pending"
+    return s_val
+
+@router.post("/preview-import")
+async def preview_import(file: UploadFile = File(...)):
+    """Preview a bet import from CSV or Excel."""
+    import pandas as pd
+    import io
+    
+    content = await file.read()
+    filename = file.filename.lower()
+    
+    try:
+        if filename.endswith(".csv"):
+            df = pd.read_csv(io.BytesIO(content))
+        elif filename.endswith((".xlsx", ".xls")):
+            df = pd.read_excel(io.BytesIO(content), engine="openpyxl")
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported file format. Use CSV or Excel.")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
+
+    # Map headers
+    mapping = HeaderMapper.map_headers(df.columns)
+    required = ["stake", "description"] # Minimal requirements
+    missing = [f for f in required if f not in mapping]
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Missing required columns: {', '.join(missing)}")
+
+    # Process rows
+    preview_bets = []
+    # Use grouped logic for parlays (if ID exists) or just treat rows as individuals
+    id_col = next((c for c in df.columns if "id" in c.lower()), None)
+    
+    for _, row in df.iterrows():
+        # Sanitize
+        bet = {
+            "id_in_file": str(row[id_col]) if id_col else None,
+            "date": sanitize_value(row.get(mapping.get("date")), "str") or datetime.now().isoformat(),
+            "sport": sanitize_value(row.get(mapping.get("sport")), "str") or "other",
+            "description": sanitize_value(row.get(mapping.get("description")), "str"),
+            "stake": sanitize_value(row.get(mapping.get("stake")), "float"),
+            "odds": sanitize_value(row.get(mapping.get("odds")), "int"),
+            "outcome": sanitize_value(row.get(mapping.get("outcome")), "outcome"),
+            "profit": sanitize_value(row.get(mapping.get("profit")), "float"),
+            "sportsbook": sanitize_value(row.get(mapping.get("sportsbook")), "str") or "Unknown"
+        }
+        preview_bets.append(bet)
+
+    # Simplified parlay detection: group by ID if provided
+    if id_col:
+        from collections import defaultdict
+        grouped = defaultdict(list)
+        for b in preview_bets:
+            grouped[b["id_in_file"]].append(b)
+        
+        final_preview = []
+        for bid, legs in grouped.items():
+            if len(legs) > 1:
+                master = legs[0].copy()
+                master["bet_type"] = "parlay"
+                master["description"] = f"{len(legs)}-leg parlay: {legs[0]['description']}..."
+                master["legs"] = legs
+                final_preview.append(master)
+            else:
+                l = legs[0]
+                l["bet_type"] = "single"
+                final_preview.append(l)
+        preview_bets = final_preview
+    else:
+        for b in preview_bets: b["bet_type"] = "single"
+
+    return {"bets": preview_bets, "total_count": len(preview_bets)}
+
+@router.post("/confirm-import")
+async def confirm_import(bets: List[dict]):
+    """Save finalized bets to database."""
+    import asyncpg
+    from datetime import datetime
+    
+    await ensure_tables()
+    conn = await asyncpg.connect(DATABASE_URL)
+    
+    imported_count = 0
+    try:
+        async with conn.transaction():
+            for bet in bets:
+                # Calculate potential payout if missing
+                potential = calculate_potential_payout(bet["stake"], bet["odds"])
+                
+                # Insert master
+                try:
+                    game_date = datetime.fromisoformat(bet["date"].replace("Z", "+00:00"))
+                except:
+                    game_date = datetime.now()
+
+                bet_row = await conn.fetchrow("""
+                    INSERT INTO bets (sport, bet_type, sportsbook, stake, odds, potential_payout, 
+                                     outcome, profit, description, game_name, source, game_date)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                    RETURNING id
+                """, bet.get("sport", "other")[:20], bet.get("bet_type", "single"), bet.get("sportsbook", "Unknown")[:50],
+                    bet.get("stake", 0.0), bet.get("odds", 0), potential, bet.get("outcome", "pending"), 
+                    bet.get("profit", 0.0), bet.get("description", "")[:200], bet.get("description", "")[:100], 
+                    "universal_import", game_date)
+                
+                # Insert legs if parlay
+                if bet.get("legs"):
+                    for leg in bet["legs"]:
+                        await conn.execute("""
+                            INSERT INTO bet_legs (bet_id, description, odds, outcome)
+                            VALUES ($1, $2, $3, $4)
+                        """, bet_row["id"], leg.get("description", "")[:200], leg.get("odds", 0), leg.get("outcome", "pending"))
+                
+                imported_count += 1
+        return {"status": "success", "imported": imported_count}
     finally:
         await conn.close()

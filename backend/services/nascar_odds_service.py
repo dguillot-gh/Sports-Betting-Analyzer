@@ -7,7 +7,10 @@ from datetime import datetime, timedelta
 from src.config import ODDS_API_KEY
 
 class NascarOddsService:
-    BASE_URL = "https://api.the-odds-api.com/v4/sports/motorsport_nascar/odds"
+    # Updated sport key based on API documentation
+    BASE_URL = "https://api.the-odds-api.com/v4/sports/motorsport_nascar_cup_series/odds"
+    # Fallback/Base URL for sports discovery if needed
+    # BASE_URL_GENERIC = "https://api.the-odds-api.com/v4/sports/motorsport_nascar/odds"
     CACHE_DURATION = timedelta(minutes=15)  # Cache for 15 minutes to save API calls
     
     def __init__(self):
@@ -17,41 +20,53 @@ class NascarOddsService:
 
     async def get_live_odds(self) -> List[Dict]:
         """
-        Fetch live NASCAR odds from The Odds API.
+        Fetch live NASCAR odds. Tries The Odds API first, falls back to Apify/DraftKings.
         Returns a list of race odds objects.
         """
-        if not self._api_key:
-            return []
-            
         # Return cached data if valid
         if self._cache and self._last_update:
             if datetime.now() - self._last_update < self.CACHE_DURATION:
                 return self._cache
 
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    self.BASE_URL,
-                    params={
-                        "apiKey": self._api_key,
-                        "regions": "us",
-                        "markets": "h2h,outrights",
-                        "oddsFormat": "american"
-                    },
-                    timeout=10.0
-                )
-                
-                if response.status_code == 200:
-                    self._cache = response.json()
-                    self._last_update = datetime.now()
-                    return self._cache
-                else:
-                    print(f"Odds API Error: {response.status_code} - {response.text}")
-                    return []
+        # Try The Odds API first
+        if self._api_key:
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(
+                        self.BASE_URL,
+                        params={
+                            "apiKey": self._api_key,
+                            "regions": "us",
+                            "markets": "h2h,outrights",
+                            "oddsFormat": "american"
+                        },
+                        timeout=10.0
+                    )
                     
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data:  # Only cache if we got data
+                            self._cache = data
+                            self._last_update = datetime.now()
+                            return self._cache
+                    else:
+                        print(f"Odds API Error: {response.status_code} - {response.text}")
+                        
+            except Exception as e:
+                print(f"The Odds API failed: {e}")
+
+        # Fallback to Apify/DraftKings
+        try:
+            from services.apify_nascar_service import fetch_nascar_odds_from_apify
+            drivers = await fetch_nascar_odds_from_apify()
+            if drivers:
+                self._cache = drivers
+                self._last_update = datetime.now()
+                return self._cache
         except Exception as e:
-            print(f"Failed to fetch NASCAR odds: {e}")
-            return []
+            print(f"Apify fallback failed: {e}")
+        
+        return []
 
     async def get_driver_odds(self, driver_name: str) -> Optional[str]:
         """

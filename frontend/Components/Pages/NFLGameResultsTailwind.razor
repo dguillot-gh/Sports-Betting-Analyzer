@@ -1,0 +1,239 @@
+@page "/nfl-game-results-tailwind"
+@rendermode InteractiveServer
+@inject HttpClient Http
+@using System.Net.Http.Json
+
+<PageTitle>NFL Results (Tailwind Demo)</PageTitle>
+
+<div class="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
+    <div class="max-w-7xl mx-auto">
+        
+        <!-- Header Section -->
+        <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+            <div class="flex items-center gap-3">
+                <div class="bg-blue-600 p-3 rounded-xl shadow-lg shadow-blue-900/20">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m.599-1c.538-.013 1.05-.139 1.503-.362M12 16c-1.11 0-2.08-.402-2.599-1M12 16v1m0-1V7m0 0v1m-.599-1C10.863 6.013 10.35 6.139 9.897 6.362"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-bold tracking-tight">NFL Analytics</h1>
+                    <p class="text-slate-400 text-sm">Historical Results & Performance Data</p>
+                </div>
+            </div>
+
+            <!-- Dashboard Filters -->
+            <div class="flex flex-wrap items-center gap-3 bg-slate-900/50 p-2 rounded-2xl border border-slate-800 backdrop-blur-sm">
+                <div class="relative">
+                    <select @bind="_selectedSeason" class="appearance-none bg-slate-800 text-sm border border-slate-700 rounded-xl px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all cursor-pointer">
+                        @foreach (var season in _availableSeasons)
+                        {
+                            <option value="@season">Season @season</option>
+                        }
+                    </select>
+                    <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"></path></svg>
+                    </div>
+                </div>
+
+                <div class="relative">
+                    <select @bind="_selectedWeek" class="appearance-none bg-slate-800 text-sm border border-slate-700 rounded-xl px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all cursor-pointer">
+                        <option value="">All Weeks</option>
+                        @for (int i = 1; i <= 18; i++)
+                        {
+                            <option value="@i">Week @i</option>
+                        }
+                    </select>
+                    <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"></path></svg>
+                    </div>
+                </div>
+
+                <div class="relative min-w-[140px]">
+                    <select @bind="_selectedTeam" class="w-full appearance-none bg-slate-800 text-sm border border-slate-700 rounded-xl px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all cursor-pointer">
+                        <option value="">All Teams</option>
+                        <option value="ARI">Cardinals</option>
+                        <option value="ATL">Falcons</option>
+                        <option value="BAL">Ravens</option>
+                        <option value="BUF">Bills</option>
+                        <option value="PHI">Eagles</option>
+                        <option value="KC">Chiefs</option>
+                        <option value="SF">49ers</option>
+                    </select>
+                    <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"></path></svg>
+                    </div>
+                </div>
+
+                <button @onclick="LoadResults" disabled="@_isLoading" class="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold px-6 py-2 rounded-xl transition-all shadow-lg shadow-blue-600/20 active:scale-95">
+                    @if (_isLoading) {
+                        <span class="inline-block animate-spin mr-2">◌</span>
+                    }
+                    Refresh Data
+                </button>
+            </div>
+        </header>
+
+        <!-- Loading State -->
+        @if (_isLoading)
+        {
+            <div class="w-full bg-slate-900 h-1 rounded-full overflow-hidden mb-8">
+                <div class="bg-blue-500 h-full animate-full-width"></div>
+            </div>
+        }
+
+        <!-- Games Grid -->
+        @if (_games.Any())
+        {
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                @foreach (var game in _games)
+                {
+                    <DashboardCard Color="blue">
+                        <HeaderContent>
+                            <span class="bg-slate-800 text-slate-400 text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full border border-slate-700">
+                                Week @game.Week • @game.GameDate
+                            </span>
+                        </HeaderContent>
+                        <StatusContent>
+                            @if (game.IsCompleted)
+                            {
+                                <span class="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                                    <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                                    FINAL
+                                </span>
+                            }
+                        </StatusContent>
+                        <ChildContent>
+                            <!-- Matchup Area -->
+                            <div class="flex flex-col gap-6">
+                                <!-- Away Team -->
+                                <div class="flex items-center justify-between group-hover:translate-x-1 transition-transform">
+                                    <div class="flex items-center gap-4">
+                                        <div class="w-12 h-12 bg-slate-800 rounded-2xl flex items-center justify-center border border-slate-700 shadow-inner">
+                                            <span class="text-xl font-black text-slate-300">@game.AwayTeam.Substring(0, 1)</span>
+                                        </div>
+                                        <span class="text-lg font-bold @(game.AwayScore > game.HomeScore ? "text-white" : "text-slate-400")">@game.AwayTeam</span>
+                                    </div>
+                                    <span class="text-3xl font-black tracking-tighter @(game.AwayScore > game.HomeScore ? "text-emerald-400" : "text-slate-600")">@game.AwayScore</span>
+                                </div>
+
+                                <div class="h-[1px] bg-gradient-to-r from-transparent via-slate-800 to-transparent"></div>
+
+                                <!-- Home Team -->
+                                <div class="flex items-center justify-between group-hover:translate-x-1 transition-transform">
+                                    <div class="flex items-center gap-4">
+                                        <div class="w-12 h-12 bg-slate-800 rounded-2xl flex items-center justify-center border border-slate-700 shadow-inner">
+                                            <span class="text-xl font-black text-slate-300">@game.HomeTeam.Substring(0, 1)</span>
+                                        </div>
+                                        <span class="text-lg font-bold @(game.HomeScore > game.AwayScore ? "text-white" : "text-slate-400")">@game.HomeTeam</span>
+                                    </div>
+                                    <span class="text-3xl font-black tracking-tighter @(game.HomeScore > game.AwayScore ? "text-emerald-400" : "text-slate-600")">@game.HomeScore</span>
+                                </div>
+                            </div>
+                        </ChildContent>
+                    </DashboardCard>
+                }
+            </div>
+        }
+        else if (!_isLoading)
+        {
+            <div class="flex flex-col items-center justify-center py-20 bg-slate-900/50 rounded-3xl border border-dashed border-slate-800">
+                <svg class="w-16 h-16 text-slate-700 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 9.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <h3 class="text-xl font-semibold text-slate-400">No analytical data found</h3>
+                <p class="text-slate-600">Try adjusting your time period or team filters.</p>
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    @@keyframes progress {
+        0% { width: 0%; transform: translateX(-100%); }
+        50% { width: 30%; transform: translateX(100%); }
+        100% { width: 0%; transform: translateX(200%); }
+    }
+    .animate-full-width {
+        animation: progress 2s infinite ease-in-out;
+    }
+</style>
+
+@code {
+    private int _selectedSeason = 2025;
+    private int? _selectedWeek;
+    private string? _selectedTeam;
+    private bool _isLoading = false;
+    private List<int> _availableSeasons = new() { 2025, 2024, 2023, 2022 };
+    private List<NFLGame> _games = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Calculate seasons same as original
+        _availableSeasons = Enumerable.Range(2020, 6).Reverse().ToList();
+        _selectedSeason = _availableSeasons.First(); // Usually 2025
+        await LoadResults();
+    }
+
+    private async Task LoadResults()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        
+        try
+        {
+            var url = $"http://backend:8000/db/games/nfl/schedule?limit=50&season={_selectedSeason}";
+            if (_selectedWeek.HasValue) url += $"&week={_selectedWeek}";
+            if (!string.IsNullOrEmpty(_selectedTeam)) url += $"&team={Uri.EscapeDataString(_selectedTeam)}";
+
+            var response = await Http.GetFromJsonAsync<NFLScheduleResponse>(url);
+            _games = (response?.Games ?? new())
+                .Select(g => new NFLGame {
+                    Week = g.Week ?? 0,
+                    GameDate = g.GameDate ?? "TBD",
+                    HomeTeam = g.HomeTeam ?? "Home",
+                    AwayTeam = g.AwayTeam ?? "Away",
+                    HomeScore = g.HomeScore ?? 0,
+                    AwayScore = g.AwayScore ?? 0,
+                    IsCompleted = g.IsCompleted ?? (g.HomeScore > 0 || g.AwayScore > 0)
+                })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+            _games = GenerateSampleGames();
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private List<NFLGame> GenerateSampleGames()
+    {
+        return new List<NFLGame> {
+            new NFLGame { Week = 18, GameDate = "Jan 7, 2024", HomeTeam = "Packers", AwayTeam = "Bears", HomeScore = 17, AwayScore = 9, IsCompleted = true },
+            new NFLGame { Week = 17, GameDate = "Dec 31, 2023", HomeTeam = "Ravens", AwayTeam = "Dolphins", HomeScore = 56, AwayScore = 19, IsCompleted = true },
+            new NFLGame { Week = 16, GameDate = "Dec 24, 2023", HomeTeam = "Dolphins", AwayTeam = "Cowboys", HomeScore = 22, AwayScore = 20, IsCompleted = true }
+        };
+    }
+
+    public class NFLScheduleResponse { public List<NFLGameItem> Games { get; set; } = new(); }
+    public class NFLGameItem {
+        public int? Week { get; set; }
+        public string? GameDate { get; set; }
+        public string? HomeTeam { get; set; }
+        public string? AwayTeam { get; set; }
+        public int? HomeScore { get; set; }
+        public int? AwayScore { get; set; }
+    }
+    public class NFLGame {
+        public int Week { get; set; }
+        public string GameDate { get; set; } = "";
+        public string HomeTeam { get; set; } = "";
+        public string AwayTeam { get; set; } = "";
+        public int HomeScore { get; set; }
+        public int AwayScore { get; set; }
+        public bool IsCompleted { get; set; }
+    }
+}

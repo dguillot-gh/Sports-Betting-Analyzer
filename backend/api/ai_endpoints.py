@@ -18,7 +18,8 @@ async def analyze_matchup(
     away_team: str = Query(..., description="Away team name"),
     # We allow passing stats directly if known, otherwise backend should fetch (future improvement)
     home_stats: Optional[str] = Query(None, description="JSON string of home stats"),
-    away_stats: Optional[str] = Query(None, description="JSON string of away stats")
+    away_stats: Optional[str] = Query(None, description="JSON string of away stats"),
+    short_prompt: bool = Query(False, description="Use a shorter, more concise prompt")
 ):
     """
     Returns a unified analysis report including multi-engine metrics and LLM insights.
@@ -31,6 +32,6 @@ async def analyze_matchup(
         advisor = get_ai_advisor()
         stats = {"home": h_stats, "away": a_stats}
         
-        return await advisor.get_full_analysis(sport, home_team, away_team, stats)
+        return await advisor.get_full_analysis(sport, home_team, away_team, stats, short_prompt=short_prompt)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
