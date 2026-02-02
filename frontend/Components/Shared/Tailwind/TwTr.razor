@@ -1,0 +1,10 @@
+@namespace SportsBettingAnalyzer.Components.Shared.Tailwind
+
+<tr class="hover:bg-slate-800/50 transition-colors @Class">
+    @ChildContent
+</tr>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string Class { get; set; } = "";
+}

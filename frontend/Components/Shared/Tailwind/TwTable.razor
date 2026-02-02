@@ -1,0 +1,23 @@
+@namespace SportsBettingAnalyzer.Components.Shared.Tailwind
+
+<div class="overflow-x-auto @Class">
+    <table class="w-full text-left">
+        @if (HeaderContent != null)
+        {
+            <thead class="bg-slate-800/50 border-b border-slate-700">
+                <tr>
+                    @HeaderContent
+                </tr>
+            </thead>
+        }
+        <tbody class="divide-y divide-slate-800">
+            @ChildContent
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [Parameter] public RenderFragment? HeaderContent { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string Class { get; set; } = "";
+}

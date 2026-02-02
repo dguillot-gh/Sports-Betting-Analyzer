@@ -1,0 +1,10 @@
+@namespace SportsBettingAnalyzer.Components.Shared.Tailwind
+
+<th class="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider @Class">
+    @ChildContent
+</th>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string Class { get; set; } = "";
+}

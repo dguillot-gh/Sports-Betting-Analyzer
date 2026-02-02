@@ -1,0 +1,49 @@
+@namespace SportsBettingAnalyzer.Components.Shared.Tailwind
+
+<button type="@Type" 
+        disabled="@Disabled"
+        @onclick="OnClick"
+        class="@ComputedClass">
+    @if (IsLoading)
+    {
+        <span class="inline-block animate-spin mr-2">◌</span>
+    }
+    @ChildContent
+</button>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string Variant { get; set; } = "primary"; // primary, secondary, outline, danger, ghost
+    [Parameter] public string Size { get; set; } = "md"; // sm, md, lg
+    [Parameter] public bool Disabled { get; set; } = false;
+    [Parameter] public bool IsLoading { get; set; } = false;
+    [Parameter] public bool FullWidth { get; set; } = false;
+    [Parameter] public string Type { get; set; } = "button";
+    [Parameter] public string Class { get; set; } = "";
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    private string ComputedClass => $"{BaseClass} {VariantClass} {SizeClass} {WidthClass} {Class}".Trim();
+
+    private string BaseClass => "font-semibold rounded-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center";
+
+    private string VariantClass => Variant switch
+    {
+        "primary" => "bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20",
+        "secondary" => "bg-slate-700 hover:bg-slate-600 text-white",
+        "outline" => "bg-transparent border-2 border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white",
+        "danger" => "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20",
+        "ghost" => "bg-transparent hover:bg-slate-800 text-slate-400 hover:text-white",
+        "success" => "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20",
+        _ => "bg-blue-600 hover:bg-blue-500 text-white"
+    };
+
+    private string SizeClass => Size switch
+    {
+        "sm" => "px-3 py-1.5 text-xs",
+        "md" => "px-5 py-2.5 text-sm",
+        "lg" => "px-8 py-3.5 text-base",
+        _ => "px-5 py-2.5 text-sm"
+    };
+
+    private string WidthClass => FullWidth ? "w-full" : "";
+}
