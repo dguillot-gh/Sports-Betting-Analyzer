@@ -1,221 +1,214 @@
 @page "/nfl-hit-rates"
 @using SportsBettingAnalyzer.Services
 @inject HttpClient Http
-@inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @rendermode InteractiveServer
 
 <PageTitle>NFL Hit Rates</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
-    <div class="d-flex justify-space-between align-center mb-4">
-        <div>
-            <MudText Typo="Typo.h4" GutterBottom="true">
-                <MudIcon Icon="@Icons.Material.Filled.SportsFootball" Class="mr-2" />
-                NFL Hit Rates
-            </MudText>
-            <MudText Typo="Typo.body2" Color="Color.Secondary">Prop bet analysis - Find consistent NFL performers</MudText>
-        </div>
-    </div>
-    
-    <!-- Search and Filters -->
-    <MudPaper Elevation="2" Class="pa-4 mb-4">
-        <MudGrid>
-            <MudItem xs="12" md="2">
-                <MudSelect T="int" @bind-Value="_selectedSeason" Label="Season" Variant="Variant.Outlined" Dense="true">
-                    @foreach (var season in _availableSeasons)
-                    {
-                        <MudSelectItem Value="@season">@season</MudSelectItem>
-                    }
-                </MudSelect>
-            </MudItem>
-            <MudItem xs="12" md="3">
-                <MudTextField @bind-Value="_searchPlayer" Label="Player Search" Variant="Variant.Outlined" Dense="true"
-                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                              Placeholder="Patrick Mahomes, Derrick Henry..."
-                              DebounceInterval="500" OnDebounceIntervalElapsed="SearchPlayers" />
-            </MudItem>
-            <MudItem xs="12" md="2">
-                <MudSelect T="string" Value="_selectedStat" ValueChanged="OnStatChanged" Label="Stat Type" Variant="Variant.Outlined" Dense="true">
-                    <MudSelectItem Value="@("pass_yds")">Pass Yards</MudSelectItem>
-                    <MudSelectItem Value="@("rush_yds")">Rush Yards</MudSelectItem>
-                    <MudSelectItem Value="@("rec_yds")">Receiving Yards</MudSelectItem>
-                    <MudSelectItem Value="@("rec")">Receptions</MudSelectItem>
-                    <MudSelectItem Value="@("pass_td")">Pass TDs</MudSelectItem>
-                    <MudSelectItem Value="@("rush_td")">Rush TDs</MudSelectItem>
-                    <MudSelectItem Value="@("rec_td")">Receiving TDs</MudSelectItem>
-                </MudSelect>
-            </MudItem>
-            <MudItem xs="12" md="2">
-                <MudNumericField T="int" @bind-Value="_threshold" Label="Over Line" Variant="Variant.Outlined" Dense="true"
-                                 Min="0" Max="500" />
-            </MudItem>
-            <MudItem xs="12" md="3">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="CalculateHitRates"
-                           StartIcon="@Icons.Material.Filled.Calculate" Disabled="@_isLoading">
-                    Calculate
-                </MudButton>
-            </MudItem>
-        </MudGrid>
-        @if (_isPassingStat)
-        {
-            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
-                <MudIcon Icon="@Icons.Material.Filled.Info" Class="mr-1" Size="Size.Small" />
-                Filtering to QBs only for passing stats
-            </MudAlert>
-        }
-    </MudPaper>
-    
-    @if (_isLoading)
-    {
-        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
-    }
-    
-    @if (_hitRates.Any())
-    {
-        <!-- Summary Cards -->
-        <MudGrid Class="mb-4">
-            @foreach (var player in _hitRates.Take(3))
-            {
-                <MudItem xs="12" md="4">
-                    <MudCard Elevation="3" Style="@GetCardStyle(player.SeasonRate)">
-                        <MudCardContent>
-                            <div class="d-flex justify-space-between align-center">
-                                <div>
-                                    <MudText Typo="Typo.h6">@player.PlayerName</MudText>
-                                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                                        Over @_threshold @GetStatLabel(_selectedStat) (@_selectedSeason)
-                                    </MudText>
-                                </div>
-                                <MudAvatar Color="@GetRateColor(player.SeasonRate)" Size="Size.Large">
-                                    @player.SeasonRate.ToString("P0")
-                                </MudAvatar>
-                            </div>
-                            <MudDivider Class="my-3" />
-                            <div class="d-flex justify-space-around">
-                                <div class="text-center">
-                                    <MudText Typo="Typo.h5" Color="@GetRateColor(player.Last5Rate)">
-                                        @player.Last5Hits/@player.Last5Games
-                                    </MudText>
-                                    <MudText Typo="Typo.caption">Last 5</MudText>
-                                </div>
-                                <div class="text-center">
-                                    <MudText Typo="Typo.h5" Color="@GetRateColor(player.Last10Rate)">
-                                        @player.Last10Hits/@player.Last10Games
-                                    </MudText>
-                                    <MudText Typo="Typo.caption">Last 10</MudText>
-                                </div>
-                                <div class="text-center">
-                                    <MudText Typo="Typo.h5" Color="@GetRateColor(player.SeasonRate)">
-                                        @player.SeasonHits/@player.SeasonGames
-                                    </MudText>
-                                    <MudText Typo="Typo.caption">Season</MudText>
-                                </div>
-                            </div>
-                        </MudCardContent>
-                    </MudCard>
-                </MudItem>
-            }
-        </MudGrid>
+<div class="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
+    <TwContainer MaxWidth="7xl">
         
-        <!-- Full Table -->
-        <MudPaper Elevation="2" Class="pa-4">
-            <MudTable Items="@_hitRates" Dense="true" Hover="true" Striped="true">
-                <HeaderContent>
-                    <MudTh>Player</MudTh>
-                    <MudTh>Team</MudTh>
-                    <MudTh>Pos</MudTh>
-                    <MudTh Style="text-align: center">L5</MudTh>
-                    <MudTh Style="text-align: center">L10</MudTh>
-                    <MudTh Style="text-align: center">Season</MudTh>
-                    <MudTh Style="text-align: center">Avg</MudTh>
-                    <MudTh Style="text-align: center">Trend</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd>
-                        <MudLink Href="@($"/nfl-player-profiles?player={Uri.EscapeDataString(context.PlayerName)}")" 
-                                 Color="Color.Primary">
-                            @context.PlayerName
-                        </MudLink>
-                    </MudTd>
-                    <MudTd>@context.Team</MudTd>
-                    <MudTd>@context.Position</MudTd>
-                    <MudTd Style="text-align: center">
-                        <MudChip T="string" Color="@GetRateColor(context.Last5Rate)" Size="Size.Small">
-                            @context.Last5Hits/@context.Last5Games
-                        </MudChip>
-                    </MudTd>
-                    <MudTd Style="text-align: center">
-                        <MudChip T="string" Color="@GetRateColor(context.Last10Rate)" Size="Size.Small">
-                            @context.Last10Hits/@context.Last10Games
-                        </MudChip>
-                    </MudTd>
-                    <MudTd Style="text-align: center">
-                        <MudChip T="string" Color="@GetRateColor(context.SeasonRate)" Size="Size.Small">
-                            @context.SeasonRate.ToString("P0")
-                        </MudChip>
-                    </MudTd>
-                    <MudTd Style="text-align: center">
-                        <strong>@context.SeasonAvg.ToString("F1")</strong>
-                    </MudTd>
-                    <MudTd Style="text-align: center">
-                        @if (context.Last5Rate > context.SeasonRate)
+        <!-- Header Section -->
+        <header class="mb-8">
+            <div class="flex items-center gap-3 mb-2">
+                <div class="bg-emerald-600 p-3 rounded-xl shadow-lg shadow-emerald-900/20">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-bold tracking-tight">NFL Hit Rates</h1>
+                    <p class="text-slate-400 text-sm">Prop bet analysis - Find consistent NFL performers</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- Filters Card -->
+        <TwCard Color="emerald" Class="mb-6">
+            <div class="flex flex-wrap items-end gap-4">
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1">Season</label>
+                    <TwSelect TValue="int" @bind-Value="_selectedSeason">
+                        @foreach (var season in _availableSeasons)
                         {
-                            <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Color="Color.Success" />
+                            <option value="@season">@season</option>
                         }
-                        else if (context.Last5Rate < context.SeasonRate)
-                        {
-                            <MudIcon Icon="@Icons.Material.Filled.TrendingDown" Color="Color.Error" />
-                        }
-                        else
-                        {
-                            <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Color="Color.Default" />
-                        }
-                    </MudTd>
-                </RowTemplate>
-            </MudTable>
-            
-            <!-- Averages Summary -->
-            @if (_hitRates.Any())
+                    </TwSelect>
+                </div>
+
+                <div class="min-w-[200px]">
+                    <label class="block text-xs text-slate-500 mb-1">Player Search</label>
+                    <TwInput @bind-Value="_searchPlayer" 
+                             Placeholder="Patrick Mahomes, Derrick Henry..." 
+                             ShowSearchIcon="true" />
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1">Stat Type</label>
+                    <TwSelect TValue="string" Value="_selectedStat" ValueChanged="OnStatChanged">
+                        <option value="pass_yds">Pass Yards</option>
+                        <option value="rush_yds">Rush Yards</option>
+                        <option value="rec_yds">Receiving Yards</option>
+                        <option value="rec">Receptions</option>
+                        <option value="pass_td">Pass TDs</option>
+                        <option value="rush_td">Rush TDs</option>
+                        <option value="rec_td">Receiving TDs</option>
+                    </TwSelect>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1">Over Line</label>
+                    <TwInput Type="number" @bind-Value="_thresholdString" Placeholder="250" Class="w-24" />
+                </div>
+
+                <TwButton Variant="success" OnClick="CalculateHitRates" IsLoading="_isLoading" Disabled="_isLoading">
+                    Calculate
+                </TwButton>
+            </div>
+
+            @if (_isPassingStat)
             {
-                <MudDivider Class="my-3" />
-                <MudText Typo="Typo.subtitle2" Class="mb-2">
-                    <MudIcon Icon="@Icons.Material.Filled.Analytics" Size="Size.Small" Class="mr-1" />
-                    Season Averages (Selected Players)
-                </MudText>
-                <MudStack Row="true" Spacing="4" Justify="Justify.SpaceAround">
-                    <MudPaper Class="pa-3 text-center" Elevation="1" Style="min-width: 120px;">
-                        <MudText Typo="Typo.h5" Color="Color.Primary">@GetOverallAvg("pass_yds").ToString("F1")</MudText>
-                        <MudText Typo="Typo.caption">Avg Pass Yds</MudText>
-                    </MudPaper>
-                    <MudPaper Class="pa-3 text-center" Elevation="1" Style="min-width: 120px;">
-                        <MudText Typo="Typo.h5" Color="Color.Secondary">@GetOverallAvg("rush_yds").ToString("F1")</MudText>
-                        <MudText Typo="Typo.caption">Avg Rush Yds</MudText>
-                    </MudPaper>
-                    <MudPaper Class="pa-3 text-center" Elevation="1" Style="min-width: 120px;">
-                        <MudText Typo="Typo.h5" Color="Color.Tertiary">@GetOverallAvg("rec_yds").ToString("F1")</MudText>
-                        <MudText Typo="Typo.caption">Avg Rec Yds</MudText>
-                    </MudPaper>
-                    <MudPaper Class="pa-3 text-center" Elevation="1" Style="min-width: 120px;">
-                        <MudText Typo="Typo.h5" Color="Color.Info">@GetOverallAvg("rec").ToString("F1")</MudText>
-                        <MudText Typo="Typo.caption">Avg Receptions</MudText>
-                    </MudPaper>
-                </MudStack>
+                <TwAlert Severity="info" Class="mt-4">
+                    Filtering to QBs only for passing stats
+                </TwAlert>
             }
-        </MudPaper>
-    }
-    else if (!_isLoading && _searchCompleted)
-    {
-        <MudAlert Severity="Severity.Info">
-            No hit rate data found. Try searching for a player or adjusting filters.
-        </MudAlert>
-    }
-</MudContainer>
+        </TwCard>
+
+        <!-- Loading State -->
+        @if (_isLoading)
+        {
+            <div class="mb-6">
+                <TwProgressBar Indeterminate="true" Color="emerald" Size="md" />
+            </div>
+        }
+
+        @if (_hitRates.Any())
+        {
+            <!-- Top 3 Summary Cards -->
+            <TwGrid Cols="1" ColsMd="3" Gap="6" Class="mb-8">
+                @foreach (var player in _hitRates.Take(3))
+                {
+                    <TwCard Color="@GetCardColor(player.SeasonRate)" Hoverable="true">
+                        <div class="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 class="text-lg font-bold text-white">@player.PlayerName</h3>
+                                <p class="text-sm text-slate-400">Over @_threshold @GetStatLabel(_selectedStat) (@_selectedSeason)</p>
+                            </div>
+                            <div class="@GetRateClasses(player.SeasonRate) w-14 h-14 rounded-full flex items-center justify-center font-bold text-lg">
+                                @player.SeasonRate.ToString("P0")
+                            </div>
+                        </div>
+                        <div class="border-t border-slate-700 pt-4">
+                            <div class="flex justify-around text-center">
+                                <div>
+                                    <div class="text-xl font-bold @GetRateTextColor(player.Last5Rate)">@player.Last5Hits/@player.Last5Games</div>
+                                    <div class="text-xs text-slate-500">Last 5</div>
+                                </div>
+                                <div>
+                                    <div class="text-xl font-bold @GetRateTextColor(player.Last10Rate)">@player.Last10Hits/@player.Last10Games</div>
+                                    <div class="text-xs text-slate-500">Last 10</div>
+                                </div>
+                                <div>
+                                    <div class="text-xl font-bold @GetRateTextColor(player.SeasonRate)">@player.SeasonHits/@player.SeasonGames</div>
+                                    <div class="text-xs text-slate-500">Season</div>
+                                </div>
+                            </div>
+                        </div>
+                    </TwCard>
+                }
+            </TwGrid>
+
+            <!-- Full Data Table -->
+            <TwCard Color="slate" Class="overflow-hidden">
+                <div class="overflow-x-auto">
+                    <TwTable>
+                        <HeaderContent>
+                            <TwTh>Player</TwTh>
+                            <TwTh>Team</TwTh>
+                            <TwTh>Pos</TwTh>
+                            <TwTh Class="text-center">L5</TwTh>
+                            <TwTh Class="text-center">L10</TwTh>
+                            <TwTh Class="text-center">Season</TwTh>
+                            <TwTh Class="text-center">Avg</TwTh>
+                            <TwTh Class="text-center">Trend</TwTh>
+                        </HeaderContent>
+                        <ChildContent>
+                            @foreach (var player in _hitRates)
+                            {
+                                <TwTr>
+                                    <TwTd>
+                                        <TwLink Href="@($"/nfl-player-profiles?player={Uri.EscapeDataString(player.PlayerName)}")">
+                                            @player.PlayerName
+                                        </TwLink>
+                                    </TwTd>
+                                    <TwTd>@player.Team</TwTd>
+                                    <TwTd>@player.Position</TwTd>
+                                    <TwTd Class="text-center">
+                                        <TwChip Size="sm" Color="@GetChipColor(player.Last5Rate)">
+                                            @player.Last5Hits/@player.Last5Games
+                                        </TwChip>
+                                    </TwTd>
+                                    <TwTd Class="text-center">
+                                        <TwChip Size="sm" Color="@GetChipColor(player.Last10Rate)">
+                                            @player.Last10Hits/@player.Last10Games
+                                        </TwChip>
+                                    </TwTd>
+                                    <TwTd Class="text-center">
+                                        <TwChip Size="sm" Color="@GetChipColor(player.SeasonRate)">
+                                            @player.SeasonRate.ToString("P0")
+                                        </TwChip>
+                                    </TwTd>
+                                    <TwTd Class="text-center font-bold text-white">@player.SeasonAvg.ToString("F1")</TwTd>
+                                    <TwTd Class="text-center">
+                                        @if (player.Last5Rate > player.SeasonRate)
+                                        {
+                                            <span class="text-emerald-400">↗</span>
+                                        }
+                                        else if (player.Last5Rate < player.SeasonRate)
+                                        {
+                                            <span class="text-red-400">↘</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-slate-500">→</span>
+                                        }
+                                    </TwTd>
+                                </TwTr>
+                            }
+                        </ChildContent>
+                    </TwTable>
+                </div>
+
+                <!-- Averages Summary -->
+                @if (_hitRates.Any())
+                {
+                    <div class="border-t border-slate-700 pt-4 mt-4">
+                        <h4 class="text-sm font-semibold text-slate-400 mb-4">Season Averages (Selected Players)</h4>
+                        <div class="flex flex-wrap gap-4 justify-around">
+                            <TwStatCard Value="@GetOverallAvg("pass_yds").ToString("F1")" Label="Avg Pass Yds" Color="blue" />
+                            <TwStatCard Value="@GetOverallAvg("rush_yds").ToString("F1")" Label="Avg Rush Yds" Color="emerald" />
+                            <TwStatCard Value="@GetOverallAvg("rec_yds").ToString("F1")" Label="Avg Rec Yds" Color="purple" />
+                            <TwStatCard Value="@GetOverallAvg("rec").ToString("F1")" Label="Avg Receptions" Color="amber" />
+                        </div>
+                    </div>
+                }
+            </TwCard>
+        }
+        else if (!_isLoading && _searchCompleted)
+        {
+            <TwAlert Severity="info">
+                No hit rate data found. Try searching for a player or adjusting filters.
+            </TwAlert>
+        }
+    </TwContainer>
+</div>
 
 @code {
     private string _searchPlayer = "";
     private string _selectedStat = "pass_yds";
     private int _threshold = 250;
+    private string _thresholdString = "250";
     private int _selectedSeason = 2025;
     private bool _isLoading = false;
     private bool _searchCompleted = false;
@@ -223,7 +216,7 @@
     
     private List<int> _availableSeasons = new() { 2025, 2024, 2023 };
     private List<HitRateResult> _hitRates = new();
-    private List<GameResult> _allGameResults = new(); // For computing multi-stat averages
+    private List<GameResult> _allGameResults = new();
     
     protected override async Task OnInitializedAsync()
     {
@@ -234,7 +227,6 @@
     {
         try
         {
-            // Query seasons from nfl_weekly data (game-by-game data)
             var response = await Http.GetFromJsonAsync<SeasonsResponse>(
                 "http://backend:8000/db/games/nfl/seasons?series=nfl_weekly");
             if (response?.Seasons?.Any() == true)
@@ -249,7 +241,6 @@
     private void OnStatChanged(string newStat)
     {
         _selectedStat = newStat;
-        // Auto-adjust thresholds based on stat type
         _threshold = newStat switch
         {
             "pass_yds" => 250,
@@ -261,25 +252,20 @@
             "rec_td" => 1,
             _ => 50
         };
-    }
-    
-    private async Task SearchPlayers()
-    {
-        if (string.IsNullOrWhiteSpace(_searchPlayer) || _searchPlayer.Length < 2)
-            return;
-        
-        await CalculateHitRates();
+        _thresholdString = _threshold.ToString();
     }
     
     private async Task CalculateHitRates()
     {
+        if (int.TryParse(_thresholdString, out var parsed))
+            _threshold = parsed;
+
         try
         {
             _isLoading = true;
             _searchCompleted = false;
             StateHasChanged();
             
-            // Fetch game results filtered by season
             var url = $"http://backend:8000/db/games/nfl/list?limit=1000&season={_selectedSeason}";
             if (!string.IsNullOrEmpty(_searchPlayer))
                 url += $"&player={Uri.EscapeDataString(_searchPlayer)}";
@@ -287,7 +273,6 @@
             var response = await Http.GetAsync(url);
             if (!response.IsSuccessStatusCode)
             {
-                Snackbar.Add("Error loading game data", Severity.Error);
                 _hitRates = new();
                 _searchCompleted = true;
                 return;
@@ -304,17 +289,13 @@
                 return;
             }
             
-            // Filter to QBs only for passing stats
             var filteredGames = games.Results.Where(g => !string.IsNullOrEmpty(g.PlayerName));
             if (_isPassingStat)
             {
                 filteredGames = filteredGames.Where(g => g.Position == "QB");
             }
             
-            // Store for computing multi-stat averages
             _allGameResults = filteredGames.ToList();
-            
-            // Group by player
             var playerGames = _allGameResults.GroupBy(g => g.PlayerName).ToList();
             
             _hitRates = playerGames.Select(pg =>
@@ -359,27 +340,42 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            Console.WriteLine($"Error: {ex.Message}");
             _hitRates = new();
         }
         finally
         {
             _isLoading = false;
+            StateHasChanged();
         }
     }
     
-    private Color GetRateColor(double rate)
+    private string GetChipColor(double rate)
     {
-        if (rate >= 0.80) return Color.Success;
-        if (rate >= 0.60) return Color.Warning;
-        return Color.Error;
+        if (rate >= 0.80) return "emerald";
+        if (rate >= 0.60) return "amber";
+        return "red";
     }
-    
-    private string GetCardStyle(double rate)
+
+    private string GetCardColor(double rate)
     {
-        if (rate >= 0.80) return "border-left: 4px solid var(--mud-palette-success);";
-        if (rate >= 0.60) return "border-left: 4px solid var(--mud-palette-warning);";
-        return "border-left: 4px solid var(--mud-palette-error);";
+        if (rate >= 0.80) return "emerald";
+        if (rate >= 0.60) return "amber";
+        return "red";
+    }
+
+    private string GetRateClasses(double rate)
+    {
+        if (rate >= 0.80) return "bg-emerald-600 text-white";
+        if (rate >= 0.60) return "bg-amber-600 text-white";
+        return "bg-red-600 text-white";
+    }
+
+    private string GetRateTextColor(double rate)
+    {
+        if (rate >= 0.80) return "text-emerald-400";
+        if (rate >= 0.60) return "text-amber-400";
+        return "text-red-400";
     }
     
     private string GetStatLabel(string stat) => stat switch
@@ -394,7 +390,6 @@
         _ => stat
     };
     
-    // Calculate overall average for any stat across all displayed players
     private double GetOverallAvg(string stat)
     {
         if (!_allGameResults.Any()) return 0;
@@ -409,7 +404,7 @@
             "rush_td" => g.RushTd ?? 0,
             "rec_td" => g.RecTd ?? 0,
             _ => 0
-        }).Where(v => v > 0); // Only count games with stats
+        }).Where(v => v > 0);
         
         return values.Any() ? values.Average() : 0;
     }

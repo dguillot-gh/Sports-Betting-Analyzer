@@ -1,7 +1,7 @@
 ﻿@page "/"
-@using MudBlazor
 @using SportsBettingAnalyzer.Models
 @using SportsBettingAnalyzer.Services
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
 @inject BetAnalysisService BetAnalysisService
 @inject DataCollectionService DataCollectionService
 @inject PythonMLServiceClient MLServiceClient
@@ -11,341 +11,330 @@
 
 <PageTitle>Dashboard - Sports Betting Analyzer</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4 mb-8">
-    @* Welcome & Header *@
-    <MudGrid Class="mb-6">
-        <MudItem xs="12" md="8">
-            <MudText Typo="Typo.h3" GutterBottom="true">👋 Welcome Back</MudText>
-            <MudText Typo="Typo.subtitle1" Color="Color.Secondary">
-                Your AI-powered command center for smart sports betting.
-            </MudText>
-        </MudItem>
-        <MudItem xs="12" md="4" Class="d-flex align-end justify-md-end">
-            <MudChip T="string" Icon="@Icons.Material.Filled.CheckCircle" Color="@(_isBackendHealthy ? Color.Success : Color.Error)">
-                System: @(_isBackendHealthy ? "Online" : "Connecting...")
-            </MudChip>
-            <ApiQuotaTracker />
-        </MudItem>
-    </MudGrid>
+<div class="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
+    <TwContainer MaxWidth="7xl">
+        <!-- Welcome & Header -->
+        <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+            <div>
+                <h1 class="text-4xl font-bold tracking-tight mb-2">👋 Welcome Back</h1>
+                <p class="text-slate-400">Your AI-powered command center for smart sports betting.</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <TwChip Color="@(_isBackendHealthy ? "emerald" : "red")" Size="md">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        System: @(_isBackendHealthy ? "Online" : "Connecting...")
+                    </div>
+                </TwChip>
+                <TwApiQuotaTracker />
+            </div>
+        </div>
 
-    @* Summary Stats Cards *@
-    <MudGrid Class="mb-8">
-        <MudItem xs="12" sm="6" md="3">
-            <MudPaper Elevation="4" Class="pa-4 mud-theme-primary dashboard-card">
-                <MudText Typo="Typo.subtitle2">Total Profit</MudText>
-                <MudText Typo="Typo.h4">@_netProfit.ToString("C2")</MudText>
-                <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Color="Color.Inherit" Class="card-icon" />
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" sm="6" md="3">
-            <MudPaper Elevation="4" Class="pa-4 mud-theme-success dashboard-card">
-                <MudText Typo="Typo.subtitle2">Win Rate</MudText>
-                <MudText Typo="Typo.h4">@_winRate.ToString("P1")</MudText>
-                <MudText Typo="Typo.caption">Across @_totalBetsWithResults bets</MudText>
-                <MudIcon Icon="@Icons.Material.Filled.Star" Color="Color.Inherit" Class="card-icon" />
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" sm="6" md="3">
-            <MudPaper Elevation="4" Class="pa-4 mud-theme-info dashboard-card">
-                <MudText Typo="Typo.subtitle2">Active Picks</MudText>
-                <MudText Typo="Typo.h4">@_activePicksCount</MudText>
-                <MudText Typo="Typo.caption">NBA & NFL Models</MudText>
-                <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Color="Color.Inherit" Class="card-icon" />
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" sm="6" md="3">
-            <MudPaper Elevation="4" Class="pa-4 mud-theme-dark dashboard-card">
-                <MudText Typo="Typo.subtitle2">Confidence Avg</MudText>
-                <MudText Typo="Typo.h4">@_avgConfidence.ToString("F1")%</MudText>
-                <MudIcon Icon="@Icons.Material.Filled.Psychology" Color="Color.Inherit" Class="card-icon" />
-            </MudPaper>
-        </MudItem>
-    </MudGrid>
+        <!-- Summary Stats Cards -->
+        <TwGrid Cols="1" ColsSm="2" ColsMd="4" Gap="6" Class="mb-8">
+            <TwStatCard Label="Total Profit" Value="@_netProfit.ToString("C2")" Color="blue" Icon="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            <TwStatCard Label="Win Rate" Value="@_winRate.ToString("P1")" Subtext="@($"Across {_totalBetsWithResults} bets")" Color="emerald" Icon="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+            <TwStatCard Label="Active Picks" Value="@_activePicksCount.ToString()" Subtext="NBA & NFL Models" Color="purple" Icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <TwStatCard Label="Confidence Avg" Value="@(_avgConfidence.ToString("F1") + "%")" Color="slate" Icon="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+        </TwGrid>
 
-    <MudGrid>
-        @* Left Column: Top Picks & Dashboard Info *@
-        <MudItem xs="12" md="8">
-            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6" Color="Color.Surface">
-                <MudTabPanel Text="Today's Top Value" Icon="@Icons.Material.Filled.BrightnessHigh">
-                    @if (_isPicksLoading)
-                    {
-                        <div class="d-flex flex-column align-center justify-center pa-12">
-                            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Class="mb-4" />
-                            <MudText>Scanning markets for EV+ opportunities...</MudText>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <!-- Left Column: Top Picks & Dashboard Info -->
+            <div class="md:col-span-2 space-y-8">
+                <!-- Main Tabs Section -->
+                <div class="bg-slate-900/50 rounded-2xl border border-slate-800 p-6 backdrop-blur-sm">
+                    <TwTabs Items="@(new[] { "Today's Top Value", "Recent Activity" })" @bind-ActiveTab="_activeTabIndex">
+                        @if (_activeTabIndex == 0) // Top Value
+                        {
+                            <div class="mt-6">
+                                @if (_isPicksLoading)
+                                {
+                                    <div class="flex flex-col items-center justify-center py-12">
+                                        <TwProgressBar Indeterminate="true" Color="blue" Class="w-48 mb-4" />
+                                        <p class="text-slate-400">Scanning markets for EV+ opportunities...</p>
+                                    </div>
+                                }
+                                else if (_topPicks.Any())
+                                {
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        @foreach (var pick in _topPicks)
+                                        {
+                                            <TwCard Hoverable="true">
+                                                <div class="flex justify-between items-start mb-2">
+                                                    <span class="text-xs text-slate-500 font-mono">@pick.Sport • @pick.GameTime</span>
+                                                    <TwChip Size="sm" Color="emerald" Variant="outlined">@pick.ValueScore.ToString("F1") Value</TwChip>
+                                                </div>
+                                                <h3 class="text-lg font-bold text-white mb-3">@pick.AwayTeam @@ @pick.HomeTeam</h3>
+                                                <div class="mb-4">
+                                                    <div class="text-slate-300">Rec: <strong class="text-white">@pick.Winner</strong></div>
+                                                    <div class="text-xs text-slate-500 mt-1">Win Prob: @pick.Probability.ToString("P1") | Edge: @pick.Edge.ToString("P1")</div>
+                                                </div>
+                                                <TwButton Variant="text" Color="blue" Class="p-0 text-sm" 
+                                                          Href="@(pick.Sport == "NBA" ? "/live-nba-odds" : "/live-nfl-odds")">
+                                                    View Details →
+                                                </TwButton>
+                                            </TwCard>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <TwAlert Severity="info">No high-value bets found yet. Check back closer to game time!</TwAlert>
+                                }
+                            </div>
+                        }
+                        else if (_activeTabIndex == 1) // Recent Activity
+                        {
+                            <div class="mt-6 overflow-x-auto">
+                                <TwTable>
+                                    <HeaderContent>
+                                        <TwTh>Date</TwTh>
+                                        <TwTh>Game/Player</TwTh>
+                                        <TwTh>Type</TwTh>
+                                        <TwTh>Wager</TwTh>
+                                        <TwTh>Result</TwTh>
+                                    </HeaderContent>
+                                    <ChildContent>
+                                        @foreach (var bet in _recentBets)
+                                        {
+                                            <TwTr>
+                                                <TwTd>@bet.AnalyzedAt.ToString("MM/dd")</TwTd>
+                                                <TwTd>@(string.IsNullOrEmpty(bet.PlayerName) ? $"{bet.Team2} @@ {bet.Team1}" : bet.PlayerName)</TwTd>
+                                                <TwTd>@bet.BetType</TwTd>
+                                                <TwTd>$@bet.WagerAmount.ToString("F0")</TwTd>
+                                                <TwTd>
+                                                    @if (bet.Won == true) { <TwChip Size="sm" Color="emerald">WON</TwChip> }
+                                                    else if (bet.Won == false) { <TwChip Size="sm" Color="red">LOST</TwChip> }
+                                                    else { <TwChip Size="sm" Color="slate">PENDING</TwChip> }
+                                                </TwTd>
+                                            </TwTr>
+                                        }
+                                    </ChildContent>
+                                </TwTable>
+                            </div>
+                        }
+                    </TwTabs>
+                </div>
+
+                <!-- Data Source Status -->
+                <div class="bg-slate-900 rounded-2xl border border-slate-800 p-6">
+                    <h3 class="text-xl font-bold text-white mb-6">📡 Data Source Status</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2 bg-amber-500/10 rounded-lg text-amber-500">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                            </div>
+                            <div>
+                                <div class="font-medium text-slate-200">NASCAR Cup</div>
+                                <div class="text-xs text-emerald-500">Active • Updated 5m ago</div>
+                            </div>
                         </div>
-                    }
-                    else if (_topPicks.Any())
+                        <div class="flex items-center gap-3">
+                            <div class="p-2 bg-blue-500/10 rounded-lg text-blue-500">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                            </div>
+                            <div>
+                                <div class="font-medium text-slate-200">NBA Live Odds</div>
+                                <div class="text-xs text-emerald-500">Active • Updated 1m ago</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="p-2 bg-cyan-500/10 rounded-lg text-cyan-500">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                            </div>
+                            <div>
+                                <div class="font-medium text-slate-200">NFL Nex Gen</div>
+                                <div class="text-xs text-emerald-500">Synced • 2025 Regular</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Advisor & Models Grid -->
+                <!-- AI Advisor -->
+                <div class="bg-slate-900 rounded-2xl border border-slate-800 p-6">
+                    <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                        <svg class="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+                        AI Advisor Insights
+                    </h3>
+                    
+                    @if (_latestInsight != null)
                     {
-                        <MudGrid>
-                            @foreach (var pick in _topPicks)
-                            {
-                                <MudItem xs="12" sm="6">
-                                    <MudCard Elevation="2" Class="h-100">
-                                        <MudCardHeader>
-                                            <CardHeaderContent>
-                                                <MudText Typo="Typo.caption">@pick.Sport - @pick.GameTime</MudText>
-                                                <MudText Typo="Typo.h6">@pick.AwayTeam @@ @pick.HomeTeam</MudText>
-                                            </CardHeaderContent>
-                                            <CardHeaderActions>
-                                                <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Outlined">@pick.ValueScore.ToString("F1") Value</MudChip>
-                                            </CardHeaderActions>
-                                        </MudCardHeader>
-                                        <MudCardContent>
-                                            <MudText Typo="Typo.body1">Recommendation: <strong>@pick.Winner</strong></MudText>
-                                            <MudText Typo="Typo.body2">Win Prob: @pick.Probability.ToString("P1") | Edge: @pick.Edge.ToString("P1")</MudText>
-                                        </MudCardContent>
-                                        <MudCardActions>
-                                            <MudButton Variant="Variant.Text" Color="Color.Primary" href="@(pick.Sport == "NBA" ? "/live-nba-odds" : "/live-nfl-odds")">View Details</MudButton>
-                                        </MudCardActions>
-                                    </MudCard>
-                                </MudItem>
-                            }
-                        </MudGrid>
+                        <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                            <h4 class="font-bold text-lg text-white mb-2">@_latestInsight.Matchup</h4>
+                            <div class="text-slate-300 text-sm leading-relaxed whitespace-pre-line mb-4 font-sans">
+                                @((MarkupString)(_latestInsight.LlmInsight?.Rationale ?? ""))
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <TwChip Color="blue" Size="sm">Confidence: @(_latestInsight.LlmInsight?.Confidence)%</TwChip>
+                                <span class="text-xs text-slate-400">Key: @(_latestInsight.LlmInsight?.KeyFactor)</span>
+                            </div>
+                        </div>
                     }
                     else
                     {
-                        <MudAlert Severity="Severity.Info">No high-value bets found yet. Check back closer to game time!</MudAlert>
+                        <div class="text-slate-400 text-sm mb-4">Get a deep AI analysis for today's top-rated value pick.</div>
+                        <TwButton Variant="primary" Size="sm" OnClick="@AnalyzeHomeTopPick" 
+                                  IsLoading="@_isAiProcessing" Disabled="@(_isPicksLoading || _isAiProcessing || !_topPicks.Any())">
+                            Analyze Today's Top Pick
+                        </TwButton>
                     }
-                </MudTabPanel>
-                
-                <MudTabPanel Text="Recent Activity" Icon="@Icons.Material.Filled.Timeline">
-                    <MudTable Items="@_recentBets" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="0">
-                        <HeaderContent>
-                            <MudTh>Date</MudTh>
-                            <MudTh>Game/Player</MudTh>
-                            <MudTh>Type</MudTh>
-                            <MudTh>Wager</MudTh>
-                            <MudTh>Result</MudTh>
-                        </HeaderContent>
-                        <RowTemplate>
-                            <MudTd DataLabel="Date">@context.AnalyzedAt.ToString("MM/dd")</MudTd>
-                            <MudTd DataLabel="Game">@(string.IsNullOrEmpty(context.PlayerName) ? $"{context.Team2} @@ {context.Team1}" : context.PlayerName)</MudTd>
-                            <MudTd DataLabel="Type">@context.BetType</MudTd>
-                            <MudTd DataLabel="Wager">$@context.WagerAmount.ToString("F0")</MudTd>
-                            <MudTd DataLabel="Result">
-                                @if (context.Won == true) { <MudChip T="string" Color="Color.Success" Size="Size.Small">WON</MudChip> }
-                                else if (context.Won == false) { <MudChip T="string" Color="Color.Error" Size="Size.Small">LOST</MudChip> }
-                                else { <MudChip T="string" Color="Color.Default" Size="Size.Small">PENDING</MudChip> }
-                            </MudTd>
-                        </RowTemplate>
-                    </MudTable>
-                </MudTabPanel>
-            </MudTabs>
+                </div>
 
-            <MudPaper Elevation="2" Class="pa-6 mt-6">
-                <MudText Typo="Typo.h6" GutterBottom="true">📡 Data Source Status</MudText>
-                <MudGrid>
-                    <MudItem xs="12" sm="4">
-                        <div class="d-flex align-center">
-                            <MudIcon Icon="@Icons.Material.Filled.DirectionsCar" Color="Color.Warning" Class="mr-2" />
-                            <div>
-                                <MudText Typo="Typo.body2">NASCAR Cup</MudText>
-                                <MudText Typo="Typo.caption" Color="Color.Success">Active • Updated 5m ago</MudText>
+                <!-- Model Intelligence -->
+                <div class="bg-slate-900 rounded-2xl border border-slate-800 p-6">
+                     <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                        <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                        Model Intelligence
+                    </h3>
+                    
+                    @if (_isModelsLoading)
+                    {
+                        <TwProgressBar Indeterminate="true" Color="slate" Class="my-4" />
+                    }
+                    else if (_modelSummary.Any())
+                    {
+                        <div class="overflow-x-auto">
+                            <TwTable>
+                                <HeaderContent>
+                                    <TwTh>Sport/Model</TwTh>
+                                    <TwTh>Task</TwTh>
+                                    <TwTh>Acc %</TwTh>
+                                    <TwTh>Status</TwTh>
+                                </HeaderContent>
+                                <ChildContent>
+                                    @foreach (var model in _modelSummary)
+                                    {
+                                        <TwTr>
+                                            <TwTd>
+                                                <span class="font-bold text-slate-200">@model.Sport.ToUpper()</span> - @model.Series
+                                            </TwTd>
+                                            <TwTd>@model.Task</TwTd>
+                                            <TwTd>
+                                                <span class="@(model.Accuracy > 0.6 ? "text-emerald-400" : "text-blue-400")">
+                                                    @((model.Accuracy * 100).ToString("F1"))%
+                                                </span>
+                                            </TwTd>
+                                            <TwTd>
+                                                <TwChip Size="sm" Color="@(model.Accuracy > 0.55 ? "emerald" : "slate")" Variant="outlined">OPTIMIZED</TwChip>
+                                            </TwTd>
+                                        </TwTr>
+                                    }
+                                </ChildContent>
+                            </TwTable>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-slate-400 text-sm">No trained models found yet.</div>
+                    }
+                </div>
+            </div>
+
+            <!-- Right Column: Bet Slip Analyzer -->
+            <div class="space-y-8">
+                <TwCard Color="blue" Class="border-t-4 border-t-blue-500">
+                    <div class="flex items-center gap-2 mb-4">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        <h3 class="text-xl font-bold text-white">Bet Slip Analyzer</h3>
+                    </div>
+                    <p class="text-slate-200 text-sm mb-6">Upload your slip to get a mathematical breakdown before you lock it in.</p>
+
+                    <InputFile OnChange="OnFileSelected" accept="image/*" class="d-none hidden" id="fileInput" />
+                    <label for="fileInput" class="block w-full cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl text-center transition-colors mb-4 flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                        Analyze My Slip
+                    </label>
+
+                    @if (_selectedFile != null)
+                    {
+                        <TwAlert Severity="info" Class="mb-4">
+                            @_selectedFile.Name
+                        </TwAlert>
+                    }
+
+                    @if (_isProcessing)
+                    {
+                        <div class="flex flex-col items-center justify-center py-4">
+                            <TwProgressBar Indeterminate="true" Color="white" Class="w-32 mb-2" />
+                            <p class="text-xs text-blue-200">Extracting data via OCR...</p>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(_errorMessage))
+                    {
+                        <TwAlert Severity="error" Class="mt-2">@_errorMessage</TwAlert>
+                    }
+
+                    @if (_currentAnalysis != null)
+                    {
+                        <div class="border-t border-blue-400/30 pt-4 mt-4">
+                            <h4 class="text-xs font-bold text-blue-200 uppercase tracking-wider mb-2">Last Analysis</h4>
+                            <div class="text-lg font-bold text-white">@_currentAnalysis.BetSlip.BetType @@ @(_currentAnalysis.BetSlip.Odds > 0 ? "+" : "")@_currentAnalysis.BetSlip.Odds</div>
+                            <div class="@(_currentAnalysis.ExpectedValue >= 0 ? "text-emerald-300" : "text-red-300") font-bold mb-3">
+                                EV: $@_currentAnalysis.ExpectedValue.ToString("F2")
                             </div>
+                            <TwButton Variant="outlined" Color="white" Size="sm" OnClick="@(() => _showAnalysisModal = true)">
+                                View Full Report
+                            </TwButton>
                         </div>
-                    </MudItem>
-                    <MudItem xs="12" sm="4">
-                        <div class="d-flex align-center">
-                            <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Color="Color.Primary" Class="mr-2" />
-                            <div>
-                                <MudText Typo="Typo.body2">NBA Live Odds</MudText>
-                                <MudText Typo="Typo.caption" Color="Color.Success">Active • Updated 1m ago</MudText>
-                            </div>
-                        </div>
-                    </MudItem>
-                    <MudItem xs="12" sm="4">
-                        <div class="d-flex align-center">
-                            <MudIcon Icon="@Icons.Material.Filled.SportsFootball" Color="Color.Info" Class="mr-2" />
-                            <div>
-                                <MudText Typo="Typo.body2">NFL Nex Gen</MudText>
-                                <MudText Typo="Typo.caption" Color="Color.Success">Synced • 2025 Regular</MudText>
-                            </div>
-                        </div>
-                    </MudItem>
-                </MudGrid>
-            </MudPaper>
+                    }
+                </TwCard>
 
-            <MudPaper Elevation="2" Class="pa-6 mt-6">
-                <MudText Typo="Typo.h6" GutterBottom="true" Class="d-flex align-center">
-                    <MudIcon Icon="@Icons.Material.Filled.Lightbulb" Color="Color.Warning" Class="mr-2" /> AI Advisor Insights
-                </MudText>
-                @if (_latestInsight != null)
-                {
-                    <MudCard Elevation="0" Outlined="true" Class="mt-2 pa-4" Style="border-radius: 12px;">
-                        <MudText Typo="Typo.subtitle1"><strong>@_latestInsight.Matchup</strong></MudText>
-                        
-                        <div class="my-3" style="font-family: 'Inter', 'Roboto', sans-serif; font-size: 0.9rem; line-height: 1.75; color: #37474f;">
-                            @((MarkupString)(_latestInsight.LlmInsight?.Rationale ?? ""))
-                        </div>
-                        
-                        <div class="d-flex align-center mt-2">
-                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">
-                                Confidence: @(_latestInsight.LlmInsight?.Confidence)%
-                            </MudChip>
-                            <MudText Typo="Typo.caption" Class="ml-2">Key: @(_latestInsight.LlmInsight?.KeyFactor)</MudText>
-                        </div>
-                    </MudCard>
-                }
-                else
-                {
-                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">Get a deep AI analysis for today's top-rated value pick.</MudText>
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
-                               StartIcon="@Icons.Material.Filled.AutoFixHigh" OnClick="@AnalyzeHomeTopPick" 
-                               Disabled="@(_isPicksLoading || _isAiProcessing || !_topPicks.Any())">
-                        @if (_isAiProcessing)
-                        {
-                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                            <span>Consulting Gemini...</span>
-                        }
-                        else
-                        {
-                            <span>Analyze Today's Top Pick</span>
-                        }
-                    </MudButton>
-                }
-            </MudPaper>
+                <div class="bg-slate-900 rounded-2xl p-6 relative overflow-hidden border border-slate-800">
+                    <div class="relative z-10">
+                        <h3 class="text-xl font-bold text-white mb-2">New to the App?</h3>
+                        <p class="text-slate-400 text-sm mb-4">Check out our guide on how to bet like a pro.</p>
+                        <TwButton Variant="primary" Color="slate" Href="/betting-101" FullWidth="true">
+                            Betting 101 Guide
+                        </TwButton>
+                    </div>
+                    <svg class="absolute -bottom-4 -right-4 w-32 h-32 text-slate-800 opacity-50 z-0" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 14l9-5-9-5-9 5 9 5z"></path>
+                        <path d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"></path>
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </TwContainer>
+</div>
 
-            <MudPaper Elevation="2" Class="pa-6 mt-6">
-                <MudText Typo="Typo.h6" GutterBottom="true" Class="d-flex align-center">
-                    <MudIcon Icon="@Icons.Material.Filled.AutoGraph" Color="Color.Secondary" Class="mr-2" /> Model Intelligence
-                </MudText>
-                @if (_isModelsLoading)
-                {
-                    <MudProgressLinear Color="Color.Secondary" Indeterminate="true" Class="my-4" />
-                }
-                else if (_modelSummary.Any())
-                {
-                    <MudTable Items="@_modelSummary" Dense="true" Hover="true" Elevation="0" Class="mt-2">
-                        <HeaderContent>
-                            <MudTh>Sport/Model</MudTh>
-                            <MudTh>Task</MudTh>
-                            <MudTh>Acc %</MudTh>
-                            <MudTh>Status</MudTh>
-                        </HeaderContent>
-                        <RowTemplate>
-                            <MudTd>
-                                <MudText Typo="Typo.body2"><strong>@context.Sport.ToUpper()</strong> - @context.Series</MudText>
-                            </MudTd>
-                            <MudTd>@context.Task</MudTd>
-                            <MudTd>
-                                <MudText Color="@(context.Accuracy > 0.6 ? Color.Success : Color.Info)">
-                                    @((context.Accuracy * 100).ToString("F1"))%
-                                </MudText>
-                            </MudTd>
-                            <MudTd>
-                                <MudChip T="string" Size="Size.Small" Color="@(context.Accuracy > 0.55 ? Color.Success : Color.Default)" Variant="Variant.Text">OPTIMIZED</MudChip>
-                            </MudTd>
-                        </RowTemplate>
-                    </MudTable>
-                }
-                else
-                {
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">No trained models found yet.</MudText>
-                }
-            </MudPaper>
-        </MudItem>
-
-        @* Right Column: Bet Slip Analyzer *@
-        <MudItem xs="12" md="4">
-            <MudPaper Elevation="4" Class="pa-6 border-t-4 border-t-primary">
-                <MudText Typo="Typo.h5" GutterBottom="true" Class="d-flex align-center">
-                    <MudIcon Icon="@Icons.Material.Filled.Scanner" Class="mr-2" /> Bet Slip Analyzer
-                </MudText>
-                <MudText Typo="Typo.body2" Class="mb-4">
-                    Upload your slip to get a mathematical breakdown before you lock it in.
-                </MudText>
-
-                <InputFile OnChange="OnFileSelected" accept="image/*" class="d-none" id="fileInput" />
-                <MudButton HtmlTag="label" Variant="Variant.Filled" Color="Color.Primary" 
-                           FullWidth="true" StartIcon="@Icons.Material.Filled.CloudUpload" 
-                           for="fileInput" Class="mb-4 py-3">
-                    Analyze My Slip
-                </MudButton>
-
-                @if (_selectedFile != null)
-                {
-                    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4" OnClose="OnFileRemoved">
-                        @_selectedFile.Name
-                    </MudAlert>
-                }
-
-                @if (_isProcessing)
-                {
-                    <MudStack AlignItems="AlignItems.Center">
-                        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
-                        <MudText Typo="Typo.body2">Extracting data via OCR...</MudText>
-                    </MudStack>
-                }
-
-                @if (!string.IsNullOrEmpty(_errorMessage))
-                {
-                    <MudAlert Severity="Severity.Error" Class="mt-2">@_errorMessage</MudAlert>
-                }
-
-                @if (_currentAnalysis != null)
-                {
-                    <MudDivider Class="my-4" />
-                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">LAST ANALYSIS</MudText>
-                    <MudText Typo="Typo.h6">@_currentAnalysis.BetSlip.BetType @@ @(_currentAnalysis.BetSlip.Odds > 0 ? "+" : "")@_currentAnalysis.BetSlip.Odds</MudText>
-                    <MudText Typo="Typo.body2" Color="@(_currentAnalysis.ExpectedValue >= 0 ? Color.Success : Color.Error)">
-                        EV: $@_currentAnalysis.ExpectedValue.ToString("F2")
-                    </MudText>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" 
-                               Class="mt-2" OnClick="@(() => _showAnalysisModal = true)">
-                        View Full Report
-                    </MudButton>
-                }
-            </MudPaper>
-
-            <MudPaper Elevation="4" Class="pa-6 mt-6 mud-theme-dark overflow-hidden relative">
-                <MudText Typo="Typo.h6">New to the App?</MudText>
-                <MudText Typo="Typo.body2" Class="mb-4">Check out our guide on how to bet like a pro.</MudText>
-                <MudButton Variant="Variant.Filled" Color="Color.Secondary" href="/betting-101" FullWidth="true">
-                    Betting 101 Guide
-                </MudButton>
-                <MudIcon Icon="@Icons.Material.Filled.School" Size="Size.Large" 
-                         Class="absolute bottom-n4 right-n4 opacity-20" Style="font-size: 100px;" />
-            </MudPaper>
-        </MudItem>
-    </MudGrid>
-</MudContainer>
-
-@* Analysis Modal *@
-<MudDialog @bind-IsVisible="_showAnalysisModal" Options="new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true }">
-    <TitleContent>
-        <MudText Typo="Typo.h5">Bet Analysis Detail</MudText>
-    </TitleContent>
-    <DialogContent>
+<!-- Analysis Modal -->
+<TwDialog @bind-IsOpen="_showAnalysisModal" Title="Bet Analysis Detail" MaxWidth="md">
+    <ChildContent>
         @if (_currentAnalysis != null)
         {
-            @* (Re-using some logic from the old Home.razor here for the modal content) *@
-            <MudAlert Severity="@(_currentAnalysis.Recommendation == "GoodBet" ? Severity.Success : _currentAnalysis.Recommendation == "BadBet" ? Severity.Error : Severity.Warning)" Class="mb-4">
-                 Recommendation: @_currentAnalysis.Recommendation (@_currentAnalysis.ConfidenceScore.ToString("F0")% Confidence)
-            </MudAlert>
-            <MudGrid>
-                <MudItem xs="6"><MudText Typo="Typo.body2"><strong>Implied Prob:</strong> @_currentAnalysis.ImpliedProbability.ToString("P1")</MudText></MudItem>
-                <MudItem xs="6"><MudText Typo="Typo.body2"><strong>Value Score:</strong> @_currentAnalysis.ValueScore.ToString("F2")</MudText></MudItem>
-            </MudGrid>
-            <MudText Typo="Typo.body2" Class="mt-4" Style="white-space: pre-line">@_currentAnalysis.AnalysisDetails</MudText>
+            var severity = _currentAnalysis.Recommendation == "GoodBet" ? "success" : 
+                          _currentAnalysis.Recommendation == "BadBet" ? "error" : "warning";
+            var color = severity switch { "success" => "green", "error" => "red", _ => "amber" }; // map severity to alert color
+            
+            <TwAlert Severity="@severity" Class="mb-4">
+                 Recommendation: <strong>@_currentAnalysis.Recommendation</strong> (@_currentAnalysis.ConfidenceScore.ToString("F0")% Confidence)
+            </TwAlert>
+            
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div class="bg-slate-800 p-3 rounded-lg">
+                    <div class="text-xs text-slate-400 uppercase">Implied Prob</div>
+                    <div class="text-lg font-bold text-white">@_currentAnalysis.ImpliedProbability.ToString("P1")</div>
+                </div>
+                <div class="bg-slate-800 p-3 rounded-lg">
+                    <div class="text-xs text-slate-400 uppercase">Value Score</div>
+                    <div class="text-lg font-bold text-white">@_currentAnalysis.ValueScore.ToString("F2")</div>
+                </div>
+            </div>
+            
+            <div class="text-slate-300 whitespace-pre-line text-sm leading-relaxed">
+                @_currentAnalysis.AnalysisDetails
+            </div>
         }
-    </DialogContent>
-    <DialogActions>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAnalysis">Save to History</MudButton>
-        <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="@(() => _showAnalysisModal = false)">Close</MudButton>
-    </DialogActions>
-</MudDialog>
-
-<style>
-    .dashboard-card { position: relative; overflow: hidden; min-height: 120px; display: flex; flex-direction: column; justify-content: center; }
-    .card-icon { position: absolute; right: -10px; bottom: -10px; font-size: 80px; opacity: 0.2; transform: rotate(-15deg); }
-    .border-t-4 { border-top: 4px solid !important; }
-    .border-t-primary { border-top-color: var(--mud-palette-primary) !important; }
-    .relative { position: relative; }
-    .absolute { position: absolute; }
-    .bottom-n4 { bottom: -1rem; }
-    .right-n4 { right: -1rem; }
-    .opacity-20 { opacity: 0.2; }
-</style>
+    </ChildContent>
+    <ActionsContent>
+        <TwButton Variant="text" Color="slate" OnClick="@(() => _showAnalysisModal = false)">Close</TwButton>
+        <TwButton Variant="primary" Color="blue" OnClick="SaveAnalysis">Save to History</TwButton>
+    </ActionsContent>
+</TwDialog>
 
 @code {
     private bool _isBackendHealthy = false;
@@ -358,6 +347,9 @@
     private List<HistoricalBet> _recentBets = new();
     private List<TopPick> _topPicks = new();
     private bool _isPicksLoading = true;
+    
+    // UI State
+    private int _activeTabIndex = 0;
     private bool _showAnalysisModal = false;
 
     // Analyzer state
@@ -423,7 +415,9 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add("Failed to load analytics data", Severity.Warning);
+            // Snackbar.Add("Failed to load analytics data", Severity.Warning); 
+            // TwToast/Snackbar not implemented yet, just log or ignore
+            Console.WriteLine("Failed to load analytics data");
         }
     }
 
@@ -466,7 +460,7 @@
         catch (Exception ex)
         {
             _errorMessage = $"Error processing: {ex.Message}";
-            Snackbar.Add(_errorMessage, Severity.Error);
+            // Snackbar.Add(_errorMessage, Severity.Error);
         }
         finally
         {
@@ -487,13 +481,13 @@
         try
         {
             await DataCollectionService.SaveBetAnalysisAsync(_currentAnalysis);
-            Snackbar.Add("Saved to history!", Severity.Success);
+            // Snackbar.Add("Saved to history!", Severity.Success);
             _showAnalysisModal = false;
             await LoadAnalytics(); // Refresh
         }
         catch (Exception ex)
         {
-            Snackbar.Add("Save failed", Severity.Error);
+            // Snackbar.Add("Save failed", Severity.Error);
         }
     }
 

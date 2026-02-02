@@ -1,140 +1,146 @@
 @page "/nba-game-results"
 @rendermode InteractiveServer
-@using MudBlazor
 @inject HttpClient Http
-@inject ISnackbar Snackbar
 @inject NavigationManager Navigation
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
 
 <PageTitle>NBA Game Results</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
-    <MudText Typo="Typo.h4" Class="mb-4">
-        <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Class="mr-2" />
-        NBA Game Results
-    </MudText>
+<div class="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
+    <TwContainer MaxWidth="7xl">
+        <!-- Header -->
+        <header class="mb-8">
+            <div class="flex items-center gap-3 mb-2">
+                <div class="bg-orange-600 p-3 rounded-xl shadow-lg shadow-orange-900/20">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 003.75-.615A2.993 2.993 0 009.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 002.25 1.016c.896 0 1.7-.393 2.25-1.016a3.001 3.001 0 003.75.614m-16.5 0a3.004 3.004 0 01-.621-4.72L4.318 3.44A1.5 1.5 0 015.378 3h13.243a1.5 1.5 0 011.06.44l1.19 1.189a3 3 0 01-.621 4.72m-13.5 8.65h3.75a.75.75 0 00.75-.75V13.5a.75.75 0 00-.75-.75H6.75a.75.75 0 00-.75.75v3.75c0 .415.336.75.75.75z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-bold tracking-tight">NBA Game Results</h1>
+                    <p class="text-slate-400 text-sm">View scores, schedules, and top performers</p>
+                </div>
+            </div>
+        </header>
 
-    <!-- Filters -->
-    <MudPaper Class="pa-4 mb-4" Elevation="2">
-        <MudGrid>
-            <MudItem xs="12" sm="6" md="2">
-                <MudSelect T="int?" Label="Season" @bind-Value="_selectedSeason" 
-                           Variant="Variant.Outlined" Dense="true" Clearable="true">
-                    @foreach (var season in _availableSeasons)
-                    {
-                        <MudSelectItem T="int?" Value="@season">@season</MudSelectItem>
-                    }
-                </MudSelect>
-            </MudItem>
-            
-            <MudItem xs="12" sm="6" md="3">
-                <MudSelect T="string" Label="Team" @bind-Value="_selectedTeam" 
-                           Variant="Variant.Outlined" Dense="true" Clearable="true"
-                           MaxHeight="400">
-                    <MudSelectItem Value="@((string?)null)">All Teams</MudSelectItem>
-                    @foreach (var team in _nbaTeams.OrderBy(t => t.Value))
-                    {
-                        <MudSelectItem Value="@team.Key">@team.Value</MudSelectItem>
-                    }
-                </MudSelect>
-            </MudItem>
-            
-            <MudItem xs="12" sm="6" md="2">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" 
-                           OnClick="LoadResults" Disabled="_isLoading" FullWidth="true">
-                    @if (_isLoading)
-                    {
-                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                    }
-                    Search
-                </MudButton>
-            </MudItem>
-        </MudGrid>
-    </MudPaper>
+        <!-- Filters -->
+        <TwCard Class="mb-8" Color="slate">
+            <div class="flex flex-col md:flex-row gap-4 items-end">
+                <div class="w-full md:w-1/4">
+                    <TwSelect TValue="int?" Label="Season" @bind-Value="_selectedSeason" 
+                              Items="_availableSeasons.Select(s => new KeyValuePair<string, int?>(s.ToString(), s))" />
+                </div>
+                
+                <div class="w-full md:w-1/3">
+                    <TwSelect TValue="string" Label="Team" @bind-Value="_selectedTeam" 
+                              Items="_teamOptions" />
+                </div>
 
-    <!-- Results -->
-    @if (_isLoading)
-    {
-        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
-    }
-    
-    @if (_games.Any())
-    {
-        <MudGrid>
-            @foreach (var game in _games)
-            {
-                <MudItem xs="12" sm="6" md="4">
-                    <MudCard Elevation="2" Class="game-card">
-                        <MudCardHeader>
-                            <CardHeaderContent>
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                    @game.GameDate
-                                </MudText>
-                            </CardHeaderContent>
-                            <CardHeaderActions>
-                                @if (game.IsCompleted)
-                                {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Final</MudChip>
-                                }
-                            </CardHeaderActions>
-                        </MudCardHeader>
-                        <MudCardContent>
-                            <MudStack Spacing="2">
-                                <!-- Away Team -->
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                        <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Size="Size.Small" />
-                                        <MudText Typo="Typo.body1" Style="@(game.AwayScore > game.HomeScore ? "font-weight: bold;" : "")">
-                                            @game.AwayTeam
-                                        </MudText>
-                                    </MudStack>
-                                    <MudText Typo="Typo.h6" Style="@(game.AwayScore > game.HomeScore ? "font-weight: bold; color: #4caf50;" : "")">
-                                        @game.AwayScore
-                                    </MudText>
-                                </MudStack>
-                                
-                                <!-- Home Team -->
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                        <MudIcon Icon="@Icons.Material.Filled.Home" Size="Size.Small" />
-                                        <MudText Typo="Typo.body1" Style="@(game.HomeScore > game.AwayScore ? "font-weight: bold;" : "")">
-                                            @game.HomeTeam
-                                        </MudText>
-                                    </MudStack>
-                                    <MudText Typo="Typo.h6" Style="@(game.HomeScore > game.AwayScore ? "font-weight: bold; color: #4caf50;" : "")">
-                                        @game.HomeScore
-                                    </MudText>
-                                </MudStack>
-                            </MudStack>
-                        </MudCardContent>
-                        @if (!string.IsNullOrEmpty(game.TopScorer))
+                <div class="w-full md:w-auto">
+                    <TwButton Variant="primary" OnClick="LoadResults" IsLoading="_isLoading" Disabled="_isLoading">
+                        Search Games
+                    </TwButton>
+                </div>
+            </div>
+        </TwCard>
+
+        <!-- Results -->
+        @if (_isLoading)
+        {
+            <div class="flex flex-col items-center justify-center py-12">
+                <TwProgressBar Indeterminate="true" Color="orange" Class="w-1/2 mb-4" />
+                <p class="text-slate-400 animate-pulse">Loading games...</p>
+            </div>
+        }
+        else if (_games.Any())
+        {
+            <TwGrid Cols="1" ColsMd="2" ColsLg="3" Gap="6">
+                @foreach (var game in _games)
+                {
+                    <TwCard Hoverable="true" Class="h-full border border-slate-700/50 bg-slate-800/50 backdrop-blur-sm">
+                        <!-- Card Header -->
+                        <div class="flex justify-between items-start mb-4 pb-3 border-b border-slate-700">
+                            <div class="text-sm font-medium text-slate-400">
+                                @FormatDate(game.GameDate)
+                            </div>
+                            @if (game.IsCompleted)
+                            {
+                                <TwChip Size="sm" Color="emerald" Variant="subtle">Final</TwChip>
+                            }
+                            else
+                            {
+                                <TwChip Size="sm" Color="slate" Variant="subtle">Scheduled</TwChip>
+                            }
+                        </div>
+
+                        <!-- Teams and Scores -->
+                        <div class="space-y-4 mb-4">
+                            <!-- Away Team -->
+                            <div class="flex justify-between items-center p-2 rounded-lg @(game.AwayScore > game.HomeScore ? "bg-slate-700/50" : "")">
+                                <span class="font-bold text-lg @(game.AwayScore > game.HomeScore ? "text-white" : "text-slate-300")">
+                                    @game.AwayTeam
+                                </span>
+                                <span class="text-2xl font-mono @(game.AwayScore > game.HomeScore ? "text-orange-400 font-bold" : "text-slate-400")">
+                                    @game.AwayScore
+                                </span>
+                            </div>
+
+                            <!-- Home Team -->
+                            <div class="flex justify-between items-center p-2 rounded-lg @(game.HomeScore > game.AwayScore ? "bg-slate-700/50" : "")">
+                                <span class="font-bold text-lg @(game.HomeScore > game.AwayScore ? "text-white" : "text-slate-300")">
+                                    @game.HomeTeam
+                                </span>
+                                <span class="text-2xl font-mono @(game.HomeScore > game.AwayScore ? "text-orange-400 font-bold" : "text-slate-400")">
+                                    @game.HomeScore
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Top Scorer -->
+                        @if (!string.IsNullOrEmpty(game.TopScorer) && game.TopScorerPoints > 0)
                         {
-                            <MudCardActions>
-                                <MudText Typo="Typo.caption">
-                                    ⭐ @game.TopScorer: @game.TopScorerPoints PTS
-                                </MudText>
-                            </MudCardActions>
+                            <div class="mt-auto pt-3 border-t border-slate-700 flex items-center justify-between text-sm">
+                                <div class="flex items-center text-orange-400">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                                    </svg>
+                                    <span class="font-medium">Top Scorer</span>
+                                </div>
+                                <div class="text-slate-300">
+                                    <span class="font-semibold text-white">@game.TopScorer</span>
+                                    <span class="text-slate-500 mx-1">•</span>
+                                    <span>@game.TopScorerPoints pts</span>
+                                </div>
+                            </div>
                         }
-                    </MudCard>
-                </MudItem>
-            }
-        </MudGrid>
-        
-        <MudText Typo="Typo.caption" Class="mt-4">
-            Showing @_games.Count games
-        </MudText>
-    }
-    else if (!_isLoading && _hasSearched)
-    {
-        <MudAlert Severity="Severity.Info">No games found. Try adjusting your filters.</MudAlert>
-    }
-</MudContainer>
-
-<style>
-    .game-card:hover {
-        transform: translateY(-2px);
-        transition: transform 0.2s;
-    }
-</style>
+                    </TwCard>
+                }
+            </TwGrid>
+            
+            <div class="mt-6 text-center">
+                <p class="text-slate-500 text-sm">Showing @_games.Count games</p>
+            </div>
+        }
+        else if (!_isLoading && _hasSearched)
+        {
+            <TwAlert Severity="info" Class="max-w-md mx-auto">
+                No games found. Try adjusting the season or team filter.
+            </TwAlert>
+        }
+        else
+        {
+            <div class="text-center py-16">
+                <div class="bg-slate-800/50 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-8 h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                </div>
+                <h3 class="text-lg font-medium text-slate-300">No Games Loaded</h3>
+                <p class="text-slate-500">Select filters and click search to view results</p>
+            </div>
+        }
+    </TwContainer>
+</div>
 
 @code {
     private int? _selectedSeason;
@@ -144,6 +150,8 @@
     
     private List<int> _availableSeasons = new();
     private List<NBAGame> _games = new();
+    
+    private List<KeyValuePair<string, string?>> _teamOptions = new();
     
     private readonly Dictionary<string, string> _nbaTeams = new()
     {
@@ -161,7 +169,22 @@
     {
         _availableSeasons = Enumerable.Range(2020, 6).Reverse().ToList();
         _selectedSeason = _availableSeasons.FirstOrDefault();
+        
+        // Initialize team options
+        _teamOptions.Add(new KeyValuePair<string, string?>("All Teams", null));
+        foreach (var team in _nbaTeams.OrderBy(t => t.Value))
+        {
+            _teamOptions.Add(new KeyValuePair<string, string?>(team.Value, team.Key));
+        }
+        
         await LoadResults();
+    }
+    
+    private string FormatDate(string dateStr)
+    {
+        if (DateTime.TryParse(dateStr, out var date))
+            return date.ToString("MMM d, yyyy");
+        return dateStr;
     }
 
     private async Task LoadResults()
@@ -199,7 +222,7 @@
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading games: {ex.Message}");
-            Snackbar.Add($"Error loading games: {ex.Message}", Severity.Warning);
+            // Simplified error handling without snackbar
             _games = new();
         }
         finally

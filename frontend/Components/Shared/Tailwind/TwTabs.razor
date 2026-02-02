@@ -1,0 +1,114 @@
+@* TwTabs.razor - Tailwind CSS Tabs Component *@
+
+<div class="@Class">
+    <!-- Tab Headers -->
+    <div class="flex border-b border-slate-800 mb-4 overflow-x-auto">
+        @if (Items != null)
+        {
+            @foreach (var (item, index) in Items.Select((x, i) => (x, i)))
+            {
+                <button @onclick="() => SelectTabIndex(index)"
+                        class="@GetTabClasses(index)">
+                    @item
+                </button>
+            }
+        }
+        else
+        {
+            @foreach (var tab in Tabs)
+            {
+                <button @onclick="() => SelectTab(tab.Id)"
+                        class="@GetTabClasses(tab.Id)">
+                    @if (!string.IsNullOrEmpty(tab.Icon))
+                    {
+                        <span class="mr-2">@tab.Icon</span>
+                    }
+                    @tab.Label
+                </button>
+            }
+        }
+    </div>
+    
+    <!-- Tab Content -->
+    <div class="tab-content">
+        @ChildContent
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<TabItem> Tabs { get; set; } = new();
+    [Parameter] public string ActiveTabId { get; set; } = "";
+    [Parameter] public EventCallback<string> ActiveTabIdChanged { get; set; }
+    
+    // Simple mode parameters
+    [Parameter] public IEnumerable<string>? Items { get; set; }
+    [Parameter] public int ActiveTab { get; set; }
+    [Parameter] public EventCallback<int> ActiveTabChanged { get; set; }
+    
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (Items != null && Items.Any())
+        {
+            // Simple mode initialization
+            if (ActiveTab < 0 || ActiveTab >= Items.Count())
+            {
+                ActiveTab = 0;
+            }
+        }
+        else if (string.IsNullOrEmpty(ActiveTabId) && Tabs.Any())
+        {
+            // Object mode initialization
+            ActiveTabId = Tabs.First().Id;
+        }
+    }
+
+    private async Task SelectTab(string tabId)
+    {
+        ActiveTabId = tabId;
+        await ActiveTabIdChanged.InvokeAsync(tabId);
+    }
+    
+    private async Task SelectTabIndex(int index)
+    {
+        ActiveTab = index;
+        await ActiveTabChanged.InvokeAsync(index);
+    }
+
+    private string GetTabClasses(string tabId)
+    {
+        var isActive = tabId == ActiveTabId;
+        return GetBaseClasses(isActive);
+    }
+    
+    private string GetTabClasses(int index)
+    {
+        var isActive = index == ActiveTab;
+        return GetBaseClasses(isActive);
+    }
+    
+    private string GetBaseClasses(bool isActive)
+    {
+        var classes = "px-4 py-3 text-sm font-medium whitespace-nowrap transition-all border-b-2 -mb-[2px]";
+        
+        if (isActive)
+        {
+            classes += " text-blue-400 border-blue-400";
+        }
+        else
+        {
+            classes += " text-slate-400 border-transparent hover:text-slate-200 hover:border-slate-600";
+        }
+        
+        return classes;
+    }
+
+    public class TabItem
+    {
+        public string Id { get; set; } = "";
+        public string Label { get; set; } = "";
+        public string? Icon { get; set; }
+    }
+}

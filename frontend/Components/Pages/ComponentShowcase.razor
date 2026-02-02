@@ -344,10 +344,89 @@
             </TwCard>
         </section>
 
+        <!-- Input Section -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                <span class="text-blue-400">10.</span> Inputs
+            </h2>
+            <TwCard Title="TwInput" Color="blue">
+                <div class="space-y-6">
+                    <div class="flex flex-wrap gap-4 items-end">
+                        <TwInput Label="Player Search" Placeholder="Type name..." ShowSearchIcon="true" @bind-Value="_searchText" />
+                        <TwInput Label="Basic Input" Placeholder="Enter text..." @bind-Value="_basicText" />
+                        <TwInput Label="Disabled" Placeholder="Can't edit" Disabled="true" />
+                    </div>
+                    <div class="text-sm text-slate-500">
+                        Search: @_searchText | Basic: @_basicText
+                    </div>
+                </div>
+            </TwCard>
+        </section>
+
+        <!-- Stat Cards Section -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                <span class="text-blue-400">11.</span> Stat Cards
+            </h2>
+            <TwCard Title="TwStatCard" Color="emerald">
+                <div class="flex flex-wrap gap-4">
+                    <TwStatCard Value="4,235" Label="Pass Yards" Color="blue" />
+                    <TwStatCard Value="1,089" Label="Rush Yards" Color="emerald" />
+                    <TwStatCard Value="42" Label="Touchdowns" Color="amber" />
+                    <TwStatCard Value="85.6%" Label="Hit Rate" Color="purple" />
+                </div>
+            </TwCard>
+        </section>
+
+        <!-- Avatar Section -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                <span class="text-blue-400">12.</span> Avatars
+            </h2>
+            <TwCard Title="TwAvatar" Color="purple">
+                <div class="space-y-6">
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider">Sizes</h4>
+                        <div class="flex items-center gap-4">
+                            <TwAvatar Size="sm" Alt="Patrick Mahomes" />
+                            <TwAvatar Size="md" Alt="Josh Allen" />
+                            <TwAvatar Size="lg" Alt="Lamar Jackson" />
+                            <TwAvatar Size="xl" Alt="Jalen Hurts" />
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider">Colors</h4>
+                        <div class="flex items-center gap-4">
+                            <TwAvatar Size="lg" Alt="Blue" Color="blue" />
+                            <TwAvatar Size="lg" Alt="Emerald" Color="emerald" />
+                            <TwAvatar Size="lg" Alt="Amber" Color="amber" />
+                            <TwAvatar Size="lg" Alt="Purple" Color="purple" />
+                            <TwAvatar Size="lg" Alt="Red" Color="red" />
+                        </div>
+                    </div>
+                </div>
+            </TwCard>
+        </section>
+
+        <!-- Link Section -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                <span class="text-blue-400">13.</span> Links
+            </h2>
+            <TwCard Title="TwLink" Color="amber">
+                <div class="flex flex-wrap gap-6">
+                    <TwLink Href="/nfl-results">Default Link</TwLink>
+                    <TwLink Href="/nfl-results" Color="purple">Purple Link</TwLink>
+                    <TwLink Href="/nfl-results" Color="emerald">Emerald Link</TwLink>
+                    <TwLink Href="/nfl-results" Color="amber">Amber Link</TwLink>
+                </div>
+            </TwCard>
+        </section>
+
         <!-- Container Section -->
         <section class="mb-12">
             <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
-                <span class="text-blue-400">10.</span> Container
+                <span class="text-blue-400">14.</span> Container
             </h2>
             <TwAlert Severity="info">
                 The <code class="bg-slate-800 px-2 py-0.5 rounded">TwContainer</code> component wraps this entire page. 
@@ -388,4 +467,6 @@
     private int? _selectedWeek;
     private string? _selectedTeam;
     private bool _showDialog = false;
+    private string? _searchText;
+    private string? _basicText;
 }

@@ -2,197 +2,196 @@
 @rendermode InteractiveServer
 @using MudBlazor
 @inject HttpClient Http
-@inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 
 <PageTitle>NFL Player Stats</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
-    <MudText Typo="Typo.h4" Class="mb-4">
-        <MudIcon Icon="@Icons.Material.Filled.SportsFootball" Class="mr-2" />
-        NFL Player Stats
-    </MudText>
-
-    <!-- Filters -->
-    <MudPaper Class="pa-4 mb-4" Elevation="2">
-        <MudGrid>
-            <MudItem xs="12" sm="6" md="2">
-                <MudSelect T="int?" Label="Season" @bind-Value="_selectedSeason" 
-                           Variant="Variant.Outlined" Dense="true" Clearable="true">
-                    @foreach (var season in _availableSeasons)
-                    {
-                        <MudSelectItem T="int?" Value="@season">@season</MudSelectItem>
-                    }
-                </MudSelect>
-            </MudItem>
-            
-            <MudItem xs="12" sm="6" md="3">
-                <MudSelect T="string" Label="Team" @bind-Value="_selectedTeam" 
-                           Variant="Variant.Outlined" Dense="true" Clearable="true"
-                           MaxHeight="400">
-                    <MudSelectItem Value="@((string?)null)">All Teams</MudSelectItem>
-                    @foreach (var team in _nflTeams.OrderBy(t => t.Value))
-                    {
-                        <MudSelectItem Value="@team.Key">@team.Value</MudSelectItem>
-                    }
-                </MudSelect>
-            </MudItem>
-            
-            <MudItem xs="12" sm="6" md="2">
-                <MudAutocomplete T="string" Label="Player"
-                                 Value="_selectedPlayer"
-                                 ValueChanged="OnPlayerChanged"
-                                 SearchFunc="SearchPlayers"
-                                 MaxItems="50"
-                                 MaxHeight="400"
-                                 Variant="Variant.Outlined"
-                                 Dense="true"
-                                 DebounceInterval="300"
-                                 Clearable="true"
-                                 Placeholder="Filter by player..." />
-            </MudItem>
-            
-            <MudItem xs="12" sm="6" md="2">
-                <MudSelect T="string" Label="Position" @bind-Value="_selectedPosition" 
-                           Variant="Variant.Outlined" Dense="true" Clearable="true">
-                    <MudSelectItem Value="@((string?)null)">All Positions</MudSelectItem>
-                    <MudSelectItem Value="@("QB")">Quarterback</MudSelectItem>
-                    <MudSelectItem Value="@("RB")">Running Back</MudSelectItem>
-                    <MudSelectItem Value="@("WR")">Wide Receiver</MudSelectItem>
-                    <MudSelectItem Value="@("TE")">Tight End</MudSelectItem>
-                </MudSelect>
-            </MudItem>
-            
-            <MudItem xs="12" sm="6" md="2">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" 
-                           OnClick="LoadResults" Disabled="_isLoading" FullWidth="true">
-                    @if (_isLoading)
-                    {
-                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                    }
-                    Search
-                </MudButton>
-            </MudItem>
-        </MudGrid>
-    </MudPaper>
-
-    <!-- Results Table -->
-    @if (_isLoading)
-    {
-        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
-    }
-    
-    @if (_results.Any())
-    {
-        <MudPaper Elevation="2">
-            <MudTable Items="@_results" Dense="true" Hover="true" Striped="true" 
-                      FixedHeader="true" Height="600px">
-                <HeaderContent>
-                    <MudTh>Season</MudTh>
-                    <MudTh>Player</MudTh>
-                    <MudTh>Pos</MudTh>
-                    <MudTh>Team</MudTh>
-                    <MudTh Style="text-align: right">Games</MudTh>
-                    <MudTh Style="text-align: right">Pass Yds</MudTh>
-                    <MudTh Style="text-align: right">Pass TD</MudTh>
-                    <MudTh Style="text-align: right">Rush Yds</MudTh>
-                    <MudTh Style="text-align: right">Rush TD</MudTh>
-                    <MudTh Style="text-align: right">Rec</MudTh>
-                    <MudTh Style="text-align: right">Rec Yds</MudTh>
-                    <MudTh Style="text-align: right">Rec TD</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd DataLabel="Season">@context.Season</MudTd>
-                    <MudTd DataLabel="Player">
-                        <MudLink Href="@($"/nfl-player-profiles?player={Uri.EscapeDataString(context.PlayerName ?? "")}")" 
-                                 Color="Color.Primary">
-                            @context.PlayerName
-                        </MudLink>
-                    </MudTd>
-                    <MudTd DataLabel="Pos">
-                        <MudChip T="string" Size="Size.Small" Color="@GetPositionColor(context.Position)">
-                            @context.Position
-                        </MudChip>
-                    </MudTd>
-                    <MudTd DataLabel="Team">@context.Team</MudTd>
-                    <MudTd DataLabel="Games" Style="text-align: right">@(context.Games ?? 0)</MudTd>
-                    <MudTd DataLabel="Pass Yds" Style="text-align: right">
-                        @if (context.PassYds > 0)
-                        {
-                            <strong>@context.PassYds.ToString("N0")</strong>
-                        }
-                        else
-                        {
-                            <span>-</span>
-                        }
-                    </MudTd>
-                    <MudTd DataLabel="Pass TD" Style="text-align: right">
-                        @if (context.PassTd > 0)
-                        {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Success">@context.PassTd</MudChip>
-                        }
-                        else
-                        {
-                            <span>-</span>
-                        }
-                    </MudTd>
-                    <MudTd DataLabel="Rush Yds" Style="text-align: right">
-                        @if (context.RushYds > 0)
-                        {
-                            <strong>@context.RushYds.ToString("N0")</strong>
-                        }
-                        else
-                        {
-                            <span>-</span>
-                        }
-                    </MudTd>
-                    <MudTd DataLabel="Rush TD" Style="text-align: right">
-                        @if (context.RushTd > 0)
-                        {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Success">@context.RushTd</MudChip>
-                        }
-                        else
-                        {
-                            <span>-</span>
-                        }
-                    </MudTd>
-                    <MudTd DataLabel="Rec" Style="text-align: right">@(context.Rec ?? 0)</MudTd>
-                    <MudTd DataLabel="Rec Yds" Style="text-align: right">
-                        @if (context.RecYds > 0)
-                        {
-                            <strong>@context.RecYds.ToString("N0")</strong>
-                        }
-                        else
-                        {
-                            <span>-</span>
-                        }
-                    </MudTd>
-                    <MudTd DataLabel="Rec TD" Style="text-align: right">
-                        @if (context.RecTd > 0)
-                        {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Success">@context.RecTd</MudChip>
-                        }
-                        else
-                        {
-                            <span>-</span>
-                        }
-                    </MudTd>
-                </RowTemplate>
-                <PagerContent>
-                    <MudTablePager PageSizeOptions="new int[] { 50, 100, 200, 500 }" />
-                </PagerContent>
-            </MudTable>
-        </MudPaper>
+<div class="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
+    <TwContainer MaxWidth="7xl">
         
-        <MudText Typo="Typo.caption" Class="mt-2">
-            Showing @_results.Count of @_totalResults results
-        </MudText>
-    }
-    else if (!_isLoading && _hasSearched)
-    {
-        <MudAlert Severity="Severity.Info">No results found. Try adjusting your filters.</MudAlert>
-    }
-</MudContainer>
+        <!-- Header Section -->
+        <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+            <div class="flex items-center gap-3">
+                <div class="bg-blue-600 p-3 rounded-xl shadow-lg shadow-blue-900/20">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-bold tracking-tight">NFL Player Stats</h1>
+                    <p class="text-slate-400 text-sm">Season statistics and player performance data</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- Filters Card -->
+        <TwCard Color="blue" Class="mb-6">
+            <div class="flex flex-wrap items-end gap-4">
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1">Season</label>
+                    <TwSelect TValue="int?" @bind-Value="_selectedSeason">
+                        @foreach (var season in _availableSeasons)
+                        {
+                            <option value="@season">@season</option>
+                        }
+                    </TwSelect>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1">Team</label>
+                    <TwSelect TValue="string?" @bind-Value="_selectedTeam" Placeholder="All Teams">
+                        @foreach (var team in _nflTeams.OrderBy(t => t.Value))
+                        {
+                            <option value="@team.Key">@team.Value</option>
+                        }
+                    </TwSelect>
+                </div>
+
+                <div class="min-w-[200px]">
+                    <TwInput Label="Player" @bind-Value="_selectedPlayer"
+                             Placeholder="Filter by player..."
+                             ShowSearchIcon="true" />
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1">Position</label>
+                    <TwSelect TValue="string?" @bind-Value="_selectedPosition" Placeholder="All Positions">
+                        <option value="QB">Quarterback</option>
+                        <option value="RB">Running Back</option>
+                        <option value="WR">Wide Receiver</option>
+                        <option value="TE">Tight End</option>
+                    </TwSelect>
+                </div>
+
+                <TwButton Variant="primary" OnClick="LoadResults" IsLoading="_isLoading" Disabled="_isLoading">
+                    Search
+                </TwButton>
+            </div>
+        </TwCard>
+
+        <!-- Loading State -->
+        @if (_isLoading)
+        {
+            <div class="mb-6">
+                <TwProgressBar Indeterminate="true" Color="blue" Size="md" />
+            </div>
+        }
+
+        <!-- Results Table -->
+        @if (_results.Any())
+        {
+            <TwCard Color="slate" Class="overflow-hidden">
+                <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+                    <TwTable>
+                        <HeaderContent>
+                            <TwTh>Season</TwTh>
+                            <TwTh>Player</TwTh>
+                            <TwTh>Pos</TwTh>
+                            <TwTh>Team</TwTh>
+                            <TwTh Class="text-right">Games</TwTh>
+                            <TwTh Class="text-right">Pass Yds</TwTh>
+                            <TwTh Class="text-right">Pass TD</TwTh>
+                            <TwTh Class="text-right">Rush Yds</TwTh>
+                            <TwTh Class="text-right">Rush TD</TwTh>
+                            <TwTh Class="text-right">Rec</TwTh>
+                            <TwTh Class="text-right">Rec Yds</TwTh>
+                            <TwTh Class="text-right">Rec TD</TwTh>
+                        </HeaderContent>
+                        <ChildContent>
+                            @foreach (var result in _results)
+                            {
+                                <TwTr>
+                                    <TwTd>@result.Season</TwTd>
+                                    <TwTd>
+                                        <TwLink Href="@($"/nfl-player-profiles?player={Uri.EscapeDataString(result.PlayerName ?? "")}")">
+                                            @result.PlayerName
+                                        </TwLink>
+                                    </TwTd>
+                                    <TwTd>
+                                        <TwChip Size="sm" Color="@GetPositionColor(result.Position)">@result.Position</TwChip>
+                                    </TwTd>
+                                    <TwTd>@result.Team</TwTd>
+                                    <TwTd Class="text-right">@(result.Games ?? 0)</TwTd>
+                                    <TwTd Class="text-right">
+                                        @if (result.PassYds > 0)
+                                        {
+                                            <strong class="text-white">@result.PassYds.ToString("N0")</strong>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-slate-600">-</span>
+                                        }
+                                    </TwTd>
+                                    <TwTd Class="text-right">
+                                        @if (result.PassTd > 0)
+                                        {
+                                            <TwChip Size="sm" Color="emerald">@result.PassTd</TwChip>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-slate-600">-</span>
+                                        }
+                                    </TwTd>
+                                    <TwTd Class="text-right">
+                                        @if (result.RushYds > 0)
+                                        {
+                                            <strong class="text-white">@result.RushYds.ToString("N0")</strong>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-slate-600">-</span>
+                                        }
+                                    </TwTd>
+                                    <TwTd Class="text-right">
+                                        @if (result.RushTd > 0)
+                                        {
+                                            <TwChip Size="sm" Color="emerald">@result.RushTd</TwChip>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-slate-600">-</span>
+                                        }
+                                    </TwTd>
+                                    <TwTd Class="text-right">@(result.Rec ?? 0)</TwTd>
+                                    <TwTd Class="text-right">
+                                        @if (result.RecYds > 0)
+                                        {
+                                            <strong class="text-white">@result.RecYds.ToString("N0")</strong>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-slate-600">-</span>
+                                        }
+                                    </TwTd>
+                                    <TwTd Class="text-right">
+                                        @if (result.RecTd > 0)
+                                        {
+                                            <TwChip Size="sm" Color="emerald">@result.RecTd</TwChip>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-slate-600">-</span>
+                                        }
+                                    </TwTd>
+                                </TwTr>
+                            }
+                        </ChildContent>
+                    </TwTable>
+                </div>
+            </TwCard>
+            
+            <div class="mt-4 text-center">
+                <TwChip Color="slate" Size="lg">Showing @_results.Count of @_totalResults results</TwChip>
+            </div>
+        }
+        else if (!_isLoading && _hasSearched)
+        {
+            <TwAlert Severity="info">
+                No results found. Try adjusting your filters.
+            </TwAlert>
+        }
+    </TwContainer>
+</div>
 
 @code {
     private int? _selectedSeason;
@@ -206,7 +205,6 @@
     private List<NFLPlayerResult> _results = new();
     private int _totalResults = 0;
     
-    // NFL Team abbreviation to full name mapping
     private readonly Dictionary<string, string> _nflTeams = new()
     {
         { "ARI", "Arizona Cardinals" },
@@ -260,7 +258,6 @@
                 $"http://backend:8000/db/stats/nfl/seasons");
             _availableSeasons = response?.Seasons ?? new List<int>();
             
-            // Default to most recent season
             if (_availableSeasons.Any() && !_selectedSeason.HasValue)
             {
                 _selectedSeason = _availableSeasons.First();
@@ -293,7 +290,6 @@
             
             var response = await Http.GetFromJsonAsync<NFLResultsResponse>(url);
             
-            // Transform metadata into structured results
             _results = (response?.Results ?? new())
                 .Select(r => new NFLPlayerResult
                 {
@@ -320,44 +316,22 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error loading results: {ex.Message}", Severity.Error);
+            Console.WriteLine($"Error loading results: {ex.Message}");
         }
         finally
         {
             _isLoading = false;
+            StateHasChanged();
         }
     }
 
-    private async Task<IEnumerable<string>> SearchPlayers(string value, CancellationToken ct)
+    private string GetPositionColor(string? position) => position switch
     {
-        if (string.IsNullOrEmpty(value) || value.Length < 2)
-            return Enumerable.Empty<string>();
-        
-        try
-        {
-            var response = await Http.GetFromJsonAsync<ProfileListResponse>(
-                $"http://backend:8000/db/profiles/nfl/list?entity_type=player&search={Uri.EscapeDataString(value)}&limit=20",
-                ct);
-            return response?.Entities?.Select(e => e.Name) ?? Enumerable.Empty<string>();
-        }
-        catch
-        {
-            return Enumerable.Empty<string>();
-        }
-    }
-
-    private void OnPlayerChanged(string player)
-    {
-        _selectedPlayer = player;
-    }
-
-    private Color GetPositionColor(string? position) => position switch
-    {
-        "QB" => Color.Primary,
-        "RB" => Color.Success,
-        "WR" => Color.Warning,
-        "TE" => Color.Info,
-        _ => Color.Default
+        "QB" => "blue",
+        "RB" => "emerald",
+        "WR" => "amber",
+        "TE" => "purple",
+        _ => "slate"
     };
 
     // Response Models

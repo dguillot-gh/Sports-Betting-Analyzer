@@ -1,206 +1,220 @@
 @page "/nba-hit-rates"
 @using SportsBettingAnalyzer.Services
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
 @inject HttpClient Http
-@inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @rendermode InteractiveServer
 
 <PageTitle>NBA Hit Rates</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
-    <div class="d-flex justify-space-between align-center mb-4">
-        <div>
-            <MudText Typo="Typo.h4" GutterBottom="true">
-                <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Class="mr-2" />
-                NBA Hit Rates
-            </MudText>
-            <MudText Typo="Typo.body2" Color="Color.Secondary">Prop bet analysis - Find consistent NBA performers</MudText>
-        </div>
-    </div>
-    
-    <!-- Search and Filters -->
-    <MudPaper Elevation="2" Class="pa-4 mb-4">
-        <MudGrid>
-            <MudItem xs="12" md="2">
-                <MudSelect T="int" @bind-Value="_selectedSeason" Label="Season" Variant="Variant.Outlined" Dense="true">
-                    @foreach (var season in _availableSeasons)
-                    {
-                        <MudSelectItem Value="@season">@season</MudSelectItem>
-                    }
-                </MudSelect>
-            </MudItem>
-            <MudItem xs="12" md="3">
-                <MudTextField @bind-Value="_searchPlayer" Label="Player Search" Variant="Variant.Outlined" Dense="true"
-                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                              Placeholder="LeBron James, Shai Gilgeous-Alexander..."
-                              DebounceInterval="500" OnDebounceIntervalElapsed="SearchPlayers" />
-            </MudItem>
-            <MudItem xs="12" md="2">
-                <MudSelect T="string" Value="_selectedStat" ValueChanged="OnStatChanged" Label="Stat Type" Variant="Variant.Outlined" Dense="true">
-                    <MudSelectItem Value="@("pts")">Points</MudSelectItem>
-                    <MudSelectItem Value="@("reb")">Rebounds</MudSelectItem>
-                    <MudSelectItem Value="@("ast")">Assists</MudSelectItem>
-                    <MudSelectItem Value="@("fg3")">3-Pointers Made</MudSelectItem>
-                    <MudSelectItem Value="@("stl")">Steals</MudSelectItem>
-                    <MudSelectItem Value="@("blk")">Blocks</MudSelectItem>
-                </MudSelect>
-            </MudItem>
-            <MudItem xs="12" md="2">
-                <MudNumericField T="int" @bind-Value="_threshold" Label="Over Line" Variant="Variant.Outlined" Dense="true"
-                                 Min="0" Max="100" />
-            </MudItem>
-            <MudItem xs="12" md="3">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="CalculateHitRates"
-                           StartIcon="@Icons.Material.Filled.Calculate" Disabled="@_isLoading">
-                    Calculate
-                </MudButton>
-            </MudItem>
-        </MudGrid>
-    </MudPaper>
-    
-    @if (_isLoading)
-    {
-        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
-    }
-    
-    @if (_hitRates.Any())
-    {
-        <!-- Summary Cards -->
-        <MudGrid Class="mb-4">
-            @foreach (var player in _hitRates.Take(3))
-            {
-                <MudItem xs="12" md="4">
-                    <MudCard Elevation="3" Style="@GetCardStyle(player.SeasonRate)">
-                        <MudCardContent>
-                            <div class="d-flex justify-space-between align-center">
-                                <div>
-                                    <MudText Typo="Typo.h6">@player.PlayerName</MudText>
-                                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                                        Over @_threshold @GetStatLabel(_selectedStat) (@_selectedSeason)
-                                    </MudText>
-                                </div>
-                                <MudAvatar Color="@GetRateColor(player.SeasonRate)" Size="Size.Large">
-                                    @player.SeasonRate.ToString("P0")
-                                </MudAvatar>
+<div class="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
+    <TwContainer MaxWidth="7xl">
+        <!-- Header -->
+        <header class="mb-8">
+            <div class="flex items-center gap-3 mb-2">
+                <div class="bg-orange-600 p-3 rounded-xl shadow-lg shadow-orange-900/20">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-bold tracking-tight">NBA Hit Rates</h1>
+                    <p class="text-slate-400 text-sm">Prop bet analysis - Find consistent NBA performers</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- Search and Filters -->
+        <TwCard Class="mb-8" Color="slate">
+            <div class="flex flex-col md:flex-row gap-4 items-end">
+                <div class="w-full md:w-1/6">
+                    <TwSelect TValue="int" Label="Season" @bind-Value="_selectedSeason" 
+                              Items="_availableSeasons.Select(s => new KeyValuePair<string, int>(s.ToString(), s))" />
+                </div>
+                
+                <div class="w-full md:w-1/3">
+                    <TwInput Label="Player Search" @bind-Value="_searchPlayer" 
+                             Placeholder="LeBron James, Shai Gilgeous-Alexander..." 
+                             ShowSearchIcon="true" />
+                </div>
+                
+                <div class="w-full md:w-1/6">
+                    <TwSelect TValue="string" Label="Stat Type" Value="_selectedStat" 
+                              Items="_statOptions" ValueChanged="@((string val) => OnStatChanged(val))" />
+                </div>
+                
+                <div class="w-full md:w-1/6">
+                    <div class="flex flex-col gap-1">
+                        <label class="text-xs font-semibold uppercase tracking-wider text-slate-400 ml-1">Over Line</label>
+                        <input type="number" @bind="_threshold" min="0" max="100" 
+                               class="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all placeholder-slate-500 hover:border-slate-600" />
+                    </div>
+                </div>
+
+                <div class="w-full md:w-auto">
+                    <TwButton Variant="primary" OnClick="CalculateHitRates" IsLoading="_isLoading" Disabled="_isLoading">
+                        Calculate
+                    </TwButton>
+                </div>
+            </div>
+        </TwCard>
+
+        @if (_isLoading)
+        {
+            <div class="flex flex-col items-center justify-center py-12">
+                <TwProgressBar Indeterminate="true" Color="orange" Class="w-1/2 mb-4" />
+                <p class="text-slate-400 animate-pulse">Calculating hit rates...</p>
+            </div>
+        }
+        else if (_hitRates.Any())
+        {
+            <!-- Summary Cards -->
+            <TwGrid Cols="1" ColsMd="3" Gap="6" Class="mb-8">
+                @foreach (var player in _hitRates.Take(3))
+                {
+                    <TwCard Hoverable="true" Class="@($"h-full border-l-4 {GetBorderClass(player.SeasonRate)}")" Color="slate">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <h3 class="font-bold text-lg text-white">@player.PlayerName</h3>
+                                <p class="text-sm text-slate-400">
+                                    Over @_threshold @GetStatLabel(_selectedStat) (@_selectedSeason)
+                                </p>
                             </div>
-                            <MudDivider Class="my-3" />
-                            <div class="d-flex justify-space-around">
-                                <div class="text-center">
-                                    <MudText Typo="Typo.h5" Color="@GetRateColor(player.Last5Rate)">
-                                        @player.Last5Hits/@player.Last5Games
-                                    </MudText>
-                                    <MudText Typo="Typo.caption">Last 5</MudText>
+                            <TwAvatar Size="lg" Color="@GetRateColorName(player.SeasonRate)">
+                                @player.SeasonRate.ToString("P0")
+                            </TwAvatar>
+                        </div>
+                        
+                        <div class="w-full h-px bg-slate-700 my-4"></div>
+                        
+                        <div class="grid grid-cols-3 gap-2">
+                            <div class="text-center">
+                                <div class="@($"text-xl font-bold {GetTextClass(player.Last5Rate)}")">
+                                    @player.Last5Hits/@player.Last5Games
                                 </div>
-                                <div class="text-center">
-                                    <MudText Typo="Typo.h5" Color="@GetRateColor(player.Last10Rate)">
-                                        @player.Last10Hits/@player.Last10Games
-                                    </MudText>
-                                    <MudText Typo="Typo.caption">Last 10</MudText>
-                                </div>
-                                <div class="text-center">
-                                    <MudText Typo="Typo.h5" Color="@GetRateColor(player.SeasonRate)">
-                                        @player.SeasonHits/@player.SeasonGames
-                                    </MudText>
-                                    <MudText Typo="Typo.caption">Season</MudText>
-                                </div>
+                                <div class="text-xs text-slate-500 uppercase tracking-wider mt-1">Last 5</div>
                             </div>
-                        </MudCardContent>
-                    </MudCard>
-                </MudItem>
-            }
-        </MudGrid>
-        
-        <!-- Full Table -->
-        <MudPaper Elevation="2" Class="pa-4">
-            <MudTable Items="@_hitRates" Dense="true" Hover="true" Striped="true">
-                <HeaderContent>
-                    <MudTh>Player</MudTh>
-                    <MudTh>Team</MudTh>
-                    <MudTh Style="text-align: center">L5</MudTh>
-                    <MudTh Style="text-align: center">L10</MudTh>
-                    <MudTh Style="text-align: center">Season</MudTh>
-                    <MudTh Style="text-align: center">Avg</MudTh>
-                    <MudTh Style="text-align: center">Trend</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd>
-                        <MudLink Href="@($"/nba-player-profiles?player={Uri.EscapeDataString(context.PlayerName)}")" 
-                                 Color="Color.Primary">
-                            @context.PlayerName
-                        </MudLink>
-                    </MudTd>
-                    <MudTd>@context.Team</MudTd>
-                    <MudTd Style="text-align: center">
-                        <MudChip T="string" Color="@GetRateColor(context.Last5Rate)" Size="Size.Small">
-                            @context.Last5Hits/@context.Last5Games
-                        </MudChip>
-                    </MudTd>
-                    <MudTd Style="text-align: center">
-                        <MudChip T="string" Color="@GetRateColor(context.Last10Rate)" Size="Size.Small">
-                            @context.Last10Hits/@context.Last10Games
-                        </MudChip>
-                    </MudTd>
-                    <MudTd Style="text-align: center">
-                        <MudChip T="string" Color="@GetRateColor(context.SeasonRate)" Size="Size.Small">
-                            @context.SeasonRate.ToString("P0")
-                        </MudChip>
-                    </MudTd>
-                    <MudTd Style="text-align: center">
-                        <strong>@context.SeasonAvg.ToString("F1")</strong>
-                    </MudTd>
-                    <MudTd Style="text-align: center">
-                        @if (context.Last5Rate > context.SeasonRate)
-                        {
-                            <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Color="Color.Success" />
-                        }
-                        else if (context.Last5Rate < context.SeasonRate)
-                        {
-                            <MudIcon Icon="@Icons.Material.Filled.TrendingDown" Color="Color.Error" />
-                        }
-                        else
-                        {
-                            <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Color="Color.Default" />
-                        }
-                    </MudTd>
-                </RowTemplate>
-            </MudTable>
+                            <div class="text-center">
+                                <div class="@($"text-xl font-bold {GetTextClass(player.Last10Rate)}")">
+                                    @player.Last10Hits/@player.Last10Games
+                                </div>
+                                <div class="text-xs text-slate-500 uppercase tracking-wider mt-1">Last 10</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="@($"text-xl font-bold {GetTextClass(player.SeasonRate)}")">
+                                    @player.SeasonHits/@player.SeasonGames
+                                </div>
+                                <div class="text-xs text-slate-500 uppercase tracking-wider mt-1">Season</div>
+                            </div>
+                        </div>
+                    </TwCard>
+                }
+            </TwGrid>
             
-            <!-- Averages Summary -->
-            @if (_hitRates.Any())
-            {
-                <MudDivider Class="my-3" />
-                <MudText Typo="Typo.subtitle2" Class="mb-2">
-                    <MudIcon Icon="@Icons.Material.Filled.Analytics" Size="Size.Small" Class="mr-1" />
-                    Season Averages (Selected Players)
-                </MudText>
-                <MudStack Row="true" Spacing="4" Justify="Justify.SpaceAround">
-                    <MudPaper Class="pa-3 text-center" Elevation="1" Style="min-width: 120px;">
-                        <MudText Typo="Typo.h5" Color="Color.Primary">@GetOverallAvg("pts").ToString("F1")</MudText>
-                        <MudText Typo="Typo.caption">Avg Points</MudText>
-                    </MudPaper>
-                    <MudPaper Class="pa-3 text-center" Elevation="1" Style="min-width: 120px;">
-                        <MudText Typo="Typo.h5" Color="Color.Secondary">@GetOverallAvg("reb").ToString("F1")</MudText>
-                        <MudText Typo="Typo.caption">Avg Rebounds</MudText>
-                    </MudPaper>
-                    <MudPaper Class="pa-3 text-center" Elevation="1" Style="min-width: 120px;">
-                        <MudText Typo="Typo.h5" Color="Color.Tertiary">@GetOverallAvg("ast").ToString("F1")</MudText>
-                        <MudText Typo="Typo.caption">Avg Assists</MudText>
-                    </MudPaper>
-                    <MudPaper Class="pa-3 text-center" Elevation="1" Style="min-width: 120px;">
-                        <MudText Typo="Typo.h5" Color="Color.Info">@GetOverallAvg("fg3").ToString("F1")</MudText>
-                        <MudText Typo="Typo.caption">Avg 3PM</MudText>
-                    </MudPaper>
-                </MudStack>
-            }
-        </MudPaper>
-    }
-    else if (!_isLoading && _searchCompleted)
-    {
-        <MudAlert Severity="Severity.Info">
-            No hit rate data found. Try searching for a player or adjusting filters.
-        </MudAlert>
-    }
-</MudContainer>
+            <!-- Full Table -->
+            <TwCard Color="slate" Class="overflow-hidden mb-8">
+                <div class="overflow-x-auto max-h-[600px]">
+                    <TwTable>
+                        <HeaderContent>
+                            <TwTh>Player</TwTh>
+                            <TwTh>Team</TwTh>
+                            <TwTh Class="text-center">L5</TwTh>
+                            <TwTh Class="text-center">L10</TwTh>
+                            <TwTh Class="text-center">Season</TwTh>
+                            <TwTh Class="text-center">Avg</TwTh>
+                            <TwTh Class="text-center">Trend</TwTh>
+                        </HeaderContent>
+                        <ChildContent>
+                            @foreach (var player in _hitRates)
+                            {
+                                <TwTr>
+                                    <TwTd>
+                                        <TwLink Href="@($"/nba-player-profiles?player={Uri.EscapeDataString(player.PlayerName)}")">
+                                            @player.PlayerName
+                                        </TwLink>
+                                    </TwTd>
+                                    <TwTd>@player.Team</TwTd>
+                                    <TwTd Class="text-center">
+                                        <TwChip Size="sm" Color="@GetRateColorName(player.Last5Rate)">
+                                            @player.Last5Hits/@player.Last5Games
+                                        </TwChip>
+                                    </TwTd>
+                                    <TwTd Class="text-center">
+                                        <TwChip Size="sm" Color="@GetRateColorName(player.Last10Rate)">
+                                            @player.Last10Hits/@player.Last10Games
+                                        </TwChip>
+                                    </TwTd>
+                                    <TwTd Class="text-center">
+                                        <TwChip Size="sm" Color="@GetRateColorName(player.SeasonRate)">
+                                            @player.SeasonRate.ToString("P0")
+                                        </TwChip>
+                                    </TwTd>
+                                    <TwTd Class="text-center font-bold text-white">
+                                        @player.SeasonAvg.ToString("F1")
+                                    </TwTd>
+                                    <TwTd Class="text-center">
+                                        @if (player.Last5Rate > player.SeasonRate)
+                                        {
+                                            <svg class="w-5 h-5 text-emerald-500 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                                            </svg>
+                                        }
+                                        else if (player.Last5Rate < player.SeasonRate)
+                                        {
+                                            <svg class="w-5 h-5 text-rose-500 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"></path>
+                                            </svg>
+                                        }
+                                        else
+                                        {
+                                            <svg class="w-5 h-5 text-slate-500 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14"></path>
+                                            </svg>
+                                        }
+                                    </TwTd>
+                                </TwTr>
+                            }
+                        </ChildContent>
+                    </TwTable>
+                </div>
+
+                <!-- Averages Summary -->
+                <div class="mt-6 pt-6 border-t border-slate-700">
+                    <h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-4 flex items-center">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                        Season Averages (Selected Players)
+                    </h4>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="bg-slate-800/50 rounded-lg p-3 text-center border border-slate-700">
+                            <div class="text-xl font-bold text-indigo-400">@GetOverallAvg("pts").ToString("F1")</div>
+                            <div class="text-xs text-slate-500">Avg Points</div>
+                        </div>
+                        <div class="bg-slate-800/50 rounded-lg p-3 text-center border border-slate-700">
+                            <div class="text-xl font-bold text-emerald-400">@GetOverallAvg("reb").ToString("F1")</div>
+                            <div class="text-xs text-slate-500">Avg Rebounds</div>
+                        </div>
+                        <div class="bg-slate-800/50 rounded-lg p-3 text-center border border-slate-700">
+                            <div class="text-xl font-bold text-amber-400">@GetOverallAvg("ast").ToString("F1")</div>
+                            <div class="text-xs text-slate-500">Avg Assists</div>
+                        </div>
+                        <div class="bg-slate-800/50 rounded-lg p-3 text-center border border-slate-700">
+                            <div class="text-xl font-bold text-blue-400">@GetOverallAvg("fg3").ToString("F1")</div>
+                            <div class="text-xs text-slate-500">Avg 3PM</div>
+                        </div>
+                    </div>
+                </div>
+            </TwCard>
+        }
+        else if (!_isLoading && _searchCompleted)
+        {
+            <TwAlert Severity="info" Class="max-w-md mx-auto">
+                No hit rate data found. Try searching for a player or adjusting filters.
+            </TwAlert>
+        }
+    </TwContainer>
+</div>
 
 @code {
     private string _searchPlayer = "";
@@ -213,6 +227,16 @@
     private List<int> _availableSeasons = new() { 2025, 2024, 2023 };
     private List<HitRateResult> _hitRates = new();
     private List<GameResult> _allGameResults = new(); // For computing multi-stat averages
+    
+    private List<KeyValuePair<string, string>> _statOptions = new()
+    {
+        new("Points", "pts"),
+        new("Rebounds", "reb"),
+        new("Assists", "ast"),
+        new("3-Pointers Made", "fg3"),
+        new("Steals", "stl"),
+        new("Blocks", "blk")
+    };
     
     protected override async Task OnInitializedAsync()
     {
@@ -275,7 +299,7 @@
             var response = await Http.GetAsync(url);
             if (!response.IsSuccessStatusCode)
             {
-                Snackbar.Add("Error loading game data", Severity.Error);
+                // Simplified error handling
                 _hitRates = new();
                 _searchCompleted = true;
                 return;
@@ -340,7 +364,7 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            Console.WriteLine($"Error: {ex.Message}");
             _hitRates = new();
         }
         finally
@@ -349,18 +373,25 @@
         }
     }
     
-    private Color GetRateColor(double rate)
+    private string GetRateColorName(double rate)
     {
-        if (rate >= 0.80) return Color.Success;
-        if (rate >= 0.60) return Color.Warning;
-        return Color.Error;
+        if (rate >= 0.80) return "emerald";
+        if (rate >= 0.60) return "amber";
+        return "rose";
     }
     
-    private string GetCardStyle(double rate)
+    private string GetBorderClass(double rate)
     {
-        if (rate >= 0.80) return "border-left: 4px solid var(--mud-palette-success);";
-        if (rate >= 0.60) return "border-left: 4px solid var(--mud-palette-warning);";
-        return "border-left: 4px solid var(--mud-palette-error);";
+        if (rate >= 0.80) return "border-emerald-500";
+        if (rate >= 0.60) return "border-amber-500";
+        return "border-rose-500";
+    }
+    
+    private string GetTextClass(double rate)
+    {
+        if (rate >= 0.80) return "text-emerald-400";
+        if (rate >= 0.60) return "text-amber-400";
+        return "text-rose-400";
     }
     
     private string GetStatLabel(string stat) => stat switch
