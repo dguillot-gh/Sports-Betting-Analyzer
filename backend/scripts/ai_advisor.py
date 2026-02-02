@@ -34,11 +34,15 @@ class AIAdvisor:
                 results["engines"] = ai_data.get("predictions", {})
                 
                 # Fetch SportsbookWire as third opinion for NBA
+                results["third_opinion"] = {"status": "Searching SportsbookWire..."}
                 try:
                     sbw_service = get_sportsbookwire_service()
-                    results["third_opinion"] = await sbw_service.get_picks(home_team, away_team)
+                    scraped_data = await sbw_service.get_picks(home_team, away_team)
+                    if scraped_data:
+                        results["third_opinion"] = scraped_data
                 except Exception as sbwe:
                     logger.error(f"SportsbookWire fetch failed: {sbwe}")
+                    results["third_opinion"] = {"status": f"Scraper error: {str(sbwe)}"}
             elif sport.lower() == "nfl":
                 ai_data = get_nfl_ai_predictions(home_team, away_team, stats.get("home", {}), stats.get("away", {}))
                 results["engines"] = ai_data.get("engines", {})
@@ -52,10 +56,14 @@ class AIAdvisor:
             logger.error(f"Error getting multi-engine predictions for {sport}: {e}")
 
         # 2. Get LLM Insight (Gemini)
-        # We enrich the stats with the engine results so Gemini can reference SHAP factors etc.
+        # We enrich the stats with the engine results + third opinion so Gemini can reference them
         try:
             gemini = get_gemini_predictor()
-            analysis_stats = {**stats, "ml_engines": results["engines"]}
+            analysis_stats = {
+                **stats, 
+                "ml_engines": results["engines"],
+                "third_opinion": results["third_opinion"]
+            }
             results["llm_insight"] = await gemini.get_insight(sport, home_team, away_team, analysis_stats, game_date=results["timestamp"], short_prompt=short_prompt)
         except Exception as e:
             logger.error(f"Error getting Gemini insight: {e}")

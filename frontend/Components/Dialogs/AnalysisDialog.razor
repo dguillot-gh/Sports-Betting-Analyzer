@@ -135,6 +135,15 @@
                             </div>
                             
                             <MudGrid>
+                                @if (thirdOpinion.TryGetProperty("status", out var status) && status.GetString() != "Success" && status.GetString() != "Searching SportsbookWire...")
+                                {
+                                    <MudItem xs="12">
+                                        <MudAlert Severity="Severity.Warning" Dense="true" Icon="@Icons.Material.Filled.Warning" Class="mt-1">
+                                            @status.GetString()
+                                        </MudAlert>
+                                    </MudItem>
+                                }
+
                                 <MudItem xs="12" md="4">
                                     <MudPaper Outlined="true" Class="pa-2">
                                         <MudText Typo="Typo.caption" Color="Color.Primary">Moneyline</MudText>
@@ -172,9 +181,22 @@
                                 @if (thirdOpinion.TryGetProperty("summary", out var summary))
                                 {
                                     <MudItem xs="12">
-                                        <MudAlert Severity="Severity.Info" Dense="true" Icon="@Icons.Material.Filled.Info" Class="mt-2">
-                                            @summary.GetString()
-                                        </MudAlert>
+                                        <div class="d-flex justify-space-between align-center mt-2">
+                                            <MudAlert Severity="Severity.Info" Dense="true" Icon="@Icons.Material.Filled.Info" Class="flex-grow-1 mr-4">
+                                                @summary.GetString()
+                                            </MudAlert>
+                                            @if (thirdOpinion.TryGetProperty("article_url", out var link))
+                                            {
+                                                <MudButton Variant="Variant.Outlined" 
+                                                           Color="Color.Info" 
+                                                           Size="Size.Small"
+                                                           Href="@link.GetString()" 
+                                                           Target="_blank"
+                                                           StartIcon="@Icons.Material.Filled.OpenInNew">
+                                                    Source
+                                                </MudButton>
+                                            }
+                                        </div>
                                     </MudItem>
                                 }
                             </MudGrid>

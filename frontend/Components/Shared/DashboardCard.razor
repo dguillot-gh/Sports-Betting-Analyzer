@@ -1,0 +1,41 @@
+@namespace SportsBettingAnalyzer.Components.Shared
+
+<div class="group bg-slate-900 border border-slate-800 rounded-3xl p-6 transition-all hover:border-@(Color)-500/50 hover:shadow-2xl hover:shadow-@(Color)-900/10 hover:-translate-y-1 relative overflow-hidden @Class">
+    
+    @if (!string.IsNullOrEmpty(Title) || HeaderContent != null)
+    {
+        <div class="flex justify-between items-center mb-6">
+            @if (HeaderContent != null)
+            {
+                @HeaderContent
+            }
+            else
+            {
+                <span class="bg-slate-800 text-slate-400 text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full border border-slate-700">
+                    @Title
+                </span>
+            }
+            
+            @if (StatusContent != null)
+            {
+                @StatusContent
+            }
+        </div>
+    }
+
+    <div class="relative z-10">
+        @ChildContent
+    </div>
+
+    <!-- Background Glow Accent -->
+    <div class="absolute bottom-0 right-0 w-24 h-24 bg-@(Color)-500/5 blur-[80px] group-hover:bg-@(Color)-500/10 transition-colors pointer-events-none"></div>
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string Color { get; set; } = "blue"; // blue, emerald, amber, etc.
+    [Parameter] public string Class { get; set; } = "";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? HeaderContent { get; set; }
+    [Parameter] public RenderFragment? StatusContent { get; set; }
+}
