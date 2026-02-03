@@ -4,17 +4,7 @@
 <NavLink href="@Href" Match="@Match" class="@ComputedClass">
     @if (!string.IsNullOrEmpty(Icon))
     {
-        <svg class="mr-3 h-5 w-5 flex-shrink-0 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-             @* 
-               Here we assume the Icon string is an SVG path d="..." 
-               However, MudBlazor uses material icon strings like 'Filled.Home'.
-               We'll need to handle that or expect SVG paths.
-               For now, let's assume we will convert icons to SVG paths in the usage side, 
-               or built a helper. 
-               SAFE APPROACH: Expect SVG Path data for now to match other Tw components.
-             *@
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="@Icon"></path>
-        </svg>
+        <TwIcon Icon="@Icon" Class="mr-3 h-5 w-5 flex-shrink-0 opacity-75" />
     }
     <span class="flex-1 truncate">@ChildContent</span>
 </NavLink>

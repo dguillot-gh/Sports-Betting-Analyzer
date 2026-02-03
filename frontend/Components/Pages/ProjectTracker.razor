@@ -1,185 +1,275 @@
 @page "/project-tracker"
-@using MudBlazor
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
 @using System.Net.Http.Json
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IConfiguration Configuration
+@implements IDisposable
 @rendermode InteractiveServer
 
 <PageTitle>Project Tracker - Sports Betting Analyzer</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <MudStack Spacing="4">
-        <MudPaper Class="pa-4" Elevation="3" Style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+<TwContainer MaxWidth="large" Class="mt-8">
+    <div class="space-y-6">
+        <!-- Header Card with Gradient -->
+        <TwCard Class="p-8 border-none shadow-xl bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900">
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-6">
                 <div>
-                    <MudText Typo="Typo.h4" Style="color: white;">
-                        <MudIcon Icon="@Icons.Material.Filled.RocketLaunch" Class="mr-2" />
+                    <h1 class="text-3xl font-extrabold text-white flex items-center gap-3">
+                        <TwIcon Icon="M15.59 14.37a6 6 0 01-5.84 0M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" Class="w-10 h-10 text-blue-400" />
                         Project Tracker
-                    </MudText>
-                    <MudText Typo="Typo.subtitle1" Style="color: #94a3b8;">Track bugs, feature requests, and the product roadmap.</MudText>
+                    </h1>
+                    <p class="text-blue-100/60 mt-1 font-medium">Track bugs, feature requests, and the product roadmap.</p>
                 </div>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenAddDialog">
+                <TwButton Variant="primary" Color="blue" OnClick="OpenAddDialog" Class="px-6 py-3 font-bold shadow-lg shadow-blue-500/20">
+                    <TwIcon Icon="M12 4v16m8-8H4" Class="w-5 h-5 mr-2" />
                     New Item
-                </MudButton>
-            </MudStack>
-        </MudPaper>
+                </TwButton>
+            </div>
+        </TwCard>
 
-        <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6" Color="Color.Surface">
-            @* Roadmap Tab *@
-            <MudTabPanel Text="Roadmap" Icon="@Icons.Material.Filled.Map">
-                <MudText Typo="Typo.h6" Class="mb-3" Style="color: #60a5fa;">
-                    <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Class="mr-1" /> Feature Requests & Ideas
-                </MudText>
-                <MudDataGrid T="TrackerItem" Items="@_items.Where(b => b.Type == "Feature")" Filterable="true" SortMode="SortMode.Multiple" Hover="true" Dense="true">
-                    <Columns>
-                        <PropertyColumn Property="x => x.Priority" Title="Priority">
-                            <CellTemplate>
-                                <MudChip T="string" Color="@GetPriorityColor(context.Item.Priority)" Size="Size.Small" Variant="Variant.Filled">@context.Item.Priority</MudChip>
-                            </CellTemplate>
-                        </PropertyColumn>
-                        <PropertyColumn Property="x => x.Title" Title="Feature" />
-                        <PropertyColumn Property="x => x.Description" Title="Description" />
-                        <TemplateColumn Title="Status">
-                            <CellTemplate>
-                                <MudSelect T="string" Value="@context.Item.Status" ValueChanged="@(v => UpdateStatus(context.Item.Id, v))" Dense="true" Variant="Variant.Text" Margin="Margin.None">
-                                    <MudSelectItem Value="@("New")">📋 Backlog</MudSelectItem>
-                                    <MudSelectItem Value="@("In Progress")">🚀 In Progress</MudSelectItem>
-                                    <MudSelectItem Value="@("Testing")">🧪 Testing</MudSelectItem>
-                                    <MudSelectItem Value="@("Resolved")">✅ Done</MudSelectItem>
-                                </MudSelect>
-                            </CellTemplate>
-                        </TemplateColumn>
-                        <TemplateColumn CellClass="d-flex justify-end">
-                            <CellTemplate>
-                                <MudTooltip Text="Generate Gemini Prompt">
-                                    <MudIconButton Size="@Size.Small" Icon="@Icons.Material.Filled.AutoFixHigh" Color="Color.Secondary" OnClick="@(() => GenerateGeminiPrompt(context.Item))" />
-                                </MudTooltip>
-                                <MudIconButton Size="@Size.Small" Icon="@Icons.Material.Filled.Edit" OnClick="@(() => OpenEditDialog(context.Item))" />
-                                <MudIconButton Size="@Size.Small" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteItem(context.Item.Id))" />
-                            </CellTemplate>
-                        </TemplateColumn>
-                    </Columns>
-                    <NoRecordsContent>
-                        <MudText>No feature requests yet. Add one to get started!</MudText>
-                    </NoRecordsContent>
-                </MudDataGrid>
-            </MudTabPanel>
+        <!-- Tabs -->
+        <TwTabs HeaderClass="px-8">
+            <TwTabPanel Title="Roadmap" TabIcon="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7">
+                <div class="px-8 space-y-4">
+                    <div class="flex items-center gap-2 mb-2">
+                        <TwIcon Icon="M13 10V3L4 14h7v7l9-11h-7z" Class="w-5 h-5 text-blue-400" />
+                        <h2 class="text-xl font-bold text-white">Feature Requests & Ideas</h2>
+                    </div>
+                    
+                    <TwTable TItem="object">
+                        <thead>
+                            <TwTr>
+                                <TwTh>Priority</TwTh>
+                                <TwTh>Feature</TwTh>
+                                <TwTh>Description</TwTh>
+                                <TwTh>Status</TwTh>
+                                <TwTh Class="text-right">Actions</TwTh>
+                            </TwTr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in _items.Where(b => b.Type == "Feature" && b.Status != "Resolved"))
+                            {
+                                <TwTr>
+                                    <TwTd>
+                                        <TwChip Color="@GetPriorityColor(item.Priority)" Size="sm">@item.Priority</TwChip>
+                                    </TwTd>
+                                    <TwTd Class="font-bold text-white">@item.Title</TwTd>
+                                    <TwTd Class="text-slate-400 max-w-xs truncate">@item.Description</TwTd>
+                                    <TwTd>
+                                        <select value="@item.Status" @onchange="@(e => UpdateStatus(item.Id, e.Value?.ToString() ?? "New"))" 
+                                                class="bg-slate-900 border border-slate-700 text-slate-300 text-xs rounded p-1 focus:ring-blue-500 focus:border-blue-500 block w-full">
+                                            <option value="New">📋 Backlog</option>
+                                            <option value="In Progress">🚀 In Progress</option>
+                                            <option value="Testing">🧪 Testing</option>
+                                            <option value="Resolved">✅ Done</option>
+                                        </select>
+                                    </TwTd>
+                                    <TwTd Class="text-right">
+                                        <div class="flex justify-end gap-1">
+                                            <button title="Generate AI Prompt" @onclick="@(() => GenerateGeminiPrompt(item))" class="p-1.5 text-purple-400 hover:bg-purple-400/10 rounded transition-colors">
+                                                <TwIcon Icon="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" Class="w-4 h-4" />
+                                            </button>
+                                            <button title="Edit" @onclick="@(() => OpenEditDialog(item))" class="p-1.5 text-slate-400 hover:bg-slate-400/10 rounded transition-colors">
+                                                <TwIcon Icon="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" Class="w-4 h-4" />
+                                            </button>
+                                            <button title="Delete" @onclick="@(() => DeleteItem(item.Id))" class="p-1.5 text-red-400 hover:bg-red-400/10 rounded transition-colors">
+                                                <TwIcon Icon="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" Class="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </TwTd>
+                                </TwTr>
+                            }
+                            @if (!_items.Any(b => b.Type == "Feature" && b.Status != "Resolved"))
+                            {
+                                <TwTr>
+                                    <TwTd colspan="5" Class="text-center py-12 text-slate-500">No feature requests yet. Add one to get started!</TwTd>
+                                </TwTr>
+                            }
+                        </tbody>
+                    </TwTable>
+                </div>
+            </TwTabPanel>
 
-            @* Bugs Tab *@
-            <MudTabPanel Text="Active Bugs" Icon="@Icons.Material.Filled.BugReport">
-                <MudDataGrid T="TrackerItem" Items="@_items.Where(b => b.Type == "Bug" && b.Status != "Resolved")" Filterable="true" SortMode="SortMode.Multiple" Hover="true">
-                    <Columns>
-                        <PropertyColumn Property="x => x.Severity" Title="Severity">
-                            <CellTemplate>
-                                <MudChip T="string" Color="@GetSeverityColor(context.Item.Severity)" Size="Size.Small" Variant="Variant.Filled">@context.Item.Severity</MudChip>
-                            </CellTemplate>
-                        </PropertyColumn>
-                        <PropertyColumn Property="x => x.Title" Title="Title" />
-                        <PropertyColumn Property="x => x.CreatedAt" Title="Reported" />
-                        <TemplateColumn Title="Status">
-                            <CellTemplate>
-                                <MudSelect T="string" Value="@context.Item.Status" ValueChanged="@(v => UpdateStatus(context.Item.Id, v))" Dense="true" Variant="Variant.Text" Margin="Margin.None">
-                                    <MudSelectItem Value="@("New")">New</MudSelectItem>
-                                    <MudSelectItem Value="@("In Progress")">In Progress</MudSelectItem>
-                                    <MudSelectItem Value="@("Testing")">Testing</MudSelectItem>
-                                    <MudSelectItem Value="@("Resolved")">Resolved</MudSelectItem>
-                                </MudSelect>
-                            </CellTemplate>
-                        </TemplateColumn>
-                        <TemplateColumn CellClass="d-flex justify-end">
-                            <CellTemplate>
-                                <MudIconButton Size="@Size.Small" Icon="@Icons.Material.Filled.Edit" OnClick="@(() => OpenEditDialog(context.Item))" />
-                                <MudIconButton Size="@Size.Small" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteItem(context.Item.Id))" />
-                                <MudIconButton Size="@Size.Small" Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" OnClick="@(() => UpdateStatus(context.Item.Id, "Resolved"))" Title="Quick Resolve" />
-                            </CellTemplate>
-                        </TemplateColumn>
-                    </Columns>
-                    <NoRecordsContent>
-                        <MudText>No active bugs found. Great job!</MudText>
-                    </NoRecordsContent>
-                </MudDataGrid>
-            </MudTabPanel>
+            <TwTabPanel Title="Active Bugs" TabIcon="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" BadgeContent="@(_items?.Count(b => b.Type == "Bug" && b.Status != "Resolved").ToString() ?? "0")">
+                <div class="px-8 space-y-4">
+                    <div class="flex items-center gap-2 mb-2">
+                        <TwIcon Icon="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" Class="w-5 h-5 text-red-400" />
+                        <h2 class="text-xl font-bold text-white">Identified Issues</h2>
+                    </div>
+
+                    <TwTable TItem="object">
+                        <thead>
+                            <TwTr>
+                                <TwTh>Severity</TwTh>
+                                <TwTh>Bug Title</TwTh>
+                                <TwTh>Reported</TwTh>
+                                <TwTh>Status</TwTh>
+                                <TwTh Class="text-right">Actions</TwTh>
+                            </TwTr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in _items.Where(b => b.Type == "Bug" && b.Status != "Resolved"))
+                            {
+                                <TwTr>
+                                    <TwTd>
+                                        <TwChip Color="@GetSeverityColor(item.Severity)" Size="sm">@item.Severity</TwChip>
+                                    </TwTd>
+                                    <TwTd Class="font-bold text-white">@item.Title</TwTd>
+                                    <TwTd Class="text-slate-500 text-xs text-nowrap">@item.CreatedAt.ToShortDateString()</TwTd>
+                                    <TwTd>
+                                        <select value="@item.Status" @onchange="@(e => UpdateStatus(item.Id, e.Value?.ToString() ?? "New"))" 
+                                                class="bg-slate-900 border border-slate-700 text-slate-300 text-xs rounded p-1 focus:ring-blue-500 focus:border-blue-500 block w-full">
+                                            <option value="New">New</option>
+                                            <option value="In Progress">In Progress</option>
+                                            <option value="Testing">Testing</option>
+                                            <option value="Resolved">Resolved</option>
+                                        </select>
+                                    </TwTd>
+                                    <TwTd Class="text-right">
+                                        <div class="flex justify-end gap-1">
+                                            <button title="Quick Resolve" @onclick="@(() => UpdateStatus(item.Id, "Resolved"))" class="p-1.5 text-emerald-400 hover:bg-emerald-400/10 rounded transition-colors">
+                                                <TwIcon Icon="M5 13l4 4L19 7" Class="w-4 h-4" />
+                                            </button>
+                                            <button title="Edit" @onclick="@(() => OpenEditDialog(item))" class="p-1.5 text-slate-400 hover:bg-slate-400/10 rounded transition-colors">
+                                                <TwIcon Icon="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" Class="w-4 h-4" />
+                                            </button>
+                                            <button title="Delete" @onclick="@(() => DeleteItem(item.Id))" class="p-1.5 text-red-400 hover:bg-red-400/10 rounded transition-colors">
+                                                <TwIcon Icon="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" Class="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </TwTd>
+                                </TwTr>
+                            }
+                            @if (!_items.Any(b => b.Type == "Bug" && b.Status != "Resolved"))
+                            {
+                                <TwTr>
+                                    <TwTd colspan="5" Class="text-center py-12 text-slate-500 font-medium">No active bugs found. Great job!</TwTd>
+                                </TwTr>
+                            }
+                        </tbody>
+                    </TwTable>
+                </div>
+            </TwTabPanel>
+
+            <TwTabPanel Title="Completed" TabIcon="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" BadgeContent="@(_items?.Count(b => b.Status == "Resolved").ToString() ?? "0")">
+                <div class="px-8 space-y-4">
+                    <div class="flex items-center gap-2 mb-2">
+                        <TwIcon Icon="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-5 h-5 text-emerald-400" />
+                        <h2 class="text-xl font-bold text-white">Finished Tasks</h2>
+                    </div>
+
+                    <TwTable TItem="object">
+                        <thead>
+                            <TwTr>
+                                <TwTh>Type</TwTh>
+                                <TwTh>Item</TwTh>
+                                <TwTh>Completed</TwTh>
+                                <TwTh Class="text-right">Action</TwTh>
+                            </TwTr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in _items.Where(b => b.Status == "Resolved"))
+                            {
+                                <TwTr>
+                                    <TwTd>
+                                        <TwChip Color="@(item.Type == "Bug" ? "red" : "blue")" Size="sm">@item.Type</TwChip>
+                                    </TwTd>
+                                    <TwTd Class="font-medium text-slate-300">@item.Title</TwTd>
+                                    <TwTd class="text-slate-500 text-xs">@item.CreatedAt.ToShortDateString()</TwTd>
+                                    <TwTd Class="text-right">
+                                        <button @onclick="@(() => UpdateStatus(item.Id, "New"))" class="text-blue-400 hover:text-blue-300 text-xs font-bold transition-colors">
+                                            Re-open
+                                        </button>
+                                    </TwTd>
+                                </TwTr>
+                            }
+                            @if (!_items.Any(b => b.Status == "Resolved"))
+                            {
+                                <TwTr>
+                                    <TwTd colspan="4" Class="text-center py-12 text-slate-500">Nothing resolved yet. Keep pushing!</TwTd>
+                                </TwTr>
+                            }
+                        </tbody>
+                    </TwTable>
+                </div>
+            </TwTabPanel>
+        </TwTabs>
+    </div>
+</TwContainer>
+
+<!-- Add/Edit Dialog -->
+<TwDialog @bind-IsOpen="_dialogOpen" Title="@(_isEdit ? "Edit Item" : "New Item")" MaxWidth="lg">
+    <ChildContent>
+        <div class="space-y-6">
+            <TwInput @bind-Value="_currentItem.Title" Label="Title" Placeholder="e.g. CLV Tracker Dashboard" Required="true" FullWidth="true" />
             
-            @* Resolved Tab *@
-            <MudTabPanel Text="Completed" Icon="@Icons.Material.Filled.CheckCircle">
-                <MudDataGrid T="TrackerItem" Items="@_items.Where(b => b.Status == "Resolved")" Hover="true">
-                    <Columns>
-                        <PropertyColumn Property="x => x.Type" Title="Type" />
-                        <PropertyColumn Property="x => x.Title" Title="Item" />
-                        <PropertyColumn Property="x => x.CreatedAt" Title="Created" />
-                        <TemplateColumn Title="Actions">
-                            <CellTemplate>
-                                <MudButton Size="@Size.Small" Variant="Variant.Outlined" OnClick="@(() => UpdateStatus(context.Item.Id, "New"))">Re-open</MudButton>
-                            </CellTemplate>
-                        </TemplateColumn>
-                    </Columns>
-                </MudDataGrid>
-            </MudTabPanel>
-        </MudTabs>
-    </MudStack>
-</MudContainer>
+            <div class="space-y-1.5">
+                <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">Description</label>
+                <textarea @bind="_currentItem.Description" rows="4" 
+                          placeholder="Describe the feature or bug..."
+                          class="bg-slate-950 border border-slate-800 text-slate-200 text-sm rounded-xl focus:ring-blue-500/50 focus:border-blue-500 block w-full p-4 placeholder-slate-600 transition-all outline-none resize-none"></textarea>
+            </div>
 
-@* Add/Edit Dialog *@
-<MudDialog @bind-Visible="_dialogOpen" Options="new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true }">
-    <TitleContent>
-        <MudText Typo="Typo.h6">@(_isEdit ? "Edit Item" : "New Item")</MudText>
-    </TitleContent>
-    <DialogContent>
-        <MudStack Spacing="3">
-            <MudTextField @bind-Value="_currentItem.Title" Label="Title" Required="true" Variant="Variant.Outlined" Placeholder="e.g. CLV Tracker Dashboard" />
-            <MudTextField @bind-Value="_currentItem.Description" Label="Description" Lines="3" Variant="Variant.Outlined" Placeholder="Describe the feature or bug..." />
-            <MudSelect @bind-Value="_currentItem.Type" Label="Type" Variant="Variant.Outlined">
-                <MudSelectItem Value="@("Bug")">🐛 Bug</MudSelectItem>
-                <MudSelectItem Value="@("Feature")">✨ Feature Request</MudSelectItem>
-                <MudSelectItem Value="@("UI")">🎨 UI Tweak</MudSelectItem>
-            </MudSelect>
-            @if (_currentItem.Type == "Feature")
-            {
-                <MudSelect @bind-Value="_currentItem.Priority" Label="Priority" Variant="Variant.Outlined">
-                    <MudSelectItem Value="@("Critical")">🔥 Critical</MudSelectItem>
-                    <MudSelectItem Value="@("High")">⬆️ High</MudSelectItem>
-                    <MudSelectItem Value="@("Medium")">➡️ Medium</MudSelectItem>
-                    <MudSelectItem Value="@("Low")">⬇️ Low</MudSelectItem>
-                </MudSelect>
-            }
-            else
-            {
-                <MudSelect @bind-Value="_currentItem.Severity" Label="Severity" Variant="Variant.Outlined">
-                    <MudSelectItem Value="@("Low")">Low</MudSelectItem>
-                    <MudSelectItem Value="@("Medium")">Medium</MudSelectItem>
-                    <MudSelectItem Value="@("High")">High</MudSelectItem>
-                    <MudSelectItem Value="@("Critical")">Critical</MudSelectItem>
-                </MudSelect>
-            }
-        </MudStack>
-    </DialogContent>
-    <DialogActions>
-        <MudButton OnClick="@(() => _dialogOpen = false)">Cancel</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveItem">Save</MudButton>
-    </DialogActions>
-</MudDialog>
+            <TwGrid Columns="2" Gap="4">
+                <TwSelect TValue="string" @bind-Value="_currentItem.Type" Label="Type" FullWidth="true">
+                    <option value="Bug">🐛 Bug</option>
+                    <option value="Feature">✨ Feature Request</option>
+                    <option value="UI">🎨 UI Tweak</option>
+                </TwSelect>
 
-@* Gemini Prompt Dialog *@
-<MudDialog @bind-Visible="_promptDialogOpen" Options="new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true }">
+                @if (_currentItem.Type == "Feature")
+                {
+                    <TwSelect TValue="string" @bind-Value="_currentItem.Priority" Label="Priority" FullWidth="true">
+                        <option value="Critical">🔥 Critical</option>
+                        <option value="High">⬆️ High</option>
+                        <option value="Medium">➡️ Medium</option>
+                        <option value="Low">⬇️ Low</option>
+                    </TwSelect>
+                }
+                else
+                {
+                    <TwSelect TValue="string" @bind-Value="_currentItem.Severity" Label="Severity" FullWidth="true">
+                        <option value="Low">Low</option>
+                        <option value="Medium">Medium</option>
+                        <option value="High">High</option>
+                        <option value="Critical">Critical</option>
+                    </TwSelect>
+                }
+            </TwGrid>
+        </div>
+    </ChildContent>
+    <ActionsContent>
+        <TwButton Variant="outline" OnClick="@(() => _dialogOpen = false)">Cancel</TwButton>
+        <TwButton Variant="primary" OnClick="SaveItem">Save Changes</TwButton>
+    </ActionsContent>
+</TwDialog>
+
+<!-- Gemini Prompt Dialog -->
+<TwDialog @bind-IsOpen="_promptDialogOpen" Title="LLM Implementation Prompt" MaxWidth="xl">
     <TitleContent>
-        <MudStack Row="true" AlignItems="AlignItems.Center">
-            <MudIcon Icon="@Icons.Material.Filled.AutoFixHigh" Color="Color.Secondary" Class="mr-2" />
-            <MudText Typo="Typo.h6">LLM Implementation Prompt</MudText>
-        </MudStack>
+         <div class="flex items-center gap-2">
+            <TwIcon Icon="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" Class="w-6 h-6 text-purple-400" />
+            <h3 class="text-xl font-bold text-white">AI Implementation Prompt</h3>
+        </div>
     </TitleContent>
-    <DialogContent>
-        <MudText Typo="Typo.body2" Class="mb-2" Style="color: #94a3b8;">Copy this prompt into Gemini or your AI assistant to implement this feature:</MudText>
-        <MudPaper Class="pa-4" Elevation="0" Style="background: #1e293b; border-radius: 8px;">
-            <MudText Style="font-family: monospace; white-space: pre-wrap; color: #e2e8f0; font-size: 0.85rem;">@_generatedPrompt</MudText>
-        </MudPaper>
-    </DialogContent>
-    <DialogActions>
-        <MudButton OnClick="@(() => _promptDialogOpen = false)">Close</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.ContentCopy" OnClick="CopyPromptToClipboard">Copy to Clipboard</MudButton>
-    </DialogActions>
-</MudDialog>
+    <ChildContent>
+        <p class="text-slate-400 text-sm mb-4 font-medium">Copy this prompt into Gemini or your AI assistant to implement this feature:</p>
+        <div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-inner group relative">
+            <pre class="whitespace-pre-wrap font-mono text-xs text-blue-100/70 leading-relaxed overflow-x-auto h-64 overflow-y-auto custom-scrollbar">@_generatedPrompt</pre>
+            <div class="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                 <TwButton Variant="outline" Size="sm" OnClick="CopyPromptToClipboard">
+                    <TwIcon Icon="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" Class="w-4 h-4" />
+                 </TwButton>
+            </div>
+        </div>
+    </ChildContent>
+    <ActionsContent>
+        <TwButton Variant="ghost" OnClick="@(() => _promptDialogOpen = false)">Close</TwButton>
+        <TwButton Variant="primary" Color="purple" OnClick="CopyPromptToClipboard">Copy Prompt</TwButton>
+    </ActionsContent>
+</TwDialog>
 
 @code {
     private List<TrackerItem> _items = new();
@@ -189,6 +279,7 @@
     private TrackerItem _currentItem = new();
     private string _generatedPrompt = "";
     private string _apiBaseUrl = "http://backend:8000";
+    private bool _disposed = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -198,9 +289,11 @@
 
     private async Task LoadItems()
     {
+        if (_disposed) return;
         try
         {
             var response = await Http.GetFromJsonAsync<ItemResponse>($"{_apiBaseUrl}/bugs");
+            if (_disposed) return;
             if (response != null) 
             {
                 _items = response.Bugs.Select(b => new TrackerItem
@@ -215,11 +308,17 @@
                     CreatedAt = b.CreatedAt
                 }).ToList();
             }
+            StateHasChanged();
         }
         catch (Exception) 
         {
             // Silent fail if endpoint doesn't exist yet
         }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
     }
 
     private void OpenAddDialog()
@@ -329,14 +428,14 @@
 **Description:** {item.Description}
 
 ## Project Context
-- **Frontend:** Blazor WebAssembly with MudBlazor UI components
+- **Frontend:** Blazor Server with Tailwind CSS components
 - **Backend:** Python FastAPI with PostgreSQL database
 - **Location:** d:\repo (frontend in /frontend, backend in /backend)
 
 ## Instructions
 1. First, explore the existing codebase to understand the patterns used.
 2. Create any necessary API endpoints in the backend.
-3. Create or modify the frontend pages/components.
+3. Create or modify the frontend pages/components using the shared Tailwind library.
 4. Follow the existing code style and conventions.
 5. Ensure the feature integrates smoothly with existing functionality.
 
@@ -347,25 +446,22 @@ Please start by examining the relevant files and then provide an implementation 
 
     private async Task CopyPromptToClipboard()
     {
-        // Note: Clipboard API requires JS interop in Blazor
         Snackbar.Add("Prompt ready to copy (use Ctrl+A, Ctrl+C in the text area)", Severity.Info);
     }
 
-    private Color GetSeverityColor(string severity) => severity switch
+    private string GetSeverityColor(string severity) => severity switch
     {
-        "Critical" => Color.Error,
-        "High" => Color.Warning,
-        "Medium" => Color.Info,
-        _ => Color.Default
+        "Critical" or "High" => "red",
+        "Medium" => "amber",
+        _ => "slate"
     };
 
-    private Color GetPriorityColor(string priority) => priority switch
+    private string GetPriorityColor(string priority) => priority switch
     {
-        "Critical" => Color.Error,
-        "High" => Color.Warning,
-        "Medium" => Color.Primary,
-        "Low" => Color.Default,
-        _ => Color.Default
+        "Critical" => "red",
+        "High" => "orange",
+        "Medium" => "blue",
+        _ => "slate"
     };
 
     public class TrackerItem

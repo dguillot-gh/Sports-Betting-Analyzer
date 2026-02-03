@@ -115,7 +115,7 @@
                                 </HeaderContent>
                                 <ChildContent>
                                     <div class="overflow-x-auto">
-                                        <TwTable>
+                                        <TwTable TItem="object">
                                             <HeaderContent>
                                                 <TwTh>Date/Season</TwTh>
                                                 <TwTh>Team</TwTh>
@@ -212,10 +212,10 @@
     private bool _notFound = false;
     private string _activeTabId = "stats";
     
-    private List<TwTabs.TabItem> _tabs = new()
+    private List<TabItem> _tabs = new()
     {
-        new TwTabs.TabItem { Id = "stats", Label = "Season Stats" },
-        new TwTabs.TabItem { Id = "games", Label = "Recent Games" }
+        new TabItem { Id = "stats", Label = "Season Stats" },
+        new TabItem { Id = "games", Label = "Recent Games" }
     };
     
     private PlayerProfile? _profile;

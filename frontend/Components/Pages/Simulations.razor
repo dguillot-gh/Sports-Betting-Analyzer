@@ -11,846 +11,1084 @@
 @inject SimulationStateService SimulationState
 @inject FileExportService FileExportService
 
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
+
 <PageTitle>Race Simulations & Predictions</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
-    <MudText Typo="Typo.h4" GutterBottom="true">Season Simulations</MudText>
-    <MudText Typo="Typo.body1" Class="mb-4">Monte Carlo simulations for NASCAR, NFL, and NBA seasons</MudText>
+<TwContainer MaxWidth="extraLarge" Class="mt-8 px-4 pb-12">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-white flex items-center gap-3">
+            <TwIcon Icon="M13 10V3L4 14h7v7l9-11h-7z" Class="w-8 h-8 text-blue-500" />
+            Season Simulations
+        </h1>
+        <p class="text-slate-400 mt-1">Monte Carlo simulations for NASCAR, NFL, and NBA seasons</p>
+    </div>
 
-
-    <MudTabs @bind-ActivePanelIndex="_activeTab" Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+    <TwTabs @bind-ActivePanelIndex="_activeTab">
         <!-- Tab: NBA Season Simulator -->
-        <MudTabPanel Text="NBA Season" Icon="@Icons.Material.Filled.SportsBasketball">
-            <MudGrid>
-                <MudItem xs="12" md="4">
-                    <MudPaper Class="pa-4">
-                        <MudText Typo="Typo.h6" Class="mb-3">NBA Season Simulation</MudText>
-                        <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">
+        <TwTabPanel Title="NBA Season" TabIcon="@Icons.Material.Filled.SportsBasketball">
+            <TwGrid Columns="1" md="12" Gap="6">
+                <div class="md:col-span-4">
+                    <TwCard Class="p-6 bg-slate-900 border-slate-800">
+                        <h3 class="text-lg font-bold text-white mb-2">NBA Season Simulation</h3>
+                        <p class="text-slate-400 text-sm mb-6">
                             Monte Carlo simulation of NBA season. Uses Elo ratings to calculate playoff probabilities and seed distributions.
-                        </MudText>
+                        </p>
                         
-                        <MudNumericField @bind-Value="_nbaNumSimulations" Label="Simulations" 
-                                         Min="100" Max="10000" Step="100" Variant="Variant.Outlined" Class="mb-4" />
+                        <div class="mb-6">
+                            <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Number of Simulations</label>
+                            <input type="number" @bind="_nbaNumSimulations" min="100" max="10000" step="100" 
+                                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors" />
+                        </div>
                         
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" 
-                                   OnClick="RunNBASeasonSim" Disabled="@_nbaSeasonLoading">
-                            @if (_nbaSeasonLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
-                            @(_nbaSeasonLoading ? "Simulating..." : "Run Season Simulation")
-                        </MudButton>
+                        <TwButton Variant="primary" Class="w-full py-3" OnClick="RunNBASeasonSim" IsLoading="_nbaSeasonLoading" Disabled="@_nbaSeasonLoading">
+                            Run Season Simulation
+                        </TwButton>
                         
                         @if (_nbaSeasonResults != null)
                         {
-                            <MudAlert Severity="Severity.Success" Dense="true" Class="mt-3">
-                                @_nbaSeasonResults.Simulations simulations completed
-                            </MudAlert>
+                            <TwAlert Color="emerald" Class="mt-4 py-2">
+                                <span class="text-xs font-bold">@_nbaSeasonResults.Simulations simulations completed</span>
+                            </TwAlert>
                         }
-                    </MudPaper>
-                </MudItem>
-                <MudItem xs="12" md="8">
+                    </TwCard>
+                </div>
+                <div class="md:col-span-8">
                     @if (_nbaSeasonResults != null && _nbaSeasonResults.Results != null)
                     {
-                        <MudPaper Class="pa-4">
-                            <MudText Typo="Typo.h6" Class="mb-3">
-                                NBA Playoff Probabilities (@_nbaSeasonResults.GamesRemaining games remaining)
-                            </MudText>
+                        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                            <h3 class="text-lg font-bold text-white mb-6 flex items-center justify-between">
+                                Playoff Probabilities
+                                <span class="text-xs font-normal text-slate-500 italic">@_nbaSeasonResults.GamesRemaining games remaining</span>
+                            </h3>
                             
-                            <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-2">
-                                <MudTabPanel Text="Eastern">
-                                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
-                                        <thead>
-                                            <tr>
-                                                <th>Team</th>
-                                                <th>Current</th>
-                                                <th>Avg Wins</th>
-                                                <th>Playoff %</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            @foreach (var team in _nbaSeasonResults.Results.Where(r => r.Conference == "East").OrderByDescending(r => r.PlayoffPct).Take(15))
-                                            {
-                                                <tr>
-                                                    <td><strong>@team.Team</strong></td>
-                                                    <td>@team.CurrentWins-@team.CurrentLosses</td>
-                                                    <td>@team.AvgWins</td>
-                                                    <td style="color: @(team.PlayoffPct > 80 ? "#4caf50" : team.PlayoffPct > 50 ? "#ff9800" : "#f44336"); font-weight: bold;">
-                                                        @team.PlayoffPct%
-                                                    </td>
+                            <TwTabs Elevation="0">
+                                <TwTabPanel Title="Eastern Conference">
+                                    <div class="overflow-x-auto">
+                                        <table class="w-full text-left">
+                                            <thead>
+                                                <tr class="text-slate-500 text-[10px] uppercase tracking-widest border-b border-slate-800">
+                                                    <th class="pb-3 px-2">Team</th>
+                                                    <th class="pb-3 px-2 border-b border-slate-800">Record</th>
+                                                    <th class="pb-3 px-2 border-b border-slate-800">Avg Wins</th>
+                                                    <th class="pb-3 px-2 text-right border-b border-slate-800">Playoff %</th>
                                                 </tr>
-                                            }
-                                        </tbody>
-                                    </MudSimpleTable>
-                                </MudTabPanel>
-                                <MudTabPanel Text="Western">
-                                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
-                                        <thead>
-                                            <tr>
-                                                <th>Team</th>
-                                                <th>Current</th>
-                                                <th>Avg Wins</th>
-                                                <th>Playoff %</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            @foreach (var team in _nbaSeasonResults.Results.Where(r => r.Conference == "West").OrderByDescending(r => r.PlayoffPct).Take(15))
-                                            {
-                                                <tr>
-                                                    <td><strong>@team.Team</strong></td>
-                                                    <td>@team.CurrentWins-@team.CurrentLosses</td>
-                                                    <td>@team.AvgWins</td>
-                                                    <td style="color: @(team.PlayoffPct > 80 ? "#4caf50" : team.PlayoffPct > 50 ? "#ff9800" : "#f44336"); font-weight: bold;">
-                                                        @team.PlayoffPct%
-                                                    </td>
+                                            </thead>
+                                            <tbody class="divide-y divide-slate-800/50">
+                                                @foreach (var team in _nbaSeasonResults.Results.Where(r => r.Conference == "East").OrderByDescending(r => r.PlayoffPct).Take(15))
+                                                {
+                                                    <tr class="hover:bg-slate-800/30 transition-colors">
+                                                        <td class="py-3 px-2 text-white font-bold text-sm">@team.Team</td>
+                                                        <td class="py-3 px-2 text-slate-400 text-xs">@team.CurrentWins-@team.CurrentLosses</td>
+                                                        <td class="py-3 px-2 text-slate-300 text-sm font-mono">@team.AvgWins</td>
+                                                        <td class="py-3 px-2 text-right">
+                                                            <span class="px-2 py-0.5 rounded text-[11px] font-black @(team.PlayoffPct > 80 ? "bg-emerald-500/10 text-emerald-400" : team.PlayoffPct > 50 ? "bg-amber-500/10 text-amber-400" : "bg-red-500/10 text-red-400")">
+                                                                @team.PlayoffPct%
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </TwTabPanel>
+                                <TwTabPanel Title="Western Conference">
+                                    <div class="overflow-x-auto">
+                                        <table class="w-full text-left">
+                                            <thead>
+                                                <tr class="text-slate-500 text-[10px] uppercase tracking-widest border-b border-slate-800">
+                                                    <th class="pb-3 px-2">Team</th>
+                                                    <th class="pb-3 px-2 border-b border-slate-800">Record</th>
+                                                    <th class="pb-3 px-2 border-b border-slate-800">Avg Wins</th>
+                                                    <th class="pb-3 px-2 text-right border-b border-slate-800">Playoff %</th>
                                                 </tr>
-                                            }
-                                        </tbody>
-                                    </MudSimpleTable>
-                                </MudTabPanel>
-                            </MudTabs>
-                        </MudPaper>
+                                            </thead>
+                                            <tbody class="divide-y divide-slate-800/50">
+                                                @foreach (var team in _nbaSeasonResults.Results.Where(r => r.Conference == "West").OrderByDescending(r => r.PlayoffPct).Take(15))
+                                                {
+                                                    <tr class="hover:bg-slate-800/30 transition-colors">
+                                                        <td class="py-3 px-2 text-white font-bold text-sm">@team.Team</td>
+                                                        <td class="py-3 px-2 text-slate-400 text-xs">@team.CurrentWins-@team.CurrentLosses</td>
+                                                        <td class="py-3 px-2 text-slate-300 text-sm font-mono">@team.AvgWins</td>
+                                                        <td class="py-3 px-2 text-right">
+                                                            <span class="px-2 py-0.5 rounded text-[11px] font-black @(team.PlayoffPct > 80 ? "bg-emerald-500/10 text-emerald-400" : team.PlayoffPct > 50 ? "bg-amber-500/10 text-amber-400" : "bg-red-500/10 text-red-400")">
+                                                                @team.PlayoffPct%
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </TwTabPanel>
+                            </TwTabs>
+                        </div>
                     }
                     else if (!_nbaSeasonLoading)
                     {
-                        <MudPaper Class="pa-16 d-flex flex-column justify-center align-center" Style="min-height: 300px;">
-                            <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Size="Size.Large" Color="Color.Secondary" Class="mb-4" />
-                            <MudText Typo="Typo.h6" Color="Color.Secondary">Click "Run Season Simulation" to start</MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Uses Elo ratings to simulate remaining NBA season</MudText>
-                        </MudPaper>
+                        <div class="h-[400px] flex flex-col items-center justify-center bg-slate-900/50 border border-dashed border-slate-800 rounded-2xl">
+                            <TwIcon Icon="M12 2a10 10 0 1010 10A10 10 0 0012 2zm0 18a8 8 0 118-8 8 8 0 01-8 8z" Class="w-16 h-16 text-slate-700 mb-4" />
+                            <h3 class="text-xl font-bold text-slate-300">No Simulation Data</h3>
+                            <p class="text-slate-500 text-sm max-w-xs text-center mt-2">Initialize the Monte Carlo engine to calculate NBA playoff probabilities.</p>
+                        </div>
                     }
-                </MudItem>
-            </MudGrid>
-        </MudTabPanel>
+                </div>
+            </TwGrid>
+        </TwTabPanel>
 
         <!-- Tab 1: Quick Predict -->
-        <MudTabPanel Text="Quick Predict" Icon="@Icons.Material.Filled.FlashOn">
+        <TwTabPanel Title="Quick Predict" TabIcon="@Icons.Material.Filled.FlashOn">
             @if (!_isPythonServiceAvailable)
             {
-                <MudAlert Severity="Severity.Error" Class="mb-4">Python ML Service is not available.</MudAlert>
+                <TwAlert Color="red" Class="mb-6">Python ML Service is not available.</TwAlert>
             }
-            <MudGrid>
-                <MudItem xs="12" md="6">
-                    <MudCard Elevation="2">
-                        <MudCardHeader>
-                            <MudText Typo="Typo.h6">Make a Prediction</MudText>
-                        </MudCardHeader>
-                        <MudCardContent>
-                            <MudStack Spacing="3">
-                                <MudSelect @bind-Value="_nascarSeries" Label="Series" Dense="true">
-                                    <MudSelectItem Value="@("cup")">Cup Series</MudSelectItem>
-                                    <MudSelectItem Value="@("truck")">Truck Series</MudSelectItem>
-                                    <MudSelectItem Value="@("xfinity")">Xfinity Series</MudSelectItem>
-                                </MudSelect>
-                                <MudSelect @bind-Value="_predictionTask" Label="Prediction Type" Dense="true">
-                                    <MudSelectItem Value="@("classification")">Win Probability</MudSelectItem>
-                                    <MudSelectItem Value="@("regression")">Finishing Position</MudSelectItem>
-                                </MudSelect>
-                                <MudDivider />
-                                <MudTextField @bind-Value="_driver" Label="Driver Name" />
-                                <MudTextField @bind-Value="_track" Label="Track Name" />
-                                <MudTextField @bind-Value="_trackType" Label="Track Type" Hint="e.g., superspeedway, short track, road course" />
-                                <MudNumericField @bind-Value="_year" Label="Season Year" Min="1949" Max="2025" />
-                                <MudNumericField @bind-Value="_startPos" Label="Starting Position" Min="1" Max="40" />
-                                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" 
-                                           OnClick="MakeQuickPrediction" Disabled="@(_isPredicting || string.IsNullOrEmpty(_driver))">
-                                    @if (_isPredicting) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
-                                    Get Prediction
-                                </MudButton>
-                                
-                                @if (_isPredicting && !string.IsNullOrEmpty(_predictStatus))
-                                {
-                                    <MudPaper Class="pa-3 mt-2" Elevation="0" Style="background: rgba(0,0,0,0.05);">
-                                        <div class="d-flex align-center">
-                                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" Class="mr-2" />
-                                            <MudText Typo="Typo.body2" Color="Color.Primary">@_predictStatus</MudText>
-                                        </div>
-                                    </MudPaper>
-                                }
-                            </MudStack>
-                        </MudCardContent>
-                    </MudCard>
-                </MudItem>
-                <MudItem xs="12" md="6">
+            <TwGrid Columns="1" md="2" Gap="6">
+                <div>
+                    <TwCard Class="p-6 bg-slate-900 border-slate-800">
+                        <h3 class="text-lg font-bold text-white mb-6">Make a Prediction</h3>
+                        
+                        <div class="space-y-6">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Series</label>
+                                <select @bind="_nascarSeries" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors">
+                                    <option value="cup">Cup Series</option>
+                                    <option value="truck">Truck Series</option>
+                                    <option value="xfinity">Xfinity Series</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Prediction Type</label>
+                                <select @bind="_predictionTask" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors">
+                                    <option value="classification">Win Probability</option>
+                                    <option value="regression">Finishing Position</option>
+                                </select>
+                            </div>
+
+                            <div class="pt-4 border-t border-slate-800 space-y-4">
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Driver Name</label>
+                                    <input @bind="_driver" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors" placeholder="e.g., Kyle Busch" />
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Track Name</label>
+                                    <input @bind="_track" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors" placeholder="e.g., Daytona" />
+                                </div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Track Type</label>
+                                        <input @bind="_trackType" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors" placeholder="e.g., Superspeedway" />
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Season Year</label>
+                                        <input type="number" @bind="_year" min="1949" max="2025" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors" />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Starting Position</label>
+                                    <input type="number" @bind="_startPos" min="1" max="40" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors" />
+                                </div>
+                            </div>
+
+                            <TwButton Variant="primary" Class="w-full py-3 mt-4" OnClick="MakeQuickPrediction" IsLoading="_isPredicting" Disabled="@(_isPredicting || string.IsNullOrEmpty(_driver))">
+                                Get Prediction
+                            </TwButton>
+                            
+                            @if (_isPredicting && !string.IsNullOrEmpty(_predictStatus))
+                            {
+                                <div class="flex items-center gap-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                                    <div class="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                                    <span class="text-sm text-blue-400 font-medium">@_predictStatus</span>
+                                </div>
+                            }
+                        </div>
+                    </TwCard>
+                </div>
+
+                <div>
                     @if (_predictionResult != null)
                     {
-                        <MudCard Elevation="2">
-                            <MudCardHeader><MudText Typo="Typo.h6">Prediction Results</MudText></MudCardHeader>
-                            <MudCardContent>
-                                <MudAlert Severity="Severity.Success" Class="mb-3">Prediction completed!</MudAlert>
-                                <MudText Typo="Typo.subtitle2">Driver: <strong>@_driver</strong></MudText>
-                                <MudText Typo="Typo.caption" Class="mb-3">Track: @_track (@_trackType)</MudText>
-                                <MudDivider Class="my-3" />
-                                @if (_predictionTask == "classification")
-                                {
-                                    var prob = (_predictionResult.Probability ?? 0.5) * 100;
-                                    <MudText Typo="Typo.h5">Win Probability: <strong>@prob.ToString("F1")%</strong></MudText>
-                                    <MudProgressLinear Color="@(prob >= 50 ? Color.Success : prob >= 30 ? Color.Warning : Color.Error)" Value="@prob" Class="my-3" />
-                                }
-                                else
-                                {
-                                    var position = Convert.ToInt32(_predictionResult.Prediction);
-                                    <MudText Typo="Typo.h5">Predicted Finish: <MudChip T="string" Color="@(position <= 5 ? Color.Success : position <= 10 ? Color.Info : Color.Warning)">P@position</MudChip></MudText>
-                                }
-                            </MudCardContent>
-                        </MudCard>
+                        <TwCard Class="p-6 bg-slate-900 border-slate-800 border-l-4 border-l-blue-500">
+                            <h3 class="text-lg font-bold text-white mb-4">Prediction Results</h3>
+                            
+                            <TwAlert Color="emerald" Class="mb-6">Model analysis complete!</TwAlert>
+                            
+                            <div class="space-y-4">
+                                <div>
+                                    <span class="text-xs text-slate-500 uppercase tracking-widest block mb-1">Driver</span>
+                                    <span class="text-xl font-bold text-white">@_driver</span>
+                                </div>
+                                <div>
+                                    <span class="text-xs text-slate-500 uppercase tracking-widest block mb-1">Track Context</span>
+                                    <span class="text-slate-300">@_track <span class="text-slate-500 px-2">•</span> @_trackType</span>
+                                </div>
+                                
+                                <div class="pt-6 border-t border-slate-800">
+                                    @if (_predictionTask == "classification")
+                                    {
+                                        var prob = (_predictionResult.Probability ?? 0.5) * 100;
+                                        <div class="flex items-end justify-between mb-2">
+                                            <span class="text-sm font-bold text-slate-400">Win Probability</span>
+                                            <span class="text-3xl font-black text-white">@prob.ToString("F1")%</span>
+                                        </div>
+                                        <div class="h-3 bg-slate-950 rounded-full overflow-hidden">
+                                            <div class="h-full @(prob >= 50 ? "bg-emerald-500" : prob >= 30 ? "bg-amber-500" : "bg-red-500")" style="width: @prob%"></div>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        var position = Convert.ToInt32(_predictionResult.Prediction);
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-sm font-bold text-slate-400">Predicted Finish</span>
+                                            <TwChip Color="@(position <= 5 ? "emerald" : position <= 10 ? "blue" : "amber")" Class="text-xl font-black px-4 py-1">
+                                                P@position
+                                            </TwChip>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </TwCard>
                     }
                     else
                     {
-                        <MudCard Elevation="1"><MudCardContent Class="pa-8 text-center">
-                            <MudText Color="Color.Secondary">Fill in race details and click "Get Prediction"</MudText>
-                        </MudCardContent></MudCard>
+                        <div class="h-full min-h-[400px] flex flex-col items-center justify-center bg-slate-900/50 border border-dashed border-slate-800 rounded-2xl p-8 text-center">
+                            <TwIcon Icon="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" Class="w-16 h-16 text-slate-700 mb-4" />
+                            <h3 class="text-xl font-bold text-slate-300">Awaiting Inputs</h3>
+                            <p class="text-slate-500 text-sm mt-2">Fill in the race details and click "Get Prediction" to run the ML model.</p>
+                        </div>
                     }
-                </MudItem>
-            </MudGrid>
-        </MudTabPanel>
+                </div>
+            </TwGrid>
+        </TwTabPanel>
 
         <!-- Tab 2: Interactive Simulator -->
-        <MudTabPanel Text="Interactive Simulator" Icon="@Icons.Material.Filled.Tune">
-            <MudGrid>
-                <MudItem xs="12" md="4">
-                    <MudPaper Class="pa-4">
-                        <MudText Typo="Typo.h6" GutterBottom="true">Model Configuration</MudText>
-                        <MudSelect T="string" Label="Series" @bind-Value="_simSeries" Variant="Variant.Outlined" Class="mb-3">
-                            <MudSelectItem Value="@("cup")">Cup</MudSelectItem>
-                            <MudSelectItem Value="@("truck")">Truck</MudSelectItem>
-                            <MudSelectItem Value="@("xfinity")">Xfinity</MudSelectItem>
-                        </MudSelect>
-                        <MudSelect T="string" Label="Task" @bind-Value="_simTask" Variant="Variant.Outlined" Class="mb-3">
-                            <MudSelectItem Value="@("classification")">Classification (Win/Loss)</MudSelectItem>
-                            <MudSelectItem Value="@("regression")">Regression (Position)</MudSelectItem>
-                        </MudSelect>
-                        <MudDivider Class="my-4" />
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadSimFeatures" 
-                                   Disabled="@_isLoadingSimFeatures" FullWidth="true" Class="mb-2">
-                            @(_isLoadingSimFeatures ? "Loading..." : "Load Features")
-                        </MudButton>
-                    </MudPaper>
-                </MudItem>
-                <MudItem xs="12" md="8">
-                    <MudPaper Class="pa-4" Style="min-height: 400px;">
-                        <MudText Typo="Typo.h6" GutterBottom="true">Feature Inputs</MudText>
+        <TwTabPanel Title="Interactive Simulator" TabIcon="@Icons.Material.Filled.Tune">
+            <TwGrid Columns="1" md="12" Gap="6">
+                <div class="md:col-span-4">
+                    <TwCard Class="p-6 bg-slate-900 border-slate-800">
+                        <h3 class="text-lg font-bold text-white mb-6">Model Configuration</h3>
+                        
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Series</label>
+                                <select @bind="_simSeries" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors">
+                                    <option value="cup">Cup</option>
+                                    <option value="truck">Truck</option>
+                                    <option value="xfinity">Xfinity</option>
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Task</label>
+                                <select @bind="_simTask" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors">
+                                    <option value="classification">Classification (Win/Loss)</option>
+                                    <option value="regression">Regression (Position)</option>
+                                </select>
+                            </div>
+                            
+                            <TwButton Variant="primary" OnClick="LoadSimFeatures" IsLoading="_isLoadingSimFeatures" Disabled="@_isLoadingSimFeatures" Class="w-full py-3 mt-4">
+                                Load Features
+                            </TwButton>
+                        </div>
+                    </TwCard>
+                </div>
+
+                <div class="md:col-span-8">
+                    <TwCard Class="p-6 bg-slate-900 border-slate-800 min-h-[400px]">
+                        <h3 class="text-lg font-bold text-white mb-6">Feature Inputs</h3>
+                        
                         @if (_isLoadingSimFeatures)
                         {
-                            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                            <div class="flex flex-col items-center justify-center py-12">
+                                <TwProgressBar Value="100" IsIndeterminate="true" Color="blue" Class="w-1/2 mb-4" />
+                                <span class="text-sm text-slate-500">Loading model features...</span>
+                            </div>
                         }
                         else if (_simFeaturesLoaded)
                         {
-                            <MudGrid>
+                            <TwGrid Columns="1" sm="2" Gap="4">
                                 @foreach (var feature in _simCategoricalFeatures.Take(6))
                                 {
-                                    <MudItem xs="12" sm="6">
-                                        <MudSelect T="string" Label="@FormatLabel(feature)" @bind-Value="_simCategoricalInputs[feature]" 
-                                                   Variant="Variant.Outlined" Dense="true">
+                                    <div>
+                                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">@FormatLabel(feature)</label>
+                                        <select @bind="_simCategoricalInputs[feature]" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors">
                                             @if (_simFeatureValues.ContainsKey(feature))
                                             {
                                                 @foreach (var val in _simFeatureValues[feature].Take(50))
                                                 {
-                                                    <MudSelectItem Value="@val.ToString()">@val</MudSelectItem>
+                                                    <option value="@val.ToString()">@val</option>
                                                 }
                                             }
-                                        </MudSelect>
-                                    </MudItem>
+                                        </select>
+                                    </div>
                                 }
                                 @foreach (var feature in _simNumericFeatures.Take(6))
                                 {
-                                    <MudItem xs="12" sm="6">
-                                        <MudNumericField T="double?" Label="@FormatLabel(feature)" @bind-Value="_simNumericInputs[feature]" 
-                                                         Variant="Variant.Outlined" Dense="true" />
-                                    </MudItem>
-                                }
-                            </MudGrid>
-                            <MudDivider Class="my-4" />
-                            <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="RunSimPrediction" 
-                                       Disabled="@_isSimPredicting" FullWidth="true" Size="Size.Large">
-                                @(_isSimPredicting ? "Predicting..." : "Run Prediction")
-                            </MudButton>
-                            
-                            @if (_isSimPredicting && !string.IsNullOrEmpty(_simStatus))
-                            {
-                                <MudPaper Class="pa-3 mt-3" Elevation="0" Style="background: rgba(0,0,0,0.05);">
-                                    <div class="d-flex align-center">
-                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" Class="mr-2" />
-                                        <MudText Typo="Typo.body2" Color="Color.Primary">@_simStatus</MudText>
+                                    <div>
+                                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">@FormatLabel(feature)</label>
+                                        <input type="number" @bind="_simNumericInputs[feature]" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors" />
                                     </div>
-                                </MudPaper>
-                            }
+                                }
+                            </TwGrid>
+                            
+                            <div class="mt-8 pt-6 border-t border-slate-800">
+                                <TwButton Variant="primary" Class="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-lg" OnClick="RunSimPrediction" Disabled="@_isSimPredicting">
+                                    @(_isSimPredicting ? "Predicting..." : "Run Prediction")
+                                </TwButton>
+                                
+                                @if (_isSimPredicting && !string.IsNullOrEmpty(_simStatus))
+                                {
+                                    <div class="mt-4 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex items-center gap-3">
+                                        <div class="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                                        <span class="text-sm text-indigo-400 font-medium">@_simStatus</span>
+                                    </div>
+                                }
+                            </div>
                         }
                         else
                         {
-                            <MudText Color="Color.Secondary">Click "Load Features" to start.</MudText>
+                            <div class="h-full flex flex-col items-center justify-center py-12 text-center text-slate-500">
+                                <TwIcon Icon="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" Class="w-12 h-12 mb-4 opacity-20" />
+                                <p>Click "Load Features" to start the simulation setup.</p>
+                            </div>
                         }
+                        
                         @if (_simPredictionResult != null)
                         {
-                            <MudPaper Class="pa-4 mt-4" Elevation="4">
-                                <MudText Typo="Typo.h5" Color="Color.Primary">Prediction: @_simPredictionResult.Prediction</MudText>
-                                @if (_simPredictionResult.Probability.HasValue)
-                                {
-                                    <MudText>Probability: @($"{_simPredictionResult.Probability:P1}")</MudText>
-                                }
-                            </MudPaper>
+                            <div class="mt-8 p-6 bg-slate-950 border border-slate-800 rounded-2xl shadow-inner animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                                    <div>
+                                        <span class="text-xs text-slate-500 uppercase tracking-widest block mb-1">Final Prediction</span>
+                                        <span class="text-2xl font-black text-blue-400">@_simPredictionResult.Prediction</span>
+                                    </div>
+                                    @if (_simPredictionResult.Probability.HasValue)
+                                    {
+                                        <div class="text-center md:text-right">
+                                            <span class="text-xs text-slate-500 uppercase tracking-widest block mb-1">Confidence Score</span>
+                                            <span class="text-2xl font-black text-white">@($"{_simPredictionResult.Probability:P1}")</span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
                         }
-                    </MudPaper>
-                </MudItem>
-            </MudGrid>
-        </MudTabPanel>
+                    </TwCard>
+                </div>
+            </TwGrid>
+        </TwTabPanel>
 
         <!-- Tab 3: Monte Carlo -->
-        <MudTabPanel Text="Monte Carlo" Icon="@Icons.Material.Filled.Casino">
-            <MudGrid>
-                <MudItem xs="12" md="4">
-                    <MudPaper Class="pa-4">
-                        <MudText Typo="Typo.h6" Class="mb-3">Configuration</MudText>
-                        <MudSelect T="int" Label="Year" @bind-Value="_mcYear" Variant="Variant.Outlined" Class="mb-4">
-                            @foreach (var year in _mcYears) { <MudSelectItem Value="@year">@year</MudSelectItem> }
-                        </MudSelect>
-                        <MudSelect T="string" Label="Track Type" @bind-Value="_mcTrackType" Variant="Variant.Outlined" Class="mb-4">
-                            <MudSelectItem Value="@("Intermediate")">Intermediate</MudSelectItem>
-                            <MudSelectItem Value="@("Short Track")">Short Track</MudSelectItem>
-                            <MudSelectItem Value="@("Superspeedway")">Superspeedway</MudSelectItem>
-                            <MudSelectItem Value="@("Road Course")">Road Course</MudSelectItem>
-                        </MudSelect>
-                        <MudNumericField @bind-Value="_mcNumSimulations" Label="Simulations" Variant="Variant.Outlined" 
-                                         Min="100" Max="10000" Step="100" Class="mb-4" />
-                        <MudDivider Class="my-4" />
-                        <MudText Typo="Typo.subtitle2" Class="mb-2">Driver Selection</MudText>
-                        <div class="d-flex gap-2 mb-2">
-                            <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="MCSelectAll">All</MudButton>
-                            <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="MCDeselectAll">None</MudButton>
-                            <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="MCSelectTop20">Top 20</MudButton>
-                        </div>
-                        <MudText Typo="Typo.caption" Class="mb-2">Selected: @_mcSelectedDrivers.Count()</MudText>
-                        <MudSelect T="string" Label="Drivers" MultiSelection="true" @bind-SelectedValues="_mcSelectedDrivers" 
-                                   Variant="Variant.Outlined" Class="mb-4">
-                            @foreach (var driver in _mcAllDrivers) { <MudSelectItem Value="@driver">@driver</MudSelectItem> }
-                        </MudSelect>
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="RunMonteCarlo" 
-                                   Disabled="@(_mcIsLoading || !_mcSelectedDrivers.Any())">
-                            @if (_mcIsLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
-                            Run Simulation
-                        </MudButton>
+        <TwTabPanel Title="Monte Carlo" TabIcon="@Icons.Material.Filled.Casino">
+            <TwGrid Columns="1" md="12" Gap="6">
+                <div class="md:col-span-4">
+                    <TwCard Class="p-6 bg-slate-900 border-slate-800">
+                        <h3 class="text-lg font-bold text-white mb-6">Configuration</h3>
                         
-                        @if (_mcIsLoading && !string.IsNullOrEmpty(_mcStatus))
-                        {
-                            <MudPaper Class="pa-4 mt-3" Elevation="0" Style="background: rgba(0,0,0,0.05);">
-                                <div class="d-flex align-center">
-                                    <MudProgressCircular Size="Size.Medium" Indeterminate="true" Color="Color.Primary" Class="mr-3" />
-                                    <div>
-                                        <MudText Typo="Typo.body2" Color="Color.Primary">@_mcStatus</MudText>
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Processing...</MudText>
+                        <div class="space-y-6">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Year</label>
+                                    <select @bind="_mcYear" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors">
+                                        @foreach (var year in _mcYears) { <option value="@year">@year</option> }
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Simulations</label>
+                                    <input type="number" @bind="_mcNumSimulations" min="100" max="10000" step="100" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors" />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Track Type</label>
+                                <select @bind="_mcTrackType" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors">
+                                    <option value="Intermediate">Intermediate</option>
+                                    <option value="Short Track">Short Track</option>
+                                    <option value="Superspeedway">Superspeedway</option>
+                                    <option value="Road Course">Road Course</option>
+                                </select>
+                            </div>
+
+                            <div class="pt-6 border-t border-slate-800">
+                                <span class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Driver Selection</span>
+                                <div class="flex flex-wrap gap-2 mb-4">
+                                    <button @onclick="MCSelectAll" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs transition-colors">Select All</button>
+                                    <button @onclick="MCDeselectAll" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs transition-colors">None</button>
+                                    <button @onclick="MCSelectTop20" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs transition-colors">Top 20</button>
+                                </div>
+                                
+                                <div class="relative group">
+                                    <select multiple @onchange="@(e => _mcSelectedDrivers = ((string[])e.Value).ToHashSet())" 
+                                            class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors min-h-[200px]">
+                                        @foreach (var driver in _mcAllDrivers) { 
+                                            <option value="@driver" selected="@_mcSelectedDrivers.Contains(driver)">@driver</option> 
+                                        }
+                                    </select>
+                                    <div class="absolute bottom-2 right-2 px-2 py-0.5 bg-blue-500/20 text-blue-400 text-[10px] font-bold rounded border border-blue-500/30">
+                                        @_mcSelectedDrivers.Count() selected
                                     </div>
                                 </div>
-                            </MudPaper>
+                            </div>
+
+                            <TwButton Variant="primary" Class="w-full py-3" OnClick="RunMonteCarlo" Disabled="@(_mcIsLoading || !_mcSelectedDrivers.Any())">
+                                @(_mcIsLoading ? "Processing..." : "Run Simulation")
+                            </TwButton>
+                        </div>
+
+                        @if (_mcIsLoading && !string.IsNullOrEmpty(_mcStatus))
+                        {
+                            <div class="mt-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl">
+                                <div class="flex items-center gap-4">
+                                    <div class="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                                    <div>
+                                        <p class="text-sm font-bold text-blue-400">@_mcStatus</p>
+                                        <p class="text-[10px] text-slate-500 uppercase tracking-widest mt-0.5">Monte Carlo Engine Running</p>
+                                    </div>
+                                </div>
+                            </div>
                         }
-                    </MudPaper>
-                </MudItem>
-                <MudItem xs="12" md="8">
+                    </TwCard>
+                </div>
+
+                <div class="md:col-span-8">
                     @if (_mcResponse != null)
                     {
-                        <MudPaper Class="pa-4">
-                            <div class="d-flex justify-space-between align-center mb-4">
-                                <MudText Typo="Typo.h6">Results - @_mcResponse.Metadata.Simulations simulations</MudText>
-                                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportMCResults">Export</MudButton>
+                        <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                            <div class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+                                <div>
+                                    <h3 class="text-lg font-bold text-white">Simulation Results</h3>
+                                    <p class="text-xs text-slate-500 mt-0.5">@_mcResponse.Metadata.Simulations Monte Carlo iterations</p>
+                                </div>
+                                <TwButton Variant="secondary" OnClick="ExportMCResults">
+                                    <PrefixContent><TwIcon Icon="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" Class="w-4 h-4" /></PrefixContent>
+                                    Export CSV
+                                </TwButton>
                             </div>
-                            <MudTable Items="@_mcResponse.Results" Dense="true" Hover="true" Striped="true">
-                                <HeaderContent>
-                                    <MudTh>Driver</MudTh><MudTh>Win %</MudTh><MudTh>Top 5 %</MudTh><MudTh>Top 10 %</MudTh><MudTh>Avg Finish</MudTh>
-                                </HeaderContent>
-                                <RowTemplate>
-                                    <MudTd><b>@context.Driver</b></MudTd>
-                                    <MudTd><MudText Color="@(context.WinProb > 0.1 ? Color.Success : Color.Default)">@($"{context.WinProb:P1}")</MudText></MudTd>
-                                    <MudTd>@($"{context.Top5Prob:P1}")</MudTd>
-                                    <MudTd>@($"{context.Top10Prob:P1}")</MudTd>
-                                    <MudTd>@($"{context.AvgFinish:F1}")</MudTd>
-                                </RowTemplate>
-                                <PagerContent><MudTablePager /></PagerContent>
-                            </MudTable>
-                        </MudPaper>
+                            
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left">
+                                    <thead>
+                                        <tr class="text-slate-500 text-[10px] uppercase tracking-widest border-b border-slate-800 bg-slate-950/50">
+                                            <th class="py-4 px-6">Driver</th>
+                                            <th class="py-4 px-6">Win %</th>
+                                            <th class="py-4 px-6">Top 5 %</th>
+                                            <th class="py-4 px-6">Top 10 %</th>
+                                            <th class="py-4 px-6 text-right">Avg Finish</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-800/50">
+                                        @foreach (var context in _mcResponse.Results)
+                                        {
+                                            <tr class="hover:bg-slate-800/30 transition-colors">
+                                                <td class="py-3 px-6 text-white font-bold">@context.Driver</td>
+                                                <td class="py-3 px-6">
+                                                    <span class="px-2 py-0.5 rounded text-[11px] font-black @(context.WinProb > 0.1 ? "bg-emerald-500/10 text-emerald-400" : "bg-slate-800 text-slate-400")">
+                                                        @($"{context.WinProb:P1}")
+                                                    </span>
+                                                </td>
+                                                <td class="py-3 px-6 text-sm text-slate-300">@($"{context.Top5Prob:P1}")</td>
+                                                <td class="py-3 px-6 text-sm text-slate-300">@($"{context.Top10Prob:P1}")</td>
+                                                <td class="py-3 px-6 text-right font-mono text-slate-400">@($"{context.AvgFinish:F1}")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     }
                     else if (!_mcIsLoading)
                     {
-                        <MudPaper Class="pa-16 d-flex justify-center align-center">
-                            <MudText Typo="Typo.h6" Color="Color.Secondary">Select drivers and run simulation</MudText>
-                        </MudPaper>
+                        <div class="h-full min-h-[500px] flex flex-col items-center justify-center bg-slate-900/50 border border-dashed border-slate-800 rounded-2xl p-8 text-center text-slate-500">
+                            <TwIcon Icon="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l1.6-1.6a1 1 0 000-1.4l-1.6-1.6a1 1 0 00-1.4 0l-1.6 1.6zM7.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l1.6-1.6a1 1 0 000-1.4l-1.6-1.6a1 1 0 00-1.4 0l-1.6 1.6z" Class="w-16 h-16 mb-6 opacity-20" />
+                            <h3 class="text-xl font-bold text-slate-300">No Simulation Run</h3>
+                            <p class="mt-2 max-w-xs mx-auto text-sm">Select your field of drivers and run the simulator to visualize finishing probabilities.</p>
+                        </div>
                     }
-                </MudItem>
-            </MudGrid>
-        </MudTabPanel>
+                </div>
+            </TwGrid>
+        </TwTabPanel>
 
         <!-- Tab 4: NFL Season Simulator -->
-        <MudTabPanel Text="NFL Season" Icon="@Icons.Material.Filled.SportsFootball">
-            <MudGrid>
-                <MudItem xs="12" md="4">
-                    <MudPaper Class="pa-4">
-                        <MudText Typo="Typo.h6" Class="mb-3">NFL Season Simulation</MudText>
-                        <MudText Typo="Typo.body2" Class="mb-4">
+        <TwTabPanel Title="NFL Season" TabIcon="@Icons.Material.Filled.SportsFootball">
+            <TwGrid Columns="1" md="12" Gap="6">
+                <div class="md:col-span-4">
+                    <TwCard Class="p-6 bg-slate-900 border-slate-800">
+                        <h3 class="text-lg font-bold text-white mb-2">NFL Season Simulation</h3>
+                        <p class="text-slate-400 text-sm mb-6">
                             Uses nflseedR to simulate 1000+ NFL seasons and calculate playoff probabilities.
-                        </MudText>
-                        <MudNumericField @bind-Value="_nflSimulations" Label="Simulations" 
-                                         Min="100" Max="10000" Step="100" Variant="Variant.Outlined" Class="mb-4" />
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" 
-                                   OnClick="RunNFLSimulation" Disabled="@_nflIsLoading">
-                            @if (_nflIsLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
-                            @(_nflIsLoading ? "Simulating..." : "Run Simulation")
-                        </MudButton>
+                        </p>
+                        
+                        <div class="mb-6">
+                            <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Number of Simulations</label>
+                            <input type="number" @bind="_nflSimulations" min="100" max="10000" step="100" 
+                                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors" />
+                        </div>
+                        
+                        <TwButton Variant="primary" Class="w-full py-3" OnClick="RunNFLSimulation" IsLoading="_nflIsLoading" Disabled="@_nflIsLoading">
+                            Run NFL Simulation
+                        </TwButton>
                         
                         @if (_nflIsLoading && !string.IsNullOrEmpty(_nflSimStatus))
                         {
-                            <MudPaper Class="pa-4 mt-3" Elevation="0" Style="background: rgba(0,0,0,0.05);">
-                                <div class="d-flex align-center">
-                                    <MudProgressCircular Size="Size.Medium" Indeterminate="true" Color="Color.Primary" Class="mr-3" />
+                            <div class="mt-6 p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl">
+                                <div class="flex items-center gap-4">
+                                    <div class="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                                     <div>
-                                        <MudText Typo="Typo.body2" Color="Color.Primary">@_nflSimStatus</MudText>
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">This may take a minute...</MudText>
+                                        <p class="text-sm font-bold text-blue-400">@_nflSimStatus</p>
+                                        <p class="text-[10px] text-slate-500 uppercase tracking-widest mt-0.5">Simulating League Dynamics</p>
                                     </div>
                                 </div>
-                            </MudPaper>
+                            </div>
                         }
                         
                         @if (_nflSimResults != null && _nflSimResults.ContainsKey("generated_at"))
                         {
-                            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
-                                Last run: @_nflSimResults["generated_at"]
-                                @if (_nflSimResults.ContainsKey("cached") && GetBool(_nflSimResults, "cached"))
-                                {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">Cached</MudChip>
-                                }
-                            </MudAlert>
+                            <TwAlert Color="blue" Class="mt-6 py-2">
+                                <div class="flex items-center justify-between w-full">
+                                    <span class="text-[10px] font-bold uppercase text-blue-300">Last run: @_nflSimResults["generated_at"]</span>
+                                    @if (_nflSimResults.ContainsKey("cached") && GetBool(_nflSimResults, "cached"))
+                                    {
+                                        <TwChip Color="amber" Size="sm" Class="font-black text-[9px] uppercase">Cached</TwChip>
+                                    }
+                                </div>
+                            </TwAlert>
                         }
-                    </MudPaper>
-                </MudItem>
-                <MudItem xs="12" md="8">
+                    </TwCard>
+                </div>
+                
+                <div class="md:col-span-8">
                     @if (_nflSimResults != null && !HasError(_nflSimResults))
                     {
-                        <MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-3">
-                            <MudTabPanel Text="Super Bowl Odds" Icon="@Icons.Material.Filled.EmojiEvents">
-                                <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                        <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                            <TwTabs Elevation="0" Class="p-2">
+                                <TwTabPanel Title="Super Bowl Odds" TabIcon="@Icons.Material.Filled.EmojiEvents">
+                                    <div class="p-4 overflow-x-auto">
+                                        <table class="w-full text-left">
+                                            <thead>
+                                                <tr class="text-slate-500 text-[10px] uppercase tracking-widest border-b border-slate-800">
+                                                    <th class="pb-3 px-4">Rank</th>
+                                                    <th class="pb-3 px-4">Team</th>
+                                                    <th class="pb-3 px-4">Playoff %</th>
+                                                    <th class="pb-3 px-4">Conf Champ %</th>
+                                                    <th class="pb-3 px-4 text-right">Super Bowl %</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-slate-800/30">
+                                                @if (_nflSimResults.ContainsKey("all_teams"))
+                                                {
+                                                    var teams = GetNFLTeamsList();
+                                                    var rank = 1;
+                                                    @foreach (var team in teams.OrderByDescending(t => GetDouble(t, "super_bowl_pct")).Take(16))
+                                                    {
+                                                        <tr class="hover:bg-slate-800/30 transition-colors">
+                                                            <td class="py-3 px-4 text-slate-500 font-mono text-xs">@rank</td>
+                                                            <td class="py-3 px-4 text-white font-bold">@team["team"]</td>
+                                                            <td class="py-3 px-4 text-slate-300 text-sm">@GetDouble(team, "playoff_pct").ToString("F1")%</td>
+                                                            <td class="py-3 px-4 text-slate-400 text-sm">@GetDouble(team, "conf_pct").ToString("F1")%</td>
+                                                            <td class="py-3 px-4 text-right">
+                                                                <TwChip Color="@GetTailwindSBColor(GetDouble(team, "super_bowl_pct"))" Size="sm" Class="font-black">
+                                                                    @GetDouble(team, "super_bowl_pct").ToString("F1")%
+                                                                </TwChip>
+                                                            </td>
+                                                        </tr>
+                                                        rank++;
+                                                    }
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </TwTabPanel>
+                                <TwTabPanel Title="AFC" TabIcon="@Icons.Material.Filled.Stadium">
+                                    <div class="p-4">
+                                        @RenderTailwindConferenceTable("afc")
+                                    </div>
+                                </TwTabPanel>
+                                <TwTabPanel Title="NFC" TabIcon="@Icons.Material.Filled.Stadium">
+                                    <div class="p-4">
+                                        @RenderTailwindConferenceTable("nfc")
+                                    </div>
+                                </TwTabPanel>
+                            </TwTabs>
+                        </div>
+                    }
+                    else if (_nflSimResults != null && _nflSimResults.ContainsKey("error"))
+                    {
+                        <div class="space-y-4">
+                            <TwAlert Color="red" Class="flex flex-col items-start gap-2 p-6">
+                                <h4 class="font-bold text-red-400 flex items-center gap-2">
+                                    <TwIcon Icon="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" Class="w-5 h-5" />
+                                    Simulation Failed
+                                </h4>
+                                <p class="text-sm opacity-80">@(_nflSimResults.ContainsKey("message") ? _nflSimResults["message"].ToString() : "An unexpected error occurred during the NFL simulation engine execution.")</p>
+                            </TwAlert>
+                            
+                            @if (_nflSimResults.ContainsKey("install_instructions"))
+                            {
+                                <TwAlert Color="blue" Class="p-6">
+                                    <h4 class="text-xs font-bold uppercase tracking-widest text-blue-400 mb-2">Installation Required</h4>
+                                    <p class="text-sm">@_nflSimResults["install_instructions"]</p>
+                                </TwAlert>
+                            }
+                        </div>
+                    }
+                    else if (!_nflIsLoading)
+                    {
+                        <div class="h-full min-h-[400px] flex flex-col items-center justify-center bg-slate-900/50 border border-dashed border-slate-800 rounded-2xl p-8 text-center text-slate-500">
+                             <TwIcon Icon="M3 10V4a1 1 0 011-1h16a1 1 0 011 1v6m-18 0v10a1 1 0 001 1h16a1 1 0 001-1V10M3 10h18" Class="w-16 h-16 mb-6 opacity-20" />
+                            <h3 class="text-xl font-bold text-slate-300">NFL Engine Ready</h3>
+                            <p class="mt-2 max-w-xs mx-auto text-sm">Calculate NFL playoff odds based on current standings and remaining schedule strength.</p>
+                            <p class="text-[10px] mt-4 uppercase tracking-tighter text-slate-600 font-bold">Powered by nflseedR</p>
+                        </div>
+                    }
+                </div>
+            </TwGrid>
+        </TwTabPanel>
+        
+        <!-- Tab 5: NASCAR Season Simulator -->
+        <TwTabPanel Title="NASCAR Season" TabIcon="@Icons.Material.Filled.DirectionsCar">
+            <TwGrid Columns="1" md="12" Gap="6">
+                <div class="md:col-span-4">
+                    <TwCard Class="p-6 bg-slate-900 border-slate-800">
+                        <h3 class="text-lg font-bold text-white mb-2">NASCAR Season Simulation</h3>
+                        <p class="text-slate-400 text-sm mb-6">
+                            Simulate full NASCAR seasons with playoffs, points, and championship probabilities.
+                        </p>
+                        
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Series</label>
+                                <select @bind="_nascarSeasonSeries" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors">
+                                    <option value="cup">Cup Series</option>
+                                    <option value="xfinity">Xfinity Series</option>
+                                    <option value="trucks">Truck Series</option>
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Simulations</label>
+                                <input type="number" @bind="_nascarSeasonSims" min="50" max="1000" step="50" 
+                                       class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors" />
+                            </div>
+                            
+                            <TwButton Variant="primary" Class="w-full py-3 mt-4" OnClick="RunNASCARSeasonSim" IsLoading="_nascarSeasonLoading" Disabled="@_nascarSeasonLoading">
+                                Run Season Simulation
+                            </TwButton>
+                        </div>
+                        
+                        @if (_nascarSeasonResults != null && _nascarSeasonResults.ContainsKey("generated_at"))
+                        {
+                            <TwAlert Color="blue" Class="mt-4 py-2">
+                                <span class="text-[10px] font-bold uppercase">@_nascarSeasonResults.GetValueOrDefault("series", ""): @_nascarSeasonResults.GetValueOrDefault("simulations", 0) simulations completed</span>
+                            </TwAlert>
+                        }
+                    </TwCard>
+                </div>
+                <div class="md:col-span-8">
+                    @if (_nascarSeasonResults != null && _nascarSeasonResults.ContainsKey("results"))
+                    {
+                        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                            <h3 class="text-lg font-bold text-white mb-6 flex items-center justify-between">
+                                @_nascarSeasonResults.GetValueOrDefault("series", "NASCAR") Championship Probabilities
+                            </h3>
+                            
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left">
                                     <thead>
-                                        <tr>
-                                            <th>Rank</th>
-                                            <th>Team</th>
-                                            <th>Playoff %</th>
-                                            <th>Conf Champ %</th>
-                                            <th>Super Bowl %</th>
+                                        <tr class="text-slate-500 text-[10px] uppercase tracking-widest border-b border-slate-800">
+                                            <th class="pb-3 px-2">Rank</th>
+                                            <th class="pb-3 px-2">Driver</th>
+                                            <th class="pb-3 px-2">Playoff %</th>
+                                            <th class="pb-3 px-2">Champ 4 %</th>
+                                            <th class="pb-3 px-2">Championship %</th>
+                                            <th class="pb-3 px-2 text-right">Avg Wins</th>
                                         </tr>
                                     </thead>
-                                    <tbody>
-                                        @if (_nflSimResults.ContainsKey("all_teams"))
-                                        {
-                                            var teams = GetNFLTeamsList();
+                                    <tbody class="divide-y divide-slate-800/50">
+                                        @{
+                                            var nascarResults = GetNASCARSeasonResults();
                                             var rank = 1;
-                                            @foreach (var team in teams.OrderByDescending(t => GetDouble(t, "super_bowl_pct")).Take(16))
+                                            foreach (var driver in nascarResults.Take(20))
                                             {
-                                                <tr>
-                                                    <td>@rank</td>
-                                                    <td><strong>@team["team"]</strong></td>
-                                                    <td>@GetDouble(team, "playoff_pct").ToString("F1")%</td>
-                                                    <td>@GetDouble(team, "conf_pct").ToString("F1")%</td>
-                                                    <td><MudChip T="string" Size="Size.Small" Color="@GetSBColor(GetDouble(team, "super_bowl_pct"))">@GetDouble(team, "super_bowl_pct").ToString("F1")%</MudChip></td>
+                                                <tr class="hover:bg-slate-800/30 transition-colors">
+                                                    <td class="py-3 px-2 text-slate-500 font-mono text-xs">@rank</td>
+                                                    <td class="py-3 px-2 text-white font-bold text-sm">@driver.GetValueOrDefault("driver", "")</td>
+                                                    <td class="py-3 px-2 text-slate-300 text-sm">@GetDoubleNascar(driver, "playoff_pct").ToString("F1")%</td>
+                                                    <td class="py-3 px-2 text-slate-400 text-sm">@GetDoubleNascar(driver, "champ_4_pct").ToString("F1")%</td>
+                                                    <td class="py-3 px-2">
+                                                        <TwChip Color="@GetChampTailwindColor(GetDoubleNascar(driver, "championship_pct"))" Size="sm" Class="font-black text-[11px]">
+                                                            @GetDoubleNascar(driver, "championship_pct").ToString("F1")%
+                                                        </TwChip>
+                                                    </td>
+                                                    <td class="py-3 px-2 text-right text-slate-400 font-mono text-sm">@GetDoubleNascar(driver, "avg_wins").ToString("F2")</td>
                                                 </tr>
                                                 rank++;
                                             }
                                         }
                                     </tbody>
-                                </MudSimpleTable>
-                            </MudTabPanel>
-                            <MudTabPanel Text="AFC" Icon="@Icons.Material.Filled.Stadium">
-                                @RenderConferenceTable("afc")
-                            </MudTabPanel>
-                            <MudTabPanel Text="NFC" Icon="@Icons.Material.Filled.Stadium">
-                                @RenderConferenceTable("nfc")
-                            </MudTabPanel>
-                        </MudTabs>
-                    }
-                    else if (_nflSimResults != null && _nflSimResults.ContainsKey("error"))
-                    {
-                        <MudAlert Severity="Severity.Error">
-                            @(_nflSimResults.ContainsKey("message") ? _nflSimResults["message"].ToString() : "Simulation failed")
-                        </MudAlert>
-                        @if (_nflSimResults.ContainsKey("install_instructions"))
-                        {
-                            <MudAlert Severity="Severity.Info" Class="mt-2">
-                                <MudText>@_nflSimResults["install_instructions"]</MudText>
-                            </MudAlert>
-                        }
-                    }
-                    else if (!_nflIsLoading)
-                    {
-                        <MudPaper Class="pa-16 d-flex flex-column justify-center align-center" Style="min-height: 300px;">
-                            <MudIcon Icon="@Icons.Material.Filled.SportsFootball" Size="Size.Large" Color="Color.Secondary" Class="mb-4" />
-                            <MudText Typo="Typo.h6" Color="Color.Secondary">Click "Run Simulation" to calculate NFL playoff odds</MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Requires R and nflseedR package installed</MudText>
-                        </MudPaper>
-                    }
-                </MudItem>
-            </MudGrid>
-        </MudTabPanel>
-        
-        <!-- Tab 5: NASCAR Season Simulator -->
-        <MudTabPanel Text="NASCAR Season" Icon="@Icons.Material.Filled.DirectionsCar">
-            <MudGrid>
-                <MudItem xs="12" md="4">
-                    <MudPaper Class="pa-4">
-                        <MudText Typo="Typo.h6" Class="mb-3">NASCAR Season Simulation</MudText>
-                        <MudText Typo="Typo.body2" Class="mb-4">
-                            Simulate full NASCAR seasons with playoffs, points, and championship.
-                        </MudText>
-                        <MudSelect T="string" @bind-Value="_nascarSeasonSeries" Label="Series" 
-                                   Variant="Variant.Outlined" Class="mb-4">
-                            <MudSelectItem Value="@("cup")">Cup Series</MudSelectItem>
-                            <MudSelectItem Value="@("xfinity")">Xfinity Series</MudSelectItem>
-                            <MudSelectItem Value="@("trucks")">Truck Series</MudSelectItem>
-                        </MudSelect>
-                        <MudNumericField @bind-Value="_nascarSeasonSims" Label="Simulations" 
-                                         Min="50" Max="1000" Step="50" Variant="Variant.Outlined" Class="mb-4" />
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" 
-                                   OnClick="RunNASCARSeasonSim" Disabled="@_nascarSeasonLoading">
-                            @if (_nascarSeasonLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
-                            @(_nascarSeasonLoading ? "Simulating Season..." : "Run Season Simulation")
-                        </MudButton>
-                        
-                        @if (_nascarSeasonResults != null && _nascarSeasonResults.ContainsKey("generated_at"))
-                        {
-                            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
-                                <strong>@_nascarSeasonResults.GetValueOrDefault("series", ""):</strong> 
-                                @_nascarSeasonResults.GetValueOrDefault("simulations", 0) simulations
-                            </MudAlert>
-                        }
-                    </MudPaper>
-                </MudItem>
-                <MudItem xs="12" md="8">
-                    @if (_nascarSeasonResults != null && _nascarSeasonResults.ContainsKey("results"))
-                    {
-                        <MudPaper Class="pa-4">
-                            <MudText Typo="Typo.h6" Class="mb-3">
-                                @_nascarSeasonResults.GetValueOrDefault("series", "NASCAR") Championship Probabilities
-                            </MudText>
-                            <MudSimpleTable Dense="true" Hover="true" Striped="true">
-                                <thead>
-                                    <tr>
-                                        <th>Rank</th>
-                                        <th>Driver</th>
-                                        <th>Playoff %</th>
-                                        <th>Champ 4 %</th>
-                                        <th>Championship %</th>
-                                        <th>Avg Wins</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @{
-                                        var nascarResults = GetNASCARSeasonResults();
-                                        var rank = 1;
-                                        foreach (var driver in nascarResults.Take(20))
-                                        {
-                                            <tr>
-                                                <td>@rank</td>
-                                                <td><strong>@driver.GetValueOrDefault("driver", "")</strong></td>
-                                                <td>@GetDoubleNascar(driver, "playoff_pct").ToString("F1")%</td>
-                                                <td>@GetDoubleNascar(driver, "champ_4_pct").ToString("F1")%</td>
-                                                <td>
-                                                    <MudChip T="string" Size="Size.Small" 
-                                                             Color="@GetChampColor(GetDoubleNascar(driver, "championship_pct"))">
-                                                        @GetDoubleNascar(driver, "championship_pct").ToString("F1")%
-                                                    </MudChip>
-                                                </td>
-                                                <td>@GetDoubleNascar(driver, "avg_wins").ToString("F2")</td>
-                                            </tr>
-                                            rank++;
-                                        }
-                                    }
-                                </tbody>
-                            </MudSimpleTable>
-                        </MudPaper>
+                                </table>
+                            </div>
+                        </div>
                     }
                     else if (_nascarSeasonResults != null && _nascarSeasonResults.ContainsKey("error"))
                     {
-                        <MudAlert Severity="Severity.Error">
-                            @(_nascarSeasonResults.GetValueOrDefault("message", "Simulation failed"))
-                        </MudAlert>
+                        <TwAlert Color="red">@(_nascarSeasonResults.GetValueOrDefault("message", "Simulation failed"))</TwAlert>
                     }
                     else if (!_nascarSeasonLoading)
                     {
-                        <MudPaper Class="pa-16 d-flex flex-column justify-center align-center" Style="min-height: 300px;">
-                            <MudIcon Icon="@Icons.Material.Filled.DirectionsCar" Size="Size.Large" Color="Color.Secondary" Class="mb-4" />
-                            <MudText Typo="Typo.h6" Color="Color.Secondary">Select series and click "Run Season Simulation"</MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Simulates full season with playoffs and championship</MudText>
-                        </MudPaper>
-                    }
-                </MudItem>
-            </MudGrid>
-        </MudTabPanel>
-        
-        <!-- Tab 6: Race Predictions (Betting) -->
-        <MudTabPanel Text="Race Picks" Icon="@Icons.Material.Filled.Casino">
-            <MudGrid>
-                <MudItem xs="12" md="4">
-                    <MudPaper Class="pa-4">
-                        <MudText Typo="Typo.h6" Class="mb-2">
-                            <MudIcon Icon="@Icons.Material.Filled.Casino" Class="mr-2" />
-                            Race Predictions
-                        </MudText>
-                        <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">
-                            Simulate any race to get win, top 5, and top 10 probabilities for betting.
-                        </MudText>
-                        
-                        <MudSelect T="string" @bind-Value="_racePickSeries" Label="Series" 
-                                   Variant="Variant.Outlined" Class="mb-3">
-                            <MudSelectItem Value="@("cup")">Cup Series</MudSelectItem>
-                            <MudSelectItem Value="@("xfinity")">Xfinity Series</MudSelectItem>
-                            <MudSelectItem Value="@("trucks")">Truck Series</MudSelectItem>
-                        </MudSelect>
-                        
-                        <MudSelect T="string" @bind-Value="_racePickTrack" Label="Track Type" 
-                                   Variant="Variant.Outlined" Class="mb-3">
-                            <MudSelectItem Value="@("Superspeedway")">Superspeedway (Daytona, Talladega)</MudSelectItem>
-                            <MudSelectItem Value="@("Intermediate")">Intermediate (1.5 mile)</MudSelectItem>
-                            <MudSelectItem Value="@("Short Track")">Short Track (Bristol, Martinsville)</MudSelectItem>
-                            <MudSelectItem Value="@("Road Course")">Road Course (COTA, Sonoma)</MudSelectItem>
-                        </MudSelect>
-                        
-                        <MudNumericField @bind-Value="_racePickSims" Label="Simulations" 
-                                         Min="100" Max="2000" Step="100" Variant="Variant.Outlined" Class="mb-4" />
-                        
-                        <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true" 
-                                   OnClick="RunRacePrediction" Disabled="@_racePickLoading" Size="Size.Large">
-                            @if (_racePickLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
-                            @(_racePickLoading ? "Simulating..." : "🎰 Get Picks!")
-                        </MudButton>
-                    </MudPaper>
-                    
-                    @if (_racePickResults != null)
-                    {
-                        <MudPaper Class="pa-3 mt-3" Style="background: var(--mud-palette-success-lighten);">
-                            <MudText Typo="Typo.subtitle2">Quick Picks:</MudText>
-                            @{
-                                var picks = GetRacePickResults().Take(3).ToList();
-                                var i = 1;
-                                foreach (var p in picks)
-                                {
-                                    <MudText>@i. <strong>@p.GetValueOrDefault("driver", "")</strong> (@GetDoubleRace(p, "win_pct")% win)</MudText>
-                                    i++;
-                                }
-                            }
-                        </MudPaper>
-                    }
-                </MudItem>
-                <MudItem xs="12" md="8">
-                    @if (_racePickResults != null)
-                    {
-                        <MudPaper Class="pa-4">
-                            <div class="d-flex justify-space-between align-center mb-3">
-                                <MudText Typo="Typo.h6">@_racePickTrack Predictions</MudText>
-                                <MudChip T="string" Color="Color.Info" Size="Size.Small">@_racePickSims sims</MudChip>
-                            </div>
-                            <MudSimpleTable Dense="true" Hover="true" Striped="true" FixedHeader="true" Style="max-height: 500px;">
-                                <thead>
-                                    <tr style="background: var(--mud-palette-surface);">
-                                        <th>#</th>
-                                        <th>Driver</th>
-                                        <th>Win %</th>
-                                        <th>Top 5 %</th>
-                                        <th>Top 10 %</th>
-                                        <th>Avg Finish</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @{
-                                        var results = GetRacePickResults();
-                                        var rank = 1;
-                                        foreach (var driver in results)
-                                        {
-                                            var winPct = GetDoubleRace(driver, "win_pct");
-                                            var top5Pct = GetDoubleRace(driver, "top5_pct");
-                                            var top10Pct = GetDoubleRace(driver, "top10_pct");
-                                            <tr>
-                                                <td>@rank</td>
-                                                <td><strong>@driver.GetValueOrDefault("driver", "")</strong></td>
-                                                <td>
-                                                    <MudChip T="string" Size="Size.Small" 
-                                                             Color="@(winPct >= 10 ? Color.Success : winPct >= 5 ? Color.Info : Color.Default)">
-                                                        @winPct.ToString("F1")%
-                                                    </MudChip>
-                                                </td>
-                                                <td style="color: @(top5Pct >= 40 ? "green" : "inherit")">@top5Pct.ToString("F1")%</td>
-                                                <td style="color: @(top10Pct >= 60 ? "green" : "inherit")">@top10Pct.ToString("F1")%</td>
-                                                <td>@GetDoubleRace(driver, "avg_finish").ToString("F1")</td>
-                                            </tr>
-                                            rank++;
-                                        }
-                                    }
-                                </tbody>
-                            </MudSimpleTable>
-                        </MudPaper>
-                    }
-                    else if (!_racePickLoading)
-                    {
-                        <MudPaper Class="pa-16 d-flex flex-column justify-center align-center" Style="min-height: 400px;">
-                            <MudIcon Icon="@Icons.Material.Filled.Casino" Size="Size.Large" Color="Color.Success" Class="mb-4" />
-                            <MudText Typo="Typo.h5" Color="Color.Secondary">Race Day Predictions</MudText>
-                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
-                                Select track type and hit "Get Picks!" to see who's favored
-                            </MudText>
-                            <MudDivider Class="my-4" Style="width: 200px;" />
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                💡 Higher simulations = more accurate but slower
-                            </MudText>
-                        </MudPaper>
-                    }
-                </MudItem>
-            </MudGrid>
-        </MudTabPanel>
-        
-        <!-- Tab 7: Full Season Schedule with Predictions -->
-        <MudTabPanel Text="Season Schedule" Icon="@Icons.Material.Filled.CalendarMonth">
-            <MudGrid>
-                <MudItem xs="12" md="3">
-                    <MudPaper Class="pa-4">
-                        <MudText Typo="Typo.h6" Class="mb-3">
-                            <MudIcon Icon="@Icons.Material.Filled.CalendarMonth" Class="mr-2" />
-                            2025 Season
-                        </MudText>
-                        
-                        <MudSelect T="string" @bind-Value="_schedSeries" Label="Series" 
-                                   Variant="Variant.Outlined" Class="mb-3">
-                            <MudSelectItem Value="@("cup")">Cup Series</MudSelectItem>
-                            <MudSelectItem Value="@("xfinity")">Xfinity Series</MudSelectItem>
-                            <MudSelectItem Value="@("trucks")">Truck Series</MudSelectItem>
-                        </MudSelect>
-                        
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" 
-                                   OnClick="LoadSeasonSchedule" Disabled="@_schedLoading" Class="mb-3">
-                            @if (_schedLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
-                            @(_schedLoading ? "Loading..." : "Load Season Predictions")
-                        </MudButton>
-                        
-                        @if (_schedRaces != null && _schedRaces.Any())
-                        {
-                            <MudText Typo="Typo.subtitle2" Class="mb-2">Select Race:</MudText>
-                            <div style="max-height: 400px; overflow-y: auto;">
-                                @foreach (var race in _schedRaces)
-                                {
-                                    var isSelected = _schedSelectedRace == GetInt(race, "race_num");
-                                    var isPlayoff = race.GetValueOrDefault("is_playoff", false)?.ToString() == "True";
-                                    <MudButton Variant="@(isSelected ? Variant.Filled : Variant.Text)" 
-                                               Color="@(isPlayoff ? Color.Warning : isSelected ? Color.Primary : Color.Default)"
-                                               FullWidth="true" Size="Size.Small" Class="mb-1 justify-start"
-                                               OnClick="@(() => SelectRace(GetInt(race, "race_num")))">
-                                        <span style="width: 25px;">@GetInt(race, "race_num").</span>
-                                        @race.GetValueOrDefault("race_name", "")
-                                    </MudButton>
-                                }
-                            </div>
-                        }
-                    </MudPaper>
-                </MudItem>
-                <MudItem xs="12" md="9">
-                    @if (_schedSelectedRaceData != null)
-                    {
-                        <MudPaper Class="pa-4">
-                            <div class="d-flex justify-space-between align-center mb-3">
-                                <div>
-                                    <MudText Typo="Typo.h5">@_schedSelectedRaceData.GetValueOrDefault("race_name", "")</MudText>
-                                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                                        @_schedSelectedRaceData.GetValueOrDefault("track", "") • @_schedSelectedRaceData.GetValueOrDefault("track_type", "")
-                                    </MudText>
-                                </div>
-                                <div class="text-right">
-                                    <MudChip T="string" Color="Color.Info">@_schedSelectedRaceData.GetValueOrDefault("date", "")</MudChip>
-                                    @if (_schedSelectedRaceData.GetValueOrDefault("is_playoff", false)?.ToString() == "True")
-                                    {
-                                        <MudChip T="string" Color="Color.Warning">@_schedSelectedRaceData.GetValueOrDefault("playoff_round", "Playoff")</MudChip>
-                                    }
-                                </div>
-                            </div>
-                            
-                            <MudDivider Class="mb-3" />
-                            
-                            <!-- Quick Summary -->
-                            <MudGrid Spacing="2" Class="mb-4">
-                                @{
-                                    var predictions = GetScheduleRacePredictions();
-                                    var top3 = predictions.Take(3).ToList();
-                                }
-                                @for (int i = 0; i < top3.Count; i++)
-                                {
-                                    var p = top3[i];
-                                    var medal = i == 0 ? "🥇" : i == 1 ? "🥈" : "🥉";
-                                    <MudItem xs="12" md="4">
-                                        <MudPaper Class="pa-3 text-center" Elevation="2" Style="@($"background: {(i == 0 ? "linear-gradient(135deg, #FFD700 0%, #FFA500 100%)" : i == 1 ? "linear-gradient(135deg, #C0C0C0 0%, #A9A9A9 100%)" : "linear-gradient(135deg, #CD7F32 0%, #8B4513 100%)")}; color: white;")">
-                                            <MudText Typo="Typo.h4">@medal</MudText>
-                                            <MudText Typo="Typo.h6"><strong>@p.GetValueOrDefault("driver", "")</strong></MudText>
-                                            <MudText Typo="Typo.body2">@GetDoubleRace(p, "win_pct").ToString("F1")% to win</MudText>
-                                        </MudPaper>
-                                    </MudItem>
-                                }
-                            </MudGrid>
-                            
-                            <MudSimpleTable Dense="true" Hover="true" Striped="true" FixedHeader="true" Style="max-height: 400px;">
-                                <thead>
-                                    <tr>
-                                        <th>#</th>
-                                        <th>Driver</th>
-                                        <th>Win %</th>
-                                        <th>Top 5 %</th>
-                                        <th>Top 10 %</th>
-                                        <th>Avg Finish</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @{
-                                        var schedPredictions = GetScheduleRacePredictions();
-                                        var rank = 1;
-                                        foreach (var driver in schedPredictions)
-                                        {
-                                            <tr style="@(rank <= 10 ? "font-weight: 500;" : "")">
-                                                <td>@rank</td>
-                                                <td>@driver.GetValueOrDefault("driver", "")</td>
-                                                <td>
-                                                    @{
-                                                        var winPct = GetDoubleRace(driver, "win_pct");
-                                                    }
-                                                    <MudChip T="string" Size="Size.Small" Color="@(winPct >= 10 ? Color.Success : winPct >= 5 ? Color.Info : Color.Default)">
-                                                        @winPct.ToString("F1")%
-                                                    </MudChip>
-                                                </td>
-                                                <td>@GetDoubleRace(driver, "top5_pct").ToString("F1")%</td>
-                                                <td>@GetDoubleRace(driver, "top10_pct").ToString("F1")%</td>
-                                                <td>@GetDoubleRace(driver, "avg_finish").ToString("F1")</td>
-                                            </tr>
-                                            rank++;
-                                        }
-                                    }
-                                </tbody>
-                            </MudSimpleTable>
-                        </MudPaper>
-                    }
-                    else if (_schedRaces != null && _schedRaces.Any())
-                    {
-                        <MudPaper Class="pa-8 d-flex flex-column justify-center align-center" Style="min-height: 400px;">
-                            <MudIcon Icon="@Icons.Material.Filled.TouchApp" Size="Size.Large" Color="Color.Secondary" Class="mb-4" />
-                            <MudText Typo="Typo.h6" Color="Color.Secondary">Select a race from the list</MudText>
-                        </MudPaper>
-                    }
-                    else if (!_schedLoading)
-                    {
-                        <MudPaper Class="pa-16 d-flex flex-column justify-center align-center" Style="min-height: 400px;">
-                            <MudIcon Icon="@Icons.Material.Filled.CalendarMonth" Size="Size.Large" Color="Color.Primary" Class="mb-4" />
-                            <MudText Typo="Typo.h5" Color="Color.Secondary">Full Season Predictions</MudText>
-                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2 text-center">
-                                Load the season to see predictions for all 36 races<br/>
-                                Browse each race to see favorites, top 5, top 10 picks
-                            </MudText>
-                        </MudPaper>
+                        <div class="h-[400px] flex flex-col items-center justify-center bg-slate-900/50 border border-dashed border-slate-800 rounded-2xl">
+                             <TwIcon Icon="M13 10V3L4 14h7v7l9-11h-7z" Class="w-16 h-16 text-slate-700 mb-4 opacity-20" />
+                            <h3 class="text-xl font-bold text-slate-300">NASCAR Season Ready</h3>
+                            <p class="text-slate-500 text-sm max-w-xs text-center mt-2">Run the season simulation to see predicted championship and playoff brackets.</p>
+                        </div>
                     }
                     else
                     {
-                        <MudPaper Class="pa-16 d-flex flex-column justify-center align-center">
-                            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
-                            <MudText Typo="Typo.body1" Class="mt-4">Simulating all 36 races... this may take a moment</MudText>
-                        </MudPaper>
+                        <div class="h-[400px] flex flex-col items-center justify-center bg-slate-900/50 border border-slate-800 rounded-2xl p-8">
+                            <TwProgressBar Value="100" IsIndeterminate="true" Color="blue" Class="w-1/2 mb-6" />
+                            <h3 class="text-lg font-bold text-white mb-2">Simulating Season</h3>
+                            <p class="text-slate-500 text-sm">Calculating 36 individual races and points brackets...</p>
+                        </div>
                     }
-                </MudItem>
-            </MudGrid>
-        </MudTabPanel>
-    </MudTabs>
-</MudContainer>
+                </div>
+            </TwGrid>
+        </TwTabPanel>
+        
+        <!-- Tab 6: Race Predictions (Betting) -->
+        <TwTabPanel Title="Race Picks" TabIcon="@Icons.Material.Filled.Casino">
+            <TwGrid Columns="1" md="12" Gap="6">
+                <div class="md:col-span-4">
+                    <TwCard Class="p-6 bg-slate-900 border-slate-800">
+                        <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                            <TwIcon Icon="M12 2a10 10 0 1010 10A10 10 0 0012 2zm0 18a8 8 0 118-8 8 8 0 01-8 8z" Class="w-5 h-5 text-emerald-500" />
+                            Race Day Picks
+                        </h3>
+                        <p class="text-slate-400 text-sm mb-6">
+                            Simulate any specific race setup to get win, top 5, and top 10 probabilities for betting analysis.
+                        </p>
+                        
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Series</label>
+                                <select @bind="_racePickSeries" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors">
+                                    <option value="cup">Cup Series</option>
+                                    <option value="xfinity">Xfinity Series</option>
+                                    <option value="trucks">Truck Series</option>
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Track Type</label>
+                                <select @bind="_racePickTrack" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors">
+                                    <option value="Superspeedway">Superspeedway</option>
+                                    <option value="Intermediate">Intermediate (1.5 mile)</option>
+                                    <option value="Short Track">Short Track</option>
+                                    <option value="Road Course">Road Course</option>
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Simulations</label>
+                                <input type="number" @bind="_racePickSims" min="100" max="2000" step="100" 
+                                       class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors" />
+                            </div>
+                            
+                            <TwButton Variant="primary" Class="w-full py-4 mt-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold" OnClick="RunRacePrediction" IsLoading="_racePickLoading" Disabled="@_racePickLoading">
+                                🎰 Get Picks!
+                            </TwButton>
+                        </div>
+                    </TwCard>
+                    
+                    @if (_racePickResults != null)
+                    {
+                        <div class="mt-6 p-5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
+                            <h4 class="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-4">Quick Picks:</h4>
+                            <div class="space-y-3">
+                                @{
+                                    var picks = GetRacePickResults().Take(3).ToList();
+                                    for (int i = 0; i < picks.Count; i++)
+                                    {
+                                        var p = picks[i];
+                                        <div class="flex items-center justify-between">
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-slate-500 font-mono text-xs">@(i+1).</span>
+                                                <span class="text-white font-bold text-sm">@p.GetValueOrDefault("driver", "")</span>
+                                            </div>
+                                            <span class="text-emerald-400 font-black text-xs">@GetDoubleRace(p, "win_pct")% win</span>
+                                        </div>
+                                    }
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+                <div class="md:col-span-8">
+                    @if (_racePickResults != null)
+                    {
+                        <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                            <div class="p-6 flex justify-between items-center border-b border-slate-800">
+                                <h3 class="text-lg font-bold text-white flex items-center gap-3">
+                                    <TwIcon Icon="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" Class="w-5 h-5 text-blue-400" />
+                                    @_racePickTrack Predictions
+                                </h3>
+                                <TwChip Color="blue" Size="sm" Class="font-bold">@_racePickSims iterations</TwChip>
+                            </div>
+                            
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left">
+                                    <thead>
+                                        <tr class="text-slate-500 text-[10px] uppercase tracking-widest border-b border-slate-800 bg-slate-950/20">
+                                            <th class="py-4 px-6">#</th>
+                                            <th class="py-4 px-6">Driver</th>
+                                            <th class="py-4 px-6">Win %</th>
+                                            <th class="py-4 px-6">Top 5 %</th>
+                                            <th class="py-4 px-6">Top 10 %</th>
+                                            <th class="py-4 px-6 text-right">Avg Finish</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-800/50">
+                                        @{
+                                            var results = GetRacePickResults();
+                                            var pickRank = 1;
+                                            foreach (var driver in results)
+                                            {
+                                                var winPct = GetDoubleRace(driver, "win_pct");
+                                                var top5Pct = GetDoubleRace(driver, "top5_pct");
+                                                var top10Pct = GetDoubleRace(driver, "top10_pct");
+                                                <tr class="hover:bg-slate-800/30 transition-colors">
+                                                    <td class="py-3 px-6 text-slate-600 font-mono text-xs">@pickRank</td>
+                                                    <td class="py-3 px-6 text-white font-bold text-sm">@driver.GetValueOrDefault("driver", "")</td>
+                                                    <td class="py-3 px-6">
+                                                        <TwChip Color="@(winPct >= 10 ? "emerald" : winPct >= 5 ? "blue" : "slate")" Size="sm" Class="font-black text-[11px]">
+                                                            @winPct.ToString("F1")%
+                                                        </TwChip>
+                                                    </td>
+                                                    <td class="py-3 px-6 @(top5Pct >= 40 ? "text-emerald-400 font-bold" : "text-slate-400") text-sm">@top5Pct.ToString("F1")%</td>
+                                                    <td class="py-3 px-6 @(top10Pct >= 60 ? "text-emerald-400 font-bold" : "text-slate-400") text-sm">@top10Pct.ToString("F1")%</td>
+                                                    <td class="py-3 px-6 text-right font-mono text-slate-500 text-sm">@GetDoubleRace(driver, "avg_finish").ToString("F1")</td>
+                                                </tr>
+                                                pickRank++;
+                                            }
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    }
+                    else if (!_racePickLoading)
+                    {
+                        <div class="h-full min-h-[400px] flex flex-col items-center justify-center bg-slate-900/50 border border-dashed border-slate-800 rounded-2xl p-8 text-center">
+                            <TwIcon Icon="M12 2a10 10 0 1010 10A10 10 0 0012 2zm0 18a8 8 0 118-8 8 8 0 01-8 8z" Class="w-16 h-16 text-slate-700 mb-4 opacity-20" />
+                            <h3 class="text-xl font-bold text-slate-300">Race Day Engine Ready</h3>
+                            <p class="text-slate-500 text-sm mt-2 max-w-sm mx-auto">Analyze field strength and track history to identify betting value for win, top 5, and top 10 positions.</p>
+                            <div class="mt-8 flex items-center gap-6 justify-center">
+                                <div class="text-center">
+                                    <p class="text-[10px] text-slate-600 font-bold uppercase tracking-widest">Accuracy</p>
+                                    <p class="text-lg font-black text-slate-400">High</p>
+                                </div>
+                                <div class="w-px h-8 bg-slate-800"></div>
+                                <div class="text-center">
+                                    <p class="text-[10px] text-slate-600 font-bold uppercase tracking-widest">Sim Speed</p>
+                                    <p class="text-lg font-black text-slate-400">Fast</p>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="h-[400px] flex flex-col items-center justify-center bg-slate-900/50 border border-slate-800 rounded-2xl">
+                            <div class="flex items-center gap-3 mb-6">
+                                <div class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                                <div class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse delay-75"></div>
+                                <div class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse delay-150"></div>
+                            </div>
+                            <h3 class="text-lg font-bold text-white mb-2">Simulating Race Lineups</h3>
+                            <p class="text-slate-500 text-sm">Processing track type bias and driver history statistics...</p>
+                        </div>
+                    }
+                </div>
+            </TwGrid>
+        </TwTabPanel>
+        
+        <!-- Tab 7: Full Season Schedule with Predictions -->
+        <TwTabPanel Title="Season Schedule" TabIcon="@Icons.Material.Filled.CalendarMonth">
+            <TwGrid Columns="1" md="12" Gap="6">
+                <div class="md:col-span-3">
+                    <TwCard Class="p-5 bg-slate-900 border-slate-800">
+                        <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                            <TwIcon Icon="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" Class="w-5 h-5 text-blue-500" />
+                            2025 Season
+                        </h3>
+                        
+                        <div class="space-y-4 mb-6">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Series</label>
+                                <select @bind="_schedSeries" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors text-sm">
+                                    <option value="cup">Cup Series</option>
+                                    <option value="xfinity">Xfinity Series</option>
+                                    <option value="trucks">Truck Series</option>
+                                </select>
+                            </div>
+                            
+                            <TwButton Variant="primary" Class="w-full py-3 text-sm" OnClick="LoadSeasonSchedule" IsLoading="_schedLoading" Disabled="@_schedLoading">
+                                Load Predictions
+                            </TwButton>
+                        </div>
+                        
+                        @if (_schedRaces != null && _schedRaces.Any())
+                        {
+                            <div class="border-t border-slate-800 pt-6">
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Select Race:</label>
+                                <div class="space-y-1 max-h-[450px] overflow-y-auto pr-2 custom-scrollbar">
+                                    @foreach (var race in _schedRaces)
+                                    {
+                                        var isSelected = _schedSelectedRace == GetInt(race, "race_num");
+                                        var isPlayoff = race.GetValueOrDefault("is_playoff", false)?.ToString() == "True";
+                                        <button @onclick="@(() => SelectRace(GetInt(race, "race_num")))"
+                                                class="w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3 group
+                                                       @(isSelected ? (isPlayoff ? "bg-amber-600/20 border border-amber-500/50" : "bg-blue-600/20 border border-blue-500/50") : "hover:bg-slate-800/50 border border-transparent")">
+                                            <span class="text-[10px] font-mono @(isSelected ? "text-white" : "text-slate-500")">#@GetInt(race, "race_num").ToString().PadLeft(2, '0')</span>
+                                            <div class="flex-1">
+                                                <p class="text-xs font-bold @(isSelected ? "text-white" : "text-slate-300 group-hover:text-white") truncate">@race.GetValueOrDefault("race_name", "")</p>
+                                                @if (isPlayoff)
+                                                {
+                                                    <span class="text-[8px] font-black uppercase tracking-widest text-amber-500">Playoffs</span>
+                                                }
+                                            </div>
+                                            @if (isSelected)
+                                            {
+                                                <div class="w-1.5 h-1.5 rounded-full @(isPlayoff ? "bg-amber-500" : "bg-blue-500") animate-pulse"></div>
+                                            }
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </TwCard>
+                </div>
+                <div class="md:col-span-9">
+                    @if (_schedSelectedRaceData != null)
+                    {
+                        <div class="space-y-6">
+                             <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+                                @* Background Decoration *@
+                                <div class="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 rounded-full -mr-32 -mt-32 blur-3xl"></div>
+                            
+                                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative">
+                                    <div>
+                                        <h2 class="text-2xl font-black text-white tracking-tight mb-1">@_schedSelectedRaceData.GetValueOrDefault("race_name", "")</h2>
+                                        <div class="flex items-center gap-3 text-sm text-slate-400">
+                                            <span>@_schedSelectedRaceData.GetValueOrDefault("track", "")</span>
+                                            <span class="w-1 h-1 rounded-full bg-slate-700"></span>
+                                            <span>@_schedSelectedRaceData.GetValueOrDefault("track_type", "")</span>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <TwChip Color="blue" Size="sm" Class="font-bold">@_schedSelectedRaceData.GetValueOrDefault("date", "")</TwChip>
+                                        @if (_schedSelectedRaceData.GetValueOrDefault("is_playoff", false)?.ToString() == "True")
+                                        {
+                                            <TwChip Color="amber" Size="sm" Class="font-black">@_schedSelectedRaceData.GetValueOrDefault("playoff_round", "Playoff")</TwChip>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            @* Podium / Top 3 Visualization *@
+                            <TwGrid Columns="1" md="3" Gap="4">
+                                @{
+                                    var predictions = GetScheduleRacePredictions();
+                                    var top3 = predictions.Take(3).ToList();
+                                    for (int i = 0; i < top3.Count; i++)
+                                    {
+                                        var p = top3[i];
+                                        var medal = i == 0 ? "🥇" : i == 1 ? "🥈" : "🥉";
+                                        var gradient = i == 0 ? "from-amber-400 to-amber-600" : i == 1 ? "from-slate-300 to-slate-500" : "from-orange-600 to-orange-800";
+                                        <div class="bg-gradient-to-br @gradient p-px rounded-2xl shadow-lg shadow-black/20 transform hover:-translate-y-1 transition-all duration-300">
+                                            <div class="bg-slate-900/90 backdrop-blur-xl rounded-2xl p-6 h-full text-center">
+                                                <span class="text-4xl block mb-2">@medal</span>
+                                                <h4 class="text-lg font-black text-white mb-1">@p.GetValueOrDefault("driver", "")</h4>
+                                                <p class="text-sm font-bold @(i == 0 ? "text-amber-400" : i == 1 ? "text-slate-300" : "text-orange-400")">@GetDoubleRace(p, "win_pct").ToString("F1")% Win</p>
+                                            </div>
+                                        </div>
+                                    }
+                                }
+                            </TwGrid>
+                            
+                            @* Full Standings Table *@
+                            <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+                                <div class="p-6 border-b border-slate-800 bg-slate-950/20">
+                                    <h3 class="text-sm font-black text-white uppercase tracking-widest">Full Field Probabilities</h3>
+                                </div>
+                                <div class="overflow-x-auto max-h-[600px] overflow-y-auto custom-scrollbar">
+                                    <table class="w-full text-left">
+                                        <thead class="sticky top-0 bg-slate-900 shadow-sm shadow-black/20">
+                                            <tr class="text-slate-500 text-[10px] uppercase tracking-widest border-b border-slate-800">
+                                                <th class="py-4 px-6">#</th>
+                                                <th class="py-4 px-6">Driver</th>
+                                                <th class="py-4 px-6">Win %</th>
+                                                <th class="py-4 px-6">Top 5 %</th>
+                                                <th class="py-4 px-6">Top 10 %</th>
+                                                <th class="py-4 px-6 text-right">Avg Finish</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-slate-800/50">
+                                            @{
+                                                var schedPredictions = GetScheduleRacePredictions();
+                                                var schedRank = 1;
+                                                foreach (var driver in schedPredictions)
+                                                {
+                                                    var winPct = GetDoubleRace(driver, "win_pct");
+                                                    <tr class="hover:bg-slate-800/30 transition-colors @(schedRank <= 3 ? "bg-blue-600/5" : "")">
+                                                        <td class="py-3 px-6 text-slate-500 font-mono text-xs">@schedRank</td>
+                                                        <td class="py-3 px-6 text-white font-bold text-sm">@driver.GetValueOrDefault("driver", "")</td>
+                                                        <td class="py-3 px-6">
+                                                            <TwChip Color="@(winPct >= 10 ? "emerald" : winPct >= 5 ? "blue" : "slate")" Size="sm" Class="font-black text-[10px]">@winPct.ToString("F1")%</TwChip>
+                                                        </td>
+                                                        <td class="py-3 px-6 text-slate-300 text-sm">@GetDoubleRace(driver, "top5_pct").ToString("F1")%</td>
+                                                        <td class="py-3 px-6 text-slate-400 text-sm">@GetDoubleRace(driver, "top10_pct").ToString("F1")%</td>
+                                                        <td class="py-3 px-6 text-right font-mono text-slate-500 text-sm">@GetDoubleRace(driver, "avg_finish").ToString("F1")</td>
+                                                    </tr>
+                                                    schedRank++;
+                                                }
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    else if (_schedRaces != null && _schedRaces.Any())
+                    {
+                        <div class="h-full min-h-[500px] flex flex-col items-center justify-center bg-slate-900/50 border border-dashed border-slate-800 rounded-2xl p-12 text-center">
+                            <TwIcon Icon="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5" Class="w-16 h-16 text-slate-700 mb-6 animate-bounce" />
+                            <h3 class="text-2xl font-black text-white mb-2">Select a Race</h3>
+                            <p class="text-slate-500 max-w-sm mx-auto">Click any race from the calendar on the left to view detailed Monte Carlo predictions for that event.</p>
+                        </div>
+                    }
+                    else if (!_schedLoading)
+                    {
+                        <div class="h-full min-h-[500px] flex flex-col items-center justify-center bg-slate-900/50 border border-dashed border-slate-800 rounded-2xl p-12 text-center">
+                            <TwIcon Icon="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" Class="w-20 h-20 text-slate-700 mb-6 opacity-30" />
+                            <h3 class="text-2xl font-black text-white mb-2">Full Season Forecast</h3>
+                            <p class="text-slate-500 max-w-sm mx-auto mb-8">Load the complete season schedule to analyze every race in the 2025 calendar with 300+ simulations per event.</p>
+                            <TwButton Variant="primary" Class="px-8 py-3" OnClick="LoadSeasonSchedule">Download Season Data</TwButton>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="h-full min-h-[500px] flex flex-col items-center justify-center bg-slate-900/50 border border-slate-800 rounded-2xl p-12 text-center">
+                            <div class="w-16 h-16 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin mb-8"></div>
+                            <h3 class="text-2xl font-black text-white mb-2">Simulating Entire Calendar</h3>
+                            <p class="text-slate-500 max-w-sm mx-auto">This involves simulating 36 separate races with full fields. This might take up to 60 seconds.</p>
+                            <div class="mt-8 flex gap-2">
+                                <div class="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce"></div>
+                                <div class="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                                <div class="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </TwGrid>
+        </TwTabPanel>
+    </TwTabs>
+</TwContainer>
 
 @code {
     private int _activeTab = 0;
@@ -1281,39 +1519,49 @@
         return 0;
     }
     
-    private Color GetSBColor(double pct) => pct >= 10 ? Color.Success : pct >= 5 ? Color.Info : pct >= 2 ? Color.Warning : Color.Default;
+    private string GetTailwindSBColor(double pct) => pct >= 10 ? "emerald" : pct >= 5 ? "blue" : pct >= 2 ? "amber" : "slate";
     
-    private RenderFragment RenderConferenceTable(string conf) => __builder =>
+    private string GetChampTailwindColor(double pct) => pct >= 15 ? "emerald" : pct >= 8 ? "blue" : pct >= 3 ? "amber" : "slate";
+
+    private RenderFragment RenderTailwindConferenceTable(string conf) => __builder =>
     {
-        <MudSimpleTable Dense="true" Hover="true" Striped="true">
-            <thead>
-                <tr>
-                    <th>Team</th>
-                    <th>Division</th>
-                    <th>W</th>
-                    <th>L</th>
-                    <th>Playoff %</th>
-                    <th>Div Win %</th>
-                </tr>
-            </thead>
-            <tbody>
-                @{
-                    var teams = GetConferenceTeams(conf);
-                    foreach (var team in teams)
-                    {
-                        <tr>
-                            <td><strong>@team.GetValueOrDefault("team", "")</strong></td>
-                            <td>@team.GetValueOrDefault("division", "")</td>
-                            <td>@team.GetValueOrDefault("wins", 0)</td>
-                            <td>@team.GetValueOrDefault("losses", 0)</td>
-                            <td>@GetDouble(team, "playoff_pct").ToString("F1")%</td>
-                            <td>@GetDouble(team, "division_pct").ToString("F1")%</td>
-                        </tr>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="text-slate-500 text-[10px] uppercase tracking-widest border-b border-slate-800">
+                        <th class="pb-3 px-4">Team</th>
+                        <th class="pb-3 px-4">Division</th>
+                        <th class="pb-3 px-4">W</th>
+                        <th class="pb-3 px-4">L</th>
+                        <th class="pb-3 px-4">Playoff %</th>
+                        <th class="pb-3 px-4 text-right">Div Win %</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800/30 text-sm">
+                    @{
+                        var teams = GetConferenceTeams(conf);
+                        foreach (var team in teams)
+                        {
+                            <tr class="hover:bg-slate-800/30 transition-colors">
+                                <td class="py-3 px-4 text-white font-bold">@team.GetValueOrDefault("team", "")</td>
+                                <td class="py-3 px-4 text-slate-400">@team.GetValueOrDefault("division", "")</td>
+                                <td class="py-3 px-4 text-slate-300 font-mono">@team.GetValueOrDefault("wins", 0)</td>
+                                <td class="py-3 px-4 text-slate-300 font-mono">@team.GetValueOrDefault("losses", 0)</td>
+                                <td class="py-3 px-4">
+                                    <span class="px-2 py-0.5 rounded text-[11px] font-black @(GetDouble(team, "playoff_pct") > 80 ? "bg-emerald-500/10 text-emerald-400" : GetDouble(team, "playoff_pct") > 50 ? "bg-amber-500/10 text-amber-400" : "bg-red-500/10 text-red-400")">
+                                        @GetDouble(team, "playoff_pct").ToString("F1")%
+                                    </span>
+                                </td>
+                                <td class="py-3 px-4 text-right text-slate-400 font-mono">@GetDouble(team, "division_pct").ToString("F1")%</td>
+                            </tr>
+                        }
                     }
-                }
-            </tbody>
-        </MudSimpleTable>
+                </tbody>
+            </table>
+        </div>
     };
+
+    private string GetTailwindWinPctColor(double pct) => pct >= 10 ? "emerald" : pct >= 5 ? "blue" : "slate";
     
     // NASCAR Season Simulation State
     private string _nascarSeasonSeries = "cup";
@@ -1405,7 +1653,7 @@
         return 0;
     }
     
-    private Color GetChampColor(double pct) => pct >= 15 ? Color.Success : pct >= 8 ? Color.Info : pct >= 3 ? Color.Warning : Color.Default;
+    private string GetChampTailwindColorManual(double pct) => pct >= 15 ? "emerald" : pct >= 8 ? "blue" : pct >= 3 ? "amber" : "slate";
     
     // Race Picks State
     private string _racePickSeries = "cup";

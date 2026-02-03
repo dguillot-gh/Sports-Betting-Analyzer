@@ -1,5 +1,6 @@
 @page "/cfb-live-odds"
 @using System.Text.Json
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject ILogger<CFBLiveOdds> Logger
@@ -8,198 +9,176 @@
 
 <PageTitle>CFB Live Odds</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
-    <MudStack Spacing="4">
-        <!-- Header -->
-        <MudPaper Class="pa-4" Elevation="2">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                <div>
-                    <MudText Typo="Typo.h4">
-                        <MudIcon Icon="@Icons.Material.Filled.SportsFootball" Class="mr-2" />
-                        CFB Live Odds
-                    </MudText>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        College Football predictions with value detection
-                    </MudText>
+<TwContainer>
+    <div class="flex flex-col gap-6">
+        <!-- Header & Loading Status -->
+        <TwCard Class="p-1 relative overflow-hidden">
+            @if (_isLoading)
+            {
+                <div class="absolute top-0 left-0 right-0 h-1 bg-slate-800">
+                    <div class="h-full bg-blue-500 animate-progress" style="width: 75%"></div>
                 </div>
-                <MudStack Row="true" Spacing="2">
-                    <MudSelect T="string" @bind-Value="_selectedSportsbook" Label="Sportsbook" 
-                               Variant="Variant.Outlined" Dense="true" Style="width: 150px;">
-                        <MudSelectItem Value="@("fanduel")">FanDuel</MudSelectItem>
-                        <MudSelectItem Value="@("draftkings")">DraftKings</MudSelectItem>
-                        <MudSelectItem Value="@("betmgm")">BetMGM</MudSelectItem>
-                    </MudSelect>
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                               StartIcon="@Icons.Material.Filled.Refresh"
-                               OnClick="@RunAnalysis" Disabled="@_isLoading">
+            }
+            <div class="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div>
+                    <h1 class="text-3xl font-bold text-white flex items-center gap-3">
+                        <svg class="w-8 h-8 text-blue-500" fill="currentColor" viewBox="0 0 24 24"><path d="M5.14,2C4.33,2,3.65,2.5,3.31,3.23L1.13,7.96C1.04,8.19,1,8.43,1,8.68V11c0,0.55,0.45,1,1,1h1c0,3.31,2.69,6,6,6c0.55,0,1,0.45,1,1v1h2v-1c0-0.55,0.45-1,1-1c3.31,0,6-2.69,6-6h1c0.55,0,1-0.45,1-1V8.68c0-0.25-0.04-0.49-0.13-0.72l-2.18-4.73C17.35,2.5,16.67,2,15.86,2H5.14z M17,11h-1v-1h1V11z M5,11H4v-1h1V11z M12,14c-1.66,0-3-1.34-3-3s1.34-3,3-3s3,1.34,3,3S13.66,14,12,14z"></path></svg>
+                        CFB Live Odds
                         @if (_isLoading)
                         {
-                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                            <span>Analyzing...</span>
+                            <span class="text-xs font-normal text-blue-400 animate-pulse ml-2 flex items-center gap-1">
+                                <span class="block w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                Fetching live odds...
+                            </span>
                         }
-                        else
-                        {
-                            <span>Analyze Games</span>
-                        }
-                    </MudButton>
-                </MudStack>
-            </MudStack>
-        </MudPaper>
+                    </h1>
+                    <p class="text-slate-400 mt-1">College Football predictions with value detection.</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                    <TwSelect TValue="string" @bind-Value="_selectedSportsbook" Label="Sportsbook" Class="w-40">
+                        <option value="fanduel">FanDuel</option>
+                        <option value="draftkings">DraftKings</option>
+                        <option value="betmgm">BetMGM</option>
+                    </TwSelect>
+                    <TwButton Variant="primary" StartIcon="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
+                              OnClick="@RunAnalysis" IsLoading="@_isLoading" Disabled="@_isLoading">
+                        Analyze Games
+                    </TwButton>
+                </div>
+            </div>
+        </TwCard>
 
         @if (_error != null)
         {
-            <MudAlert Severity="Severity.Error" Variant="Variant.Filled">@_error</MudAlert>
+            <TwAlert Severity="error">@_error</TwAlert>
         }
 
-        <ApiQuotaTracker />
+        <TwApiQuotaTracker />
 
-        <!-- Summary Stats -->
         @if (_games.Any())
         {
-            <MudPaper Class="pa-3" Elevation="1">
-                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                    <MudText Typo="Typo.body1">
-                        <strong>@_games.Count</strong> games found · 
-                        <strong>@_valueBets</strong> value bets detected
-                    </MudText>
-                    <MudChip T="string" Color="Color.Info" Size="Size.Small">@_source</MudChip>
-                </MudStack>
-            </MudPaper>
+            <div class="bg-slate-900/50 border border-slate-800 rounded-xl px-4 py-3 flex justify-between items-center">
+                <span class="text-slate-300">
+                    <strong class="text-white">@_games.Count</strong> games found · 
+                    <strong class="text-blue-400">@_valueBets</strong> value bets detected
+                </span>
+                <TwChip Color="blue" Variant="outline" Size="sm">@_source</TwChip>
+            </div>
         }
 
-        <!-- Games Grid -->
         @if (_games.Any())
         {
-            <MudGrid Spacing="3">
+            <TwGrid Columns="1" ColumnsMd="2" ColumnsLg="3" Gap="6">
                 @foreach (var game in _games)
                 {
-                    <MudItem xs="12" md="6" lg="4">
-                        <MudCard Elevation="3" Class="h-100">
-                            <MudCardHeader Style="@GetCardStyle(game)">
-                                <CardHeaderContent>
-                                    <MudText Typo="Typo.h6">@game.AwayTeam</MudText>
-                                    <MudText Typo="Typo.caption">at</MudText>
-                                    <MudText Typo="Typo.h6">@game.HomeTeam</MudText>
-                                </CardHeaderContent>
-                                 <CardHeaderActions>
-                                     @if (game.HasValue)
-                                     {
-                                         <MudChip T="string" Color="Color.Success" Size="Size.Small">VALUE</MudChip>
-                                     }
-                                 </CardHeaderActions>
-                            </MudCardHeader>
-                            <MudCardContent>
-                                <MudSimpleTable Dense="true" Hover="true">
-                                    <tbody>
-                                        @if (game.HomeMoneyline.HasValue && game.AwayMoneyline.HasValue)
-                                        {
-                                            <tr>
-                                                <td><strong>Moneyline</strong></td>
-                                                <td>@FormatOdds(game.HomeMoneyline) / @FormatOdds(game.AwayMoneyline)</td>
-                                            </tr>
-                                        }
-                                        @if (game.Spread.HasValue)
-                                        {
-                                            <tr>
-                                                <td><strong>Spread</strong></td>
-                                                <td>@game.Spread.Value.ToString("+0.0;-0.0")</td>
-                                            </tr>
-                                        }
-                                        @if (game.OverUnder.HasValue)
-                                        {
-                                            <tr>
-                                                <td><strong>O/U</strong></td>
-                                                <td>@game.OverUnder.Value</td>
-                                            </tr>
-                                        }
-                                    </tbody>
-                                </MudSimpleTable>
+                    <TwCard NoPadding="true" Class="flex flex-col h-full border-t-4" Style="@(game.HasValue ? "border-t-blue-500" : "border-t-slate-800")">
+                        <div class="p-5 border-b border-slate-800 bg-slate-900/40">
+                            <div class="flex justify-between items-start mb-1">
+                                <div class="flex flex-col">
+                                    <span class="text-lg font-bold text-white">@game.AwayTeam</span>
+                                    <span class="text-[10px] text-slate-500 uppercase tracking-widest my-0.5">at</span>
+                                    <span class="text-lg font-bold text-white">@game.HomeTeam</span>
+                                </div>
+                                @if (game.HasValue)
+                                {
+                                    <TwChip Color="emerald" Size="xs">VALUE</TwChip>
+                                }
+                            </div>
+                        </div>
 
-                                <!-- Model Predictions Section -->
-                                <MudText Typo="Typo.subtitle2" Class="mt-3 mb-1" Style="font-weight:700;">Predictions</MudText>
-                                <MudSimpleTable Dense="true" Hover="true" Style="background: transparent; border: 1px solid #e0e0e0; border-radius: 4px;">
-                                    <thead>
-                                        <tr style="background: rgba(0,0,0,0.05);">
-                                            <th>Model</th>
-                                            <th>Winner</th>
-                                            <th>Total</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <!-- Simple Model -->
-                                        <tr>
-                                            <td><MudText Typo="Typo.caption" Style="font-weight:600;">Simple Stats</MudText></td>
-                                            <td>
+                        <div class="p-5 flex-1 space-y-4">
+                            <!-- Odds Table -->
+                            <div class="rounded-lg border border-slate-800 overflow-hidden text-xs">
+                                    <TwTable TItem="object">
+                                    <TwTr>
+                                        <TwTd Class="bg-slate-900/20 font-medium text-slate-400">Moneyline</TwTd>
+                                        <TwTd Class="text-right">@FormatOdds(game.HomeMoneyline) / @FormatOdds(game.AwayMoneyline)</TwTd>
+                                    </TwTr>
+                                    @if (game.Spread.HasValue)
+                                    {
+                                        <TwTr>
+                                            <TwTd Class="bg-slate-900/20 font-medium text-slate-400">Spread</TwTd>
+                                            <TwTd Class="text-right">@game.Spread.Value.ToString("+0.0;-0.0")</TwTd>
+                                        </TwTr>
+                                    }
+                                    @if (game.OverUnder.HasValue)
+                                    {
+                                        <TwTr>
+                                            <TwTd Class="bg-slate-900/20 font-medium text-slate-400">O/U</TwTd>
+                                            <TwTd Class="text-right">@game.OverUnder.Value</TwTd>
+                                        </TwTr>
+                                    }
+                                </TwTable>
+                            </div>
+
+                            <!-- Predictions -->
+                            <div class="space-y-3">
+                                <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Model Predictions</h4>
+                                <div class="rounded-lg border border-slate-800 overflow-hidden text-xs">
+                                    <TwTable TItem="object">
+                                        <TwTr Class="bg-slate-900/40">
+                                            <TwTh Class="text-[10px] py-1">Model</TwTh>
+                                            <TwTh Class="text-[10px] py-1">Winner</TwTh>
+                                            <TwTh Class="text-[10px] py-1 text-right">Total</TwTh>
+                                        </TwTr>
+                                        <TwTr>
+                                            <TwTd>Simple Stats</TwTd>
+                                            <TwTd>
                                                 @if (game.Prediction != null)
                                                 {
-                                                    <strong style="color: @(game.Prediction.HomeWinProbability > 0.5 ? "#4caf50" : "#f44336")">
+                                                    <span class="font-bold @(game.Prediction.HomeWinProbability > 0.5 ? "text-emerald-500" : "text-red-500")">
                                                         @(game.Prediction.HomeWinProbability > 0.5 ? "Home" : "Away")
-                                                    </strong>
-                                                    <span style="font-size: 0.75em;"> (@(game.Prediction.HomeWinProbability.ToString("P0")))</span>
+                                                    </span>
+                                                    <span class="text-slate-500 text-[10px]"> @(game.Prediction.HomeWinProbability.ToString("P0"))</span>
                                                 }
                                                 else { <span>-</span> }
-                                            </td>
-                                            <td>@(game.Prediction?.PredictedTotal.ToString("F1") ?? "-")</td>
-                                        </tr>
-
-                                        <!-- XGBoost Placeholder (Future) -->
-                                        <tr>
-                                            <td><MudText Typo="Typo.caption" Style="font-weight:600;">XGBoost (ML)</MudText></td>
-                                            <td colspan="2" style="text-align:center;">
-                                                <MudText Typo="Typo.caption" Color="Color.Default" Style="font-style:italic;">Coming Soon</MudText>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </MudSimpleTable>
-
-                                <MudDivider Class="my-2" />
-                                <div class="mt-2">
-                                    @if (game.GeminiAnalysis == null)
-                                    {
-                                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Size="Size.Small"
-                                                   StartIcon="@Icons.Material.Filled.AutoFixHigh"
-                                                   OnClick="@(() => GetGeminiAnalysis(game))" Disabled="@game.IsAnalyzing">
-                                            @if (game.IsAnalyzing)
-                                            {
-                                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                                                <span>Analyzing...</span>
-                                            }
-                                            else
-                                            {
-                                                <span>AI Rationale</span>
-                                            }
-                                        </MudButton>
-                                    }
-                                    else
-                                    {
-                                        <div class="mt-2">
-                                            <MudPaper Class="pa-3 mt-2" Style="background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px;">
-                                                <div class="d-flex align-center mb-2">
-                                                    <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Small" Color="Color.Secondary" Class="mr-2" />
-                                                    <MudText Typo="Typo.caption" Color="Color.Secondary"><strong>AI Rationale</strong></MudText>
-                                                </div>
-                                                <div style="font-family: 'Inter', 'Roboto', sans-serif; font-size: 0.85rem; line-height: 1.7; color: #37474f;">
-                                                    @((MarkupString)(game.GeminiAnalysis.LlmInsight?.Rationale ?? ""))
-                                                </div>
-                                            </MudPaper>
-                                        </div>
-                                    }
+                                            </TwTd>
+                                            <TwTd Class="text-right font-medium">@(game.Prediction?.PredictedTotal.ToString("F1") ?? "-")</TwTd>
+                                        </TwTr>
+                                        <TwTr>
+                                            <TwTd>XGBoost (ML)</TwTd>
+                                            <TwTd colspan="2" Class="text-center italic text-slate-500 py-1">Coming Soon</TwTd>
+                                        </TwTr>
+                                    </TwTable>
                                 </div>
-                                
-                            </MudCardContent>
-                        </MudCard>
-                    </MudItem>
+                            </div>
+
+                            <!-- AI Analysis -->
+                            <div>
+                                @if (game.GeminiAnalysis == null)
+                                {
+                                    <TwButton Variant="outline" Size="sm" Class="w-full"
+                                              StartIcon="M13 10V3L4 14h7v7l9-11h-7z"
+                                              OnClick="@(() => GetGeminiAnalysis(game))" IsLoading="@game.IsAnalyzing" Disabled="@game.IsAnalyzing">
+                                        AI Rationale
+                                    </TwButton>
+                                }
+                                else
+                                {
+                                    <div class="mt-2 p-3 rounded-lg bg-blue-500/5 border border-blue-500/10 space-y-2">
+                                        <div class="flex items-center gap-2 text-blue-400">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+                                            <span class="text-xs font-bold uppercase tracking-wider">AI Rationale</span>
+                                        </div>
+                                        <div class="text-xs text-slate-400 leading-relaxed">
+                                            @((MarkupString)(game.GeminiAnalysis.LlmInsight?.Rationale ?? ""))
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </TwCard>
                 }
-            </MudGrid>
+            </TwGrid>
         }
         else if (!_isLoading)
         {
-            <MudAlert Severity="Severity.Info">
-                No College Football games found for today. Click "Analyze Games" to fetch live odds from The-Odds-API.
-            </MudAlert>
+            <TwAlert Severity="info">
+                No College Football games found for today. Click "Analyze Games" to fetch live odds.
+            </TwAlert>
         }
-    </MudStack>
-</MudContainer>
+    </div>
+</TwContainer>
 
 @code {
     private bool _isLoading = false;
@@ -302,10 +281,6 @@
         > 0 => $"+{odds}",
         _ => odds.ToString() ?? "-"
     };
-
-    private string GetCardStyle(GameData game) => game.HasValue
-        ? "background: linear-gradient(135deg, #1565c0 0%, #1e88e5 100%); color: white;"
-        : "";
 
     private class GameData
     {

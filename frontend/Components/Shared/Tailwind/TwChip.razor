@@ -1,6 +1,6 @@
 @namespace SportsBettingAnalyzer.Components.Shared.Tailwind
 
-<span class="@ComputedClass">
+<span class="@ComputedClass" @attributes="AdditionalAttributes">
     @if (ShowDot)
     {
         <span class="w-1.5 h-1.5 rounded-full @DotClass mr-1.5 @(Pulse ? "animate-pulse" : "")"></span>
@@ -17,6 +17,7 @@
 </span>
 
 @code {
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public string Color { get; set; } = "slate"; // slate, blue, emerald, amber, red, purple
     [Parameter] public string Size { get; set; } = "md"; // sm, md, lg

@@ -5,395 +5,519 @@
 
 <PageTitle>Model Lab - NBA</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
-    <MudStack Spacing="4">
+<TwContainer MaxWidth="TwContainer.ContainerWidth.ExtraLarge" Class="py-8">
+    <div class="space-y-6">
         <!-- Header -->
-        <MudPaper Class="pa-4" Elevation="2" Style="background: linear-gradient(135deg, #4a148c 0%, #7b1fa2 100%);">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                <div>
-                    <MudText Typo="Typo.h4" Style="color: white;">
-                        <MudIcon Icon="@Icons.Material.Filled.Science" Class="mr-2" />
-                        Model Lab - NBA
-                    </MudText>
-                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.8);">
-                        Mirror of Live NBA Odds + Advanced Filtering • Does NOT affect live predictions
-                    </MudText>
+        <div class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-900 via-purple-900 to-fuchsia-900 p-8 shadow-2xl">
+            <div class="absolute top-0 right-0 -mt-20 -mr-20 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
+            <div class="absolute bottom-0 left-0 -mb-20 -ml-20 w-80 h-80 bg-fuchsia-500/20 rounded-full blur-3xl"></div>
+            
+            <div class="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div class="space-y-2">
+                    <div class="flex items-center gap-3">
+                        <div class="p-3 bg-white/10 backdrop-blur-md rounded-2xl">
+                            <TwIcon Icon="Science" Class="w-8 h-8 text-white" />
+                        </div>
+                        <h1 class="text-4xl font-black text-white tracking-tight">
+                            Model Lab <span class="text-indigo-400">NBA</span>
+                        </h1>
+                    </div>
+                    <p class="text-indigo-100/70 text-lg font-medium max-w-2xl">
+                        Advanced game analysis and model laboratory. Mirror of live odds with custom thresholds and filtering.
+                    </p>
                 </div>
-                <MudStack Row="true" Spacing="2">
-                    <MudSelect T="string" @bind-Value="_sportsbook" Label="Sportsbook" 
-                               Variant="Variant.Outlined" Dense="true" Style="width: 140px; background: white;">
-                        <MudSelectItem Value="@("fanduel")">FanDuel</MudSelectItem>
-                        <MudSelectItem Value="@("draftkings")">DraftKings</MudSelectItem>
-                    </MudSelect>
-                    <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="LoadGames" Disabled="@_loading">
-                        @(_loading ? "Loading..." : "Analyze Games")
-                    </MudButton>
-                </MudStack>
-            </MudStack>
-        </MudPaper>
+                
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+                    <div class="relative min-w-[160px]">
+                        <label class="block text-[10px] uppercase tracking-widest text-indigo-200/50 font-black mb-1.5 ml-1">Sportsbook</label>
+                        <select @bind="_sportsbook" class="w-full bg-white/10 border border-white/20 text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none backdrop-blur-md transition-all">
+                            <option value="fanduel" class="text-slate-900">FanDuel</option>
+                            <option value="draftkings" class="text-slate-900">DraftKings</option>
+                        </select>
+                        <div class="absolute right-4 bottom-3 pointer-events-none text-white/50">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </div>
+                    </div>
+                    
+                    <button @onclick="LoadGames" disabled="@_loading" 
+                            class="flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-900 font-black px-8 py-3.5 rounded-2xl shadow-lg shadow-amber-500/20 transform hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 mt-auto">
+                        @if (_loading) {
+                            <div class="w-5 h-5 border-2 border-slate-900/30 border-t-slate-900 rounded-full animate-spin"></div>
+                            <span>Analyzing...</span>
+                        } else {
+                            <TwIcon Icon="Analytics" Class="w-5 h-5" />
+                            <span>Analyze Games</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
 
         <!-- Tab Navigation -->
-        <MudTabs @bind-ActivePanelIndex="_activeTab" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-0">
-            <MudTabPanel Text="Model Lab" Icon="@Icons.Material.Filled.Science" />
-            <MudTabPanel Text="ESPN BPI" Icon="@Icons.Material.Filled.Sports" BadgeColor="Color.Error" BadgeData="@(_espnGames.Count > 0 ? _espnGames.Count.ToString() : null)" />
-        </MudTabs>
+        <TwTabs @bind-ActiveTab="_activeTab">
+            <TwTabPanel Title="Model Lab" TabIcon="Science">
 
         @if (_activeTab == 0)
         {
-        <!-- Terminology Guide -->
-        <MudPaper Class="pa-3" Elevation="1" Style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);">
-            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Class="flex-wrap">
-                <MudTooltip Text="The point difference between model prediction and market line. Higher edge = more confident.">
-                    <MudChip T="string" Color="Color.Info" Size="Size.Small" Variant="Variant.Outlined">
-                        <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="Size.Small" Class="mr-1" />
-                        Edge = Model Advantage
-                    </MudChip>
-                </MudTooltip>
-                <MudTooltip Text="Kelly Criterion: Math formula for optimal bet sizing based on your edge. Higher % = stronger bet.">
-                    <MudChip T="string" Color="Color.Secondary" Size="Size.Small" Variant="Variant.Outlined">
-                        <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Size="Size.Small" Class="mr-1" />
-                        Kelly = Bet Size
-                    </MudChip>
-                </MudTooltip>
-                <MudTooltip Text="Different thresholds for OVER vs UNDER. OVERs need 3.0pt edge (harder), UNDERs need 1.5pt (easier).">
-                    <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Outlined">
-                        <MudIcon Icon="@Icons.Material.Filled.Balance" Size="Size.Small" Class="mr-1" />
-                        Asymmetric = Different Standards
-                    </MudChip>
-                </MudTooltip>
-                <MudTooltip Text="Closing Line Value: Did you beat the final line? Getting better odds than closing = long-term edge.">
-                    <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Outlined">
-                        <MudIcon Icon="@Icons.Material.Filled.Timeline" Size="Size.Small" Class="mr-1" />
-                        CLV = Beat Closing Line
-                    </MudChip>
-                </MudTooltip>
-                <MudSpacer />
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.6);">
-                    <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" /> Hover for explanations
-                </MudText>
-            </MudStack>
-        </MudPaper>
+            <!-- Terminology Guide -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
+                <div class="flex flex-wrap items-center gap-4">
+                    <div class="group relative">
+                        <div class="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-full text-xs font-bold transition-all hover:bg-blue-500/20 cursor-help">
+                            <TwIcon Icon="TrendingUp" Class="w-4 h-4" />
+                            <span>Edge = Advantage</span>
+                        </div>
+                        <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-800 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+                            Point difference between model prediction and market line.
+                        </div>
+                    </div>
+                    
+                    <div class="group relative">
+                        <div class="flex items-center gap-2 px-3 py-1.5 bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded-full text-xs font-bold transition-all hover:bg-purple-500/20 cursor-help">
+                            <TwIcon Icon="AccountBalance" Class="w-4 h-4" />
+                            <span>Kelly = Bet Size</span>
+                        </div>
+                        <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-800 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+                            Math formula for optimal bet sizing based on your edge.
+                        </div>
+                    </div>
 
-        <!-- Filter Controls -->
-        <MudPaper Class="pa-3" Elevation="1">
-            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Class="flex-wrap">
-                <MudText Typo="Typo.subtitle2">Filters:</MudText>
-                
-                <MudTooltip Text="Hide games where model says don't bet (low confidence or failed rules)">
-                    <MudSwitch T="bool" @bind-Value="_hideSkips" Label="Hide SKIP bets" Color="Color.Primary" />
-                </MudTooltip>
-                <MudTooltip Text="Only show UNDER predictions (historically more reliable)">
-                    <MudSwitch T="bool" @bind-Value="_undersOnly" Label="UNDERs only" Color="Color.Secondary" />
-                </MudTooltip>
-                <MudTooltip Text="Only show HIGH confidence picks (strongest edge)">
-                    <MudSwitch T="bool" @bind-Value="_highConfOnly" Label="High confidence only" Color="Color.Success" />
-                </MudTooltip>
-                
-                <MudDivider Vertical="true" FlexItem="true" />
-                
-                <MudChip T="string" Color="Color.Info" Size="Size.Small">
-                    @_filteredGames.Count() of @_games.Count games
-                </MudChip>
-                
-                <MudSpacer />
-                
-                <MudStack Row="true" Spacing="1">
-                    <MudTooltip Text="UNDER needs only 1.5 point edge for HIGH confidence">
-                        <MudChip T="string" Color="Color.Success" Size="Size.Small">UNDER: 1.5pt = HIGH</MudChip>
-                    </MudTooltip>
-                    <MudTooltip Text="OVER needs 3.0 point edge for HIGH confidence (higher bar because OVERs historically underperform)">
-                        <MudChip T="string" Color="Color.Warning" Size="Size.Small">OVER: 3.0pt = HIGH</MudChip>
-                    </MudTooltip>
-                </MudStack>
-            </MudStack>
-        </MudPaper>
+                    <div class="group relative">
+                        <div class="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-full text-xs font-bold transition-all hover:bg-amber-500/20 cursor-help">
+                            <TwIcon Icon="Balance" Class="w-4 h-4" />
+                            <span>Asymmetric Limits</span>
+                        </div>
+                        <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-800 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+                            Different thresholds for OVER vs UNDER.
+                        </div>
+                    </div>
 
-        <!-- Performance Summary -->
-        <MudPaper Class="pa-3" Elevation="1" Style="background: rgba(0,0,0,0.03);">
-            <MudStack Row="true" Spacing="4" Justify="Justify.SpaceAround">
-                @foreach (var kvp in _performance)
-                {
-                    <MudStack AlignItems="AlignItems.Center">
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">@kvp.Key.ToUpper()</MudText>
-                        <MudText Typo="Typo.subtitle1" Style="@(kvp.Value.Roi >= 0 ? "color:#4caf50;" : "color:#f44336;")">
-                            @kvp.Value.Wins-@kvp.Value.Losses (@(kvp.Value.Roi >= 0 ? "+" : "")@kvp.Value.Roi%)
-                        </MudText>
-                        <MudText Typo="Typo.caption">@kvp.Value.Status</MudText>
-                    </MudStack>
-                }
-            </MudStack>
-        </MudPaper>
+                    <div class="group relative">
+                        <div class="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full text-xs font-bold transition-all hover:bg-emerald-500/20 cursor-help">
+                            <TwIcon Icon="Timeline" Class="w-4 h-4" />
+                            <span>CLV = Market Beat</span>
+                        </div>
+                        <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-800 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+                            Closing Line Value - did you beat the final market line?
+                        </div>
+                    </div>
 
-        @if (_error != null)
-        {
-            <MudAlert Severity="Severity.Error">@_error</MudAlert>
-        }
+                    <div class="ml-auto flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                        <TwIcon Icon="Info" Class="w-3.5 h-3.5" />
+                        <span>Hover for details</span>
+                    </div>
+                </div>
+            </div>
 
-        <!-- Games Grid -->
-        @if (_loading)
-        {
-            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
-        }
-        else if (_filteredGames.Any())
-        {
-            <MudGrid Spacing="3">
-                @foreach (var game in _filteredGames)
-                {
-                    <MudItem xs="12" md="6" lg="4">
-                        <MudCard Elevation="3" Style="@GetCardStyle(game)">
-                            <MudCardHeader>
-                                <CardHeaderContent>
-                                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                                        <MudText Typo="Typo.h6">@game.Away</MudText>
-                                        <MudText Typo="Typo.caption">@@</MudText>
-                                        <MudText Typo="Typo.h6">@game.Home</MudText>
-                                    </MudStack>
-                                </CardHeaderContent>
-                                <CardHeaderActions>
+            <!-- Filter Controls -->
+            <div class="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                <div class="flex flex-wrap items-center gap-8">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-black text-slate-500 uppercase tracking-widest mr-2">Filters:</span>
+                        
+                        <div class="flex items-center gap-6">
+                            <div class="flex items-center gap-2">
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" @bind="_hideSkips" class="sr-only peer">
+                                    <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500"></div>
+                                </label>
+                                <span class="text-xs font-semibold text-slate-300">Hide Skips</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" @bind="_undersOnly" class="sr-only peer">
+                                    <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-500"></div>
+                                </label>
+                                <span class="text-xs font-semibold text-slate-300">Unders Only</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" @bind="_highConfOnly" class="sr-only peer">
+                                    <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                                </label>
+                                <span class="text-xs font-semibold text-slate-300">High Confidence</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="h-8 w-px bg-slate-800 hidden md:block"></div>
+                    
+                    <div class="flex items-center gap-3">
+                        <span class="px-3 py-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-lg text-xs font-bold font-mono">
+                            @_filteredGames.Count() / @_games.Count Games
+                        </span>
+                    </div>
+                    
+                    <div class="ml-auto flex items-center gap-4">
+                        <div class="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-emerald-500/5 text-emerald-500/60 border border-emerald-500/10 rounded-lg text-[10px] font-bold uppercase tracking-tighter">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            Under: 1.5pt Edge
+                        </div>
+                        <div class="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-amber-500/5 text-amber-500/60 border border-amber-500/10 rounded-lg text-[10px] font-bold uppercase tracking-tighter">
+                            <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                            Over: 3.0pt Edge
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Performance Summary -->
+            <div class="bg-indigo-950/20 border border-indigo-500/10 rounded-2xl p-6 shadow-inner">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                    @foreach (var kvp in _performance)
+                    {
+                        <div class="flex flex-col items-center justify-center p-4 bg-slate-900 shadow-lg rounded-xl border border-slate-800 transform hover:scale-105 transition-transform duration-200">
+                            <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">@kvp.Key</span>
+                            <div class="text-2xl font-black @(kvp.Value.Roi >= 0 ? "text-emerald-400" : "text-rose-400")">
+                                @kvp.Value.Wins-@kvp.Value.Losses (@(kvp.Value.Roi >= 0 ? "+" : "")@kvp.Value.Roi%)
+                            </div>
+                            <div class="mt-1 px-2 py-0.5 bg-slate-800 rounded text-[10px] text-slate-400 font-bold uppercase tracking-tight">
+                                @kvp.Value.Status
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @if (_error != null)
+            {
+                <div class="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4 text-rose-400 flex items-center gap-3">
+                    <TwIcon Icon="Error" Class="w-5 h-5 flex-shrink-0" />
+                    <span class="text-sm font-medium">@_error</span>
+                </div>
+            }
+
+            <!-- Games Grid -->
+            @if (_loading)
+            {
+                <div class="py-12 flex flex-col items-center justify-center space-y-4">
+                    <div class="w-16 h-16 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+                    <p class="text-indigo-400 font-black uppercase tracking-widest text-xs animate-pulse">Analyzing Games...</p>
+                </div>
+            }
+            else if (_filteredGames.Any())
+            {
+                <TwGrid Columns="3" Gap="6">
+                    @foreach (var game in _filteredGames)
+                    {
+                        <div class="group relative bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 @(game.ShouldSkip ? "opacity-60 grayscale-[0.5]" : "")">
+                            @* Confidence Sidebar *@
+                            <div class="absolute left-0 top-0 bottom-0 w-1.5 @(GetConfidenceTailwindColor(game))"></div>
+                            
+                            <div class="p-6">
+                                <div class="flex items-center justify-between mb-6">
+                                    <div class="flex-1">
+                                        <h3 class="text-lg font-black text-white leading-tight">@game.Away</h3>
+                                        <span class="text-[10px] text-slate-500 font-black uppercase tracking-widest">Visitor</span>
+                                    </div>
+                                    <div class="px-4 text-slate-500 font-black italic">@@</div>
+                                    <div class="flex-1 text-right">
+                                        <h3 class="text-lg font-black text-white leading-tight">@game.Home</h3>
+                                        <span class="text-[10px] text-slate-500 font-black uppercase tracking-widest">Home</span>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center justify-center gap-2 mb-6">
                                     @if (game.ShouldSkip)
                                     {
-                                        <MudChip T="string" Color="Color.Error" Size="Size.Small">SKIP</MudChip>
+                                        <span class="px-3 py-1 bg-rose-500 text-slate-900 text-[10px] font-black rounded-lg uppercase tracking-widest shadow-lg shadow-rose-500/20">SKIP</span>
                                     }
                                     else
                                     {
-                                        <MudChip T="string" Color="@GetConfidenceColor(game.Confidence)" Size="Size.Small">
-                                            @game.Confidence.ToUpper()
-                                        </MudChip>
+                                        <span class="px-3 py-1 @(GetConfidenceTailwindBadge(game.Confidence)) text-slate-900 text-[10px] font-black rounded-lg uppercase tracking-widest shadow-lg">
+                                            @game.Confidence
+                                        </span>
                                     }
-                                </CardHeaderActions>
-                            </MudCardHeader>
-                            <MudCardContent>
-                                <MudStack Spacing="2">
-                                    <!-- Odds -->
-                                    <MudStack Row="true" Justify="Justify.SpaceBetween">
-                                        <MudChip T="string" Size="Size.Small">Away: @FormatOdds(game.AwayML)</MudChip>
-                                        <MudChip T="string" Size="Size.Small">Home: @FormatOdds(game.HomeML)</MudChip>
-                                    </MudStack>
+                                </div>
 
-                                    <MudDivider />
+                                @* Odds Summary *@
+                                <div class="grid grid-cols-2 gap-3 mb-6">
+                                    <div class="bg-slate-950/50 rounded-xl p-3 border border-slate-800/50">
+                                        <span class="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Away ML</span>
+                                        <span class="text-white font-mono font-bold">@FormatOdds(game.AwayML)</span>
+                                    </div>
+                                    <div class="bg-slate-950/50 rounded-xl p-3 border border-slate-800/50">
+                                        <span class="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Home ML</span>
+                                        <span class="text-white font-mono font-bold">@FormatOdds(game.HomeML)</span>
+                                    </div>
+                                </div>
 
-                                    <!-- Model Predictions -->
-                                    <MudSimpleTable Dense="true" Style="background: transparent;">
-                                        <thead>
-                                            <tr style="background: rgba(0,0,0,0.1);">
-                                                <th></th>
-                                                <th style="text-align:center;">Raw</th>
-                                                <th style="text-align:center;">Adjusted</th>
+                                @* Model Stats Table *@
+                                <div class="rounded-2xl overflow-hidden border border-slate-800 mb-6 bg-slate-950/20">
+                                    <table class="w-full text-[11px]">
+                                        <thead class="bg-slate-800/50 text-slate-500 font-black uppercase tracking-widest">
+                                            <tr>
+                                                <th class="py-2 px-3 text-left">Model Stat</th>
+                                                <th class="py-2 px-2 text-center">Raw</th>
+                                                <th class="py-2 px-3 text-right">Adj</th>
                                             </tr>
                                         </thead>
-                                        <tbody>
-                                            <tr>
-                                                <td><MudText Typo="Typo.caption">Home Win%</MudText></td>
-                                                <td style="text-align:center;">@((game.RawHomeProb * 100).ToString("F1"))%</td>
-                                                <td style="text-align:center;"><strong>@((game.AdjHomeProb * 100).ToString("F1"))%</strong></td>
+                                        <tbody class="text-slate-300">
+                                            <tr class="border-b border-slate-800/50">
+                                                <td class="py-2.5 px-3 font-medium">Home Prob</td>
+                                                <td class="py-2.5 px-2 text-center">@((game.RawHomeProb * 100).ToString("F1"))%</td>
+                                                <td class="py-2.5 px-3 text-right font-black text-indigo-400">@((game.AdjHomeProb * 100).ToString("F1"))%</td>
                                             </tr>
                                             <tr>
-                                                <td><MudText Typo="Typo.caption">ML Pick</MudText></td>
-                                                <td colspan="2" style="text-align:center;">
-                                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary">@game.MLPick</MudChip>
+                                                <td class="py-2.5 px-3 font-medium">ML Pick</td>
+                                                <td colspan="2" class="py-2.5 px-3 text-right">
+                                                    <span class="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded-md font-black">@game.MLPick</span>
                                                 </td>
                                             </tr>
                                         </tbody>
-                                    </MudSimpleTable>
+                                    </table>
+                                </div>
 
-                                    <MudDivider />
+                                @* O/U Focus Area *@
+                                @if (game.Total > 0)
+                                {
+                                    <div class="relative rounded-2xl p-4 @(GetOUTailwindStyle(game)) shadow-lg border border-white/5">
+                                        <div class="flex justify-between items-center mb-3">
+                                            <div class="flex flex-col">
+                                                <span class="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-0.5">Market Line</span>
+                                                <span class="text-lg font-black text-white">@game.Total</span>
+                                            </div>
+                                            <div class="h-8 w-px bg-slate-700/50"></div>
+                                            <div class="flex flex-col text-right">
+                                                <span class="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-0.5">Model Total</span>
+                                                <span class="text-lg font-black text-indigo-400">@game.PredictedTotal.ToString("F1")</span>
+                                            </div>
+                                        </div>
 
-                                    <!-- O/U Section with Enhanced Logic -->
-                                    @if (game.Total > 0)
-                                    {
-                                        <MudPaper Class="pa-2" Style="@GetOUStyle(game)">
-                                            <MudStack Spacing="1">
-                                                <MudStack Row="true" Justify="Justify.SpaceBetween">
-                                                    <MudText Typo="Typo.caption">Line: @game.Total</MudText>
-                                                    <MudText Typo="Typo.caption">Model: @game.PredictedTotal.ToString("F1")</MudText>
-                                                </MudStack>
-                                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                                                    <MudChip T="string" Size="Size.Small" 
-                                                             Color="@(game.OUPick == "UNDER" ? Color.Secondary : Color.Info)">
-                                                        @game.OUPick
-                                                    </MudChip>
-                                                    <MudText>Edge: <strong>@game.Edge.ToString("F1")</strong> pts</MudText>
-                                                </MudStack>
-                                                
-                                                @if (game.BiasNote != null)
-                                                {
-                                                    <MudAlert Severity="@(game.OUPick == "UNDER" ? Severity.Success : Severity.Warning)" 
-                                                              Dense="true" Variant="Variant.Text">
-                                                        @game.BiasNote
-                                                    </MudAlert>
-                                                }
+                                        <div class="flex items-center justify-between gap-4 mb-4">
+                                            <div class="flex items-center gap-2">
+                                                <span class="px-3 py-1 @(game.OUPick == "UNDER" ? "bg-purple-500" : "bg-blue-500") text-slate-900 text-[10px] font-black rounded-lg uppercase tracking-widest shadow-lg">
+                                                    @game.OUPick
+                                                </span>
+                                            </div>
+                                            <div class="text-sm font-black text-white">
+                                                <span class="text-slate-500 text-[10px] uppercase font-black tracking-widest mr-1.5">Edge:</span>
+                                                @game.Edge.ToString("F1") pts
+                                            </div>
+                                        </div>
 
-                                                <!-- Asymmetric Kelly -->
-                                                <MudStack Row="true" Justify="Justify.SpaceBetween">
-                                                    <MudText Typo="Typo.caption">
-                                                        Kelly (@(game.OUPick == "UNDER" ? "100%" : "25%")):
-                                                    </MudText>
-                                                    <MudText Typo="Typo.caption">
-                                                        <strong>$@game.KellySuggestion.ToString("F0")</strong> of $1000
-                                                    </MudText>
-                                                </MudStack>
+                                        @if (!string.IsNullOrEmpty(game.BiasNote))
+                                        {
+                                            <div class="p-2.5 bg-black/30 rounded-xl mb-4 border border-white/5">
+                                                <p class="text-[10px] leading-relaxed font-bold @(game.OUPick == "UNDER" ? "text-emerald-400" : "text-amber-400")">
+                                                    @game.BiasNote
+                                                </p>
+                                            </div>
+                                        }
 
-                                                <!-- Parlay Suggestion -->
-                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                    @game.ParlayNote
-                                                </MudText>
-                                            </MudStack>
-                                        </MudPaper>
-                                    }
-                                </MudStack>
-                            </MudCardContent>
-                        </MudCard>
-                    </MudItem>
-                }
-            </MudGrid>
-        }
-        else if (!_loading)
-        {
-            <MudAlert Severity="Severity.Info">
-                Click "Analyze Games" to fetch today's NBA games and run predictions with enhanced filtering.
-            </MudAlert>
-        }
+                                        <div class="flex items-center justify-between">
+                                            <div class="flex flex-col">
+                                                <span class="text-[8px] font-black text-slate-500 uppercase tracking-widest">Kelly Criterion</span>
+                                                <span class="text-sm font-black text-white">$@game.KellySuggestion.ToString("F0") <span class="text-[10px] text-slate-500 font-bold">/ $1k</span></span>
+                                            </div>
+                                            <div class="text-[9px] font-bold text-slate-400 italic max-w-[120px] text-right leading-tight">
+                                                @game.ParlayNote
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </TwGrid>
+            }
+            else if (!_loading)
+            {
+                <div class="bg-indigo-950/20 border border-indigo-500/20 rounded-3xl p-12 text-center space-y-4">
+                    <TwIcon Icon="Info" Class="w-16 h-16 text-indigo-500/30 mx-auto" />
+                    <div class="space-y-2">
+                        <h3 class="text-xl font-black text-white">Ready for Analysis</h3>
+                        <p class="text-slate-400 max-w-md mx-auto">Click "Analyze Games" to fetch today's NBA slate and run the model simulations with custom thresholds.</p>
+                    </div>
+                </div>
+            }
 
-        <!-- Legend -->
-        <MudPaper Class="pa-3" Elevation="1">
-            <MudText Typo="Typo.subtitle2" Class="mb-2">Enhanced Features Active:</MudText>
-            <MudStack Row="true" Spacing="2" Class="flex-wrap">
-                <MudChip T="string" Size="Size.Small" Color="Color.Secondary">Bias Adjust: -3 pts on 225+ lines</MudChip>
-                <MudChip T="string" Size="Size.Small" Color="Color.Warning">OVER needs 3.0pt edge (vs 1.5 for UNDER)</MudChip>
-                <MudChip T="string" Size="Size.Small" Color="Color.Error">Auto-SKIP: OVERs on 228+ unless HIGH conf</MudChip>
-                <MudChip T="string" Size="Size.Small" Color="Color.Info">Kelly: 25% for OVERs, 100% for UNDERs</MudChip>
-            </MudStack>
-        </MudPaper>
+            <!-- Legend -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                <h4 class="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">Laboratory Settings Active:</h4>
+                <div class="flex flex-wrap gap-4">
+                    <div class="flex items-center gap-2 px-3 py-1.5 bg-slate-950 rounded-xl border border-slate-800">
+                        <span class="w-2 h-2 rounded-full bg-purple-500"></span>
+                        <span class="text-[10px] font-bold text-slate-300">Bias Adjust: -3 pts (225+ lines)</span>
+                    </div>
+                    <div class="flex items-center gap-2 px-3 py-1.5 bg-slate-950 rounded-xl border border-slate-800">
+                        <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                        <span class="text-[10px] font-bold text-slate-300">OVER: 3.0pt Edge Threshold</span>
+                    </div>
+                    <div class="flex items-center gap-2 px-3 py-1.5 bg-slate-950 rounded-xl border border-slate-800">
+                        <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+                        <span class="text-[10px] font-bold text-slate-300">Auto-SKIP: 228+ High Lines</span>
+                    </div>
+                    <div class="flex items-center gap-2 px-3 py-1.5 bg-slate-950 rounded-xl border border-slate-800">
+                        <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+                        <span class="text-[10px] font-bold text-slate-300">Kelly: asymmetric weighting</span>
+                    </div>
+                </div>
+            </div>
         } @* End Model Lab Tab *@
         else
         {
-        <!-- ESPN BPI Panel -->
-        <MudPaper Class="pa-4" Elevation="2" Style="background: linear-gradient(135deg, #c62828 0%, #e53935 100%);">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                <div>
-                    <MudText Typo="Typo.h5" Style="color: white;">
-                        <MudIcon Icon="@Icons.Material.Filled.Sports" Class="mr-2" />
-                        ESPN BPI Predictions
-                    </MudText>
-                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.8);">
-                        Basketball Power Index • Win Probability & O/U Predictions
-                    </MudText>
+            <!-- ESPN BPI Panel -->
+            <div class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-rose-900 via-red-900 to-orange-900 p-8 shadow-2xl mb-8">
+                <div class="absolute top-0 right-0 -mt-20 -mr-20 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
+                <div class="absolute bottom-0 left-0 -mb-20 -ml-20 w-80 h-80 bg-orange-500/20 rounded-full blur-3xl"></div>
+                
+                <div class="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div class="space-y-2">
+                        <div class="flex items-center gap-3">
+                            <div class="p-3 bg-white/10 backdrop-blur-md rounded-2xl">
+                                <TwIcon Icon="Sports" Class="w-8 h-8 text-white" />
+                            </div>
+                            <h2 class="text-3xl font-black text-white tracking-tight">
+                                ESPN <span class="text-orange-400">BPI</span> Predictions
+                            </h2>
+                        </div>
+                        <p class="text-rose-100/70 text-lg font-medium max-w-2xl">
+                            Basketball Power Index rankings, win probabilities, and O/U projections from ESPN.
+                        </p>
+                    </div>
+                    
+                    <button @onclick="LoadEspnData" disabled="@_espnLoading" 
+                            class="flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-900 font-black px-8 py-3.5 rounded-2xl shadow-lg shadow-amber-500/20 transform hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200">
+                        @if (_espnLoading) {
+                            <div class="w-5 h-5 border-2 border-slate-900/30 border-t-slate-900 rounded-full animate-spin"></div>
+                            <span>Refreshing...</span>
+                        } else {
+                            <TwIcon Icon="Refresh" Class="w-5 h-5" />
+                            <span>Refresh ESPN Data</span>
+                        }
+                    </button>
                 </div>
-                <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="LoadEspnData" Disabled="@_espnLoading">
-                    @(_espnLoading ? "Loading..." : "Refresh ESPN Data")
-                </MudButton>
-            </MudStack>
-        </MudPaper>
+            </div>
 
-        @if (_espnError != null)
-        {
-            <MudAlert Severity="Severity.Error">@_espnError</MudAlert>
-        }
+            @if (_espnError != null)
+            {
+                <div class="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4 text-rose-400 flex items-center gap-3 mb-6">
+                    <TwIcon Icon="Error" Class="w-5 h-5 flex-shrink-0" />
+                    <span class="text-sm font-medium">@_espnError</span>
+                </div>
+            }
 
-        @if (_espnLoading)
-        {
-            <MudProgressLinear Indeterminate="true" Color="Color.Error" />
-        }
-        else if (_espnGames.Any())
-        {
-            <MudGrid Spacing="3">
-                @foreach (var game in _espnGames)
-                {
-                    <MudItem xs="12" md="6" lg="4">
-                        <MudCard Elevation="3" Style="@GetEspnCardStyle(game)">
-                            <MudCardHeader>
-                                <CardHeaderContent>
-                                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                                        <MudStack>
-                                            <MudText Typo="Typo.subtitle1">@game.AwayTeam</MudText>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@game.AwayRecord</MudText>
-                                        </MudStack>
-                                        <MudText Typo="Typo.caption">@@</MudText>
-                                        <MudStack>
-                                            <MudText Typo="Typo.subtitle1">@game.HomeTeam</MudText>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@game.HomeRecord</MudText>
-                                        </MudStack>
-                                    </MudStack>
-                                </CardHeaderContent>
-                                <CardHeaderActions>
-                                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(game.Status)">@game.Status</MudChip>
-                                </CardHeaderActions>
-                            </MudCardHeader>
-                            <MudCardContent>
-                                <MudStack Spacing="2">
-                                    @if (game.HasBpi)
-                                    {
-                                        <!-- Win Probabilities -->
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Win Probability</MudText>
-                                        <MudStack Row="true" Justify="Justify.SpaceBetween">
-                                            <MudChip T="string" Size="Size.Small" Color="@(game.AwayWinProb > 0.5 ? Color.Success : Color.Default)">
-                                                @game.AwayAbbrev: @((game.AwayWinProb * 100).ToString("F0"))%
-                                            </MudChip>
-                                            <MudChip T="string" Size="Size.Small" Color="@(game.HomeWinProb > 0.5 ? Color.Success : Color.Default)">
-                                                @game.HomeAbbrev: @((game.HomeWinProb * 100).ToString("F0"))%
-                                            </MudChip>
-                                        </MudStack>
+            @if (_espnLoading)
+            {
+                <div class="py-12 flex flex-col items-center justify-center space-y-4">
+                    <div class="w-16 h-16 border-4 border-rose-500/20 border-t-rose-500 rounded-full animate-spin"></div>
+                    <p class="text-rose-400 font-black uppercase tracking-widest text-xs animate-pulse">Loading BPI Data...</p>
+                </div>
+            }
+            else if (_espnGames.Any())
+            {
+                <TwGrid Columns="3" Gap="6">
+                    @foreach (var game in _espnGames)
+                    {
+                        <div class="group relative bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 @(!game.HasBpi ? "opacity-60" : "")">
+                            @* BPI Border Accent *@
+                            <div class="absolute left-0 top-0 bottom-0 w-1.5 @(GetEspnConfidenceTailwindColor(game))"></div>
+                            
+                            <div class="p-6">
+                                <div class="flex items-center justify-between mb-6">
+                                    <div class="flex-1">
+                                        <h3 class="text-lg font-black text-white leading-tight">@game.AwayTeam</h3>
+                                        <span class="text-[10px] text-slate-500 font-black uppercase tracking-widest block">@game.AwayRecord</span>
+                                    </div>
+                                    <div class="px-4 text-slate-500 font-black italic">@@</div>
+                                    <div class="flex-1 text-right">
+                                        <h3 class="text-lg font-black text-white leading-tight">@game.HomeTeam</h3>
+                                        <span class="text-[10px] text-slate-500 font-black uppercase tracking-widest block">@game.HomeRecord</span>
+                                    </div>
+                                </div>
 
-                                        <MudDivider />
+                                <div class="flex justify-center mb-6">
+                                    <span class="px-3 py-1 @(GetStatusTailwindColor(game.Status)) text-slate-900 text-[10px] font-black rounded-lg uppercase tracking-widest shadow-lg">
+                                        @game.Status
+                                    </span>
+                                </div>
 
-                                        <!-- O/U Probability -->
-                                        <MudPaper Class="pa-2" Style="background: rgba(0,0,0,0.05);">
-                                            <MudStack Spacing="1">
-                                                <MudText Typo="Typo.caption" Color="Color.Secondary">Over/Under Probability</MudText>
-                                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                                                    <MudChip T="string" Size="Size.Small" 
-                                                             Color="@(game.TotalOverProb > 0.5 ? Color.Info : Color.Secondary)">
-                                                        @(game.TotalOverProb > 0.5 ? "OVER" : "UNDER") Favored
-                                                    </MudChip>
-                                                    <MudText>
-                                                        <strong>@((Math.Max(game.TotalOverProb, 1 - game.TotalOverProb) * 100).ToString("F0"))%</strong>
-                                                    </MudText>
-                                                </MudStack>
-                                                <MudProgressLinear Value="@(game.TotalOverProb * 100)" Color="Color.Info" Size="Size.Small" />
-                                                <MudStack Row="true" Justify="Justify.SpaceBetween">
-                                                    <MudText Typo="Typo.caption">Under @((100 - game.TotalOverProb * 100).ToString("F0"))%</MudText>
-                                                    <MudText Typo="Typo.caption">Over @((game.TotalOverProb * 100).ToString("F0"))%</MudText>
-                                                </MudStack>
-                                            </MudStack>
-                                        </MudPaper>
+                                <div class="h-px bg-slate-800 mb-6"></div>
 
-                                        <!-- Spread Cover -->
-                                        <MudStack Row="true" Justify="Justify.SpaceBetween">
-                                            <MudText Typo="Typo.caption">Spread Cover (Home):</MudText>
-                                            <MudText Typo="Typo.caption">
-                                                <strong>@((game.SpreadCoverHomeProb * 100).ToString("F0"))%</strong>
-                                            </MudText>
-                                        </MudStack>
-                                    }
-                                    else
-                                    {
-                                        <MudAlert Severity="Severity.Info" Dense="true">BPI data not available</MudAlert>
-                                    }
-                                </MudStack>
-                            </MudCardContent>
-                        </MudCard>
-                    </MudItem>
-                }
-            </MudGrid>
-        }
-        else
-        {
-            <MudAlert Severity="Severity.Info">
-                Click "Refresh ESPN Data" to fetch ESPN's BPI predictions for today's NBA games.
-            </MudAlert>
-        }
+                                @if (game.HasBpi)
+                                {
+                                    @* Win Probabilities *@
+                                    <div class="space-y-3 mb-6">
+                                        <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest block text-center">Win Probability</span>
+                                        <div class="flex items-center gap-3">
+                                            <div class="flex-1 bg-slate-950/50 rounded-2xl p-4 border @(game.AwayWinProb > 0.5 ? "border-emerald-500/20 bg-emerald-500/5" : "border-slate-800")">
+                                                <div class="text-center">
+                                                    <span class="text-[10px] font-black text-slate-500 uppercase block mb-1">@game.AwayAbbrev</span>
+                                                    <span class="text-xl font-black @(game.AwayWinProb > 0.5 ? "text-emerald-400" : "text-white")">@((game.AwayWinProb * 100).ToString("F0"))%</span>
+                                                </div>
+                                            </div>
+                                            <div class="flex-1 bg-slate-950/50 rounded-2xl p-4 border @(game.HomeWinProb > 0.5 ? "border-emerald-500/20 bg-emerald-500/5" : "border-slate-800")">
+                                                <div class="text-center">
+                                                    <span class="text-[10px] font-black text-slate-500 uppercase block mb-1">@game.HomeAbbrev</span>
+                                                    <span class="text-xl font-black @(game.HomeWinProb > 0.5 ? "text-emerald-400" : "text-white")">@((game.HomeWinProb * 100).ToString("F0"))%</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
 
-        <MudPaper Class="pa-3" Elevation="1" Style="background: rgba(198, 40, 40, 0.1);">
-            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                <MudIcon Icon="@Icons.Material.Filled.Info" Color="Color.Warning" />
-                <MudText Typo="Typo.caption">
-                    Data from ESPN's unofficial BPI API. Updates may be delayed. Use as a "second opinion" alongside your model predictions.
-                </MudText>
-            </MudStack>
-        </MudPaper>
+                                    @* O/U Focus *@
+                                    <div class="bg-indigo-950/20 border border-indigo-500/10 rounded-2xl p-5 shadow-inner mb-6">
+                                        <div class="flex justify-between items-center mb-4">
+                                            <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest">O/U Probability</span>
+                                            <span class="px-3 py-1 @(game.TotalOverProb > 0.5 ? "bg-indigo-500" : "bg-purple-500") text-slate-900 text-[10px] font-black rounded-lg uppercase tracking-widest shadow-lg">
+                                                @(game.TotalOverProb > 0.5 ? "OVER" : "UNDER") Favored
+                                            </span>
+                                        </div>
+                                        
+                                        <div class="relative h-2 bg-slate-800 rounded-full overflow-hidden mb-2">
+                                            <div class="absolute inset-y-0 left-0 bg-indigo-500 transition-all duration-1000" style="width: @(game.TotalOverProb * 100)%"></div>
+                                        </div>
+                                        
+                                        <div class="flex justify-between text-[10px] font-black text-slate-500 px-1">
+                                            <span>UNDER @((100 - game.TotalOverProb * 100).ToString("F0"))%</span>
+                                            <span class="text-white text-xs">@((Math.Max(game.TotalOverProb, 1 - game.TotalOverProb) * 100).ToString("F0"))% Max</span>
+                                            <span>OVER @((game.TotalOverProb * 100).ToString("F0"))%</span>
+                                        </div>
+                                    </div>
+
+                                    @* Spread Cover *@
+                                    <div class="flex items-center justify-between px-2">
+                                        <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Spread Cover (Home):</span>
+                                        <span class="text-lg font-black text-indigo-400">@((game.SpreadCoverHomeProb * 100).ToString("F0"))%</span>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="py-8 text-center bg-slate-950/50 rounded-3xl border border-dashed border-slate-800">
+                                        <TwIcon Icon="Info" Class="w-8 h-8 text-slate-700 mx-auto mb-2" />
+                                        <p class="text-[10px] font-black text-slate-600 uppercase tracking-widest">BPI Data Not Available</p>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </TwGrid>
+            }
+            else
+            {
+                <div class="bg-rose-950/20 border border-rose-500/20 rounded-3xl p-12 text-center space-y-4">
+                    <TwIcon Icon="Sports" Class="w-16 h-16 text-rose-500/30 mx-auto" />
+                    <div class="space-y-2">
+                        <h3 class="text-xl font-black text-white">BPI Center</h3>
+                        <p class="text-slate-400 max-w-md mx-auto">Click refresh to load the latest Basketball Power Index data from ESPN's analytics engine.</p>
+                    </div>
+                </div>
+            }
+
+            <div class="mt-8 flex items-center gap-4 p-4 bg-rose-500/5 border border-rose-500/10 rounded-2xl">
+                <div class="p-2 bg-rose-500/20 rounded-xl">
+                    <TwIcon Icon="Info" Class="w-5 h-5 text-rose-500" />
+                </div>
+                <p class="text-xs text-rose-200/50 leading-relaxed italic">
+                    Data sourced from ESPN's unofficial BPI API. These projections are separate from our model and serve as a "second opinion" for market validation.
+                </p>
+            </div>
         } @* End ESPN Tab *@
-    </MudStack>
-</MudContainer>
+            </TwTabPanel>
+        </TwTabs>
+    </div>
+</TwContainer>
 
 @code {
     private string _sportsbook = "fanduel";
@@ -410,7 +534,7 @@
     // ESPN BPI data
     private bool _espnLoading = false;
     private string? _espnError;
-    private List<EspnGame> _espnGames = new();
+    private List<NbaEspnGame> _espnGames = new();
 
     private Dictionary<string, PerfData> _performance = new()
     {
@@ -691,7 +815,7 @@
                 {
                     foreach (var game in gamesArray.EnumerateArray())
                     {
-                        _espnGames.Add(new EspnGame
+                        _espnGames.Add(new NbaEspnGame
                         {
                             EventId = game.GetProperty("event_id").GetString() ?? "",
                             HomeTeam = game.GetProperty("home_team").GetString() ?? "",
@@ -728,22 +852,53 @@
         _espnLoading = false;
     }
 
-    private string GetEspnCardStyle(EspnGame game)
+    private string GetConfidenceTailwindColor(EnhancedGame game)
     {
-        if (!game.HasBpi) return "opacity: 0.7;";
-        if (game.TotalOverProb < 0.35) return "border-left: 4px solid #9c27b0;"; // Strong UNDER
-        if (game.TotalOverProb > 0.65) return "border-left: 4px solid #2196f3;"; // Strong OVER
-        return "";
+        if (game.ShouldSkip) return "bg-rose-500";
+        return game.Confidence switch
+        {
+            "high" => "bg-emerald-500",
+            "medium" => "bg-amber-500",
+            _ => "bg-slate-700"
+        };
     }
 
-    private Color GetStatusColor(string status)
+    private string GetConfidenceTailwindBadge(string confidence)
     {
-        if (status.Contains("Final")) return Color.Success;
-        if (status.Contains("progress") || status.Contains("Half")) return Color.Warning;
-        return Color.Default;
+        return confidence switch
+        {
+            "high" => "bg-emerald-500 shadow-emerald-500/20",
+            "medium" => "bg-amber-500 shadow-amber-500/20",
+            _ => "bg-slate-400 shadow-slate-400/20"
+        };
     }
 
-    private record EspnGame
+    private string GetOUTailwindStyle(EnhancedGame game)
+    {
+        if (game.ShouldSkip) return "bg-slate-950/50 border-rose-500/10";
+        if (game.OUPick == "UNDER" && game.Confidence == "high") 
+            return "bg-gradient-to-br from-indigo-900/40 to-purple-900/40 border-indigo-500/20";
+        if (game.OUPick == "OVER") 
+            return "bg-blue-900/20 border-blue-500/20";
+        return "bg-slate-950/20 border-slate-800";
+    }
+
+    private string GetEspnConfidenceTailwindColor(NbaEspnGame game)
+    {
+        if (!game.HasBpi) return "bg-slate-800";
+        if (game.TotalOverProb < 0.35) return "bg-purple-500 shadow-lg shadow-purple-500/20"; // Strong UNDER
+        if (game.TotalOverProb > 0.65) return "bg-blue-500 shadow-lg shadow-blue-500/20"; // Strong OVER
+        return "bg-slate-700";
+    }
+
+    private string GetStatusTailwindColor(string status)
+    {
+        if (status.Contains("Final")) return "bg-emerald-500 shadow-emerald-500/20";
+        if (status.Contains("progress") || status.Contains("Half")) return "bg-amber-500 shadow-amber-500/20";
+        return "bg-slate-400 shadow-slate-400/20";
+    }
+
+    private record NbaEspnGame
     {
         public string EventId { get; init; } = "";
         public string HomeTeam { get; init; } = "";

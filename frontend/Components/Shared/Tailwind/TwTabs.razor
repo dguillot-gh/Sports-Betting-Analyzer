@@ -2,113 +2,145 @@
 
 <div class="@Class">
     <!-- Tab Headers -->
-    <div class="flex border-b border-slate-800 mb-4 overflow-x-auto">
-        @if (Items != null)
+    <div class="flex border-b border-slate-800 mb-6 overflow-x-auto no-scrollbar @HeaderClass">
+        @if (Items != null && Items.Any())
         {
             @foreach (var (item, index) in Items.Select((x, i) => (x, i)))
             {
+                var isActive = index == ActiveTab;
                 <button @onclick="() => SelectTabIndex(index)"
-                        class="@GetTabClasses(index)">
+                        class="@GetTabHeaderClasses(isActive, false)">
                     @item
+                    @if (isActive)
+                    {
+                        <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 rounded-t-full"></div>
+                    }
+                </button>
+            }
+        }
+        else if (Tabs != null && Tabs.Any())
+        {
+            @foreach (var tab in Tabs)
+            {
+                var isActive = ActiveTabId == tab.Id;
+                <button @onclick="() => SelectTabId(tab.Id)"
+                        class="@GetTabHeaderClasses(isActive, false)">
+                    <div class="flex items-center gap-2">
+                        @if (!string.IsNullOrEmpty(tab.Icon))
+                        {
+                            <TwIcon Icon="@tab.Icon" Class="@(isActive ? "text-blue-400" : "text-slate-500")" />
+                        }
+                        <span class="whitespace-nowrap">@tab.Label</span>
+                    </div>
+                    @if (isActive)
+                    {
+                        <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 rounded-t-full"></div>
+                    }
                 </button>
             }
         }
         else
         {
-            @foreach (var tab in Tabs)
+            @foreach (var panel in _panels)
             {
-                <button @onclick="() => SelectTab(tab.Id)"
-                        class="@GetTabClasses(tab.Id)">
-                    @if (!string.IsNullOrEmpty(tab.Icon))
+                var isActive = ActiveTabId == panel.Id;
+                <button @onclick="() => SelectTabId(panel.Id)"
+                        disabled="@panel.Disabled"
+                        class="@GetTabHeaderClasses(isActive, panel.Disabled)">
+                    <div class="flex items-center gap-2">
+                        @if (!string.IsNullOrEmpty(panel.TabIcon))
+                        {
+                            <TwIcon Icon="@panel.TabIcon" Class="@(isActive ? "text-blue-400" : "text-slate-500")" />
+                        }
+                        else if (panel.IconContent != null)
+                        {
+                            <span class="@(isActive ? "text-blue-400" : "text-slate-500")">
+                                @panel.IconContent
+                            </span>
+                        }
+                        <span class="whitespace-nowrap">@panel.Title</span>
+                        @if (!string.IsNullOrEmpty(panel.BadgeContent))
+                        {
+                            <span class="ml-1.5 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-blue-500/20 text-blue-400">
+                                @panel.BadgeContent
+                            </span>
+                        }
+                    </div>
+                    @if (isActive)
                     {
-                        <span class="mr-2">@tab.Icon</span>
+                        <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 rounded-t-full"></div>
                     }
-                    @tab.Label
                 </button>
             }
         }
     </div>
     
     <!-- Tab Content -->
-    <div class="tab-content">
-        @ChildContent
-    </div>
+    <CascadingValue Value="this" IsFixed="true">
+        <div class="tab-content">
+            @ChildContent
+        </div>
+    </CascadingValue>
 </div>
 
 @code {
-    [Parameter] public List<TabItem> Tabs { get; set; } = new();
-    [Parameter] public string ActiveTabId { get; set; } = "";
+    [Parameter] public List<TabItem>? Tabs { get; set; }
+    [Parameter] public string? ActiveTabId { get; set; }
     [Parameter] public EventCallback<string> ActiveTabIdChanged { get; set; }
     
-    // Simple mode parameters
     [Parameter] public IEnumerable<string>? Items { get; set; }
     [Parameter] public int ActiveTab { get; set; }
     [Parameter] public EventCallback<int> ActiveTabChanged { get; set; }
-    
+
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public string? Class { get; set; }
+    [Parameter] public string? HeaderClass { get; set; }
 
-    protected override void OnInitialized()
+    private List<TwTabPanel> _panels = new();
+
+    public void RegisterPanel(TwTabPanel panel)
     {
-        if (Items != null && Items.Any())
+        if (!_panels.Contains(panel))
         {
-            // Simple mode initialization
-            if (ActiveTab < 0 || ActiveTab >= Items.Count())
+            _panels.Add(panel);
+            if (string.IsNullOrEmpty(ActiveTabId) && _panels.Count == 1 && (Tabs == null || !Tabs.Any()) && (Items == null || !Items.Any()))
             {
-                ActiveTab = 0;
+                ActiveTabId = panel.Id;
             }
-        }
-        else if (string.IsNullOrEmpty(ActiveTabId) && Tabs.Any())
-        {
-            // Object mode initialization
-            ActiveTabId = Tabs.First().Id;
+            StateHasChanged();
         }
     }
 
-    private async Task SelectTab(string tabId)
+    public void UnregisterPanel(TwTabPanel panel)
     {
+        if (_panels.Contains(panel))
+        {
+            _panels.Remove(panel);
+            StateHasChanged();
+        }
+    }
+
+    private async Task SelectTabId(string? tabId)
+    {
+        if (string.IsNullOrEmpty(tabId)) return;
         ActiveTabId = tabId;
         await ActiveTabIdChanged.InvokeAsync(tabId);
+        StateHasChanged();
     }
-    
+
     private async Task SelectTabIndex(int index)
     {
         ActiveTab = index;
         await ActiveTabChanged.InvokeAsync(index);
+        StateHasChanged();
     }
 
-    private string GetTabClasses(string tabId)
+    private string GetTabHeaderClasses(bool isActive, bool disabled)
     {
-        var isActive = tabId == ActiveTabId;
-        return GetBaseClasses(isActive);
-    }
-    
-    private string GetTabClasses(int index)
-    {
-        var isActive = index == ActiveTab;
-        return GetBaseClasses(isActive);
-    }
-    
-    private string GetBaseClasses(bool isActive)
-    {
-        var classes = "px-4 py-3 text-sm font-medium whitespace-nowrap transition-all border-b-2 -mb-[2px]";
-        
-        if (isActive)
-        {
-            classes += " text-blue-400 border-blue-400";
-        }
-        else
-        {
-            classes += " text-slate-400 border-transparent hover:text-slate-200 hover:border-slate-600";
-        }
-        
+        var classes = "relative px-6 py-4 text-sm font-semibold transition-all duration-200 outline-none";
+        if (disabled) classes += " opacity-30 cursor-not-allowed";
+        else if (isActive) classes += " text-blue-400 bg-blue-500/5";
+        else classes += " text-slate-500 hover:text-slate-300 hover:bg-white/[0.02]";
         return classes;
-    }
-
-    public class TabItem
-    {
-        public string Id { get; set; } = "";
-        public string Label { get; set; } = "";
-        public string? Icon { get; set; }
     }
 }

@@ -1,161 +1,161 @@
 @page "/betting-101"
-@using MudBlazor
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
+@rendermode InteractiveServer
 
-<PageTitle>Sports Betting 101 - Smart Betting Guide</PageTitle>
+<TwContainer>
+    <!-- Page Header -->
+    <div class="text-center mb-16">
+        <h1 class="text-4xl md:text-5xl font-black text-white mb-6 tracking-tight">🎓 Sports Betting 101</h1>
+        <p class="text-xl text-slate-400 max-w-2xl mx-auto">
+            Learn how to leverage math and logic to beat the sportsbooks and bet efficiently.
+        </p>
+    </div>
 
-<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4 mb-8">
-    <MudText Typo="Typo.h3" Align="Align.Center" GutterBottom="true" Class="mb-6">🎓 Sports Betting 101</MudText>
-    <MudText Typo="Typo.h6" Align="Align.Center" Color="Color.Secondary" Class="mb-12">
-        Learn how to leverage math and logic to beat the sportsbooks and bet efficiently.
-    </MudText>
-
-    <MudGrid>
+    <TwGrid Columns="1" ColumnsMd="2" Gap="8" Class="mb-12">
         @* 1. Bankroll Management *@
-        <MudItem xs="12" md="6">
-            <MudCard Elevation="4" Class="h-100 border-l-4 border-l-primary">
-                <MudCardHeader>
-                    <CardHeaderAvatar>
-                        <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Color="Color.Primary" Size="Size.Large" />
-                    </CardHeaderAvatar>
-                    <CardHeaderContent>
-                        <MudText Typo="Typo.h5">Bankroll Management</MudText>
-                    </CardHeaderContent>
-                </MudCardHeader>
-                <MudCardContent>
-                    <MudText Typo="Typo.body1" Class="mb-4">
-                        The single most important skill in betting is **preservation of capital**. Without a bankroll, you can't place bets.
-                    </MudText>
-                    <MudList T="string">
-                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">
-                            <strong>The 1-3% Rule:</strong> Never bet more than 1-3% of your total bankroll on a single game.
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">
-                            <strong>Standardize Units:</strong> Define a "Unit" (e.g., $10 or $100) and track your profit in units, not dollars.
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.Error" IconColor="Color.Error">
-                            <strong>Don't Chase:</strong> Increasing your bet size to "get even" after a loss is the fastest way to go broke.
-                        </MudListItem>
-                    </MudList>
-                </MudCardContent>
-            </MudCard>
-        </MudItem>
+        <TwCard Class="h-full border-l-4 border-l-blue-500 bg-slate-900 shadow-xl overflow-hidden hover:scale-[1.02] transition-transform duration-300">
+            <div class="p-6">
+                <div class="flex items-center gap-4 mb-6">
+                    <div class="p-3 bg-blue-500/10 rounded-xl">
+                        <TwIcon Icon="M3 6l3 12h12l3-12H3zm5 8h8" Class="w-8 h-8 text-blue-500" />
+                    </div>
+                    <h2 class="text-2xl font-bold text-white">Bankroll Management</h2>
+                </div>
+                
+                <p class="text-slate-300 mb-6 leading-relaxed">
+                    The single most important skill in betting is <strong class="text-white">preservation of capital</strong>. Without a bankroll, you can't place bets.
+                </p>
+
+                <ul class="space-y-4">
+                    <li class="flex items-start gap-3">
+                        <TwIcon Icon="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-5 h-5 text-emerald-500 mt-1 flex-shrink-0" />
+                        <span class="text-slate-400"><strong class="text-slate-200">The 1-3% Rule:</strong> Never bet more than 1-3% of your total bankroll on a single game.</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <TwIcon Icon="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-5 h-5 text-emerald-500 mt-1 flex-shrink-0" />
+                        <span class="text-slate-400"><strong class="text-slate-200">Standardize Units:</strong> Define a "Unit" (e.g., $10 or $100) and track your profit in units, not dollars.</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <TwIcon Icon="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-5 h-5 text-red-500 mt-1 flex-shrink-0" />
+                        <span class="text-slate-400"><strong class="text-slate-200">Don't Chase:</strong> Increasing your bet size to "get even" after a loss is the fastest way to go broke.</span>
+                    </li>
+                </ul>
+            </div>
+        </TwCard>
 
         @* 2. Expected Value (EV+) *@
-        <MudItem xs="12" md="6">
-            <MudCard Elevation="4" Class="h-100 border-l-4 border-l-info">
-                <MudCardHeader>
-                    <CardHeaderAvatar>
-                        <MudIcon Icon="@Icons.Material.Filled.Functions" Color="Color.Info" Size="Size.Large" />
-                    </CardHeaderAvatar>
-                    <CardHeaderContent>
-                        <MudText Typo="Typo.h5">Positive Expected Value (EV+)</MudText>
-                    </CardHeaderContent>
-                </MudCardHeader>
-                <MudCardContent>
-                    <MudText Typo="Typo.body1" Class="mb-4">
-                        EV betting is when the **probability of winning** is higher than the **implied probability** of the odds.
-                    </MudText>
-                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4">
-                        Formula: (Win Prob * Payout) - (Loss Prob * Stake)
-                    </MudAlert>
-                    <MudText Typo="Typo.body2">
-                        If the result is positive, it's a "math win" long-term. Kyle's models (XGBoost/NN) specialize in finding these discrepancies between reality and sportsbook lines.
-                    </MudText>
-                </MudCardContent>
-            </MudCard>
-        </MudItem>
+        <TwCard Class="h-full border-l-4 border-l-purple-500 bg-slate-900 shadow-xl overflow-hidden hover:scale-[1.02] transition-transform duration-300">
+            <div class="p-6">
+                <div class="flex items-center gap-4 mb-6">
+                    <div class="p-3 bg-purple-500/10 rounded-xl">
+                        <TwIcon Icon="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" Class="w-8 h-8 text-purple-500" />
+                    </div>
+                    <h2 class="text-2xl font-bold text-white">Positive Expected Value (EV+)</h2>
+                </div>
+                
+                <p class="text-slate-300 mb-6 leading-relaxed">
+                    EV betting is when the <strong class="text-white">probability of winning</strong> is higher than the <strong class="text-white">implied probability</strong> of the odds.
+                </p>
+
+                <div class="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-4 mb-6">
+                    <p class="text-indigo-300 font-mono text-sm text-center">Formula: (Win Prob * Payout) - (Loss Prob * Stake)</p>
+                </div>
+
+                <p class="text-slate-400 text-sm italic">
+                    If the result is positive, it's a "math win" long-term. Our models specialize in finding these discrepancies between reality and sportsbook lines.
+                </p>
+            </div>
+        </TwCard>
 
         @* 3. Understanding Odds *@
-        <MudItem xs="12" md="6">
-            <MudCard Elevation="4" Class="h-100 border-l-4 border-l-warning">
-                <MudCardHeader>
-                    <CardHeaderAvatar>
-                        <MudIcon Icon="@Icons.Material.Filled.Percent" Color="Color.Warning" Size="Size.Large" />
-                    </CardHeaderAvatar>
-                    <CardHeaderContent>
-                        <MudText Typo="Typo.h5">Understanding Odds</MudText>
-                    </CardHeaderContent>
-                </MudCardHeader>
-                <MudCardContent>
-                    <MudText Typo="Typo.body1" Class="mb-4">
-                        Odds are just probabilities in disguise.
-                    </MudText>
-                    <MudGrid>
-                        <MudItem xs="6">
-                            <MudText Typo="Typo.subtitle1"><strong>American Odds</strong></MudText>
-                            <MudText Typo="Typo.body2">-110 means bet $110 to win $100.<br/>+150 means bet $100 to win $150.</MudText>
-                        </MudItem>
-                        <MudItem xs="6">
-                            <MudText Typo="Typo.subtitle1"><strong>Implied Prob</strong></MudText>
-                            <MudText Typo="Typo.body2">-110 = 52.4% chance.<br/>+100 = 50.0% chance.<br/>+200 = 33.3% chance.</MudText>
-                        </MudItem>
-                    </MudGrid>
-                </MudCardContent>
-            </MudCard>
-        </MudItem>
+        <TwCard Class="h-full border-l-4 border-l-amber-500 bg-slate-900 shadow-xl overflow-hidden hover:scale-[1.02] transition-transform duration-300">
+            <div class="p-6">
+                <div class="flex items-center gap-4 mb-6">
+                    <div class="p-3 bg-amber-500/10 rounded-xl">
+                        <TwIcon Icon="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" Class="w-8 h-8 text-amber-500" />
+                    </div>
+                    <h2 class="text-2xl font-bold text-white">Understanding Odds</h2>
+                </div>
+                
+                <p class="text-slate-300 mb-6 leading-relaxed">
+                    Odds are just <strong class="text-white">probabilities</strong> in disguise.
+                </p>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="p-3 bg-slate-800/50 rounded-lg">
+                        <h4 class="text-xs font-black text-slate-500 uppercase tracking-widest mb-2">American Odds</h4>
+                        <p class="text-xs text-slate-300 leading-relaxed">-110: Bet $110 to win $100.<br/>+150: Bet $100 to win $150.</p>
+                    </div>
+                    <div class="p-3 bg-slate-800/50 rounded-lg">
+                        <h4 class="text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Implied Prob</h4>
+                        <p class="text-xs text-slate-300 leading-relaxed">-110 = 52.4% chance.<br/>+100 = 50.0% chance.<br/>+200 = 33.3% chance.</p>
+                    </div>
+                </div>
+            </div>
+        </TwCard>
 
         @* 4. The Kelly Criterion *@
-        <MudItem xs="12" md="6">
-            <MudCard Elevation="4" Class="h-100 border-l-4 border-l-success">
-                <MudCardHeader>
-                    <CardHeaderAvatar>
-                        <MudIcon Icon="@Icons.Material.Filled.Balance" Color="Color.Success" Size="Size.Large" />
-                    </CardHeaderAvatar>
-                    <CardHeaderContent>
-                        <MudText Typo="Typo.h5">The Kelly Criterion</MudText>
-                    </CardHeaderContent>
-                </MudCardHeader>
-                <MudCardContent>
-                    <MudText Typo="Typo.body1" Class="mb-4">
-                        The Kelly Criterion is a formula used to determine the **mathematically optimal amount** to bet on a simulation.
-                    </MudText>
-                    <MudText Typo="Typo.body2" Class="mb-2 italic">"Bet more when the edge is high, bet less when the edge is low."</MudText>
-                    <MudAlert Severity="Severity.Success" Variant="Variant.Text">
-                        Our app calculates this automatically in the <strong>Live Odds</strong> pages to help you size your stakes.
-                    </MudAlert>
-                </MudCardContent>
-            </MudCard>
-        </MudItem>
+        <TwCard Class="h-full border-l-4 border-l-emerald-500 bg-slate-900 shadow-xl overflow-hidden hover:scale-[1.02] transition-transform duration-300">
+            <div class="p-6">
+                <div class="flex items-center gap-4 mb-6">
+                    <div class="p-3 bg-emerald-500/10 rounded-xl">
+                        <TwIcon Icon="M3 6l3 12h12l3-12H3zm5 8h8" Class="w-8 h-8 text-emerald-500" />
+                    </div>
+                    <h2 class="text-2xl font-bold text-white">The Kelly Criterion</h2>
+                </div>
+                
+                <p class="text-slate-300 mb-6 leading-relaxed">
+                    The Kelly Criterion is a formula used to determine the <strong class="text-white">mathematically optimal amount</strong> to bet on a simulation.
+                </p>
 
-        @* Quick Tips Section *@
-        <MudItem xs="12">
-            <MudPaper Elevation="2" Class="pa-6 mt-4 mud-theme-dark">
-                <MudText Typo="Typo.h5" GutterBottom="true" Class="mb-4">⚡ Pro Tips for Efficiency</MudText>
-                <MudGrid>
-                    <MudItem xs="12" sm="4">
-                        <MudText Typo="Typo.subtitle1"><strong>Line Shopping</strong></MudText>
-                        <MudText Typo="Typo.body2">Always check multiple sportsbooks. Getting FanDuel at -105 vs DraftKings at -110 adds up to a huge difference over 1,000 bets.</MudText>
-                    </MudItem>
-                    <MudItem xs="12" sm="4">
-                        <MudText Typo="Typo.subtitle1"><strong>Avoid the "Parlay Trap"</strong></MudText>
-                        <MudText Typo="Typo.body2">Parlays are highly profitable for books. Use them sparingly or only when every leg has positive EV (Correlation is key!).</MudText>
-                    </MudItem>
-                    <MudItem xs="12" sm="4">
-                        <MudText Typo="Typo.subtitle1"><strong>Trust the Data</strong></MudText>
-                        <MudText Typo="Typo.body2">Model logic is superior to "gut feelings." If the XGBoost and Neural Network agree, it's a high-conviction signals.</MudText>
-                    </MudItem>
-                </MudGrid>
-            </MudPaper>
-        </MudItem>
-    </MudGrid>
+                <div class="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-xl italic text-center text-emerald-400 text-sm mb-6">
+                    "Bet more when the edge is high, bet less when the edge is low."
+                </div>
 
-    <MudStack Row="true" Justify="Justify.Center" Class="mt-12">
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.SportsBasketball" href="/live-nba-odds" Size="Size.Large">
+                <div class="flex items-start gap-3 text-slate-400 text-xs bg-emerald-500/5 p-3 rounded-lg">
+                    <TwIcon Icon="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-5 h-5 text-emerald-500 flex-shrink-0" />
+                    Our app calculates this automatically in the <strong class="text-slate-200">Live Odds</strong> pages to help you size your stakes.
+                </div>
+            </div>
+        </TwCard>
+    </TwGrid>
+
+    @* Quick Tips Section *@
+    <TwCard Class="mb-12 bg-slate-900 border-slate-800 overflow-hidden">
+        <div class="p-8">
+            <h3 class="text-2xl font-bold text-white mb-8 flex items-center gap-3">
+                <TwIcon Icon="M13 10V3L4 14h7v7l9-11h-7z" Class="w-6 h-6 text-yellow-400" />
+                ⚡ Pro Tips for Efficiency
+            </h3>
+            <TwGrid Columns="1" ColumnsSm="3" Gap="8">
+                <div>
+                    <h4 class="text-lg font-bold text-white mb-2">Line Shopping</h4>
+                    <p class="text-sm text-slate-400 leading-relaxed">Always check multiple sportsbooks. Getting FanDuel at -105 vs DraftKings at -110 adds up to a huge difference over 1,000 bets.</p>
+                </div>
+                <div>
+                    <h4 class="text-lg font-bold text-white mb-2">Avoid the "Parlay Trap"</h4>
+                    <p class="text-sm text-slate-400 leading-relaxed">Parlays are highly profitable for books. Use them sparingly or only when every leg has positive EV (Correlation is key!).</p>
+                </div>
+                <div>
+                    <h4 class="text-lg font-bold text-white mb-2">Trust the Data</h4>
+                    <p class="text-sm text-slate-400 leading-relaxed">Model logic is superior to "gut feelings." If the XGBoost and Neural Network agree, it's a high-conviction signal.</p>
+                </div>
+            </TwGrid>
+        </div>
+    </TwCard>
+
+    <div class="flex flex-col sm:flex-row justify-center gap-4 py-8">
+        <TwButton Variant="primary" Href="/live-nba-odds" Size="lg" Class="px-8">
+            <TwIcon Icon="M13 10V3L4 14h7v7l9-11h-7z" Class="w-5 h-5 mr-3" />
             Apply to NBA
-        </MudButton>
-        <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.SportsFootball" href="/live-nfl-odds" Size="Size.Large">
+        </TwButton>
+        <TwButton Variant="secondary" Href="/live-nfl-odds" Size="lg" Class="px-8">
+            <TwIcon Icon="M13 10V3L4 14h7v7l9-11h-7z" Class="w-5 h-5 mr-3" />
             Apply to NFL
-        </MudButton>
-    </MudStack>
-</MudContainer>
-
-<style>
-    .border-l-4 { border-left-width: 4px !important; }
-    .border-l-primary { border-left-color: var(--mud-palette-primary) !important; }
-    .border-l-info { border-left-color: var(--mud-palette-info) !important; }
-    .border-l-warning { border-left-color: var(--mud-palette-warning) !important; }
-    .border-l-success { border-left-color: var(--mud-palette-success) !important; }
-</style>
+        </TwButton>
+    </div>
+</TwContainer>
 
 @code {
+    // Icons provided as SVG paths inline
 }

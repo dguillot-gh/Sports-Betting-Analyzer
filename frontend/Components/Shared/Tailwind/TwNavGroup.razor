@@ -6,9 +6,7 @@
             @onclick="ToggleExpanded">
         @if (!string.IsNullOrEmpty(Icon))
         {
-            <svg class="mr-3 h-5 w-5 flex-shrink-0 opacity-75 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="@Icon"></path>
-            </svg>
+             <TwIcon Icon="@Icon" Class="mr-3 h-5 w-5 flex-shrink-0 opacity-75 group-hover:text-white" />
         }
         <span class="flex-1">@Title</span>
         <svg class="@(Expanded ? "text-slate-400 rotate-90" : "text-slate-500") ml-3 h-5 w-5 flex-shrink-0 transition-transform duration-150 ease-in-out group-hover:text-slate-400" 

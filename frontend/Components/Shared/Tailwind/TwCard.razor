@@ -1,6 +1,6 @@
 @namespace SportsBettingAnalyzer.Components.Shared.Tailwind
 
-<div class="group bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden transition-all @HoverClass relative @Class">
+<div class="group bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden transition-all @HoverClass relative @Class" style="@Style" @attributes="AdditionalAttributes">
     @if (HeaderContent != null || !string.IsNullOrEmpty(Title))
     {
         <div class="flex justify-between items-center p-6 pb-0">
@@ -21,7 +21,7 @@
         </div>
     }
 
-    <div class="p-6 relative z-10">
+    <div class="@(NoPadding ? "" : "p-6") relative z-10">
         @ChildContent
     </div>
 
@@ -40,11 +40,14 @@
     [Parameter] public string Title { get; set; } = "";
     [Parameter] public string Color { get; set; } = "blue"; // blue, emerald, amber, purple, etc.
     [Parameter] public string Class { get; set; } = "";
+    [Parameter] public string Style { get; set; } = "";
     [Parameter] public bool Hoverable { get; set; } = true;
+    [Parameter] public bool NoPadding { get; set; } = false;
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public RenderFragment? HeaderContent { get; set; }
     [Parameter] public RenderFragment? StatusContent { get; set; }
     [Parameter] public RenderFragment? FooterContent { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
 
     private string HoverClass => Hoverable 
         ? "hover:border-slate-700 hover:shadow-2xl hover:shadow-slate-900/50 hover:-translate-y-1" 

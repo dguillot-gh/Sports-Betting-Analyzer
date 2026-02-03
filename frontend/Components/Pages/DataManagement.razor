@@ -8,579 +8,551 @@
 
 <PageTitle>Data Management</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <div class="d-flex justify-space-between align-center mb-4">
+<TwContainer MaxWidth="extraLarge" Class="mt-8 px-4">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
         <div>
-            <MudText Typo="Typo.h4" GutterBottom="true">Data Management</MudText>
-            <MudText Typo="Typo.subtitle1">
-                Manage data sources, check for updates, and retrain models.
-            </MudText>
+            <h1 class="text-3xl font-bold text-white">Data Management</h1>
+            <p class="text-slate-400 mt-1">Manage data sources, check for updates, and retrain models.</p>
         </div>
-        <div>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" 
-                       StartIcon="@Icons.Material.Filled.Refresh" 
-                       OnClick="LoadStatus" 
-                       Disabled="_isLoading">
-                Refresh Status
-            </MudButton>
-        </div>
+        <TwButton Variant="primary" OnClick="LoadStatus" IsLoading="_isLoading" Disabled="_isLoading">
+            <PrefixContent><TwIcon Icon="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" Class="w-4 h-4" /></PrefixContent>
+            Refresh Status
+        </TwButton>
     </div>
 
     @if (_isLoading)
     {
-        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+        <div class="mb-6">
+            <TwProgressBar Value="100" IsIndeterminate="true" Color="blue" />
+        </div>
     }
 
-    <MudGrid>
-        <!-- NASCAR Card (GitHub) -->
-        <MudItem xs="12" md="6" lg="4">
-            <MudCard Elevation="3" Class="h-100">
-                <MudCardHeader>
-                    <CardHeaderAvatar>
-                        <MudAvatar Color="Color.Error">
-                            <MudIcon Icon="@Icons.Material.Filled.DirectionsCar" />
-                        </MudAvatar>
-                    </CardHeaderAvatar>
-                    <CardHeaderContent>
-                        <MudText Typo="Typo.h6">NASCAR</MudText>
-                        <MudText Typo="Typo.caption">nascaR.data (GitHub)</MudText>
-                    </CardHeaderContent>
-                </MudCardHeader>
-                <MudCardContent>
-                    @if (_dataStatus?.Nascar != null)
-                    {
-                        <MudStack Spacing="2">
-                            <MudText Typo="Typo.body2">
-                                <MudIcon Icon="@Icons.Material.Filled.Storage" Size="Size.Small" Class="mr-1" />
-                                Files: @GetFileCount(_dataStatus.Nascar.Files)
-                            </MudText>
-                             @if (!string.IsNullOrEmpty(_dataStatus.Nascar.LastCommit))
-                            {
-                                <MudText Typo="Typo.body2">
-                                    <MudIcon Icon="@Icons.Material.Filled.Update" Size="Size.Small" Class="mr-1" />
-                                    Last Commit: @FormatDate(_dataStatus.Nascar.LastCommit)
-                                </MudText>
-                            }
-                            
-                            <MudDivider Class="my-2"/>
-                            
-                            <MudText Typo="Typo.body2">
-                                <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Small" Class="mr-1" />
-                                Models: @_dataStatus.Nascar.Models
-                                @if (_dataStatus.Nascar.ModelAccuracy.HasValue)
-                                {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Class="ml-2">
-                                        @(_dataStatus.Nascar.ModelAccuracy.Value * 100).ToString("F1")% acc
-                                    </MudChip>
-                                }
-                            </MudText>
-                        </MudStack>
-                    }
-                </MudCardContent>
-                <MudCardActions>
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" 
-                               StartIcon="@Icons.Material.Filled.CloudDownload"
-                               OnClick="@(() => UpdateData("nascar"))" 
-                               Disabled="@_isUpdating">
-                        Update
-                    </MudButton>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Info"
-                               StartIcon="@Icons.Material.Filled.AutoFixHigh"
-                               OnClick="@(() => EnhanceData("nascar"))"
-                               Disabled="@_isUpdating">
-                        Enhance
-                    </MudButton>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
-                               StartIcon="@Icons.Material.Filled.ModelTraining"
-                               OnClick="@(() => RetrainModel("nascar"))"
-                               Disabled="@_isUpdating">
-                        Train
-                    </MudButton>
-                    <MudButton Variant="Variant.Filled" Color="Color.Warning"
-                               StartIcon="@Icons.Material.Filled.DatasetLinked"
-                               OnClick="@OpenRdaImportDialog"
-                               Disabled="@(_isUpdating || _isRdaImporting)"
-                               Title="Import directly from .rda files with pre-computed stats">
-                        Import RDA
-                    </MudButton>
-                </MudCardActions>
-            </MudCard>
-        </MudItem>
+    <TwGrid Columns="1" md="2" lg="3" Gap="6" Class="mb-8">
+        <!-- NASCAR Card -->
+        <TwCard Class="p-5 flex flex-col h-full bg-slate-900 border-slate-800">
+            <div class="flex items-center gap-4 mb-6">
+                <div class="bg-red-500/20 p-3 rounded-xl">
+                    <TwIcon Icon="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" Class="w-6 h-6 text-red-400" />
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">NASCAR</h3>
+                    <p class="text-xs text-slate-500">nascaR.data (GitHub)</p>
+                </div>
+            </div>
 
-        <!-- NFL Card -->
-        <MudItem xs="12" md="6" lg="4">
-            <MudCard Elevation="3" Class="h-100">
-                <MudCardHeader>
-                    <CardHeaderAvatar>
-                        <MudAvatar Color="Color.Success">
-                            <MudIcon Icon="@Icons.Material.Filled.SportsFootball" />
-                        </MudAvatar>
-                    </CardHeaderAvatar>
-                    <CardHeaderContent>
-                        <MudText Typo="Typo.h6">NFL</MudText>
-                        <MudText Typo="Typo.caption">NFLverse Data</MudText>
-                    </CardHeaderContent>
-                </MudCardHeader>
-                <MudCardContent>
-                    @if (_dataStatus?.Nfl != null)
-                    {
-                        <MudStack Spacing="2">
-                            <MudText Typo="Typo.body2">
-                                <MudIcon Icon="@Icons.Material.Filled.Storage" Size="Size.Small" Class="mr-1" />
-                                Files: @GetFileCount(_dataStatus.Nfl.Files)
-                            </MudText>
-                            <MudText Typo="Typo.body2">
-                                <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Small" Class="mr-1" />
-                                Models: @_dataStatus.Nfl.Models
-                            </MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                Source: nflverse-data (play-by-play, Next Gen Stats, contracts, injuries)
-                            </MudText>
-                        </MudStack>
-                    }
-                </MudCardContent>
-                <MudCardActions>
-                    <MudButton Variant="Variant.Filled" Color="Color.Success"
-                               StartIcon="@Icons.Material.Filled.CloudDownload"
-                               OnClick="@(() => OpenSportImportDialog("nfl"))"
-                               Disabled="@(_isUpdating || _isSportImporting)">
-                        Import Data
-                    </MudButton>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
-                               StartIcon="@Icons.Material.Filled.ModelTraining"
-                               OnClick="@(() => RetrainModel("nfl"))"
-                               Disabled="@_isUpdating">
-                        Train Model
-                    </MudButton>
-                </MudCardActions>
-            </MudCard>
-        </MudItem>
-        
-        <!-- NBA Card -->
-        <MudItem xs="12" md="6" lg="4">
-            <MudCard Elevation="3" Class="h-100">
-                <MudCardHeader>
-                    <CardHeaderAvatar>
-                        <MudAvatar Color="Color.Warning">
-                            <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" />
-                        </MudAvatar>
-                    </CardHeaderAvatar>
-                    <CardHeaderContent>
-                        <MudText Typo="Typo.h6">NBA</MudText>
-                        <MudText Typo="Typo.caption">NBA Stats API</MudText>
-                    </CardHeaderContent>
-                </MudCardHeader>
-                <MudCardContent>
-                    @if (_dataStatus?.Nba != null)
-                    {
-                        <MudStack Spacing="2">
-                            <MudText Typo="Typo.body2">
-                                <MudIcon Icon="@Icons.Material.Filled.Storage" Size="Size.Small" Class="mr-1" />
-                                Files: @GetFileCount(_dataStatus.Nba.Files)
-                            </MudText>
-                            <MudText Typo="Typo.body2">
-                                <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Small" Class="mr-1" />
-                                Models: @_dataStatus.Nba.Models
-                            </MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                Source: stats.nba.com + hoopR (live game data)
-                            </MudText>
-                        </MudStack>
-                    }
-                </MudCardContent>
-                <MudCardActions>
-                    <MudButton Variant="Variant.Filled" Color="Color.Warning"
-                               StartIcon="@Icons.Material.Filled.CloudDownload"
-                               OnClick="@(() => OpenSportImportDialog("nba"))"
-                               Disabled="@(_isUpdating || _isSportImporting)">
-                        Import Data
-                    </MudButton>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
-                               StartIcon="@Icons.Material.Filled.ModelTraining"
-                               OnClick="@(() => RetrainModel("nba"))"
-                               Disabled="@_isUpdating">
-                        Train Model
-                    </MudButton>
-                </MudCardActions>
-            </MudCard>
-        </MudItem>
-        
-        <!-- College Baseball Card -->
-        <MudItem xs="12" md="6" lg="4">
-            <MudCard Elevation="3" Class="h-100">
-                <MudCardHeader>
-                    <CardHeaderAvatar>
-                        <MudAvatar Color="Color.Info">
-                            <MudIcon Icon="@Icons.Material.Filled.SportsBaseball" />
-                        </MudAvatar>
-                    </CardHeaderAvatar>
-                    <CardHeaderContent>
-                        <MudText Typo="Typo.h6">College Baseball</MudText>
-                        <MudText Typo="Typo.caption">Python + R Hybrid</MudText>
-                    </CardHeaderContent>
-                </MudCardHeader>
-                <MudCardContent>
-                    <MudStack Spacing="2">
-                        @if (_baseballSummary != null)
+            <div class="flex-grow">
+                @if (_dataStatus?.Nascar != null)
+                {
+                    <div class="space-y-4">
+                        <div class="flex items-center gap-2 text-sm text-slate-300">
+                            <TwIcon Icon="M4 7v10c0 1.1.9 2 2 2h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2z" Class="w-4 h-4 text-slate-500" />
+                            Files: <span class="font-semibold ml-auto text-white">@GetFileCount(_dataStatus.Nascar.Files)</span>
+                        </div>
+                        @if (!string.IsNullOrEmpty(_dataStatus.Nascar.LastCommit))
                         {
-                            <MudAlert Severity="Severity.Success" Dense="true" Class="mb-2">
-                                <strong>Last Import:</strong> @FormatDate(_baseballSummary.GeneratedAt)
-                                <br/>D@(_baseballSummary.Division) - @_baseballSummary.ImportedTeams teams
-                            </MudAlert>
+                            <div class="flex items-center gap-2 text-sm text-slate-300">
+                                <TwIcon Icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-4 h-4 text-slate-500" />
+                                Last Commit: <span class="font-semibold ml-auto text-white">@FormatDate(_dataStatus.Nascar.LastCommit)</span>
+                            </div>
                         }
                         
-                        <MudAlert Severity="Severity.Info" Dense="true">
-                            <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="mr-1" />
-                            Fetches all divisions (D1, D2, D3) and current season rosters/stats.
-                        </MudAlert>
-                    </MudStack>
-                </MudCardContent>
-                <MudCardActions>
-                    <MudButton Variant="Variant.Filled" Color="Color.Info"
-                               StartIcon="@Icons.Material.Filled.CloudDownload"
-                               OnClick="@OpenBaseballImportDialog"
-                               Disabled="@(_isUpdating || _isBaseballImporting)">
-                        Full Import (All Divisions)
-                    </MudButton>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Default"
-                               StartIcon="@Icons.Material.Filled.List"
-                               OnClick="@ViewBaseballTeams"
-                               Disabled="@(_baseballSummary == null)">
-                        View Teams
-                    </MudButton>
-                </MudCardActions>
-            </MudCard>
-        </MudItem>
-        <!-- NCAAB Card -->
-        <MudItem xs="12" md="6" lg="4">
-            <MudCard Elevation="3" Class="h-100">
-                <MudCardHeader>
-                    <CardHeaderAvatar>
-                        <MudAvatar Color="Color.Primary">
-                            <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" />
-                        </MudAvatar>
-                    </CardHeaderAvatar>
-                    <CardHeaderContent>
-                        <MudText Typo="Typo.h6">NCAA Basketball</MudText>
-                        <MudText Typo="Typo.caption">sportsdataverse (mbb)</MudText>
-                    </CardHeaderContent>
-                </MudCardHeader>
-                <MudCardContent>
-                    <MudStack Spacing="2">
-                        <MudText Typo="Typo.body2">
-                            <MudIcon Icon="@Icons.Material.Filled.Storage" Size="Size.Small" Class="mr-1" />
-                            Fetches historical schedules and boxscores.
-                        </MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">
-                            <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="mr-1" />
-                            Used for O/U and Moneyline modeling.
-                        </MudText>
-                    </MudStack>
-                </MudCardContent>
-                <MudCardActions>
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                               StartIcon="@Icons.Material.Filled.CloudDownload"
-                               OnClick="@OpenNcaabImportDialog"
-                               Disabled="@_isSportImporting">
-                        Import History
-                    </MudButton>
-                </MudCardActions>
-            </MudCard>
-        </MudItem>
+                        <div class="border-t border-slate-800 my-4"></div>
+                        
+                        <div class="flex items-center gap-2 text-sm text-slate-300">
+                            <TwIcon Icon="M9.663 17h4.674a1 1 0 00.908-.588l3.333-6.666A1 1 0 0017.671 8h-4.674a1 1 0 00-.908.588l-3.333 6.666A1 1 0 009.663 17z" Class="w-4 h-4 text-slate-500" />
+                            Models: <span class="font-semibold text-white ml-auto">@_dataStatus.Nascar.Models</span>
+                            @if (_dataStatus.Nascar.ModelAccuracy.HasValue)
+                            {
+                                <TwChip Color="emerald" Size="sm" Class="ml-2">
+                                    @((_dataStatus.Nascar.ModelAccuracy.Value * 100).ToString("F1"))% acc
+                                </TwChip>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
 
-    </MudGrid>
+            <div class="grid grid-cols-2 gap-2 mt-6">
+                <TwButton Variant="primary" Size="sm" OnClick="@(() => UpdateData("nascar"))" Disabled="@_isUpdating">
+                    <PrefixContent><TwIcon Icon="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" Class="w-4 h-4" /></PrefixContent>
+                    Update
+                </TwButton>
+                <TwButton Variant="secondary" Size="sm" OnClick="@(() => EnhanceData("nascar"))" Disabled="@_isUpdating">
+                    <PrefixContent><TwIcon Icon="M13 10V3L4 14h7v7l9-11h-7z" Class="w-4 h-4" /></PrefixContent>
+                    Enhance
+                </TwButton>
+                <TwButton Variant="outline" Size="sm" OnClick="@(() => RetrainModel("nascar"))" Disabled="@_isUpdating">
+                    <PrefixContent><TwIcon Icon="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0-4V4" Class="w-4 h-4" /></PrefixContent>
+                    Train
+                </TwButton>
+                <TwButton Variant="outline" Size="sm" OnClick="@OpenRdaImportDialog" Disabled="@(_isUpdating || _isRdaImporting)" Color="amber">
+                    <PrefixContent><TwIcon Icon="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z" Class="w-4 h-4" /></PrefixContent>
+                    Import RDA
+                </TwButton>
+            </div>
+        </TwCard>
+
+        <!-- NFL Card -->
+        <TwCard Class="p-5 flex flex-col h-full bg-slate-900 border-slate-800">
+            <div class="flex items-center gap-4 mb-6">
+                <div class="bg-emerald-500/20 p-3 rounded-xl">
+                    <TwIcon Icon="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" Class="w-6 h-6 text-emerald-400" />
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">NFL</h3>
+                    <p class="text-xs text-slate-500">NFLverse Data</p>
+                </div>
+            </div>
+
+            <div class="flex-grow">
+                @if (_dataStatus?.Nfl != null)
+                {
+                    <div class="space-y-4">
+                        <div class="flex items-center gap-2 text-sm text-slate-300">
+                            <TwIcon Icon="M4 7v10c0 1.1.9 2 2 2h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2z" Class="w-4 h-4 text-slate-500" />
+                            Files: <span class="font-semibold ml-auto text-white">@GetFileCount(_dataStatus.Nfl.Files)</span>
+                        </div>
+                        <div class="flex items-center gap-2 text-sm text-slate-300">
+                            <TwIcon Icon="M9.663 17h4.674a1 1 0 00.908-.588l3.333-6.666A1 1 0 0017.671 8h-4.674a1 1 0 00-.908.588l-3.333 6.666A1 1 0 009.663 17z" Class="w-4 h-4 text-slate-500" />
+                            Models: <span class="font-semibold text-white ml-auto">@_dataStatus.Nfl.Models</span>
+                        </div>
+                        <p class="text-[10px] text-slate-500 italic mt-4">
+                            Source: nflverse-data (play-by-play, Next Gen Stats, contracts, injuries)
+                        </p>
+                    </div>
+                }
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 mt-6">
+                <TwButton Variant="primary" Size="sm" OnClick="@(() => OpenSportImportDialog("nfl"))" Disabled="@(_isUpdating || _isSportImporting)">
+                    <PrefixContent><TwIcon Icon="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" Class="w-4 h-4" /></PrefixContent>
+                    Import Data
+                </TwButton>
+                <TwButton Variant="outline" Size="sm" OnClick="@(() => RetrainModel("nfl"))" Disabled="@_isUpdating">
+                    <PrefixContent><TwIcon Icon="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0-4V4" Class="w-4 h-4" /></PrefixContent>
+                    Train Model
+                </TwButton>
+            </div>
+        </TwCard>
+        
+        <!-- NBA Card -->
+        <TwCard Class="p-5 flex flex-col h-full bg-slate-900 border-slate-800">
+            <div class="flex items-center gap-4 mb-6">
+                <div class="bg-amber-500/20 p-3 rounded-xl">
+                    <TwIcon Icon="M12 2a10 10 0 1010 10A10 10 0 0012 2zm0 18a8 8 0 118-8 8 8 0 01-8 8z" Class="w-6 h-6 text-amber-400" />
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">NBA</h3>
+                    <p class="text-xs text-slate-500">NBA Stats API</p>
+                </div>
+            </div>
+
+            <div class="flex-grow">
+                @if (_dataStatus?.Nba != null)
+                {
+                    <div class="space-y-4">
+                        <div class="flex items-center gap-2 text-sm text-slate-300">
+                            <TwIcon Icon="M4 7v10c0 1.1.9 2 2 2h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2z" Class="w-4 h-4 text-slate-500" />
+                            Files: <span class="font-semibold ml-auto text-white">@GetFileCount(_dataStatus.Nba.Files)</span>
+                        </div>
+                        <div class="flex items-center gap-2 text-sm text-slate-300">
+                            <TwIcon Icon="M9.663 17h4.674a1 1 0 00.908-.588l3.333-6.666A1 1 0 0017.671 8h-4.674a1 1 0 00-.908.588l-3.333 6.666A1 1 0 009.663 17z" Class="w-4 h-4 text-slate-500" />
+                            Models: <span class="font-semibold text-white ml-auto">@_dataStatus.Nba.Models</span>
+                        </div>
+                        <p class="text-[10px] text-slate-500 italic mt-4">
+                            Source: stats.nba.com + hoopR (live game data)
+                        </p>
+                    </div>
+                }
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 mt-6">
+                <TwButton Variant="primary" Size="sm" OnClick="@(() => OpenSportImportDialog("nba"))" Disabled="@(_isUpdating || _isSportImporting)" Color="amber">
+                    <PrefixContent><TwIcon Icon="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" Class="w-4 h-4" /></PrefixContent>
+                    Import Data
+                </TwButton>
+                <TwButton Variant="outline" Size="sm" OnClick="@(() => RetrainModel("nba"))" Disabled="@_isUpdating">
+                    <PrefixContent><TwIcon Icon="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0-4V4" Class="w-4 h-4" /></PrefixContent>
+                    Train Model
+                </TwButton>
+            </div>
+        </TwCard>
+        
+        <!-- College Baseball Card -->
+        <TwCard Class="p-5 flex flex-col h-full bg-slate-900 border-slate-800">
+            <div class="flex items-center gap-4 mb-6">
+                <div class="bg-blue-500/20 p-3 rounded-xl">
+                    <TwIcon Icon="M12 2a10 10 0 1010 10A10 10 0 0012 2zm0 18a8 8 0 118-8 8 8 0 01-8 8z" Class="w-6 h-6 text-blue-400" />
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">College Baseball</h3>
+                    <p class="text-xs text-slate-500">Python + R Hybrid</p>
+                </div>
+            </div>
+
+            <div class="flex-grow">
+                <div class="space-y-3">
+                    @if (_baseballSummary != null)
+                    {
+                        <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
+                            <p class="text-[11px] text-emerald-400 font-bold uppercase tracking-wider mb-1">Last Import</p>
+                            <p class="text-sm text-white">@FormatDate(_baseballSummary.GeneratedAt)</p>
+                            <p class="text-xs text-slate-400 mt-1">D@(_baseballSummary.Division) - @_baseballSummary.ImportedTeams teams</p>
+                        </div>
+                    }
+                    
+                    <div class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
+                        <div class="flex gap-2">
+                            <TwIcon Icon="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-5 h-5 text-blue-400 shrink-0" />
+                            <p class="text-xs text-blue-200">Fetches all divisions (D1, D2, D3) and current season rosters/stats.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 mt-6">
+                <TwButton Variant="primary" Size="sm" OnClick="@OpenBaseballImportDialog" Disabled="@(_isUpdating || _isBaseballImporting)">
+                    <PrefixContent><TwIcon Icon="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" Class="w-4 h-4" /></PrefixContent>
+                    Full Import
+                </TwButton>
+                <TwButton Variant="outline" Size="sm" OnClick="@ViewBaseballTeams" Disabled="@(_baseballSummary == null)">
+                    <PrefixContent><TwIcon Icon="M4 6h16M4 10h16M4 14h16M4 18h16" Class="w-4 h-4" /></PrefixContent>
+                    View Teams
+                </TwButton>
+            </div>
+        </TwCard>
+        <!-- NCAAB Card -->
+        <TwCard Class="p-5 flex flex-col h-full bg-slate-900 border-slate-800">
+            <div class="flex items-center gap-4 mb-6">
+                <div class="bg-indigo-500/20 p-3 rounded-xl">
+                    <TwIcon Icon="M12 2a10 10 0 1010 10A10 10 0 0012 2zm0 18a8 8 0 118-8 8 8 0 01-8 8z" Class="w-6 h-6 text-indigo-400" />
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">NCAA Basketball</h3>
+                    <p class="text-xs text-slate-500">sportsdataverse (mbb)</p>
+                </div>
+            </div>
+
+            <div class="flex-grow">
+                <div class="space-y-4">
+                    <div class="flex items-center gap-2 text-sm text-slate-300">
+                        <TwIcon Icon="M4 7v10c0 1.1.9 2 2 2h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2z" Class="w-4 h-4 text-slate-500" />
+                        <p>Fetches historical schedules and boxscores.</p>
+                    </div>
+                    <p class="text-[10px] text-slate-500 italic mt-4">
+                        Source: Used for O/U and Moneyline modeling.
+                    </p>
+                </div>
+            </div>
+
+            <div class="mt-6">
+                <TwButton Variant="primary" Size="sm" OnClick="@OpenNcaabImportDialog" Disabled="@_isSportImporting" Class="w-full">
+                    <PrefixContent><TwIcon Icon="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" Class="w-4 h-4" /></PrefixContent>
+                    Import History
+                </TwButton>
+            </div>
+        </TwCard>
+    </TwGrid>
 
     <!-- Import History Section -->
-    <MudPaper Class="pa-4 mt-4" Elevation="2">
-        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
-            <MudText Typo="Typo.h6">
-                <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-2" />
+    <TwCard NoPadding="true" Class="bg-slate-900 border-slate-800 overflow-hidden shadow-xl">
+        <div class="p-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
+            <h2 class="text-lg font-bold text-white flex items-center gap-3">
+                <TwIcon Icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-5 h-5 text-blue-400" />
                 Import History
-            </MudText>
-            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="LoadHistory">
-                <MudIcon Icon="@Icons.Material.Filled.Refresh" />
-            </MudButton>
-        </MudStack>
+            </h2>
+            <TwButton Variant="ghost" Size="sm" OnClick="LoadHistory">
+                <PrefixContent><TwIcon Icon="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" Class="w-4 h-4" /></PrefixContent>
+            </TwButton>
+        </div>
         
-        @if (_history.Any())
-        {
-            <MudTable Items="@_history.Take(10)" Dense="true" Hover="true" Striped="true">
-                <HeaderContent>
-                    <MudTh>Date</MudTh>
-                    <MudTh>Sport</MudTh>
-                    <MudTh>Details</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd DataLabel="Date">@FormatDate(context["date"]?.ToString())</MudTd>
-                    <MudTd DataLabel="Sport">
-                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">@context["topic"]</MudChip>
-                    </MudTd>
-                    <MudTd DataLabel="Details">
-                        <MudText Typo="Typo.caption" Style="font-family: monospace; max-width: 400px; overflow: hidden; text-overflow: ellipsis;">
-                            @System.Text.Json.JsonSerializer.Serialize(context["details"])
-                        </MudText>
-                    </MudTd>
-                </RowTemplate>
-            </MudTable>
-        }
-        else
-        {
-            <MudAlert Severity="Severity.Info" Dense="true">No import history yet. Import data to see history here.</MudAlert>
-        }
-    </MudPaper>
-
-</MudContainer>
+        <div class="overflow-x-auto">
+            @if (_history.Any())
+            {
+                <TwTable TItem="object">
+                    <thead>
+                        <tr class="text-slate-500 text-xs uppercase tracking-wider">
+                            <TwTh>Date</TwTh>
+                            <TwTh>Sport</TwTh>
+                            <TwTh>Details</TwTh>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var context in _history.Take(10))
+                        {
+                            <tr class="border-b border-slate-800/50 hover:bg-slate-800/30">
+                                <TwTd class="text-slate-400">@FormatDate(context["date"]?.ToString())</TwTd>
+                                <TwTd>
+                                    <TwChip Color="blue" Size="sm">@context["topic"]</TwChip>
+                                </TwTd>
+                                <TwTd>
+                                    <code class="text-[10px] text-slate-500 font-mono block max-w-md truncate" title="@System.Text.Json.JsonSerializer.Serialize(context["details"])">
+                                        @System.Text.Json.JsonSerializer.Serialize(context["details"])
+                                    </code>
+                                </TwTd>
+                            </tr>
+                        }
+                    </tbody>
+                </TwTable>
+            }
+            else
+            {
+                <div class="p-12 text-center">
+                    <TwIcon Icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-12 h-12 text-slate-700 mx-auto mb-4" />
+                    <p class="text-slate-500">No import history yet. Import data to see history here.</p>
+                </div>
+            }
+        </div>
+    </TwCard>
+</TwContainer>
 
 <!-- RDA Import Progress Dialog -->
-<MudDialog @bind-Visible="_showRdaDialog" Options="_rdaDialogOptions">
-    <TitleContent>
-        <MudText Typo="Typo.h6">
-            <MudIcon Icon="@Icons.Material.Filled.DatasetLinked" Class="mr-2" />
-            NASCAR RDA Import
-        </MudText>
-    </TitleContent>
-    <DialogContent>
+<TwDialog @bind-IsOpen="_showRdaDialog" Title="NASCAR RDA Import" MaxWidth="md">
+    <ChildContent>
         @if (!_isRdaImporting)
         {
             <!-- Import Options -->
-            <MudStack Spacing="3">
-                <MudAlert Severity="Severity.Info" Dense="true">
-                    Import directly from .rda files with pre-computed season stats.
-                </MudAlert>
+            <div class="space-y-6">
+                <div class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 flex gap-3">
+                    <TwIcon Icon="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-5 h-5 text-blue-400 shrink-0" />
+                    <p class="text-sm text-blue-200">Import directly from .rda files with pre-computed season stats.</p>
+                </div>
                 
-                <MudSelect T="string" Label="Series" @bind-Value="_rdaSeries" Variant="Variant.Outlined">
-                    <MudSelectItem Value="@("all")">All Series</MudSelectItem>
-                    <MudSelectItem Value="@("cup")">Cup Series</MudSelectItem>
-                    <MudSelectItem Value="@("xfinity")">Xfinity Series</MudSelectItem>
-                    <MudSelectItem Value="@("trucks")">Trucks Series</MudSelectItem>
-                </MudSelect>
-                
-                <MudStack Row="true" Spacing="2">
-                    <MudNumericField T="int" Label="Year Start" @bind-Value="_rdaYearStart" 
-                                     Variant="Variant.Outlined" Min="2000" Max="2030" />
-                    <MudNumericField T="int" Label="Year End" @bind-Value="_rdaYearEnd" 
-                                     Variant="Variant.Outlined" Min="2000" Max="2030" />
-                </MudStack>
-                
-                <MudCheckBox T="bool" @bind-Value="_rdaClearExisting" 
-                             Label="Clear existing NASCAR data before import" Color="Color.Warning" />
-            </MudStack>
+                <div class="space-y-4">
+                    <label class="block text-sm font-medium text-slate-400">Series</label>
+                    <TwSelect @bind-Value="_rdaSeries" Class="w-full">
+                        <option value="all">All Series</option>
+                        <option value="cup">Cup Series</option>
+                        <option value="xfinity">Xfinity Series</option>
+                        <option value="trucks">Trucks Series</option>
+                    </TwSelect>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-1">
+                            <label class="block text-sm font-medium text-slate-400">Year Start</label>
+                            <TwNumericField @bind-Value="_rdaYearStart" min="2000" max="2030" />
+                        </div>
+                        <div class="space-y-1">
+                            <label class="block text-sm font-medium text-slate-400">Year End</label>
+                            <TwNumericField @bind-Value="_rdaYearEnd" min="2000" max="2030" />
+                        </div>
+                    </div>
+                    
+                    <label class="flex items-center gap-3 p-3 rounded-lg border border-slate-800 hover:bg-slate-800/50 transition-colors cursor-pointer">
+                        <input type="checkbox" @bind="_rdaClearExisting" class="w-4 h-4 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-amber-500/20" />
+                        <span class="text-sm text-slate-300">Clear existing NASCAR data before import</span>
+                    </label>
+                </div>
+            </div>
         }
         else
         {
             <!-- Progress Display -->
-            <MudStack Spacing="2">
-                <MudProgressLinear Color="Color.Primary" Indeterminate="@(_rdaStatus?.Status == "running")" 
-                                   Value="100" Class="mb-2" />
+            <div class="space-y-6">
+                <TwProgressBar Value="100" IsIndeterminate="@(_rdaStatus?.Status == "running")" Color="blue" />
                 
-                <MudText Typo="Typo.subtitle2">
-                    Status: <MudChip T="string" Size="Size.Small" 
-                                     Color="@(_rdaStatus?.Status == "completed" ? Color.Success : 
-                                              _rdaStatus?.Status == "failed" ? Color.Error : Color.Info)">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm text-slate-400">Status</span>
+                    <TwChip Color="@(_rdaStatus?.Status == "completed" ? "emerald" : _rdaStatus?.Status == "failed" ? "red" : "blue")" Size="sm">
                         @(_rdaStatus?.Status ?? "unknown")
-                    </MudChip>
-                </MudText>
+                    </TwChip>
+                </div>
                 
                 @if (_rdaStatus?.StartedAt != null)
                 {
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">
-                        Started: @FormatDate(_rdaStatus.StartedAt)
-                    </MudText>
+                    <p class="text-xs text-slate-500">Started: @FormatDate(_rdaStatus.StartedAt)</p>
                 }
                 
-                <MudPaper Class="pa-2 mt-2" Elevation="0" Outlined="true" 
-                          Style="max-height: 200px; overflow-y: auto; background: #1a1a2e;">
+                <div class="bg-slate-950 border border-slate-800 rounded-lg p-3 h-48 overflow-y-auto font-mono text-[11px] space-y-1">
                     @if (_rdaStatus?.Progress != null)
                     {
                         @foreach (var line in _rdaStatus.Progress)
                         {
-                            <MudText Typo="Typo.caption" Style="font-family: monospace; color: #00ff88;">
-                                @line
-                            </MudText>
+                            <p class="text-emerald-400/80">@line</p>
                         }
                     }
-                </MudPaper>
+                </div>
                 
                 @if (_rdaStatus?.Error != null)
                 {
-                    <MudAlert Severity="Severity.Error" Dense="true">
+                    <div class="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-sm text-red-400">
                         @_rdaStatus.Error
-                    </MudAlert>
+                    </div>
                 }
-            </MudStack>
+            </div>
         }
-    </DialogContent>
-    <DialogActions>
+    </ChildContent>
+    <ActionsContent>
         @if (!_isRdaImporting)
         {
-            <MudButton OnClick="@CloseRdaDialog">Cancel</MudButton>
-            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@StartRdaImport">
-                Start Import
-            </MudButton>
+            <TwButton Variant="ghost" OnClick="@CloseRdaDialog">Cancel</TwButton>
+            <TwButton Variant="primary" OnClick="@StartRdaImport">Start Import</TwButton>
         }
         else if (_rdaStatus?.Status == "completed" || _rdaStatus?.Status == "failed")
         {
-            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@CloseRdaDialog">
-                Close
-            </MudButton>
+            <TwButton Variant="primary" OnClick="@CloseRdaDialog">Close</TwButton>
         }
-    </DialogActions>
-</MudDialog>
+    </ActionsContent>
+</TwDialog>
 
 <!-- NFL/NBA Import Dialog -->
-<MudDialog @bind-Visible="_showSportImportDialog" Options="@_rdaDialogOptions">
-    <TitleContent>
-        <MudText Typo="Typo.h6">
-            <MudIcon Icon="@Icons.Material.Filled.CloudDownload" Class="mr-2" />
-            Import @(_sportImportTarget?.ToUpper()) Data
-        </MudText>
-    </TitleContent>
-    <DialogContent>
+<TwDialog @bind-IsOpen="_showSportImportDialog" Title="@($"Import {_sportImportTarget?.ToUpper()} Data")" MaxWidth="md">
+    <ChildContent>
         @if (!_isSportImporting)
         {
-            <MudStack Spacing="3">
-                <MudText Typo="Typo.body2">
-                    This will download and import @(_sportImportTarget) data from:
-                </MudText>
-                <MudList T="string" Dense="true">
-                    @if (_sportImportTarget == "nfl")
-                    {
-                        <MudListItem Icon="@Icons.Material.Filled.Code" Dense="true">nflverse-data (GitHub releases)</MudListItem>
-                    }
-                    else
-                    {
-                        <MudListItem Icon="@Icons.Material.Filled.Code" Dense="true">hoopR + stats.nba.com</MudListItem>
-                    }
-                </MudList>
-                <MudCheckBox @bind-Value="_sportClearExisting" Color="Color.Warning" Dense="true">
-                    Clear existing @(_sportImportTarget?.ToUpper()) data before import
-                </MudCheckBox>
-            </MudStack>
+            <div class="space-y-6">
+                <div class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+                    <p class="text-sm text-blue-200 mb-3">This will download and import @(_sportImportTarget) data from:</p>
+                    <ul class="space-y-2">
+                        @if (_sportImportTarget == "nfl")
+                        {
+                            <li class="flex items-center gap-2 text-sm text-slate-300">
+                                <TwIcon Icon="M17.22 8.98L12 3.75 6.78 8.98l1.06 1.06L11 6.81V15h2V6.81l3.16 3.24 1.06-1.07z" Class="w-4 h-4 text-emerald-400" />
+                                nflverse-data (GitHub releases)
+                            </li>
+                        }
+                        else
+                        {
+                            <li class="flex items-center gap-2 text-sm text-slate-300">
+                                <TwIcon Icon="M17.22 8.98L12 3.75 6.78 8.98l1.06 1.06L11 6.81V15h2V6.81l3.16 3.24 1.06-1.07z" Class="w-4 h-4 text-amber-400" />
+                                hoopR + stats.nba.com
+                            </li>
+                        }
+                    </ul>
+                </div>
+                
+                <label class="flex items-center gap-3 p-3 rounded-lg border border-slate-800 hover:bg-slate-800/50 transition-colors cursor-pointer">
+                    <input type="checkbox" @bind="_sportClearExisting" class="w-4 h-4 rounded border-slate-700 bg-slate-900 text-blue-500 focus:ring-blue-500/20" />
+                    <span class="text-sm text-slate-300">Clear existing @(_sportImportTarget?.ToUpper()) data before import</span>
+                </label>
+            </div>
         }
         else
         {
-            <MudStack Spacing="2">
-                <MudProgressLinear Color="@(_sportStatus?.Status == "completed" ? Color.Success : Color.Primary)" 
-                                    Indeterminate="@(_sportStatus?.Status == "running")" />
-                <MudText Typo="Typo.body2">
-                    Status: @(_sportStatus?.Status ?? "starting...")
-                </MudText>
+            <div class="space-y-6">
+                <TwProgressBar Value="100" IsIndeterminate="@(_sportStatus?.Status == "running")" Color="blue" />
                 
-                <MudPaper Class="pa-2 mt-2" Elevation="0" Outlined="true" 
-                          Style="max-height: 200px; overflow-y: auto; background: #1a1a2e;">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm text-slate-400">Status</span>
+                    <TwChip Color="@(_sportStatus?.Status == "completed" ? "emerald" : _sportStatus?.Status == "failed" ? "red" : "blue")" Size="sm">
+                        @(_sportStatus?.Status ?? "starting...")
+                    </TwChip>
+                </div>
+                
+                <div class="bg-slate-950 border border-slate-800 rounded-lg p-3 h-48 overflow-y-auto font-mono text-[11px] space-y-1">
                     @if (_sportStatus?.Progress != null)
                     {
                         @foreach (var line in _sportStatus.Progress)
                         {
-                            <MudText Typo="Typo.caption" Style="font-family: monospace; color: #00ff88;">
-                                @line
-                            </MudText>
+                            <p class="text-emerald-400/80">@line</p>
                         }
                     }
-                </MudPaper>
+                </div>
                 
                 @if (_sportStatus?.Error != null)
                 {
-                    <MudAlert Severity="Severity.Error" Dense="true">
+                    <div class="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-sm text-red-400">
                         @_sportStatus.Error
-                    </MudAlert>
+                    </div>
                 }
-            </MudStack>
+            </div>
         }
-    </DialogContent>
-    <DialogActions>
+    </ChildContent>
+    <ActionsContent>
         @if (!_isSportImporting)
         {
-            <MudButton OnClick="@CloseSportImportDialog">Cancel</MudButton>
-            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@StartSportImport">
-                Start Import
-            </MudButton>
+            <TwButton Variant="ghost" OnClick="@CloseSportImportDialog">Cancel</TwButton>
+            <TwButton Variant="primary" OnClick="@StartSportImport">Start Import</TwButton>
         }
         else if (_sportStatus?.Status == "completed" || _sportStatus?.Status == "failed")
         {
-            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@CloseSportImportDialog">
-                Close
-            </MudButton>
+            <TwButton Variant="primary" OnClick="@CloseSportImportDialog">Close</TwButton>
         }
-    </DialogActions>
-</MudDialog>
+    </ActionsContent>
+</TwDialog>
 
 <!-- College Baseball Import Dialog -->
-<MudDialog @bind-Visible="_showBaseballImportDialog" Options="@_rdaDialogOptions">
-    <TitleContent>
-        <MudText Typo="Typo.h6">
-            <MudIcon Icon="@Icons.Material.Filled.SportsBaseball" Class="mr-2" />
-            Import NCAA Baseball - @(_baseballDivision == 0 ? "All Divisions" : $"Division {_baseballDivision}")
-        </MudText>
-    </TitleContent>
-    <DialogContent>
+<TwDialog @bind-IsOpen="_showBaseballImportDialog" Title="@($"Import NCAA Baseball - {(_baseballDivision == "0" ? "All Divisions" : $"Division {_baseballDivision}")}")" MaxWidth="md">
+    <ChildContent>
         @if (!_isBaseballImporting)
         {
-            <MudStack Spacing="3">
-                <MudText Typo="Typo.body2">
-                    This will download NCAA @(_baseballDivision == 0 ? "All Divisions" : $"Division {_baseballDivision}") baseball data for @_baseballYear:
-                </MudText>
-                <MudList T="string" Dense="true">
-                    <MudListItem Icon="@Icons.Material.Filled.Groups" Dense="true">Team rosters</MudListItem>
-                    <MudListItem Icon="@Icons.Material.Filled.Sports" Dense="true">Batting statistics</MudListItem>
-                    <MudListItem Icon="@Icons.Material.Filled.Speed" Dense="true">Pitching statistics</MudListItem>
-                    <MudListItem Icon="@Icons.Material.Filled.CalendarMonth" Dense="true">Schedules & results</MudListItem>
-                </MudList>
-                <MudAlert Severity="Severity.Info" Dense="true">
-                    This performs a full bulk import of all teams and players for the selected division and year.
-                </MudAlert>
-            </MudStack>
+            <div class="space-y-6">
+                <div class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+                    <p class="text-sm text-blue-200 mb-4">This will download NCAA @(_baseballDivision == "0" ? "All Divisions" : $"Division {_baseballDivision}") baseball data for @_baseballYear:</p>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="flex items-center gap-2 text-sm text-slate-300">
+                            <TwIcon Icon="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" Class="w-4 h-4 text-blue-400" />
+                            Team rosters
+                        </div>
+                        <div class="flex items-center gap-2 text-sm text-slate-300">
+                            <TwIcon Icon="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6" Class="w-4 h-4 text-blue-400" />
+                            Batting statistics
+                        </div>
+                        <div class="flex items-center gap-2 text-sm text-slate-300">
+                            <TwIcon Icon="M13 10V3L4 14h7v7l9-11h-7z" Class="w-4 h-4 text-blue-400" />
+                            Pitching statistics
+                        </div>
+                        <div class="flex items-center gap-2 text-sm text-slate-300">
+                            <TwIcon Icon="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" Class="w-4 h-4 text-blue-400" />
+                            Schedules & results
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-blue-500/5 border border-blue-500/10 rounded-lg p-3">
+                    <p class="text-[11px] text-blue-400 italic">This performs a full bulk import of all teams and players for the selected division and year.</p>
+                </div>
+            </div>
         }
         else
         {
-            <MudStack Spacing="2">
-                <MudProgressLinear Color="@(_baseballStatus?.Status == "completed" ? Color.Success : Color.Info)" 
-                                    Indeterminate="@(_baseballStatus?.Status == "running")" />
-                <MudText Typo="Typo.body2">
-                    Status: @(_baseballStatus?.Status ?? "starting...")
-                </MudText>
+            <div class="space-y-6">
+                <TwProgressBar Value="100" IsIndeterminate="@(_baseballStatus?.Status == "running")" Color="blue" />
+                
+                <div class="flex items-center justify-between">
+                    <span class="text-sm text-slate-400">Status</span>
+                    <TwChip Color="@(_baseballStatus?.Status == "completed" ? "emerald" : (_baseballStatus?.Status == "error" || _baseballStatus?.Status == "failed") ? "red" : "blue")" Size="sm">
+                        @(_baseballStatus?.Status ?? "starting...")
+                    </TwChip>
+                </div>
                 
                 @if (_baseballStatus?.Progress?.Any() == true)
                 {
-                    <MudPaper Class="pa-2" Style="max-height: 200px; overflow-y: auto; background: var(--mud-palette-background-grey);">
-                        @foreach (var msg in _baseballStatus.Progress.TakeLast(10))
+                    <div class="bg-slate-950 border border-slate-800 rounded-lg p-3 h-48 overflow-y-auto font-mono text-[11px] space-y-1">
+                        @foreach (var msg in _baseballStatus.Progress.TakeLast(20))
                         {
-                            <MudText Typo="Typo.caption" Style="font-family: monospace;">@msg</MudText>
+                            <p class="text-blue-400/80">@msg</p>
                         }
-                    </MudPaper>
+                    </div>
                 }
                 
                 @if (_baseballStatus?.Status == "completed")
                 {
-                    <MudAlert Severity="Severity.Success" Dense="true">
+                    <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-sm text-emerald-400">
                         Import completed successfully!
-                    </MudAlert>
+                    </div>
                 }
                 @if (_baseballStatus?.Status == "error" || _baseballStatus?.Status == "failed")
                 {
-                    <MudAlert Severity="Severity.Error" Dense="true">
+                    <div class="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-sm text-red-400">
                         @(_baseballStatus?.Error ?? _baseballStatus?.Message ?? "Import failed")
-                    </MudAlert>
+                    </div>
                 }
-            </MudStack>
+            </div>
         }
-    </DialogContent>
-    <DialogActions>
+    </ChildContent>
+    <ActionsContent>
         @if (!_isBaseballImporting)
         {
-            <MudButton OnClick="@CloseBaseballImportDialog">Cancel</MudButton>
-            <MudButton Color="Color.Info" Variant="Variant.Filled" OnClick="@StartBaseballImport">
-                Start Import
-            </MudButton>
+            <TwButton Variant="ghost" OnClick="@CloseBaseballImportDialog">Cancel</TwButton>
+            <TwButton Variant="primary" OnClick="@StartBaseballImport">Start Import</TwButton>
         }
         else if (_baseballStatus?.Status == "completed" || _baseballStatus?.Status == "error" || _baseballStatus?.Status == "failed")
         {
-            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@CloseBaseballImportDialog">
-                Close
-            </MudButton>
+            <TwButton Variant="primary" OnClick="@CloseBaseballImportDialog">Close</TwButton>
         }
-    </DialogActions>
-</MudDialog>
+    </ActionsContent>
+</TwDialog>
 
 @code {
     private DataStatusResponse? _dataStatus;
@@ -595,8 +567,8 @@
     private bool _showRdaDialog = false;
     private bool _isRdaImporting = false;
     private string _rdaSeries = "all";
-    private int _rdaYearStart = 2012;
-    private int _rdaYearEnd = DateTime.Now.Year;
+    private double _rdaYearStart = 2012;
+    private double _rdaYearEnd = DateTime.Now.Year;
     private bool _rdaClearExisting = false;
     private RdaImportStatus? _rdaStatus;
     private System.Threading.Timer? _rdaPollTimer;
@@ -613,8 +585,8 @@
     // College Baseball Import
     private bool _showBaseballImportDialog = false;
     private bool _isBaseballImporting = false;
-    private int _baseballDivision = 0;
-    private int _baseballYear = 0;
+    private string _baseballDivision = "0";
+    private double _baseballYear = 0;
     private string _baseballSource = "auto";
     private BaseballImportStatus? _baseballStatus;
     private BaseballImportSummary? _baseballSummary;
@@ -1053,7 +1025,7 @@
                 var result = await response.Content.ReadFromJsonAsync<BaseballImportSummary>();
                 _baseballSummary = result;
                 _baseballStatus = new BaseballImportStatus { Status = "completed", Message = "Import complete!" };
-                Snackbar.Add($"College baseball {(_baseballDivision == 0 ? "All Divisions" : $"D{_baseballDivision}")} import complete!", Severity.Success);
+                Snackbar.Add($"College baseball {(_baseballDivision == "0" ? "All Divisions" : $"D{_baseballDivision}")} import complete!", Severity.Success);
             }
             else
             {

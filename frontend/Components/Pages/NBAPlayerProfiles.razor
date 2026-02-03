@@ -9,7 +9,7 @@
 <div class="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
     <TwContainer MaxWidth="6xl">
         <!-- Header -->
-        <header class="mb-8">
+        <header class="mb-8 px-6">
             <div class="flex items-center gap-3 mb-2">
                 <div class="bg-orange-600 p-3 rounded-xl shadow-lg shadow-orange-900/20">
                     <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -96,8 +96,8 @@
                         </div>
                     </TwCard>
                     
-                    <div class="mb-6">
-                        <TwTabs Items="@(new[] { "Overview", "Season Stats" })" @bind-ActiveTab="_activeTab" />
+                    <div class="mb-6 px-6">
+                        <TwTabs HeaderClass="px-0" Items="@(new[] { "Overview", "Season Stats" })" @bind-ActiveTab="_activeTab" />
                     </div>
 
                     @if (_activeTab == 0)
@@ -117,7 +117,7 @@
                                 </HeaderContent>
                                 <ChildContent>
                                     <div class="overflow-x-auto">
-                                        <TwTable>
+                                        <TwTable TItem="object">
                                             <HeaderContent>
                                                 <TwTh>Season</TwTh>
                                                 <TwTh>Team</TwTh>

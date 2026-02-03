@@ -2,6 +2,7 @@
 @using SportsBettingAnalyzer.Models
 @using SportsBettingAnalyzer.Services
 @using SportsBettingAnalyzer.Components.Shared.Tailwind
+@using MudBlazor
 @inject BetAnalysisService BetAnalysisService
 @inject DataCollectionService DataCollectionService
 @inject PythonMLServiceClient MLServiceClient
@@ -88,7 +89,7 @@
                         else if (_activeTabIndex == 1) // Recent Activity
                         {
                             <div class="mt-6 overflow-x-auto">
-                                <TwTable>
+                                <TwTable TItem="object">
                                     <HeaderContent>
                                         <TwTh>Date</TwTh>
                                         <TwTh>Game/Player</TwTh>
@@ -197,7 +198,7 @@
                     else if (_modelSummary.Any())
                     {
                         <div class="overflow-x-auto">
-                            <TwTable>
+                            <TwTable TItem="object">
                                 <HeaderContent>
                                     <TwTh>Sport/Model</TwTh>
                                     <TwTh>Task</TwTh>

@@ -1,400 +1,388 @@
 @page "/data-health"
 @rendermode InteractiveServer
+@implements IDisposable
 @using System.Text.Json
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 
 <PageTitle>Data Health</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
-    <MudStack Spacing="4">
+<TwContainer MaxWidth="extraLarge" Class="mt-8">
+    <div class="space-y-8 pb-12">
         <!-- Header -->
-        <MudPaper Class="pa-4" Elevation="2">
-            <div class="d-flex justify-space-between align-center">
-                <div>
-                    <MudText Typo="Typo.h4">
-                        <MudIcon Icon="@Icons.Material.Filled.HealthAndSafety" Class="mr-2" />
-                        Data Health Dashboard
-                    </MudText>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        Analyze data quality, identify issues, and get improvement recommendations
-                    </MudText>
+        <TwCard Class="p-6 bg-slate-900 border-slate-800">
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-6">
+                <div class="flex items-center gap-4">
+                    <div class="bg-blue-600/20 p-3 rounded-xl">
+                        <TwIcon Icon="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04M12 21.355c-1.901-1.036-3.723-2.316-5.418-3.79a11.95 11.95 0 01-2.964-3.615" Class="w-10 h-10 text-blue-400" />
+                    </div>
+                    <div>
+                        <h1 class="text-3xl font-extrabold text-white tracking-tight">Data Health Dashboard</h1>
+                        <p class="text-slate-400 text-sm mt-0.5">Analyze data quality, identify issues, and get improvement recommendations</p>
+                    </div>
                 </div>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" 
-                           StartIcon="@Icons.Material.Filled.Refresh" 
-                           OnClick="RefreshAllSports" 
-                           Disabled="_loading">
-                    @if (_loading)
-                    {
-                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                        <span>Scanning...</span>
-                    }
-                    else
-                    {
-                        <span>Refresh All</span>
-                    }
-                </MudButton>
+                <TwButton Variant="primary" OnClick="RefreshAllSports" Disabled="_loading" IsLoading="@_loading" Class="px-6">
+                    <TwIcon Icon="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" Class="w-5 h-5 mr-2" />
+                    @(_loading ? "Scanning..." : "Refresh All")
+                </TwButton>
             </div>
-        </MudPaper>
+        </TwCard>
 
         <!-- Database Stats -->
         @if (_dbStats != null)
         {
-            <MudPaper Class="pa-4" Elevation="1">
-                <div class="d-flex align-center mb-2">
-                    <MudIcon Icon="@Icons.Material.Filled.Storage" Color="Color.Success" Class="mr-2" />
-                    <MudText Typo="Typo.h6">PostgreSQL Database</MudText>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Class="ml-2">Connected</MudChip>
+            <TwCard Class="p-6 bg-slate-900 border-slate-800">
+                <div class="flex items-center gap-3 mb-6">
+                    <TwIcon Icon="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" Class="w-6 h-6 text-emerald-400" />
+                    <h2 class="text-xl font-bold text-white">PostgreSQL Database</h2>
+                    <TwChip Color="emerald" Size="sm" Class="font-bold">CONNECTED</TwChip>
                 </div>
-                <MudGrid>
-                    <MudItem xs="6" md="2">
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Results</MudText>
-                        <MudText Typo="Typo.h6">@_dbStats.Results.ToString("N0")</MudText>
-                    </MudItem>
-                    <MudItem xs="6" md="2">
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Entities</MudText>
-                        <MudText Typo="Typo.h6">@_dbStats.Entities.ToString("N0")</MudText>
-                    </MudItem>
-                    <MudItem xs="6" md="2">
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Stats</MudText>
-                        <MudText Typo="Typo.h6">@_dbStats.Stats.ToString("N0")</MudText>
-                    </MudItem>
-                    <MudItem xs="6" md="2">
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Predictions</MudText>
-                        <MudText Typo="Typo.h6">@_dbStats.Predictions.ToString("N0")</MudText>
-                    </MudItem>
-                    <MudItem xs="6" md="2">
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Models</MudText>
-                        <MudText Typo="Typo.h6">@_dbStats.Models.ToString("N0")</MudText>
-                    </MudItem>
-                    <MudItem xs="6" md="2">
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Sports</MudText>
-                        <MudText Typo="Typo.h6">@_dbStats.Sports.ToString("N0")</MudText>
-                    </MudItem>
-                </MudGrid>
-            </MudPaper>
+                
+                <TwGrid Columns="2" ColumnsMd="6" Gap="4">
+                    <TwStatCard Label="Results" Value="@_dbStats.Results.ToString("N0")" Icon="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" Color="blue" />
+                    <TwStatCard Label="Entities" Value="@_dbStats.Entities.ToString("N0")" Icon="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" Color="emerald" />
+                    <TwStatCard Label="Stats" Value="@_dbStats.Stats.ToString("N0")" Icon="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16" Color="purple" />
+                    <TwStatCard Label="Predictions" Value="@_dbStats.Predictions.ToString("N0")" Icon="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" Color="amber" />
+                    <TwStatCard Label="Models" Value="@_dbStats.Models.ToString("N0")" Icon="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.644.322a6 6 0 01-3.86.517l-2.387-.477a2 2 0 00-1.022.547l-1.16 1.16a2 2 0 002.828 2.828l1.16-1.16a2 2 0 00.547-1.022l.477-2.387a6 6 0 00-.517-3.86l-.322-.644a6 6 0 01-.517-3.86l.477-2.387a2 2 0 00-.547-1.022l-1.16-1.16a2 2 0 00-2.828 2.828l1.16 1.16a2 2 0 001.022.547l2.387.477a6 6 0 003.86-.517l.644-.322a6 6 0 013.86-.517l2.387.477a2 2 0 001.022-.547l1.16-1.16a2 2 0 00-2.828-2.828l-1.16 1.16a2 2 0 00-.547 1.022l-.477 2.387a6 6 0 00.517 3.86l.322.644a6 6 0 01.517 3.86l-.477 2.387a2 2 0 00.547 1.022l1.16 1.16a2 2 0 002.828-2.828l-1.16-1.16z" Color="indigo" />
+                    <TwStatCard Label="Sports" Value="@_dbStats.Sports.ToString("N0")" Icon="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" Color="rose" />
+                </TwGrid>
+            </TwCard>
         }
 
         <!-- Sport Tabs -->
-        <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" 
-                 PanelClass="pa-4" ActivePanelIndex="_activeTab" ActivePanelIndexChanged="OnTabChanged">
+        <TwTabs HeaderClass="px-6">
             @foreach (var sport in _sports)
             {
-                <MudTabPanel Text="@sport.DisplayName" Icon="@sport.Icon" BadgeData="@GetBadgeData(sport.Key)">
-                    @if (_sportData.ContainsKey(sport.Key))
-                    {
-                        var data = _sportData[sport.Key];
-                        <MudGrid Spacing="3">
-                            <!-- Summary Cards -->
-                            <MudItem xs="12" md="2">
-                                <MudPaper Class="pa-4 text-center" Elevation="1">
-                                    <MudText Typo="Typo.h3" Color="@GetScoreColor(data.SufficiencyScore)">
-                                        @data.SufficiencyScore
-                                    </MudText>
-                                    <MudText Typo="Typo.body2">Sufficiency Score</MudText>
-                                    <MudProgressLinear Value="@data.SufficiencyScore" Color="@GetScoreColor(data.SufficiencyScore)" Class="mt-2" />
-                                </MudPaper>
-                            </MudItem>
-                            <MudItem xs="12" md="2">
-                                <MudPaper Class="pa-4 text-center" Elevation="1">
-                                    <MudText Typo="Typo.h3" Color="Color.Info">@data.TotalRows.ToString("N0")</MudText>
-                                    <MudText Typo="Typo.body2">Total Rows</MudText>
-                                </MudPaper>
-                            </MudItem>
-                            <MudItem xs="12" md="2">
-                                <MudPaper Class="pa-4 text-center" Elevation="1">
-                                    <MudText Typo="Typo.h5" Color="Color.Primary" Class="mt-2">@data.DateRange</MudText>
-                                    <MudText Typo="Typo.body2" Class="mt-2">Season Range</MudText>
-                                </MudPaper>
-                            </MudItem>
-                            <MudItem xs="12" md="3">
-                                <MudPaper Class="pa-4 text-center" Elevation="1">
-                                    <MudText Typo="Typo.h3" Color="Color.Secondary">@data.FeaturesAvailable</MudText>
-                                    <MudText Typo="Typo.body2">Features</MudText>
-                                </MudPaper>
-                            </MudItem>
-                            <MudItem xs="12" md="3">
-                                <MudPaper Class="pa-4 text-center" Elevation="1">
-                                    <MudText Typo="Typo.h3" Color="@(data.IssuesCount > 0 ? Color.Warning : Color.Success)">
-                                        @data.IssuesCount
-                                    </MudText>
-                                    <MudText Typo="Typo.body2">Issues Found</MudText>
-                                </MudPaper>
-                            </MudItem>
+                <TwTabPanel Title="@sport.DisplayName" TabIcon="@GetSportIcon(sport.Key)" BadgeContent="@GetBadgeData(sport.Key)">
+                    <div class="px-6 space-y-6">
+                        @if (_sportData.ContainsKey(sport.Key))
+                        {
+                            var data = _sportData[sport.Key];
+                            
+                            <!-- Summary Grid -->
+                            <TwGrid Columns="1" ColumnsSm="2" ColumnsMd="5" Gap="4">
+                                <TwCard Class="p-6 text-center bg-slate-900 border-slate-800">
+                                    <div class="text-4xl font-black mb-1 @GetScoreTextClass(data.SufficiencyScore)">@data.SufficiencyScore</div>
+                                    <div class="text-xs uppercase tracking-widest text-slate-500 font-bold mb-4">Quality Score</div>
+                                    <TwProgressBar Value="@data.SufficiencyScore" Color="@GetTailwindColor(GetScoreColor(data.SufficiencyScore))" Size="sm" />
+                                </TwCard>
 
-                            <!-- Rating -->
-                            <MudItem xs="12">
-                                <MudAlert Severity="@GetRatingSeverity(data.Rating)" Variant="Variant.Outlined">
-                                    <strong>Rating:</strong> @data.Rating
-                                </MudAlert>
-                            </MudItem>
+                                <TwCard Class="p-6 text-center bg-slate-900 border-slate-800 flex flex-col justify-center">
+                                    <div class="text-3xl font-extrabold text-white mb-1">@data.TotalRows.ToString("N0")</div>
+                                    <div class="text-xs uppercase tracking-widest text-slate-500 font-bold">Total Rows</div>
+                                </TwCard>
 
-                            <!-- Issues & Recommendations -->
-                            <MudItem xs="12" md="6">
-                                <MudPaper Class="pa-4" Elevation="1" Style="height: 100%;">
-                                    <MudText Typo="Typo.h6" Class="mb-3">
-                                        <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-2" />
-                                        Issues
-                                    </MudText>
+                                <TwCard Class="p-6 text-center bg-slate-900 border-slate-800 flex flex-col justify-center">
+                                    <div class="text-2xl font-bold text-blue-400 mb-1">@data.DateRange</div>
+                                    <div class="text-xs uppercase tracking-widest text-slate-500 font-bold">Season Range</div>
+                                </TwCard>
+
+                                <TwCard Class="p-6 text-center bg-slate-900 border-slate-800 flex flex-col justify-center">
+                                    <div class="text-3xl font-extrabold text-blue-400 mb-1">@data.FeaturesAvailable</div>
+                                    <div class="text-xs uppercase tracking-widest text-slate-500 font-bold">Features</div>
+                                </TwCard>
+
+                                <TwCard Class="p-6 text-center bg-slate-900 border-slate-800 flex flex-col justify-center">
+                                    <div class="text-3xl font-extrabold @(data.IssuesCount > 0 ? "text-amber-500" : "text-emerald-500") mb-1">@data.IssuesCount</div>
+                                    <div class="text-xs uppercase tracking-widest text-slate-500 font-bold">Issues Found</div>
+                                </TwCard>
+                            </TwGrid>
+
+                            <!-- Rating Alert -->
+                            <TwAlert Severity="@GetTailwindSeverity(data.Rating)" Icon="@GetRatingIcon(data.Rating)" Class="border-slate-800">
+                                <span class="font-bold">Database Rating:</span> @data.Rating
+                            </TwAlert>
+
+                            <!-- Issues \u0026 Recommendations -->
+                            <TwGrid Columns="1" ColumnsMd="2" Gap="6">
+                                <TwCard Class="p-6 bg-slate-900 border-slate-800 h-full">
+                                    <div class="flex items-center gap-3 mb-6">
+                                        <TwIcon Icon="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" Class="w-6 h-6 text-amber-500" />
+                                        <h3 class="text-xl font-bold text-white">Issues</h3>
+                                    </div>
                                     @if (data.Issues.Any())
                                     {
-                                        <MudList T="string" Dense="true">
+                                        <ul class="space-y-3">
                                             @foreach (var issue in data.Issues)
                                             {
-                                                <MudListItem Icon="@Icons.Material.Filled.Error" IconColor="Color.Error">
-                                                    @issue
-                                                </MudListItem>
+                                                <li class="flex items-start gap-3 group">
+                                                    <TwIcon Icon="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+                                                    <span class="text-slate-300 group-hover:text-blue-200 transition-colors">@issue</span>
+                                                </li>
                                             }
-                                        </MudList>
+                                        </ul>
                                     }
                                     else
                                     {
-                                        <MudText Color="Color.Success">No issues found!</MudText>
+                                        <div class="flex flex-col items-center justify-center py-8 text-emerald-500 font-bold italic">
+                                            <TwIcon Icon="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-12 h-12 mb-3" />
+                                            No issues found!
+                                        </div>
                                     }
-                                </MudPaper>
-                            </MudItem>
+                                </TwCard>
 
-                            <MudItem xs="12" md="6">
-                                <MudPaper Class="pa-4" Elevation="1" Style="height: 100%;">
-                                    <MudText Typo="Typo.h6" Class="mb-3">
-                                        <MudIcon Icon="@Icons.Material.Filled.Lightbulb" Color="Color.Info" Class="mr-2" />
-                                        Recommendations
-                                    </MudText>
+                                <TwCard Class="p-6 bg-slate-900 border-slate-800 h-full">
+                                    <div class="flex items-center gap-3 mb-6">
+                                        <TwIcon Icon="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" Class="w-6 h-6 text-blue-400" />
+                                        <h3 class="text-xl font-bold text-white">Recommendations</h3>
+                                    </div>
                                     @if (data.Recommendations.Any())
                                     {
-                                        <MudList T="string" Dense="true">
+                                        <ul class="space-y-3">
                                             @foreach (var rec in data.Recommendations)
                                             {
-                                                <MudListItem Icon="@Icons.Material.Filled.TipsAndUpdates" IconColor="Color.Info">
-                                                    @rec
-                                                </MudListItem>
+                                                <li class="flex items-start gap-3 group">
+                                                    <TwIcon Icon="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
+                                                    <span class="text-slate-300 group-hover:text-blue-200 transition-colors">@rec</span>
+                                                </li>
                                             }
-                                        </MudList>
+                                        </ul>
                                     }
                                     else
                                     {
-                                        <MudText Color="Color.Success">Data looks good!</MudText>
+                                        <div class="flex flex-col items-center justify-center py-8 text-emerald-500 font-bold italic">
+                                            <TwIcon Icon="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-12 h-12 mb-3" />
+                                            Data looks optimized!
+                                        </div>
                                     }
-                                </MudPaper>
-                            </MudItem>
+                                </TwCard>
+                            </TwGrid>
 
-                            <!-- Feature Coverage -->
-                            <MudItem xs="12">
-                                <MudExpansionPanels>
-                                    @if (data.FeatureImpact.Any())
-                                    {
-                                        <MudExpansionPanel Text="Model Feature Importance (SHAP)">
-                                            <MudSimpleTable Dense="true" Hover="true">
+                            <!-- Detailed Metrics (Expansion Panels) -->
+                            <div class="space-y-3">
+                                @if (data.FeatureImpact.Any())
+                                {
+                                    <details class="group bg-slate-900 border border-slate-800 rounded-xl overflow-hidden transition-all duration-300">
+                                        <summary class="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-800/50 list-none font-bold text-white uppercase tracking-wider text-xs">
+                                            <div class="flex items-center gap-3">
+                                                <TwIcon Icon="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" Class="w-5 h-5 text-indigo-400" />
+                                                Model Feature Importance (SHAP)
+                                            </div>
+                                            <TwIcon Icon="M19 9l-7 7-7-7" Class="w-4 h-4 text-slate-500 group-open:rotate-180 transition-transform" />
+                                        </summary>
+                                        <div class="px-4 pb-4 border-t border-slate-800 pt-4">
+                                            <TwTable TItem="object">
                                                 <thead>
-                                                    <tr>
-                                                        <th>Feature</th>
-                                                        <th>Importance</th>
-                                                        <th>Impact</th>
-                                                    </tr>
+                                                    <TwTr><TwTh>Feature</TwTh><TwTh>Importance</TwTh><TwTh>Visual Impact</TwTh></TwTr>
                                                 </thead>
                                                 <tbody>
                                                     @foreach (var fi in data.FeatureImpact)
                                                     {
-                                                        <tr>
-                                                            <td>@fi.Feature</td>
-                                                            <td>@fi.Impact.ToString("P2")</td>
-                                                            <td>
-                                                                <MudProgressLinear Value="@(fi.Impact * 100)" Color="Color.Primary" Size="Size.Small" />
-                                                            </td>
-                                                        </tr>
+                                                        <TwTr>
+                                                            <TwTd class="font-mono text-xs text-blue-400">@fi.Feature</TwTd>
+                                                            <TwTd class="font-bold">@fi.Impact.ToString("P2")</TwTd>
+                                                            <TwTd class="w-1/3"><TwProgressBar Value="@((int)(fi.Impact * 100))" Color="indigo" Size="sm" /></TwTd>
+                                                        </TwTr>
                                                     }
                                                 </tbody>
-                                            </MudSimpleTable>
-                                        </MudExpansionPanel>
-                                    }
+                                            </TwTable>
+                                        </div>
+                                    </details>
+                                }
 
-                                    <MudExpansionPanel Text="Feature Coverage Details">
-                                        <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                <details class="group bg-slate-900 border border-slate-800 rounded-xl overflow-hidden transition-all duration-300">
+                                    <summary class="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-800/50 list-none font-bold text-white uppercase tracking-wider text-xs">
+                                        <div class="flex items-center gap-3">
+                                            <TwIcon Icon="M9 12H11M13 12H15M17 12H19" Class="w-5 h-5 text-emerald-400" />
+                                            Feature Coverage Details
+                                        </div>
+                                        <TwIcon Icon="M19 9l-7 7-7-7" Class="w-4 h-4 text-slate-500 group-open:rotate-180 transition-transform" />
+                                    </summary>
+                                    <div class="px-4 pb-4 border-t border-slate-800 pt-4">
+                                        <TwTable TItem="object">
                                             <thead>
-                                                <tr>
-                                                    <th>Feature</th>
-                                                    <th>Coverage %</th>
-                                                    <th>Status</th>
-                                                </tr>
+                                                <TwTr><TwTh>Feature Name</TwTh><TwTh>Coverage %</TwTh><TwTh>Status</TwTh></TwTr>
                                             </thead>
                                             <tbody>
                                                 @foreach (var fc in data.FeatureCoverage.Take(15))
                                                 {
-                                                    <tr>
-                                                        <td>@fc.Key</td>
-                                                        <td>
-                                                            <MudProgressLinear Value="@fc.Value" Color="@GetCoverageColor(fc.Value)" 
-                                                                              Size="Size.Small" Style="width: 100px; display: inline-block;" />
-                                                            @fc.Value.ToString("F1")%
-                                                        </td>
-                                                        <td>
-                                                            @if (fc.Value >= 90)
-                                                            {
-                                                                <MudChip T="string" Color="Color.Success" Size="Size.Small">Good</MudChip>
-                                                            }
-                                                            else if (fc.Value >= 70)
-                                                            {
-                                                                <MudChip T="string" Color="Color.Warning" Size="Size.Small">Moderate</MudChip>
-                                                            }
-                                                            else
-                                                            {
-                                                                <MudChip T="string" Color="Color.Error" Size="Size.Small">Low</MudChip>
-                                                            }
-                                                        </td>
-                                                    </tr>
+                                                    <TwTr>
+                                                        <TwTd class="font-mono text-xs text-slate-300">@fc.Key</TwTd>
+                                                        <TwTd>
+                                                            <div class="flex items-center gap-3">
+                                                                <div class="w-24 flex-shrink-0">
+                                                                    <TwProgressBar Value="@((int)fc.Value)" Color="@GetTailwindColor(GetCoverageColor(fc.Value))" Size="xs" />
+                                                                </div>
+                                                                <span class="font-bold">@fc.Value.ToString("F1")%</span>
+                                                            </div>
+                                                        </TwTd>
+                                                        <TwTd>
+                                                            @if (fc.Value >= 90) { <TwChip Color="emerald" Size="sm">GOOD</TwChip> }
+                                                            else if (fc.Value >= 70) { <TwChip Color="amber" Size="sm">MODERATE</TwChip> }
+                                                            else { <TwChip Color="red" Size="sm">LOW</TwChip> }
+                                                        </TwTd>
+                                                    </TwTr>
                                                 }
                                             </tbody>
-                                        </MudSimpleTable>
-                                    </MudExpansionPanel>
+                                        </TwTable>
+                                    </div>
+                                </details>
 
-                                    @if (data.Correlations.Any())
-                                    {
-                                        <MudExpansionPanel Text="Highly Correlated Features (Redundancy)">
-                                            <MudAlert Severity="Severity.Info" Class="mb-2">These feature pairs are highly redundant (Correlation > 0.8). Removing one can reduce overfitting.</MudAlert>
-                                            <MudSimpleTable Dense="true">
+                                @if (data.Correlations.Any())
+                                {
+                                    <details class="group bg-slate-900 border border-slate-800 rounded-xl overflow-hidden transition-all duration-300">
+                                        <summary class="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-800/50 list-none font-bold text-white uppercase tracking-wider text-xs">
+                                            <div class="flex items-center gap-3">
+                                                <TwIcon Icon="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" Class="w-5 h-5 text-amber-400" />
+                                                Highly Correlated Features (Redundancy)
+                                            </div>
+                                            <TwIcon Icon="M19 9l-7 7-7-7" Class="w-4 h-4 text-slate-500 group-open:rotate-180 transition-transform" />
+                                        </summary>
+                                        <div class="px-4 pb-4 border-t border-slate-800 pt-4">
+                                            <div class="mb-4 bg-blue-500/10 p-3 rounded-lg border border-blue-500/20 text-xs text-blue-200">
+                                                These feature pairs are highly redundant (Correlation > 0.8). Removing one can reduce overfitting.
+                                            </div>
+                                            <TwTable TItem="object">
                                                 <thead>
-                                                    <tr>
-                                                        <th>Feature A</th>
-                                                        <th>Feature B</th>
-                                                        <th>Corr</th>
-                                                    </tr>
+                                                    <TwTr><TwTh>Feature A</TwTh><TwTh>Feature B</TwTh><TwTh>Correlation</TwTh></TwTr>
                                                 </thead>
                                                 <tbody>
                                                     @foreach (var c in data.Correlations)
                                                     {
-                                                        <tr>
-                                                            <td>@c.Feature1</td>
-                                                            <td>@c.Feature2</td>
-                                                            <td><MudChip T="string" Size="Size.Small" Color="Color.Warning">@c.Correlation.ToString("F3")</MudChip></td>
-                                                        </tr>
+                                                        <TwTr>
+                                                            <TwTd class="font-mono text-xs text-slate-400">@c.Feature1</TwTd>
+                                                            <TwTd class="font-mono text-xs text-slate-400">@c.Feature2</TwTd>
+                                                            <TwTd><TwChip Color="amber" Size="sm" Variant="outline">@c.Correlation.ToString("F3")</TwChip></TwTd>
+                                                        </TwTr>
                                                     }
                                                 </tbody>
-                                            </MudSimpleTable>
-                                        </MudExpansionPanel>
-                                    }
+                                            </TwTable>
+                                        </div>
+                                    </details>
+                                }
 
-                                    @if (data.MissingIdealFeatures.Any())
-                                    {
-                                        <MudExpansionPanel Text="Missing Ideal Features (Improvement Potential)">
-                                            <MudSimpleTable Dense="true">
+                                @if (data.MissingIdealFeatures.Any())
+                                {
+                                    <details class="group bg-slate-900 border border-slate-800 rounded-xl overflow-hidden transition-all duration-300">
+                                        <summary class="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-800/50 list-none font-bold text-white uppercase tracking-wider text-xs">
+                                            <div class="flex items-center gap-3">
+                                                <TwIcon Icon="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-5 h-5 text-rose-400" />
+                                                Missing Ideal Features
+                                            </div>
+                                            <TwIcon Icon="M19 9l-7 7-7-7" Class="w-4 h-4 text-slate-500 group-open:rotate-180 transition-transform" />
+                                        </summary>
+                                        <div class="px-4 pb-4 border-t border-slate-800 pt-4">
+                                            <TwTable TItem="object">
                                                 <thead>
-                                                    <tr>
-                                                        <th>Missing Feature</th>
-                                                        <th>Est. Accuracy Gain</th>
-                                                        <th>Difficulty</th>
-                                                    </tr>
+                                                    <TwTr><TwTh>Missing Feature</TwTh><TwTh>Accuracy Gain</TwTh><TwTh>Difficulty</TwTh></TwTr>
                                                 </thead>
                                                 <tbody>
                                                     @foreach (var mf in data.MissingIdealFeatures)
                                                     {
-                                                        <tr>
-                                                            <td>@mf.Feature.Replace("_", " ").ToUpper()</td>
-                                                            <td><MudText Color="Color.Success">@mf.Impact</MudText></td>
-                                                            <td><MudChip T="string" Size="Size.Small">@mf.Difficulty</MudChip></td>
-                                                        </tr>
+                                                        <TwTr>
+                                                            <TwTd class="font-bold text-slate-300">@mf.Feature.Replace("_", " ").ToUpper()</TwTd>
+                                                            <TwTd class="text-emerald-400 font-bold">@mf.Impact</TwTd>
+                                                            <TwTd><TwChip Color="slate" Size="sm" Variant="outline">@mf.Difficulty</TwChip></TwTd>
+                                                        </TwTr>
                                                     }
                                                 </tbody>
-                                            </MudSimpleTable>
-                                        </MudExpansionPanel>
-                                    }
+                                            </TwTable>
+                                        </div>
+                                    </details>
+                                }
 
-                                    @if (data.ImprovementRecommendations.Any())
-                                    {
-                                        <MudExpansionPanel Text="Detailed Recommendations">
-                                            <MudList T="string">
+                                @if (data.ImprovementRecommendations.Any())
+                                {
+                                    <details class="group bg-slate-900 border border-slate-800 rounded-xl overflow-hidden transition-all duration-300">
+                                        <summary class="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-800/50 list-none font-bold text-white uppercase tracking-wider text-xs">
+                                            <div class="flex items-center gap-3">
+                                                <TwIcon Icon="M13 10V3L4 14h7v7l9-11h-7z" Class="w-5 h-5 text-blue-400" />
+                                                Detailed Recommendations
+                                            </div>
+                                            <TwIcon Icon="M19 9l-7 7-7-7" Class="w-4 h-4 text-slate-500 group-open:rotate-180 transition-transform" />
+                                        </summary>
+                                        <div class="px-4 pb-4 border-t border-slate-800 pt-4">
+                                            <ul class="space-y-4">
                                                 @foreach (var ir in data.ImprovementRecommendations)
                                                 {
-                                                    <MudListItem>
-                                                        <MudText Typo="Typo.subtitle2" Color="Color.Info">@ir.Issue</MudText>
-                                                        <MudText Typo="Typo.body2">@ir.Suggestion (@ir.Impact impact)</MudText>
-                                                    </MudListItem>
+                                                    <li class="p-3 rounded-lg bg-slate-950 border border-slate-800">
+                                                        <div class="font-bold text-blue-400 mb-1">@ir.Issue</div>
+                                                        <div class="text-sm text-slate-300">@ir.Suggestion <span class="text-emerald-400 font-bold ml-2">(@ir.Impact impact)</span></div>
+                                                    </li>
                                                 }
-                                            </MudList>
-                                        </MudExpansionPanel>
-                                    }
+                                            </ul>
+                                        </div>
+                                    </details>
+                                }
 
-                                    @if (data.ClassBalance.Any())
-                                    {
-                                        <MudExpansionPanel Text="Class Balance">
-                                            <MudGrid>
+                                @if (data.ClassBalance.Any())
+                                {
+                                    <details class="group bg-slate-900 border border-slate-800 rounded-xl overflow-hidden transition-all duration-300">
+                                        <summary class="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-800/50 list-none font-bold text-white uppercase tracking-wider text-xs">
+                                            <div class="flex items-center gap-3">
+                                                <TwIcon Icon="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" Class="w-5 h-5 text-indigo-400" />
+                                                Target Class Balance
+                                            </div>
+                                            <TwIcon Icon="M19 9l-7 7-7-7" Class="w-4 h-4 text-slate-500 group-open:rotate-180 transition-transform" />
+                                        </summary>
+                                        <div class="px-4 pb-6 pt-4 border-t border-slate-800">
+                                            <TwGrid Columns="2" ColumnsMd="4" Gap="4">
                                                 @foreach (var cb in data.ClassBalance)
                                                 {
-                                                    <MudItem xs="6" md="3">
-                                                        <MudPaper Class="pa-3 text-center" Elevation="0">
-                                                            <MudText Typo="Typo.h5">@cb.Value.ToString("F1")%</MudText>
-                                                            <MudText Typo="Typo.caption">@cb.Key</MudText>
-                                                        </MudPaper>
-                                                    </MudItem>
+                                                    <div class="p-4 rounded-xl bg-slate-950 border border-slate-800 text-center">
+                                                        <div class="text-2xl font-black text-white">@cb.Value.ToString("F1")%</div>
+                                                        <div class="text-[10px] uppercase font-bold text-slate-500 tracking-tighter">@cb.Key</div>
+                                                    </div>
                                                 }
-                                            </MudGrid>
-                                        </MudExpansionPanel>
-                                    }
-
-                                    @if (data.MissingValues.Any())
-                                    {
-                                        <MudExpansionPanel Text="Missing Values">
-                                            <MudSimpleTable Dense="true" Hover="true">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Feature</th>
-                                                        <th>Missing %</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    @foreach (var mv in data.MissingValues.OrderByDescending(x => x.Value).Take(10))
-                                                    {
-                                                        <tr>
-                                                            <td>@mv.Key</td>
-                                                            <td>
-                                                                <MudChip T="string" Color="@(mv.Value > 50 ? Color.Error : mv.Value > 20 ? Color.Warning : Color.Default)" 
-                                                                        Size="Size.Small">
-                                                                    @mv.Value.ToString("F1")%
-                                                                </MudChip>
-                                                            </td>
-                                                        </tr>
-                                                    }
-                                                </tbody>
-                                            </MudSimpleTable>
-                                        </MudExpansionPanel>
-                                    }
-                                </MudExpansionPanels>
-                            </MudItem>
-                        </MudGrid>
-                    }
-                    else if (_sportLoading.ContainsKey(sport.Key) && _sportLoading[sport.Key])
-                    {
-                        <div class="d-flex flex-column align-center justify-center" style="min-height: 200px;">
-                            <MudProgressCircular Indeterminate="true" Size="Size.Large" Color="Color.Primary" />
-                            <MudText Typo="Typo.body1" Class="mt-4">@(_sportLoadingStatus.GetValueOrDefault(sport.Key, "Loading..."))</MudText>
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="d-flex flex-column align-center justify-center" style="min-height: 200px;">
-                            <MudIcon Icon="@Icons.Material.Filled.CloudDownload" Size="Size.Large" Color="Color.Secondary" />
-                            <MudText Typo="Typo.body1" Class="mt-2">Click to load @sport.DisplayName data</MudText>
-                            @if (_sportLoadingStatus.ContainsKey(sport.Key) && !string.IsNullOrEmpty(_sportLoadingStatus[sport.Key]))
-                            {
-                                <MudText Typo="Typo.caption" Color="Color.Error">@_sportLoadingStatus[sport.Key]</MudText>
-                            }
-                        </div>
-                    }
-                </MudTabPanel>
+                                            </TwGrid>
+                                        </div>
+                                    </details>
+                                }
+                            </div>
+                        }
+                        else if (_sportLoading.ContainsKey(sport.Key) && _sportLoading[sport.Key])
+                        {
+                            <div class="flex flex-col items-center justify-center min-h-[400px] py-12">
+                                <div class="w-16 h-16 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin mb-6"></div>
+                                <h3 class="text-xl font-bold text-white mb-2">Analyzing @sport.DisplayName Data...</h3>
+                                <p class="text-slate-500 font-medium">@(_sportLoadingStatus.GetValueOrDefault(sport.Key, "Processing metrics..."))</p>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="flex flex-col items-center justify-center min-h-[400px] py-12 text-center">
+                                <div class="bg-slate-800/50 p-6 rounded-full mb-6">
+                                    <TwIcon Icon="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" Class="w-16 h-16 text-slate-600" />
+                                </div>
+                                <h3 class="text-xl font-bold text-white mb-2">No @sport.DisplayName Data Scanned</h3>
+                                <p class="text-slate-500 max-w-sm mb-6">Detailed quality metrics have not been generated for this sport session yet.</p>
+                                <TwButton Variant="outline" OnClick="@(() => LoadSportData(sport.Key, true))">
+                                    Start Analysis
+                                </TwButton>
+                                @if (_sportLoadingStatus.ContainsKey(sport.Key) && !string.IsNullOrEmpty(_sportLoadingStatus[sport.Key]))
+                                {
+                                    <p class="mt-4 text-xs font-bold text-red-400">@_sportLoadingStatus[sport.Key]</p>
+                                }
+                            </div>
+                        }
+                    </div>
+                </TwTabPanel>
             }
-        </MudTabs>
+        </TwTabs>
 
-        <!-- Last Updated -->
+        <!-- Footer -->
         @if (_lastUpdated.HasValue)
         {
-            <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Center">
-                Last scanned: @_lastUpdated.Value.ToString("g")
-            </MudText>
+            <div class="text-center py-8">
+                <span class="px-4 py-2 rounded-full bg-slate-900 border border-slate-800 text-slate-500 text-xs font-semibold">
+                    Last Global Scan: @_lastUpdated.Value.ToString("MMM dd, yyyy HH:mm:ss")
+                </span>
+            </div>
         }
-    </MudStack>
-</MudContainer>
+    </div>
+</TwContainer>
+
+<style>
+    .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
+</style>
 
 @code {
     private bool _loading = false;
+    private bool _disposed = false;
     private int _activeTab = 0;
     private DateTime? _lastUpdated;
     private Dictionary<string, SportQualityData> _sportData = new();
@@ -405,24 +393,19 @@
 
     private List<SportInfo> _sports = new()
     {
-        new SportInfo { Key = "nfl", DisplayName = "NFL", Icon = Icons.Material.Filled.SportsCricket },
-        new SportInfo { Key = "nba", DisplayName = "NBA", Icon = Icons.Material.Filled.SportsBasketball },
-        new SportInfo { Key = "nascar", DisplayName = "NASCAR", Icon = Icons.Material.Filled.DirectionsCar }
+        new SportInfo { Key = "nfl", DisplayName = "NFL", Icon = "M13 10V3L4 14h7v7l9-11h-7z" },
+        new SportInfo { Key = "nba", DisplayName = "NBA", Icon = "M13 10V3L4 14h7v7l9-11h-7z" },
+        new SportInfo { Key = "nascar", DisplayName = "NASCAR", Icon = "M13 10V3L4 14h7v7l9-11h-7z" }
     };
 
     protected override async Task OnInitializedAsync()
     {
-        // Initialize loading states
         foreach (var sport in _sports)
         {
             _sportLoading[sport.Key] = false;
             _sportLoadingStatus[sport.Key] = "";
         }
-        
-        // Load database stats
         await LoadDbStats();
-        
-        // Only load the first sport initially (lazy load)
         await LoadSportData(_sports[0].Key);
     }
     
@@ -444,47 +427,32 @@
                 };
             }
         }
-        catch
-        {
-            // Database not available, stats will be null (hidden)
-        }
-    }
-
-    private async Task OnTabChanged(int index)
-    {
-        _activeTab = index;
-        var sport = _sports[index];
-        
-        // Load data if not already loaded
-        if (!_sportData.ContainsKey(sport.Key))
-        {
-            await LoadSportData(sport.Key);
-        }
+        catch { }
     }
 
     private async Task RefreshAllSports()
     {
+        if (_disposed) return;
         _loading = true;
         StateHasChanged();
-
         foreach (var sport in _sports)
         {
+            if (_disposed) return;
             _currentLoadingSport = sport.DisplayName;
             StateHasChanged();
             await LoadSportData(sport.Key, forceRefresh: true);
         }
-
+        if (_disposed) return;
         _currentLoadingSport = "";
         _lastUpdated = DateTime.Now;
         _loading = false;
-        StateHasChanged();
+        if (!_disposed) StateHasChanged();
     }
 
     private async Task LoadSportData(string sportKey, bool forceRefresh = false)
     {
-        if (_sportData.ContainsKey(sportKey) && !forceRefresh)
-            return;
-            
+        if (_disposed) return;
+        if (_sportData.ContainsKey(sportKey) && !forceRefresh) return;
         var sport = _sports.First(s => s.Key == sportKey);
         _sportLoading[sportKey] = true;
         _sportLoadingStatus[sportKey] = "Connecting...";
@@ -492,23 +460,19 @@
 
         try
         {
-            _sportLoadingStatus[sportKey] = $"Loading detailed {sport.DisplayName} data...";
+            if (_disposed) return;
+            _sportLoadingStatus[sportKey] = $"Loading {sport.DisplayName} metrics...";
             StateHasChanged();
-            
             var series = sportKey == "nascar" ? "?series=cup" : "";
-            
-            // Use HttpClient with timeout and call /detailed endpoint
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
             var response = await Http.GetAsync($"http://backend:8000/data/quality/{sportKey}/detailed{series}", cts.Token);
             
+            if (_disposed) return;
             if (response.IsSuccessStatusCode)
             {
-                _sportLoadingStatus[sportKey] = "Processing results...";
-                StateHasChanged();
-                
+                // ... (rest of logic)
                 var json = await response.Content.ReadAsStringAsync();
                 var data = JsonSerializer.Deserialize<JsonElement>(json);
-                
                 var summary = data.GetProperty("summary");
                 var dr = data.GetProperty("date_range");
 
@@ -524,37 +488,28 @@
                     Recommendations = ParseStringArray(data, "recommendations"),
                     FeatureCoverage = ParseDictionary(data, "feature_coverage"),
                     ClassBalance = ParseClassBalance(data),
-                    MissingValues = ParseDictionary(data, "missing_values"),
-                    
-                    // Detailed metrics
                     Correlations = ParseCorrelations(data),
                     MissingIdealFeatures = ParseMissingFeatures(data),
                     ImprovementRecommendations = ParseDetailedRecommendations(data),
                     FeatureImpact = ParseFeatureImpact(data)
                 };
                 _sportData[sportKey].IssuesCount = _sportData[sportKey].Issues.Count;
-                _sportLoadingStatus[sportKey] = "Complete!";
             }
             else
             {
                 _sportLoadingStatus[sportKey] = $"Error: {response.StatusCode}";
-                Snackbar.Add($"Error loading {sport.DisplayName}: {response.StatusCode}", Severity.Error);
+                Snackbar.Add($"Error: {response.StatusCode}", Severity.Error);
             }
-        }
-        catch (OperationCanceledException)
-        {
-            _sportLoadingStatus[sportKey] = "Timeout - data loading took too long";
-            Snackbar.Add($"{sport.DisplayName} loading timed out. Try refreshing.", Severity.Warning);
         }
         catch (Exception ex)
         {
             _sportLoadingStatus[sportKey] = $"Error: {ex.Message}";
-            Snackbar.Add($"Error loading {sport.DisplayName}: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
         }
         finally
         {
             _sportLoading[sportKey] = false;
-            StateHasChanged();
+            if (!_disposed) StateHasChanged();
         }
     }
 
@@ -562,16 +517,8 @@
     {
         var result = new List<CorrelationInfo>();
         if (data.TryGetProperty("correlations", out var corr) && corr.TryGetProperty("high_correlations", out var list))
-        {
             foreach (var item in list.EnumerateArray())
-            {
-                result.Add(new CorrelationInfo {
-                    Feature1 = item.GetProperty("feature1").GetString() ?? "",
-                    Feature2 = item.GetProperty("feature2").GetString() ?? "",
-                    Correlation = item.GetProperty("correlation").GetDouble()
-                });
-            }
-        }
+                result.Add(new CorrelationInfo { Feature1 = item.GetProperty("feature1").GetString() ?? "", Feature2 = item.GetProperty("feature2").GetString() ?? "", Correlation = item.GetProperty("correlation").GetDouble() });
         return result;
     }
 
@@ -579,16 +526,8 @@
     {
         var result = new List<MissingFeatureInfo>();
         if (data.TryGetProperty("missing_ideal_features", out var list))
-        {
             foreach (var item in list.EnumerateArray())
-            {
-                result.Add(new MissingFeatureInfo {
-                    Feature = item.GetProperty("feature").GetString() ?? "",
-                    Impact = item.GetProperty("estimated_impact").GetString() ?? "",
-                    Difficulty = item.GetProperty("difficulty").GetString() ?? ""
-                });
-            }
-        }
+                result.Add(new MissingFeatureInfo { Feature = item.GetProperty("feature").GetString() ?? "", Impact = item.GetProperty("estimated_impact").GetString() ?? "", Difficulty = item.GetProperty("difficulty").GetString() ?? "" });
         return result;
     }
 
@@ -596,16 +535,8 @@
     {
         var result = new List<RecommendationInfo>();
         if (data.TryGetProperty("improvement_recommendations", out var list))
-        {
             foreach (var item in list.EnumerateArray())
-            {
-                result.Add(new RecommendationInfo {
-                    Issue = item.GetProperty("issue").GetString() ?? "",
-                    Suggestion = item.GetProperty("suggestion").GetString() ?? "",
-                    Impact = item.GetProperty("estimated_impact").GetString() ?? ""
-                });
-            }
-        }
+                result.Add(new RecommendationInfo { Issue = item.GetProperty("issue").GetString() ?? "", Suggestion = item.GetProperty("suggestion").GetString() ?? "", Impact = item.GetProperty("estimated_impact").GetString() ?? "" });
         return result;
     }
 
@@ -613,153 +544,58 @@
     {
         var result = new List<FeatureImpactInfo>();
         if (data.TryGetProperty("feature_impact", out var list))
-        {
             foreach (var item in list.EnumerateArray())
-            {
-                result.Add(new FeatureImpactInfo {
-                    Feature = item.GetProperty("feature").GetString() ?? "",
-                    Impact = item.GetProperty("importance").GetDouble()
-                });
-            }
-        }
+                result.Add(new FeatureImpactInfo { Feature = item.GetProperty("feature").GetString() ?? "", Impact = item.GetProperty("importance").GetDouble() });
         return result;
     }
 
-
-    private List<string> ParseStringArray(JsonElement data, string property)
-    {
-        if (data.TryGetProperty(property, out var arr) && arr.ValueKind == JsonValueKind.Array)
-        {
-            return arr.EnumerateArray().Select(x => x.GetString() ?? "").ToList();
-        }
-        return new List<string>();
-    }
+    private List<string> ParseStringArray(JsonElement data, string property) =>
+        data.TryGetProperty(property, out var arr) && arr.ValueKind == JsonValueKind.Array ? arr.EnumerateArray().Select(x => x.GetString() ?? "").ToList() : new List<string>();
 
     private Dictionary<string, double> ParseDictionary(JsonElement data, string property)
     {
         var result = new Dictionary<string, double>();
         if (data.TryGetProperty(property, out var obj) && obj.ValueKind == JsonValueKind.Object)
-        {
-            foreach (var prop in obj.EnumerateObject())
-            {
-                if (prop.Value.TryGetDouble(out var val))
-                {
-                    result[prop.Name] = val;
-                }
-            }
-        }
+            foreach (var prop in obj.EnumerateObject()) if (prop.Value.TryGetDouble(out var val)) result[prop.Name] = val;
         return result;
     }
 
     private Dictionary<string, double> ParseClassBalance(JsonElement data)
     {
         var result = new Dictionary<string, double>();
-        if (data.TryGetProperty("class_balance", out var cb))
-        {
-            if (cb.ValueKind == JsonValueKind.Object)
-            {
-                foreach (var prop in cb.EnumerateObject())
-                {
-                    if (prop.Value.ValueKind == JsonValueKind.Number && prop.Value.TryGetDouble(out var val))
-                    {
-                        result[prop.Name == "True" ? "Win" : prop.Name == "False" ? "Loss" : prop.Name] = val;
-                    }
-                }
-            }
-        }
+        if (data.TryGetProperty("class_balance", out var cb) && cb.ValueKind == JsonValueKind.Object)
+            foreach (var prop in cb.EnumerateObject()) if (prop.Value.TryGetDouble(out var val)) result[prop.Name == "True" ? "Win" : prop.Name == "False" ? "Loss" : prop.Name] = val;
         return result;
     }
 
-    private string? GetBadgeData(string key)
-    {
-        if (_sportData.TryGetValue(key, out var data) && data.IssuesCount > 0)
-            return data.IssuesCount.ToString();
-        return null;
-    }
+    private string? GetBadgeData(string key) => _sportData.TryGetValue(key, out var data) && data.IssuesCount > 0 ? data.IssuesCount.ToString() : null;
 
-    private Color GetScoreColor(int score)
-    {
-        if (score >= 80) return Color.Success;
-        if (score >= 60) return Color.Warning;
-        return Color.Error;
-    }
-
-    private Color GetCoverageColor(double coverage)
-    {
-        if (coverage >= 90) return Color.Success;
-        if (coverage >= 70) return Color.Warning;
-        return Color.Error;
-    }
-
-    private Severity GetRatingSeverity(string rating)
-    {
-        if (rating.Contains("GOOD")) return Severity.Success;
-        if (rating.Contains("MODERATE")) return Severity.Warning;
-        return Severity.Error;
-    }
-
-    private class SportInfo
-    {
-        public string Key { get; set; } = "";
-        public string DisplayName { get; set; } = "";
-        public string Icon { get; set; } = "";
-    }
-
-    private class SportQualityData
-    {
-        public int SufficiencyScore { get; set; }
-        public int TotalRows { get; set; }
-        public int FeaturesAvailable { get; set; }
-        public int IssuesCount { get; set; }
-        public string Rating { get; set; } = "";
-        public string DateRange { get; set; } = "N/A";
-        public List<string> Issues { get; set; } = new();
-        public List<string> Recommendations { get; set; } = new();
-        public Dictionary<string, double> FeatureCoverage { get; set; } = new();
-        public Dictionary<string, double> ClassBalance { get; set; } = new();
-        public Dictionary<string, double> MissingValues { get; set; } = new();
-        
-        // Detailed metrics
-        public List<CorrelationInfo> Correlations { get; set; } = new();
-        public List<MissingFeatureInfo> MissingIdealFeatures { get; set; } = new();
-        public List<RecommendationInfo> ImprovementRecommendations { get; set; } = new();
-        public List<FeatureImpactInfo> FeatureImpact { get; set; } = new();
-    }
-
-    private class CorrelationInfo
-    {
-        public string Feature1 { get; set; } = "";
-        public string Feature2 { get; set; } = "";
-        public double Correlation { get; set; }
-    }
-
-    private class MissingFeatureInfo
-    {
-        public string Feature { get; set; } = "";
-        public string Impact { get; set; } = "";
-        public string Difficulty { get; set; } = "";
-    }
-
-    private class RecommendationInfo
-    {
-        public string Issue { get; set; } = "";
-        public string Suggestion { get; set; } = "";
-        public string Impact { get; set; } = "";
-    }
-
-    private class FeatureImpactInfo
-    {
-        public string Feature { get; set; } = "";
-        public double Impact { get; set; }
-    }
+    private Color GetScoreColor(int score) => score >= 80 ? Color.Success : score >= 60 ? Color.Warning : Color.Error;
+    private Color GetCoverageColor(double coverage) => coverage >= 90 ? Color.Success : coverage >= 70 ? Color.Warning : Color.Error;
+    private string GetTailwindColor(Color color) => color switch { Color.Success => "emerald", Color.Warning => "amber", Color.Error => "rose", _ => "blue" };
+    private string GetScoreTextClass(int score) => score >= 80 ? "text-emerald-500" : score >= 60 ? "text-amber-500" : "text-rose-500";
+    private string GetTailwindSeverity(string rating) => rating.Contains("GOOD") ? "success" : rating.Contains("MODERATE") ? "warning" : "error";
     
-    private class DbStats
+    private string GetSportIcon(string key) => key switch {
+        "nfl" => "M13 10V3L4 14h7v7l9-11h-7z", // Replace with actual football icon if desired
+        "nba" => "M13 10V3L4 14h7v7l9-11h-7z",
+        _ => "M13 10V3L4 14h7v7l9-11h-7z"
+    };
+
+    private string GetRatingIcon(string rating) => rating.Contains("GOOD") 
+        ? "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" 
+        : "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z";
+
+    public void Dispose()
     {
-        public int Results { get; set; }
-        public int Entities { get; set; }
-        public int Stats { get; set; }
-        public int Predictions { get; set; }
-        public int Models { get; set; }
-        public int Sports { get; set; }
+        _disposed = true;
     }
+
+    private class SportInfo { public string Key { get; set; } = ""; public string DisplayName { get; set; } = ""; public string Icon { get; set; } = ""; }
+    private class SportQualityData { public int SufficiencyScore { get; set; } public int TotalRows { get; set; } public int FeaturesAvailable { get; set; } public int IssuesCount { get; set; } public string Rating { get; set; } = ""; public string DateRange { get; set; } = "N/A"; public List<string> Issues { get; set; } = new(); public List<string> Recommendations { get; set; } = new(); public Dictionary<string, double> FeatureCoverage { get; set; } = new(); public Dictionary<string, double> ClassBalance { get; set; } = new(); public List<CorrelationInfo> Correlations { get; set; } = new(); public List<MissingFeatureInfo> MissingIdealFeatures { get; set; } = new(); public List<RecommendationInfo> ImprovementRecommendations { get; set; } = new(); public List<FeatureImpactInfo> FeatureImpact { get; set; } = new(); }
+    private class CorrelationInfo { public string Feature1 { get; set; } = ""; public string Feature2 { get; set; } = ""; public double Correlation { get; set; } }
+    private class MissingFeatureInfo { public string Feature { get; set; } = ""; public string Impact { get; set; } = ""; public string Difficulty { get; set; } = ""; }
+    private class RecommendationInfo { public string Issue { get; set; } = ""; public string Suggestion { get; set; } = ""; public string Impact { get; set; } = ""; }
+    private class FeatureImpactInfo { public string Feature { get; set; } = ""; public double Impact { get; set; } }
+    private class DbStats { public int Results { get; set; } public int Entities { get; set; } public int Stats { get; set; } public int Predictions { get; set; } public int Models { get; set; } public int Sports { get; set; } }
 }

@@ -1,9 +1,9 @@
 @page "/nascar-odds"
-@using MudBlazor
 @using SportsBettingAnalyzer.Services
 @using System.Text.Json
 @using SportsBettingAnalyzer.Components.Dialogs
 @using SportsBettingAnalyzer.Models
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
 @inject DataCollectionService DataCollectionService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -11,87 +11,111 @@
 
 <PageTitle>NASCAR Live Odds</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-8">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudText Typo="Typo.h3" Color="Color.Primary" Style="font-weight: 700;">NASCAR Live Odds</MudText>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenManualEntry" Class="mr-4" StartIcon="@Icons.Material.Filled.Edit">
-            Manual Entry
-        </MudButton>
-        <MudButton Variant="Variant.Filled" Color="Color.Tertiary" OnClick="GenerateRaceAnalysis" 
-                   Disabled="@(!_drivers.Any() || _analyzing)" Class="mr-4"
-                   StartIcon="@(_analyzing ? null : Icons.Material.Filled.AutoFixHigh)">
-            @if (_analyzing) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
-            Analyze Race Value
-        </MudButton>
-        <MudFileUpload T="IBrowserFile" FilesChanged="UploadOddsImage" Accept=".jpg, .jpeg, .png" Class="mt-0">
-             <ActivatorContent>
-                <MudButton Variant="Variant.Filled" 
-                           Color="Color.Secondary" 
-                           StartIcon="@Icons.Material.Filled.CameraAlt">
-                    Upload Odds Screenshot
-                </MudButton>
-            </ActivatorContent>
-        </MudFileUpload>
-    </MudStack>    <MudText Typo="Typo.subtitle1" Class="mb-6">AI-powered predictions for upcoming NASCAR races. <MudText Typo="Typo.caption" Style="opacity: 0.7;">(Live odds coming soon via Action Network)</MudText></MudText>
-
-    @if (_loading)
-    {
-        <MudPaper Class="pa-12 d-flex flex-column align-center justify-center" Elevation="2">
-            <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true" />
-            <MudText Typo="Typo.h6" Class="mt-4">Fetching Race Data...</MudText>
-        </MudPaper>
-    }
-    else if (_drivers.Any())
-    {
-        <MudGrid>
-            @foreach (var driver in _drivers)
+<TwContainer>
+    <div class="flex flex-col gap-6">
+        <!-- Header & Loading Status -->
+        <TwCard Class="p-1 relative overflow-hidden">
+            @if (_loading || _analyzing)
             {
-                <MudItem xs="12" sm="6" md="4" lg="3">
-                    <MudCard Elevation="3" Class="d-flex flex-column h-100">
-                        <MudCardHeader>
-                            <CardHeaderAvatar>
-                                <MudAvatar Color="@GetConfidenceColor(driver.Confidence)" Variant="Variant.Filled">@driver.Rank</MudAvatar>
-                            </CardHeaderAvatar>
-                            <CardHeaderContent>
-                                <MudText Typo="Typo.h6">@driver.DriverName</MudText>
-                                <MudText Typo="Typo.body2">Car #@driver.CarNumber</MudText>
-                            </CardHeaderContent>
-                        </MudCardHeader>
-                        <MudCardContent>
-                            <MudStack Spacing="2">
-                                <MudPaper Class="pa-2 d-flex justify-space-between" Elevation="0" Style="background-color: rgba(255,255,255,0.05);">
-                                    <MudText>Win Prob:</MudText>
-                                    <MudText Style="font-weight: 700;">@((driver.WinProbability * 100).ToString("F1"))%</MudText>
-                                </MudPaper>
-                                <MudPaper Class="pa-2 d-flex justify-space-between" Elevation="0" Style="background-color: rgba(255,255,255,0.05);">
-                                    <MudText>Proj Finish:</MudText>
-                                    <MudText>@driver.ProjectedFinish.ToString("F1")</MudText>
-                                </MudPaper>
-                                
-                                @if (driver.MarketOdds != "N/A")
-                                {
-                                     <MudChip T="string" Color="Color.Success" Variant="Variant.Outlined" Size="Size.Small" Class="align-self-start">Odds: @driver.MarketOdds</MudChip>
-                                }
-                            </MudStack>
-                        </MudCardContent>
-                        <MudCardActions>
-                            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenAnalysisDialog(driver))">Analyze Details</MudButton>
-                            <MudSpacer />
+                <div class="absolute top-0 left-0 right-0 h-1 bg-slate-800">
+                    <div class="h-full bg-red-600 animate-progress" style="width: 60%"></div>
+                </div>
+            }
+            <div class="p-6 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+                <div>
+                    <h1 class="text-3xl font-bold text-white flex items-center gap-3">
+                        <svg class="w-8 h-8 text-red-500" fill="currentColor" viewBox="0 0 24 24"><path d="M21 16.5C21 16.88 20.79 17.21 20.47 17.38L12.57 21.82C12.41 21.94 12.21 22 12 22C11.79 22 11.59 21.94 11.43 21.82L3.53 17.38C3.21 17.21 3 16.88 3 16.5V7.5C3 7.12 3.21 6.79 3.53 6.62L11.43 2.18C11.59 2.06 11.79 2 12 2C12.21 2 12.41 2.06 12.57 2.18L20.47 6.62C20.79 6.79 21 7.12 21 7.5V16.5Z"></path></svg>
+                        NASCAR Live Odds
+                        @if (_loading || _analyzing)
+                        {
+                            <span class="text-xs font-normal text-red-400 animate-pulse ml-2 flex items-center gap-1">
+                                <span class="block w-1.5 h-1.5 rounded-full bg-red-600"></span>
+                                @(_analyzing ? "Generating AI race report..." : "Processing race data...")
+                            </span>
+                        }
+                    </h1>
+                    <p class="text-slate-400 mt-1">AI-powered predictions for upcoming NASCAR races. <span class="text-[10px] opacity-70 italic">(Live odds coming soon via Action Network)</span></p>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                    <TwButton Variant="secondary" StartIcon="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" 
+                              OnClick="OpenManualEntry">
+                        Manual Entry
+                    </TwButton>
+                    <TwButton Variant="primary" StartIcon="M13 10V3L4 14h7v7l9-11h-7z" 
+                              OnClick="GenerateRaceAnalysis" IsLoading="@_analyzing" Disabled="@(!_drivers.Any() || _analyzing)">
+                        Analyze Race Value
+                    </TwButton>
+                    <TwFileUpload ButtonText="Upload Screenshot" StartIcon="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+                                  Accept=".jpg, .jpeg, .png" OnFilesChanged="UploadOddsImage" IsLoading="@_loading" />
+                </div>
+            </div>
+        </TwCard>
+
+        @if (_loading)
+        {
+            <div class="py-20 flex flex-col items-center justify-center">
+                <TwProgressBar Indeterminate="true" Color="primary" Class="w-64 mb-4" />
+                <span class="text-slate-400 font-medium">Fetching Race Data...</span>
+            </div>
+        }
+        else if (_drivers.Any())
+        {
+            <TwGrid Columns="1" ColumnsSm="2" ColumnsMd="3" ColumnsLg="4" Gap="6">
+                @foreach (var driver in _drivers)
+                {
+                    <TwCard NoPadding="true" Class="flex flex-col h-full group hover:border-red-500/50 transition-all duration-300">
+                        <div class="p-5 border-b border-slate-800 bg-slate-900/40 flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <TwAvatar Text="@driver.Rank.ToString()" Color="@GetConfidenceColorStr(driver.Confidence)" Size="md" />
+                                <div>
+                                    <h3 class="text-base font-bold text-white group-hover:text-red-400 transition-colors">@driver.DriverName</h3>
+                                    <p class="text-[10px] text-slate-500 font-mono">Car #@driver.CarNumber</p>
+                                </div>
+                            </div>
                             @if (driver.WinProbability > 0.05) 
                             {
-                                <MudIcon Icon="@Icons.Material.Filled.LocalFireDepartment" Color="Color.Warning" />
+                                <div class="text-orange-500 animate-pulse">
+                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C12 2 12 2 12 2C11.55 2 11.13 2.19 10.83 2.51C10.53 2.82 10.38 3.25 10.42 3.68C10.5 4.5 10.15 5.3 9.5 5.86C8.85 6.42 8 6.53 7.25 6.18C6.12 5.61 4.71 6.07 4.14 7.21C3.57 8.34 4.03 9.75 5.17 10.33C5.92 10.69 6.27 11.48 6.08 12.28C5.89 13.08 5.18 13.62 4.38 13.56C3.12 13.51 2.06 14.49 2.01 15.75C1.96 17.01 2.94 18.07 4.2 18.12H4.22H4.24C4.24 18.12 4.25 18.12 4.25 18.12H19.75C19.75 18.12 19.76 18.12 19.76 18.12H19.78H19.8C21.06 18.07 22.04 17.01 21.99 15.75C21.94 14.49 20.88 13.51 19.62 13.56C18.82 13.62 18.11 13.08 17.92 12.28C17.73 11.48 18.08 10.69 18.83 10.33C19.97 9.75 20.43 8.34 19.86 7.21C19.29 6.07 17.88 5.61 16.75 6.18C16 6.53 15.15 6.42 14.5 5.86C13.85 5.3 13.5 4.5 13.58 3.68C13.62 3.25 13.47 2.82 13.17 2.51C12.87 2.19 12.45 2 12 2Z"></path></svg>
+                                </div>
                             }
-                        </MudCardActions>
-                    </MudCard>
-                </MudItem>
-            }
-        </MudGrid>
-    }
-    else
-    {
-        <MudAlert Severity="Severity.Info" Variant="Variant.Filled">No active race data found. Check back closer to race day!</MudAlert>
-    }
-</MudContainer>
+                        </div>
+
+                        <div class="p-5 flex-1 space-y-4">
+                            <div class="grid grid-cols-2 gap-2">
+                                <div class="p-2 rounded bg-slate-800/50 border border-slate-700/50">
+                                    <p class="text-[10px] text-slate-500 uppercase tracking-tighter">Win Prob</p>
+                                    <p class="text-base font-bold text-white">@((driver.WinProbability * 100).ToString("F1"))%</p>
+                                </div>
+                                <div class="p-2 rounded bg-slate-800/50 border border-slate-700/50">
+                                    <p class="text-[10px] text-slate-500 uppercase tracking-tighter">Proj Finish</p>
+                                    <p class="text-base font-bold text-white">@driver.ProjectedFinish.ToString("F1")</p>
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-center justify-between">
+                                @if (driver.MarketOdds != "N/A")
+                                {
+                                     <TwChip Color="emerald" Variant="outline" Size="sm">Odds: @driver.MarketOdds</TwChip>
+                                }
+                                <div class="flex-1"></div>
+                            </div>
+
+                            <TwButton Variant="outline" Size="sm" Class="w-full" OnClick="@(() => OpenAnalysisDialog(driver))" StartIcon="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
+                                Analyze Details
+                            </TwButton>
+                        </div>
+                    </TwCard>
+                }
+            </TwGrid>
+        }
+        else
+        {
+            <TwAlert Severity="info">
+                No active race data found. Check back closer to race day!
+            </TwAlert>
+        }
+    </div>
+</TwContainer>
 
 @code {
     private bool _loading = true;
@@ -158,8 +182,6 @@
         _loading = true;
         try
         {
-            // Reset error/success state
-            
             var result = await DataCollectionService.UploadNascarOddsAsync(file);
             if (result.HasValue && result.Value.TryGetProperty("drivers", out var driversJson))
             {
@@ -191,39 +213,29 @@
 
     private void UpdateDriversWithOdds(List<DriverPrediction> oddsList)
     {
-        // Merge strategy:
-        // Use existing drivers if populated (predictions), update their odds.
-        // If driver missing, add them.
-        
         var driverMap = _drivers.ToDictionary(d => d.DriverName.ToLower(), d => d);
         
         foreach (var odd in oddsList)
         {
-            // Normalize name
             var key = odd.DriverName.ToLower().Trim();
-            // Fuzzy match logic could go here, for now direct match
             
             if (driverMap.TryGetValue(key, out var existing))
             {
                 existing.MarketOdds = odd.MarketOdds;
                 existing.WinProbability = EstimateWinProbFromOdds(odd.MarketOdds);
-                // Recalculate value?
             }
             else
             {
-                // New driver found in odds
                 odd.Rank = _drivers.Count + 1;
                 odd.WinProbability = EstimateWinProbFromOdds(odd.MarketOdds);
-                odd.ProjectedFinish = odd.Rank * 1.5; // Dummy projection
+                odd.ProjectedFinish = odd.Rank * 1.5;
                 odd.Confidence = "Unknown";
                 _drivers.Add(odd);
             }
         }
         
-        // Re-sort by probability/odds
         _drivers = _drivers.OrderByDescending(d => d.WinProbability).ToList();
         
-        // Re-rank
         for(int i=0; i<_drivers.Count; i++) _drivers[i].Rank = i+1;
         
         StateHasChanged();
@@ -231,7 +243,6 @@
 
     private double EstimateWinProbFromOdds(string oddsStr)
     {
-        // Convert American odds to implied probability
         try
         {
             var odds = int.Parse(oddsStr.Replace("+", ""));
@@ -242,23 +253,22 @@
         }
         catch
         {
-            return 0.01; // Default very low probability
+            return 0.01;
         }
     }
 
-    private Color GetConfidenceColor(string conf) => conf.ToLower() switch
+    private string GetConfidenceColorStr(string conf) => conf.ToLower() switch
     {
-        "high" => Color.Success,
-        "medium" => Color.Warning,
-        _ => Color.Error
+        "high" => "emerald",
+        "medium" => "orange",
+        _ => "red"
     };
 
     private async Task OpenAnalysisDialog(DriverPrediction driver)
     {
-        // Adapt driver data to AnalyzedGame format for the dialog
         var gameData = new
         {
-            home_team = driver.DriverName, // Hack: put driver in home team slot
+            home_team = driver.DriverName,
             away_team = "Field",
             sport_key = "nascar",
             home_moneyline = driver.MarketOdds, 
@@ -320,7 +330,5 @@
                 Snackbar.Add($"Added manual odds for {manualDrivers.Count} drivers.", Severity.Success);
             }
         }
-    }
-
     }
 }

@@ -12,9 +12,7 @@
     
     @if (!string.IsNullOrEmpty(Icon))
     {
-        <svg class="absolute bottom-0 right-0 w-16 h-16 opacity-10 @GetValueColor()" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="@Icon"></path>
-        </svg>
+        <TwIcon Icon="@Icon" Class="@($"absolute bottom-0 right-0 w-16 h-16 opacity-10 {GetValueColor()}")" />
     }
 </div>
 

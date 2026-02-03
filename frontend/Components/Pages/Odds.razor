@@ -2,6 +2,7 @@
 @page "/ncaab"
 @using SportsBettingAnalyzer.Services
 @using SportsBettingAnalyzer.Models
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
 @inject OddsService OddsService
 @inject BallDontLieService StatsService
 @inject PythonMLServiceClient PythonMLService
@@ -9,363 +10,342 @@
 @inject IDialogService DialogService
 @inject FileExportService FileExportService
 @inject NavigationManager NavigationManager
-@using SportsBettingAnalyzer.Components.Shared
 @rendermode InteractiveServer
 
-<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <div class="d-flex justify-space-between align-center mb-4">
+<TwContainer>
+    <div class="px-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
         <div>
-            <MudText Typo="Typo.h4" GutterBottom="true">Live Betting Odds</MudText>
-            <MudText Typo="Typo.body1">Real-time odds and trend analysis.</MudText>
+            <h1 class="text-3xl font-bold text-white tracking-tight">Live Betting Odds</h1>
+            <p class="text-slate-400 mt-1">Real-time odds and trend analysis across major sportsbooks.</p>
         </div>
-        <div class="d-flex gap-4 align-center">
+        <div class="flex flex-wrap items-center gap-3">
             @if (OddsService.LastQuotaUsage.RequestsRemaining > 0 || OddsService.LastQuotaUsage.RequestsUsed > 0)
             {
-                <MudTooltip Text="Odds API Quota: Used / Remaining">
-                    <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined" Size="Size.Small" Icon="@Icons.Material.Filled.DataUsage">
-                        Odds API: @OddsService.LastQuotaUsage.RequestsUsed / @OddsService.LastQuotaUsage.RequestsRemaining
-                    </MudChip>
-                </MudTooltip>
+                <TwChip Icon="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" 
+                        Color="blue" Variant="outline">
+                    Odds API: @OddsService.LastQuotaUsage.RequestsUsed / @OddsService.LastQuotaUsage.RequestsRemaining
+                </TwChip>
             }
-            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportOdds" Disabled="@(!_events.Any())">Export CSV</MudButton>
-            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.History" Href="/daily-analysis">View Daily Cache</MudButton>
+            <TwButton Variant="outline" Size="sm" OnClick="ExportOdds" Disabled="@(!_events.Any())">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Export CSV
+            </TwButton>
+            <TwButton Variant="secondary" Size="sm" Href="/daily-analysis">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                View Daily Cache
+            </TwButton>
         </div>
     </div>
 
-    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4" KeepPanelsAlive="true">
-        <MudTabPanel Text="Live Odds" Icon="@Icons.Material.Filled.List">
-
-            <MudGrid Class="mb-4">
-                <MudItem xs="12" md="6">
-                    <MudSelect T="string" Label="Select Sport" Value="@_selectedSportKey" ValueChanged="OnSportChanged" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+    <TwTabs HeaderClass="px-4">
+        <TwTabPanel Title="Live Odds">
+            <IconContent>
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg>
+            </IconContent>
+            <ChildContent>
+                <div class="px-4">
+                    <TwGrid Columns="1" ColumnsMd="2" Class="mb-6 items-end">
+                    <TwSelect TValue="string" Label="Select Sport" Value="@_selectedSportKey" ValueChanged="OnSportChanged" FullWidth="true">
                         @foreach (var sport in _filteredSports)
                         {
-                            <MudSelectItem Value="@sport.Key">@sport.Title</MudSelectItem>
+                            <option value="@sport.Key">@sport.Title</option>
                         }
-                    </MudSelect>
-                </MudItem>
-                <MudItem xs="12" md="6" Class="d-flex align-center gap-2">
-                     <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadOdds" Disabled="@(string.IsNullOrEmpty(_selectedSportKey) || _isLoading)">
-                        @if (_isLoading)
-                        {
-                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
-                            <MudText Class="ms-2">Loading...</MudText>
-                        }
-                        else
-                        {
-                            <MudText>Refresh Odds</MudText>
-                        }
-                    </MudButton>
+                    </TwSelect>
+                    <div class="flex gap-3">
+                        <TwButton Variant="primary" OnClick="LoadOdds" IsLoading="@_isLoading" Disabled="@(string.IsNullOrEmpty(_selectedSportKey) || _isLoading)" FullWidth="true">
+                            Refresh Odds
+                        </TwButton>
 
-                    @if (_selectedSportKey == "basketball_ncaab")
-                    {
-                        <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.ModelTraining"
-                                   OnClick="TrainNcaabModel" Disabled="@(_isLoading || _isTraining)">
-                             @if (_isTraining)
-                             {
-                                 <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
-                                 <MudText Class="ms-2">Starting...</MudText>
-                             }
-                             else
-                             {
-                                 <MudText>Train Model (v2)</MudText>
-                             }
-                        </MudButton>
-                    }
-                </MudItem>
-            </MudGrid>
-
-            @if (_events.Any())
-            {
-                var validEvents = _events.Where(e => !string.IsNullOrEmpty(e.HomeTeam) && !string.IsNullOrEmpty(e.AwayTeam)).ToList();
-                
-                @if (validEvents.Any())
-                {
-                    <MudTable Items="@validEvents" Hover="true" Dense="true" Striped="true">
-                        <HeaderContent>
-                            <MudTh>Time</MudTh>
-                            <MudTh>Matchup</MudTh>
-                            <MudTh>DraftKings</MudTh>
-                            <MudTh>FanDuel</MudTh>
-                            <MudTh>ESPN BPI</MudTh>
-                            <MudTh>Analysis</MudTh>
-                        </HeaderContent>
-                        <RowTemplate>
-                            <MudTd DataLabel="Time">@context.CommenceTime.ToLocalTime().ToString("MM/dd HH:mm")</MudTd>
-                            <MudTd DataLabel="Matchup">
-                                <div class="d-flex flex-column">
-                                    <MudText Typo="Typo.body2"><b>@context.AwayTeam</b></MudText>
-                                    <MudText Typo="Typo.caption">vs</MudText>
-                                    <MudText Typo="Typo.body2"><b>@context.HomeTeam</b></MudText>
-                                </div>
-                            </MudTd>
-                            <MudTd DataLabel="DraftKings">
-                                @GetBookmakerOdds(context, "DraftKings")
-                            </MudTd>
-                            <MudTd DataLabel="FanDuel">
-                                @GetBookmakerOdds(context, "FanDuel")
-                            </MudTd>
-                            <MudTd DataLabel="ESPN BPI">
-                                @{
-                                    var bpi = MatchEspnGame(context);
-                                }
-                                @if (bpi != null)
-                                {
-                                    <div class="d-flex flex-column gap-1" style="max-width: 100px;">
-                                        @if (bpi.HomeWinProb > bpi.AwayWinProb)
-                                        {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text">H: {(bpi.HomeWinProb*100):F0}%</MudChip>
-                                        }
-                                        else
-                                        {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text">A: {(bpi.AwayWinProb*100):F0}%</MudChip>
-                                        }
-                                    </div>
-                                }
-                                else
-                                {
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">-</MudText>
-                                }
-                            </MudTd>
-                            <MudTd DataLabel="Analysis">
-                                <MudButton Variant="Variant.Outlined" Color="Color.Info" Size="Size.Small" 
-                                           OnClick="@(() => OpenAnalysis(context))"
-                                           StartIcon="@Icons.Material.Filled.Analytics">
-                                    Analyze
-                                </MudButton>
-                            </MudTd>
-                        </RowTemplate>
-                        <PagerContent>
-                            <MudTablePager />
-                        </PagerContent>
-                    </MudTable>
-                }
-                else
-                {
-                    <MudAlert Severity="Severity.Info">This sport only has futures/outright markets available. Try selecting a different sport with upcoming games.</MudAlert>
-                }
-            }
-            else if (!string.IsNullOrEmpty(_selectedSportKey) && !_isLoading)
-            {
-                <MudAlert Severity="Severity.Info">No active events found for this sport.</MudAlert>
-            }
-        </MudTabPanel>
-
-        <MudTabPanel Text="Hit Rates (NCAAB)" Icon="@Icons.Material.Filled.TrendingUp" Disabled="@(!_selectedSportKey.Contains("ncaab"))" ToolTip="Select NCAAB to enable">
-            <MudGrid>
-                <MudItem xs="12" md="4">
-                    <MudAutocomplete T="string" Label="Team" @bind-Value="_trendTeam" SearchFunc="@SearchTeams" ResetValueOnEmptyText="true" Variant="Variant.Outlined" AdornmentIcon="@Icons.Material.Filled.Search" />
-                </MudItem>
-                <MudItem xs="6" md="2">
-                    <MudSelect T="string" Label="Metric" @bind-Value="_trendMetric" Variant="Variant.Outlined">
-                        <MudSelectItem Value="@("total")">Total (O/U)</MudSelectItem>
-                        <MudSelectItem Value="@("team_score")">Team Score</MudSelectItem>
-                        <MudSelectItem Value="@("margin")">Margin (Spread)</MudSelectItem>
-                    </MudSelect>
-                </MudItem>
-                <MudItem xs="6" md="2">
-                    <MudNumericField @bind-Value="_trendLine" Label="Target Line" Variant="Variant.Outlined" Step="0.5" />
-                </MudItem>
-                <MudItem xs="12" md="2">
-                    <MudSlider @bind-Value="_trendLastN" Min="5" Max="50" Step="1" Color="Color.Primary">Last @_trendLastN Games</MudSlider>
-                </MudItem>
-                <MudItem xs="12" md="2" Class="d-flex align-center">
-                    <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="CalculateTrend" Disabled="@(string.IsNullOrEmpty(_trendTeam) || _isTrendLoading)" FullWidth="true">
-                        @if (_isTrendLoading)
+                        @if (_selectedSportKey == "basketball_ncaab")
                         {
-                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                            <TwButton Variant="secondary" OnClick="TrainNcaabModel" IsLoading="@_isTraining" Disabled="@(_isLoading || _isTraining)" FullWidth="true">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86 1.417l-1.873 1.56a2 2 0 01-1.076.443L6.5 18M3.5 14l1-1.5M13 13l3-1M5 10c2.133 0 4.267.533 6 1.5M15 10c-2.133 0-4.267.533-6 1.5"></path></svg>
+                                Train Model (v2)
+                            </TwButton>
                         }
-                        else
-                        {
-                            <MudText>Check Trend</MudText>
-                        }
-                    </MudButton>
-                </MudItem>
-            </MudGrid>
-
-            @if (_hitRateResult != null)
-            {
-                <MudPaper Class="pa-4 mt-4" Elevation="3">
-                    <div class="d-flex justify-space-between align-center mb-2">
-                        <MudText Typo="Typo.h5">@_hitRateResult.Team Trends</MudText>
-                        <MudChip T="string" Color="@(_hitRateResult.HitRate > 0.55 ? Color.Success : Color.Default)">Hit Rate: @_hitRateResult.Hits / @_hitRateResult.GamesAnalyzed (@(_hitRateResult.HitRate.ToString("P0")))</MudChip>
                     </div>
-                    <MudText Typo="Typo.body2" Class="mb-4">
-                        Analysis: Over last @_hitRateResult.GamesAnalyzed games, @_hitRateResult.Team went <b>@(_trendMetric == "total" ? "OVER" : "OVER")</b> @_hitRateResult.Line <b>@_hitRateResult.Hits</b> times.
-                        Avg Value: @_hitRateResult.AvgValue
-                    </MudText>
+                </TwGrid>
 
-                    <MudTable Items="@_hitRateResult.GameLog" Dense="true" Hover="true" Striped="true">
-                        <HeaderContent>
-                            <MudTh>Date</MudTh>
-                            <MudTh>Opponent</MudTh>
-                            <MudTh>Score</MudTh>
-                            <MudTh>Value</MudTh>
-                            <MudTh>Result</MudTh>
-                        </HeaderContent>
-                        <RowTemplate Context="game">
-                            <MudTd>@game.Date</MudTd>
-                            <MudTd>@game.Opponent</MudTd>
-                            <MudTd>@game.Score</MudTd>
-                            <MudTd>@game.Value</MudTd>
-                            <MudTd>
-                                @if (game.IsHit)
-                                {
-                                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
-                                }
-                                else
-                                {
-                                    <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" />
-                                }
-                            </MudTd>
-                        </RowTemplate>
-                    </MudTable>
-                </MudPaper>
-            }
-            
-            <MudDivider Class="my-4" />
-            
-            <MudText Typo="Typo.h6" Class="mb-2">Model Management</MudText>
-            <div class="d-flex align-center gap-4">
-                <MudButton Variant="Variant.Filled" Color="Color.Tertiary" StartIcon="@Icons.Material.Filled.ModelTraining" 
-                           OnClick="TrainNcaabModel" Disabled="@_isTraining">
-                    @if(_isTraining) {
-                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
-                        <MudText Class="ms-2">Training...</MudText>
-                    } else {
-                        <MudText>Train XGBoost Model</MudText>
-                    }
-                </MudButton>
-                @if(_trainingMessage != null)
+                @if (_events.Any())
                 {
-                    <MudText Color="Color.Info">@_trainingMessage</MudText>
-                }
-                
-                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.History" 
-                           OnClick="RunBacktest" Disabled="@_isBacktesting">
-                    @if(_isBacktesting) {
-                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
-                        <MudText Class="ms-2">Running...</MudText>
-                    } else {
-                        <MudText>Run Backtest (2023-24)</MudText>
-                    }
-                </MudButton>
-            </div>
-            
-            @if(_backtestReport != null)
-            {
-                <MudCard Class="mt-4 pa-4" Elevation="3">
-                    <MudText Typo="Typo.h6">Backtest Results (Season 2023-24)</MudText>
-                    <div class="d-flex gap-4 mt-2">
-                        <MudPaper Class="pa-3 d-flex flex-column align-center" Width="120px">
-                            <MudText Typo="Typo.caption">ROI</MudText>
-                            <MudText Typo="Typo.h5" Color="@(_backtestReport.RoiPercent > 0 ? Color.Success : Color.Error)">
-                                @_backtestReport.RoiPercent%
-                            </MudText>
-                        </MudPaper>
-                        <MudPaper Class="pa-3 d-flex flex-column align-center" Width="120px">
-                            <MudText Typo="Typo.caption">Units Won</MudText>
-                            <MudText Typo="Typo.h5" Color="@(_backtestReport.UnitsWon > 0 ? Color.Success : Color.Error)">
-                                @_backtestReport.UnitsWon
-                            </MudText>
-                        </MudPaper>
-                        <MudPaper Class="pa-3 d-flex flex-column align-center" Width="120px">
-                            <MudText Typo="Typo.caption">Hit Rate</MudText>
-                            <MudText Typo="Typo.h5">@_backtestReport.HitRate%</MudText>
-                        </MudPaper>
-                        <MudPaper Class="pa-3 d-flex flex-column align-center" Width="120px">
-                            <MudText Typo="Typo.caption">Bets</MudText>
-                            <MudText Typo="Typo.h5">@_backtestReport.BetsPlaced</MudText>
-                        </MudPaper>
-                    </div>
-                </MudCard>
-            }
-
-        </MudTabPanel>
-
-        <MudTabPanel Text="ESPN Predictions" Icon="@Icons.Material.Filled.Psychology">
-            <div class="d-flex gap-4 mb-4 align-center">
-                <MudSelect T="string" Label="League" @bind-Value="_espnSport" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Class="flex-grow-0" Style="width: 200px;">
-                    <MudSelectItem Value="@("ncaab")">NCAAB</MudSelectItem>
-                    <MudSelectItem Value="@("nba")">NBA</MudSelectItem>
-                    <MudSelectItem Value="@("nfl")">NFL</MudSelectItem>
-                </MudSelect>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadEspnPredictions" Disabled="@_isEspnLoading">
-                    @if (_isEspnLoading)
+                    var validEvents = _events.Where(e => !string.IsNullOrEmpty(e.HomeTeam) && !string.IsNullOrEmpty(e.AwayTeam)).ToList();
+                    
+                    @if (validEvents.Any())
                     {
-                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
-                        <MudText Class="ms-2">Loading...</MudText>
+                        <TwCard NoPadding="true" Class="overflow-hidden">
+                            <TwTable TItem="object">
+                                <TwTh>Time</TwTh>
+                                <TwTh>Matchup</TwTh>
+                                <TwTh>DraftKings</TwTh>
+                                <TwTh>FanDuel</TwTh>
+                                <TwTh>ESPN BPI</TwTh>
+                                <TwTh Class="text-right">Analysis</TwTh>
+                                @foreach (var context in validEvents)
+                                {
+                                    <TwTr>
+                                        <TwTd><span class="text-slate-400">@context.CommenceTime.ToLocalTime().ToString("MM/dd HH:mm")</span></TwTd>
+                                        <TwTd>
+                                            <div class="flex flex-col">
+                                                <span class="font-bold text-white">@context.AwayTeam</span>
+                                                <span class="text-[10px] text-slate-500 uppercase tracking-widest my-0.5">at</span>
+                                                <span class="font-bold text-white">@context.HomeTeam</span>
+                                            </div>
+                                        </TwTd>
+                                        <TwTd>
+                                            <div class="text-xs space-y-1">
+                                                @GetBookmakerOdds(context, "DraftKings")
+                                            </div>
+                                        </TwTd>
+                                        <TwTd>
+                                            <div class="text-xs space-y-1">
+                                                @GetBookmakerOdds(context, "FanDuel")
+                                            </div>
+                                        </TwTd>
+                                        <TwTd>
+                                            @{
+                                                var bpi = MatchEspnGame(context);
+                                            }
+                                            @if (bpi != null)
+                                            {
+                                                <div class="flex flex-col gap-1 max-w-[100px]">
+                                                    @if (bpi.HomeWinProb > bpi.AwayWinProb)
+                                                    {
+                                                        <TwChip Color="emerald" Variant="outline" Size="sm">H: @((bpi.HomeWinProb*100).ToString("F0"))%</TwChip>
+                                                    }
+                                                    else
+                                                    {
+                                                        <TwChip Color="emerald" Variant="outline" Size="sm">A: @((bpi.AwayWinProb*100).ToString("F0"))%</TwChip>
+                                                    }
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-slate-600">-</span>
+                                            }
+                                        </TwTd>
+                                        <TwTd Class="text-right">
+                                            <TwButton Variant="secondary" Size="sm" OnClick="@(() => OpenAnalysis(context))">
+                                                <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                                                Analyze
+                                            </TwButton>
+                                        </TwTd>
+                                    </TwTr>
+                                }
+                            </TwTable>
+                        </TwCard>
                     }
                     else
                     {
-                        <MudText>Load Predictions</MudText>
+                        <TwAlert Severity="info" Class="mt-4">
+                            This sport only has futures/outright markets available. Try selecting a different sport with upcoming games.
+                        </TwAlert>
                     }
-                </MudButton>
-                @if (_espnResponse != null)
-                {
-                    <MudText Typo="Typo.caption">Source: @_espnResponse.Source</MudText>
                 }
-            </div>
+                else if (!string.IsNullOrEmpty(_selectedSportKey) && !_isLoading)
+                {
+                    <TwAlert Severity="info" Class="mt-4">
+                        No active events found for this sport.
+                    </TwAlert>
+                }
+                </div>
+            </ChildContent>
+        </TwTabPanel>
 
-            @if (_espnResponse?.Games != null && _espnResponse.Games.Any())
-            {
-                <MudTable Items="@_espnResponse.Games" Hover="true" Dense="true" Striped="true" Virtualize="true" FixedHeader="true" Height="600px">
-                    <HeaderContent>
-                        <MudTh>Time</MudTh>
-                        <MudTh>Away Team</MudTh>
-                        <MudTh>Home Team</MudTh>
-                        <MudTh>Win Probability</MudTh>
-                        <MudTh>Spread/Total</MudTh>
-                    </HeaderContent>
-                    <RowTemplate Context="game">
-                        <MudTd>
-                            @DateTime.Parse(game.GameTime).ToLocalTime().ToString("MM/dd HH:mm")
-                            <MudText Typo="Typo.caption" Class="d-block">@game.EventId</MudText>
-                        </MudTd>
-                        <MudTd>
-                             <div class="d-flex flex-column">
-                                <MudText>
-                                    <b>@game.AwayTeam</b> 
-                                    @if(game.AwayRank is object && game.AwayRank.ToString() != "99" && game.AwayRank.ToString() != "999") 
-                                    { <span class="mud-secondary-text ms-1">(@game.AwayRank)</span> }
-                                </MudText>
-                                <MudText Typo="Typo.caption">@game.AwayScore</MudText>
-                            </div>
-                        </MudTd>
-                        <MudTd>
-                             <div class="d-flex flex-column">
-                                <MudText>
-                                    <b>@game.HomeTeam</b>
-                                    @if(game.HomeRank is object && game.HomeRank.ToString() != "99" && game.HomeRank.ToString() != "999") 
-                                    { <span class="mud-secondary-text ms-1">(@game.HomeRank)</span> }
-                                </MudText>
-                                <MudText Typo="Typo.caption">@game.HomeScore</MudText>
-                            </div>
-                        </MudTd>
-                        <MudTd>
-                            <div class="d-flex flex-column gap-1">
-                                <MudProgressLinear Color="@(game.AwayWinProb > game.HomeWinProb ? Color.Success : Color.Default)" Value="@(game.AwayWinProb * 100)" Class="my-1" Size="Size.Medium">
-                                    <MudText Typo="Typo.caption">Away: @(game.AwayWinProb.ToString("P1"))</MudText>
-                                </MudProgressLinear>
-                                <MudProgressLinear Color="@(game.HomeWinProb > game.AwayWinProb ? Color.Success : Color.Default)" Value="@(game.HomeWinProb * 100)" Class="my-1" Size="Size.Medium">
-                                    <MudText Typo="Typo.caption">Home: @(game.HomeWinProb.ToString("P1"))</MudText>
-                                </MudProgressLinear>
-                            </div>
-                        </MudTd>
-                        <MudTd>
-                            <MudText Typo="Typo.body2">Spread: @game.Spread</MudText>
-                            <MudText Typo="Typo.body2">Total: @game.OverUnder</MudText>
-                        </MudTd>
-                    </RowTemplate>
-                    <PagerContent>
-                        <MudTablePager />
-                    </PagerContent>
-                </MudTable>
-            }
-        </MudTabPanel>
-    </MudTabs>
+        <TwTabPanel Title="Hit Rates (NCAAB)" Disabled="@(!_selectedSportKey.Contains("ncaab"))">
+             <IconContent>
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+            </IconContent>
+            <ChildContent>
+                <div class="px-4">
+                <TwCard Class="mb-6">
+                    <TwGrid Columns="1" ColumnsMd="12" Class="items-end gap-4">
+                        <div class="md:col-span-4">
+                            <TwAutocomplete Items="@_teamList" Label="Team" @bind-Value="_trendTeam" Placeholder="Search team..." FullWidth="true" />
+                        </div>
+                        <div class="md:col-span-2">
+                            <TwSelect TValue="string" Label="Metric" @bind-Value="_trendMetric" FullWidth="true">
+                                <option value="total">Total (O/U)</option>
+                                <option value="team_score">Team Score</option>
+                                <option value="margin">Margin (Spread)</option>
+                            </TwSelect>
+                        </div>
+                        <div class="md:col-span-2">
+                            <TwNumericField @bind-Value="_trendLine" Label="Target Line" Step="0.5" FullWidth="true" />
+                        </div>
+                        <div class="md:col-span-2">
+                             <TwSlider @bind-Value="_trendLastN" Min="5" Max="50" Step="1">Last @_trendLastN Games</TwSlider>
+                        </div>
+                        <div class="md:col-span-2">
+                            <TwButton Variant="primary" OnClick="CalculateTrend" IsLoading="@_isTrendLoading" Disabled="@(string.IsNullOrEmpty(_trendTeam) || _isTrendLoading)" FullWidth="true">
+                                Check Trend
+                            </TwButton>
+                        </div>
+                    </TwGrid>
+                </TwCard>
 
-</MudContainer>
+                @if (_hitRateResult != null)
+                {
+                    <TwCard HoverEffect="false" Class="mb-6">
+                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+                            <div>
+                                <h3 class="text-xl font-bold text-white">@_hitRateResult.Team Trends</h3>
+                                <p class="text-sm text-slate-400 mt-1">
+                                    Analysis: Over last @_hitRateResult.GamesAnalyzed games, @_hitRateResult.Team went <b>@(_trendMetric == "total" ? "OVER" : "OVER")</b> @_hitRateResult.Line <b>@_hitRateResult.Hits</b> times.
+                                </p>
+                            </div>
+                            <TwChip Color="@(_hitRateResult.HitRate > 0.55 ? "emerald" : "slate")" Size="lg">
+                                Hit Rate: @_hitRateResult.Hits / @_hitRateResult.GamesAnalyzed (@(_hitRateResult.HitRate.ToString("P0")))
+                            </TwChip>
+                        </div>
+                        
+                        <div class="text-sm text-blue-400 bg-blue-500/5 p-3 rounded-lg border border-blue-500/10 mb-4 inline-block">
+                            Avg Value: <strong>@_hitRateResult.AvgValue</strong>
+                        </div>
+
+                        <TwTable TItem="object">
+                            <TwTh>Date</TwTh>
+                            <TwTh>Opponent</TwTh>
+                            <TwTh>Score</TwTh>
+                            <TwTh>Value</TwTh>
+                            <TwTh Class="text-right">Result</TwTh>
+                            @foreach (var game in _hitRateResult.GameLog)
+                            {
+                                <TwTr>
+                                    <TwTd><span class="text-slate-400">@game.Date</span></TwTd>
+                                    <TwTd><span class="text-white font-medium">@game.Opponent</span></TwTd>
+                                    <TwTd>@game.Score</TwTd>
+                                    <TwTd>@game.Value</TwTd>
+                                    <TwTd Class="text-right">
+                                        @if (game.IsHit)
+                                        {
+                                            <svg class="w-5 h-5 text-emerald-500 ml-auto" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
+                                        }
+                                        else
+                                        {
+                                            <svg class="w-5 h-5 text-red-500 ml-auto" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path></svg>
+                                        }
+                                    </TwTd>
+                                </TwTr>
+                            }
+                        </TwTable>
+                    </TwCard>
+                }
+                
+                <h6 class="text-lg font-bold text-white mt-8 mb-4">Model Management</h6>
+                <div class="flex flex-wrap items-center gap-4">
+                    <TwButton Variant="primary" OnClick="TrainNcaabModel" IsLoading="@_isTraining" Disabled="@_isTraining">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86 1.417l-1.873 1.56a2 2 0 01-1.076.443L6.5 18M3.5 14l1-1.5M13 13l3-1M5 10c2.133 0 4.267.533 6 1.5M15 10c-2.133 0-4.267.533-6 1.5"></path></svg>
+                        Train XGBoost Model
+                    </TwButton>
+                    
+                    @if(_trainingMessage != null)
+                    {
+                        <span class="text-blue-400 text-sm">@_trainingMessage</span>
+                    }
+                    
+                    <TwButton Variant="outline" OnClick="RunBacktest" IsLoading="@_isBacktesting" Disabled="@_isBacktesting">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        Run Backtest (2023-24)
+                    </TwButton>
+                </div>
+                
+                @if(_backtestReport != null)
+                {
+                    <TwGrid Columns="2" ColumnsMd="4" Class="mt-6">
+                        <TwStatCard Label="ROI" Value="@($"{_backtestReport.RoiPercent}%")" Color="@(_backtestReport.RoiPercent > 0 ? "emerald" : "red")" />
+                        <TwStatCard Label="Units Won" Value="@(_backtestReport.UnitsWon.ToString("F1"))" Color="@(_backtestReport.UnitsWon > 0 ? "emerald" : "red")" />
+                        <TwStatCard Label="Hit Rate" Value="@($"{_backtestReport.HitRate}%")" Color="blue" />
+                        <TwStatCard Label="Bets" Value="@(_backtestReport.BetsPlaced.ToString())" Color="slate" />
+                    </TwGrid>
+                }
+                </div>
+            </ChildContent>
+        </TwTabPanel>
+
+        <TwTabPanel Title="ESPN Predictions">
+            <IconContent>
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            </IconContent>
+            <ChildContent>
+                <div class="px-4">
+                <TwGrid Columns="1" ColumnsMd="2" Class="mb-6 items-end gap-4">
+                    <TwSelect TValue="string" Label="League" @bind-Value="_espnSport" FullWidth="true">
+                        <option value="ncaab">NCAAB</option>
+                        <option value="nba">NBA</option>
+                        <option value="nfl">NFL</option>
+                    </TwSelect>
+                    <div class="flex items-center gap-4">
+                        <TwButton Variant="primary" OnClick="LoadEspnPredictions" IsLoading="@_isEspnLoading" Disabled="@_isEspnLoading" FullWidth="true">
+                            Load Predictions
+                        </TwButton>
+                        @if (_espnResponse != null)
+                        {
+                            <span class="text-xs text-slate-500">Source: @_espnResponse.Source</span>
+                        }
+                    </div>
+                </TwGrid>
+
+                @if (_espnResponse?.Games != null && _espnResponse.Games.Any())
+                {
+                    <TwCard NoPadding="true" Class="overflow-hidden">
+                        <TwTable TItem="object">
+                            <TwTh>Time</TwTh>
+                            <TwTh>Away Team</TwTh>
+                            <TwTh>Home Team</TwTh>
+                            <TwTh>Win Probability</TwTh>
+                            <TwTh>Spread/Total</TwTh>
+                            @foreach (var game in _espnResponse.Games)
+                            {
+                                <TwTr>
+                                    <TwTd>
+                                        <div class="flex flex-col">
+                                            <span class="text-slate-400">@DateTime.Parse(game.GameTime).ToLocalTime().ToString("MM/dd HH:mm")</span>
+                                            <span class="text-[10px] text-slate-600">@game.EventId</span>
+                                        </div>
+                                    </TwTd>
+                                    <TwTd>
+                                        <div class="flex flex-col">
+                                            <div class="flex items-center">
+                                                <span class="font-bold text-white">@game.AwayTeam</span>
+                                                @if(game.AwayRank is object && game.AwayRank.ToString() != "99" && game.AwayRank.ToString() != "999") 
+                                                { <span class="ml-1.5 text-blue-400 text-[10px] font-bold">#@game.AwayRank</span> }
+                                            </div>
+                                            <span class="text-xs text-slate-500">@game.AwayScore</span>
+                                        </div>
+                                    </TwTd>
+                                    <TwTd>
+                                         <div class="flex flex-col">
+                                            <div class="flex items-center">
+                                                <span class="font-bold text-white">@game.HomeTeam</span>
+                                                @if(game.HomeRank is object && game.HomeRank.ToString() != "99" && game.HomeRank.ToString() != "999") 
+                                                { <span class="ml-1.5 text-blue-400 text-[10px] font-bold">#@game.HomeRank</span> }
+                                            </div>
+                                            <span class="text-xs text-slate-500">@game.HomeScore</span>
+                                        </div>
+                                    </TwTd>
+                                    <TwTd>
+                                        <div class="flex flex-col gap-2 min-w-[120px]">
+                                            <TwProgressBar Value="@((int)(game.AwayWinProb * 100))" Color="@(game.AwayWinProb > game.HomeWinProb ? "emerald" : "slate")" Size="sm" Label="@($"Away: {game.AwayWinProb:P1}")" />
+                                            <TwProgressBar Value="@((int)(game.HomeWinProb * 100))" Color="@(game.HomeWinProb > game.AwayWinProb ? "emerald" : "slate")" Size="sm" Label="@($"Home: {game.HomeWinProb:P1}")" />
+                                        </div>
+                                    </TwTd>
+                                    <TwTd>
+                                        <div class="text-xs space-y-0.5">
+                                            <div class="text-slate-300">Spread: <span class="font-medium text-white">@game.Spread</span></div>
+                                            <div class="text-slate-300">Total: <span class="font-medium text-white">@game.OverUnder</span></div>
+                                        </div>
+                                    </TwTd>
+                                </TwTr>
+                            }
+                        </TwTable>
+                    </TwCard>
+                }
+                </div>
+            </ChildContent>
+        </TwTabPanel>
+    </TwTabs>
+
+</TwContainer>
 
 @code {
     private List<SportInfo> _sports = new();
@@ -694,7 +674,7 @@
             var home = h2h.Outcomes.FirstOrDefault(o => o.Name == ev.HomeTeam);
             
             builder.OpenElement(1, "div");
-            builder.AddAttribute(2, "class", "d-flex justify-space-between mb-1");
+            builder.AddAttribute(2, "class", "flex justify-between mb-1");
             builder.AddContent(3, $"ML: {FormatPrice(away?.Price)} / {FormatPrice(home?.Price)}");
             builder.CloseElement();
         }
@@ -709,7 +689,7 @@
             if (away != null && home != null)
             {
                 builder.OpenElement(4, "div");
-                builder.AddAttribute(5, "class", "d-flex justify-space-between mb-1");
+                builder.AddAttribute(5, "class", "flex justify-between mb-1");
                 builder.AddContent(6, $"Spr: {FormatPoint(away.Point)} ({FormatPrice(away.Price)})");
                 builder.CloseElement();
             }
@@ -724,7 +704,7 @@
             if (over != null)
             {
                 builder.OpenElement(7, "div");
-                builder.AddAttribute(8, "class", "d-flex justify-space-between");
+                builder.AddAttribute(8, "class", "flex justify-between");
                 builder.AddContent(9, $"Tot: {over.Point} ({FormatPrice(over.Price)})");
                 builder.CloseElement();
             }

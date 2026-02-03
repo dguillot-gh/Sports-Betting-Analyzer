@@ -4,12 +4,21 @@
 {
     <a href="@Href" 
        class="@ComputedClass"
-       @onclick="OnClick">
+       @onclick="OnClick"
+       @attributes="AdditionalAttributes">
         @if (IsLoading)
         {
             <span class="inline-block animate-spin mr-2">◌</span>
         }
+        else if (!string.IsNullOrEmpty(StartIcon))
+        {
+            <TwIcon Icon="@StartIcon" Class="w-4 h-4 mr-2" />
+        }
         @ChildContent
+        @if (!string.IsNullOrEmpty(EndIcon) && !IsLoading)
+        {
+            <TwIcon Icon="@EndIcon" Class="w-4 h-4 ml-2" />
+        }
     </a>
 }
 else
@@ -17,17 +26,29 @@ else
     <button type="@Type" 
             disabled="@Disabled"
             @onclick="OnClick"
-            class="@ComputedClass">
+            class="@ComputedClass"
+            @attributes="AdditionalAttributes">
         @if (IsLoading)
         {
             <span class="inline-block animate-spin mr-2">◌</span>
         }
+        else if (!string.IsNullOrEmpty(StartIcon))
+        {
+             <TwIcon Icon="@StartIcon" Class="w-4 h-4 mr-2" />
+        }
         @ChildContent
+        @if (!string.IsNullOrEmpty(EndIcon) && !IsLoading)
+        {
+             <TwIcon Icon="@EndIcon" Class="w-4 h-4 ml-2" />
+        }
     </button>
 }
 
 @code {
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? StartIcon { get; set; }
+    [Parameter] public string? EndIcon { get; set; }
     [Parameter] public string Variant { get; set; } = "primary"; // primary, secondary, outline, danger, ghost
     [Parameter] public string? Color { get; set; } // blue, emerald, amber,  slate (overrides variant color)
     [Parameter] public string Size { get; set; } = "md"; // sm, md, lg

@@ -1,0 +1,49 @@
+@using Microsoft.AspNetCore.Components.Forms
+
+<div class="flex flex-col gap-2 @Class">
+    @if (!string.IsNullOrEmpty(Label))
+    {
+        <label class="text-sm font-medium text-slate-300">@Label</label>
+    }
+    
+    <label class="relative flex items-center justify-center px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg cursor-pointer transition-colors group">
+        @if (IsLoading)
+        {
+            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+        }
+        else if (!string.IsNullOrEmpty(StartIcon))
+        {
+            <svg class="w-5 h-5 mr-2 text-slate-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="@StartIcon"></path>
+            </svg>
+        }
+        
+        <span class="text-white font-medium">@(string.IsNullOrEmpty(ButtonText) ? "Upload File" : ButtonText)</span>
+        
+        <InputFile OnChange="HandleFileChanged" accept="@Accept" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+    </label>
+    
+    @if (!string.IsNullOrEmpty(HelperText))
+    {
+        <p class="text-[10px] text-slate-500 italic">@HelperText</p>
+    }
+</div>
+
+@code {
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string? ButtonText { get; set; }
+    [Parameter] public string? StartIcon { get; set; }
+    [Parameter] public string? Accept { get; set; }
+    [Parameter] public string? HelperText { get; set; }
+    [Parameter] public string Class { get; set; } = "";
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public EventCallback<IBrowserFile> OnFilesChanged { get; set; }
+
+    private async Task HandleFileChanged(InputFileChangeEventArgs e)
+    {
+        await OnFilesChanged.InvokeAsync(e.File);
+    }
+}
