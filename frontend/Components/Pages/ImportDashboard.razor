@@ -7,6 +7,14 @@
 @using SportsBettingAnalyzer.Components.Shared.Tailwind
 
 <TwContainer MaxWidth="large" Class="mt-8 px-4 pb-12">
+    <!-- Loading Overlay for Import Operations -->
+    <TwLoadingOverlay 
+        IsVisible="@isImporting"
+        Title="Importing Data..."
+        Color="emerald"
+        CurrentStatusMessage="@_importStatusMessage"
+        ShowProgress="false"
+        OnCancel="@CancelImport" />
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
         <div>
             <h1 class="text-3xl font-bold text-white">Automated Data Import</h1>
@@ -169,6 +177,19 @@
 @code {
     private List<ImportLog> logs;
     private bool isImporting = false;
+    private string _importStatusMessage = "Connecting to data sources...";
+    private CancellationTokenSource? _importCts;
+    
+    private string[] _importMessages = new[] {
+        "📡 Connecting to data sources...",
+        "📥 Fetching latest records...",
+        "🔍 Parsing response data...",
+        "🧹 Cleaning and validating...",
+        "💾 Saving to database...",
+        "🔗 Linking relationships...",
+        "✅ Verifying data integrity...",
+        "🎉 Almost done..."
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -178,6 +199,13 @@
     private async Task LoadLogs()
     {
         logs = await PythonService.GetImportLogsAsync();
+    }
+    
+    private void CancelImport()
+    {
+        _importCts?.Cancel();
+        isImporting = false;
+        Snackbar.Add("Import cancelled", Severity.Warning);
     }
 
     private async Task TriggerImport()

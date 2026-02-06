@@ -134,9 +134,7 @@ CREATE TABLE IF NOT EXISTS bet_legs (
     outcome VARCHAR(10) DEFAULT 'pending'
 );
 
-CREATE INDEX IF NOT EXISTS idx_bets_sport ON bets(sport);
-CREATE INDEX IF NOT EXISTS idx_bets_outcome ON bets(outcome);
-CREATE INDEX IF NOT EXISTS idx_bets_created ON bets(created_at);
+);
 """
 
 _tables_initialized = False
@@ -212,6 +210,18 @@ async def ensure_tables():
         
         # Check and add new columns if they don't exist (migrations)
         try:
+            # Check for sport (core column that might be missing in very old schemas)
+            val = await conn.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='bets' AND column_name='sport'")
+            if not val:
+                logger.info("Adding sport column to bets table")
+                await conn.execute("ALTER TABLE bets ADD COLUMN sport VARCHAR(20)")
+
+            # Check for bet_type
+            val = await conn.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='bets' AND column_name='bet_type'")
+            if not val:
+                logger.info("Adding bet_type column to bets table")
+                await conn.execute("ALTER TABLE bets ADD COLUMN bet_type VARCHAR(20) DEFAULT 'single'")
+
             # Check for game_name
             val = await conn.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='bets' AND column_name='game_name'")
             if not val:
@@ -241,6 +251,11 @@ async def ensure_tables():
             if not val:
                 logger.info("Adding clv_percent column to bets table")
                 await conn.execute("ALTER TABLE bets ADD COLUMN clv_percent DECIMAL(5,2)")
+
+            # Finalize indexes after column migrations
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_bets_sport ON bets(sport)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_bets_outcome ON bets(outcome)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_bets_created ON bets(created_at)")
         except Exception as e:
             logger.error(f"Schema migration error: {e}")
             
@@ -248,8 +263,12 @@ async def ensure_tables():
         _tables_initialized = True
         logger.info("Bet tracker tables initialized successfully")
     except Exception as e:
-        logger.error(f"Failed to initialize bet tables: {e}")
-        raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
+        logger.error(f"Failed to initialize bet tables (database connection: {DATABASE_URL[:30]}...): {e}")
+        # Re-raise to ensure the endpoint returns a 500 with context
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Bet analysis database connection failed. Ensure PostgreSQL is running. Error: {str(e)}"
+        )
 
 
 # ==================== Endpoints ====================
@@ -374,11 +393,15 @@ async def list_bets(
     offset: int = Query(0, ge=0, description="Offset for pagination")
 ):
     """List bets with optional filters."""
-    import asyncpg
+    import traceback
     
-    await ensure_tables()
-    
-    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        await ensure_tables()
+        conn = await asyncpg.connect(DATABASE_URL)
+    except Exception as e:
+        logger.error(f"Database connection error in list_bets: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
+        
     try:
         # Build query
         conditions = []
@@ -449,6 +472,9 @@ async def list_bets(
             })
         
         return {"bets": bets, "count": len(bets)}
+    except Exception as e:
+        logger.error(f"Query error in list_bets: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
     finally:
         await conn.close()
 
@@ -657,10 +683,15 @@ async def get_bet_stats(
 ):
     """Get betting statistics summary."""
     import asyncpg
+    import traceback
     
-    await ensure_tables()
-    
-    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        await ensure_tables()
+        conn = await asyncpg.connect(DATABASE_URL)
+    except Exception as e:
+        logger.error(f"Database connection error in /stats/summary: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
+        
     try:
         if days > 0:
             conditions = ["created_at > NOW() - INTERVAL '%s days'" % days]
@@ -711,6 +742,9 @@ async def get_bet_stats(
             "net_profit": net_profit,
             "roi": round(net_profit / total_staked * 100, 1) if total_staked else 0
         }
+    except Exception as e:
+        logger.error(f"Query error in /stats/summary: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
     finally:
         await conn.close()
 
@@ -724,12 +758,15 @@ async def get_chart_data(
     Get time-series data for betting analytics charts.
     Returns: daily profits, cumulative ROI trend, outcome distribution.
     """
-    import asyncpg
-    from datetime import datetime, timedelta
+    import traceback
     
-    await ensure_tables()
-    
-    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        await ensure_tables()
+        conn = await asyncpg.connect(DATABASE_URL)
+    except Exception as e:
+        logger.error(f"Database connection error in get_chart_data: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
+        
     try:
         if days > 0:
             date_filter = f"WHERE created_at > NOW() - INTERVAL '{days} days'"
@@ -832,6 +869,9 @@ async def get_chart_data(
                 "total_bets": sum(d["bets"] for d in daily_data)
             }
         }
+    except Exception as e:
+        logger.error(f"Query error in get_chart_data: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
     finally:
         await conn.close()
 

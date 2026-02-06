@@ -1,0 +1,98 @@
+@namespace SportsBettingAnalyzer.Components.Shared
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
+
+<TwCard Class="p-6 bg-slate-900/80 border border-slate-800 backdrop-blur-md relative overflow-hidden group">
+    <!-- Background Decoration -->
+    <div class="absolute -right-8 -top-8 w-24 h-24 bg-blue-500/5 rounded-full blur-2xl group-hover:bg-blue-500/10 transition-colors"></div>
+    
+    <div class="flex items-center gap-3 mb-6">
+        <div class="p-2 bg-blue-500/10 rounded-lg">
+            <TwIcon Icon="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" Class="w-5 h-5 text-blue-400" />
+        </div>
+        <h3 class="text-lg font-bold text-white tracking-tight">Betting Calculator</h3>
+    </div>
+
+    <div class="space-y-4">
+        <!-- Input Group -->
+        <div class="space-y-4">
+            <div>
+                <label class="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1.5 ml-1">Current Bankroll</label>
+                <div class="relative">
+                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-bold">$</span>
+                    <input type="number" @bind="_bankroll" @bind:event="oninput" 
+                           class="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-4 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all font-mono text-sm" />
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1.5 ml-1">Wager</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-bold">$</span>
+                        <input type="number" @bind="_wager" @bind:event="oninput" 
+                               class="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-4 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all font-mono text-sm" />
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1.5 ml-1">To Win</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-bold">$</span>
+                        <input type="number" @bind="_toWin" @bind:event="oninput" 
+                               class="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-4 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all font-mono text-sm" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Risk Intensity Bar -->
+        <div class="pt-2">
+            <div class="flex justify-between items-center mb-1.5 px-1">
+                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Risk Intensity</span>
+                <span class="text-[10px] font-bold @(RiskPercent > 5 ? "text-red-400" : "text-emerald-400")">@RiskPercent.ToString("F1")%</span>
+            </div>
+            <div class="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                <div class="h-full transition-all duration-500 ease-out @(RiskPercent > 5 ? "bg-red-500" : "bg-emerald-500")" 
+                     style="width: @(Math.Min(100, RiskPercent * 10))%"></div>
+            </div>
+            @if (RiskPercent > 3)
+            {
+                <p class="text-[10px] text-amber-500/80 mt-1.5 italic font-medium leading-tight">
+                    ⚠️ High risk! Avoid wagering > 3% of bankroll.
+                </p>
+            }
+        </div>
+
+        <!-- Results Display -->
+        <div class="grid grid-cols-2 gap-4 mt-6 pt-6 border-t border-slate-800/50">
+            <div>
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">ROI</p>
+                <p class="text-xl font-black text-emerald-400">@Roi.ToString("F1")%</p>
+            </div>
+            <div class="text-right">
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Impact</p>
+                <div class="flex items-center justify-end gap-1.5">
+                    <TwIcon Icon="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" Class="w-3 h-3 text-emerald-500" />
+                    <span class="text-lg font-black text-white">$@TotalPayout.ToString("F2")</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-blue-500/5 rounded-xl p-4 border border-blue-500/10">
+            <div class="flex justify-between items-center">
+                <span class="text-xs font-semibold text-slate-400">New Bankroll</span>
+                <span class="text-sm font-black text-blue-400">@NewBankroll.ToString("C2")</span>
+            </div>
+        </div>
+    </div>
+</TwCard>
+
+@code {
+    private decimal _bankroll = 1000;
+    private decimal _wager = 50;
+    private decimal _toWin = 45.45m;
+
+    private decimal RiskPercent => _bankroll > 0 ? (_wager / _bankroll) * 100 : 0;
+    private decimal Roi => _wager > 0 ? (_toWin / _wager) * 100 : 0;
+    private decimal TotalPayout => _wager + _toWin;
+    private decimal NewBankroll => _bankroll + _toWin;
+}

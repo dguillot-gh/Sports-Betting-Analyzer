@@ -6,425 +6,469 @@
 @inject DataCollectionService DataCollectionService
 @using SportsBettingAnalyzer.Services
 @using SportsBettingAnalyzer.Models
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
 
 <PageTitle>Bet Tracker</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
-    <MudStack Spacing="4">
+<TwContainer MaxWidth="extraLarge" Class="pa-4 mt-8">
+    <!-- Loading Overlay for Import -->
+    <TwLoadingOverlay 
+        IsVisible="@_isImporting"
+        Title="Importing Bet History"
+        Color="blue"
+        CurrentStatusMessage="@_importStatus"
+        ShowProgress="false" />
+    <div class="space-y-6">
         <!-- Header -->
-        <MudPaper Class="pa-4" Elevation="2" Style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <div class="p-6 rounded-xl shadow-lg bg-gradient-to-br from-slate-900 to-slate-800 text-white border border-slate-700">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
                 <div>
-                    <MudText Typo="Typo.h4" Style="color: white;">
-                        <MudIcon Icon="@Icons.Material.Filled.Receipt" Class="mr-2" />
+                    <h1 class="text-3xl font-bold flex items-center gap-3">
+                        <svg class="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
                         Bet Tracker
-                    </MudText>
+                    </h1>
                 </div>
-                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                    <MudChip T="string" Color="Color.Success" Size="Size.Small">@_wins W</MudChip>
-                    <MudChip T="string" Color="Color.Error" Size="Size.Small">@_losses L</MudChip>
-                    <MudChip T="string" Color="@(_netProfit >= 0 ? Color.Success : Color.Error)" Size="Size.Small">
+                <div class="flex items-center gap-3">
+                    <TwChip Color="emerald" Size="sm" Variant="solid">@_wins W</TwChip>
+                    <TwChip Color="red" Size="sm" Variant="solid">@_losses L</TwChip>
+                    <TwChip Color="@(_netProfit >= 0 ? "emerald" : "red")" Size="sm" Variant="outline">
                         @(_netProfit >= 0 ? "+" : "")$@_netProfit.ToString("F2")
-                    </MudChip>
-                    <MudTooltip Text="Import from Excel/CSV">
-                        <MudFileUpload T="IBrowserFile" OnFilesChanged="OnImportFileSelected" Accept=".csv, .xlsx, .xls" Class="ml-2">
-                            <ActivatorContent>
-                                <MudButton Variant="Variant.Filled"
-                                           Color="Color.Info"
-                                           Size="Size.Small"
-                                           StartIcon="@Icons.Material.Filled.UploadFile"
-                                           Disabled="@_isImporting">
-                                    @(_isImporting ? "Processing..." : "Import")
-                                </MudButton>
-                            </ActivatorContent>
-                        </MudFileUpload>
-                    </MudTooltip>
-                </MudStack>
-            </MudStack>
-        </MudPaper>
+                    </TwChip>
+                    
+                    <div class="relative">
+                        <label class="cursor-pointer inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md shadow-sm transition-colors border border-transparent">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            @(_isImporting ? "Processing..." : "Import")
+                            <InputFile OnChange="OnImportFileSelected" class="hidden" accept=".csv, .xlsx, .xls" disabled="@_isImporting" />
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-        <MudGrid>
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
             <!-- Left: Available Games -->
-            <MudItem xs="12" md="5">
-                <MudPaper Class="pa-4" Elevation="2" Style="max-height: 600px; overflow-y: auto;">
-                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
-                        <MudText Typo="Typo.h6">Available Games</MudText>
-                        <MudStack Row="true" Spacing="1">
-                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="@(_sport == "nfl" ? Color.Primary : Color.Default)"
-                                       OnClick="@(() => { _sport = "nfl"; _ = LoadGames(); })">NFL</MudButton>
-                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="@(_sport == "nba" ? Color.Primary : Color.Default)"
-                                       OnClick="@(() => { _sport = "nba"; _ = LoadGames(); })">NBA</MudButton>
-                            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="LoadGames" />
-                        </MudStack>
-                    </MudStack>
+            <div class="md:col-span-5">
+                <TwCard Class="flex flex-col h-[600px]">
+                    <div class="flex justify-between items-center mb-4 pb-2 border-b border-slate-700">
+                        <h2 class="text-lg font-bold text-white">Available Games</h2>
+                        <div class="flex gap-2">
+                            <button @onclick="@(() => { _sport = "nfl"; _ = LoadGames(); })" class="px-2 py-1 text-xs font-bold rounded border @(_sport == "nfl" ? "bg-blue-500 border-blue-500 text-white" : "border-slate-600 text-slate-400 hover:text-white")">NFL</button>
+                            <button @onclick="@(() => { _sport = "nba"; _ = LoadGames(); })" class="px-2 py-1 text-xs font-bold rounded border @(_sport == "nba" ? "bg-orange-500 border-orange-500 text-white" : "border-slate-600 text-slate-400 hover:text-white")">NBA</button>
+                            <button @onclick="LoadGames" class="p-1 text-slate-400 hover:text-white">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                            </button>
+                        </div>
+                    </div>
 
-                    @if (_loadingGames)
-                    {
-                        <MudProgressLinear Indeterminate="true" />
-                    }
-                    else if (_games.Any())
-                    {
-                        @foreach (var game in _games)
+                    <div class="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-2">
+                        @if (_loadingGames)
                         {
-                            <MudCard Class="mb-2" Elevation="1">
-                                <MudCardContent Class="pa-2">
-                                    <MudText Typo="Typo.body2">@game.Away @@ @game.Home</MudText>
-                                    <MudStack Row="true" Spacing="1" Class="mt-1 flex-wrap">
+                            <TwProgressBar Indeterminate="true" Color="blue" />
+                        }
+                        else if (_games.Any())
+                        {
+                            @foreach (var game in _games)
+                            {
+                                <div class="bg-slate-900 border border-slate-800 rounded-lg p-3 hover:border-slate-600 transition-colors">
+                                    <div class="text-xs font-medium text-slate-300 mb-2">@game.Away @@ @game.Home</div>
+                                    <div class="flex flex-wrap gap-2">
                                         @if (game.HomeML != 0)
                                         {
-                                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
-                                                       OnClick="@(() => AddLeg($"{game.Home} ML", game.HomeML, game.GameId, $"{game.Away} @ {game.Home}"))">
+                                            <button @onclick="@(() => AddLeg($"{game.Home} ML", game.HomeML, game.GameId, $"{game.Away} @ {game.Home}"))" 
+                                                    class="px-2 py-1 bg-slate-800 hover:bg-blue-600 border border-slate-700 rounded text-xs text-white transition-colors">
                                                 @game.Home.Split(' ').Last() @FormatOdds(game.HomeML)
-                                            </MudButton>
-                                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
-                                                       OnClick="@(() => AddLeg($"{game.Away} ML", game.AwayML, game.GameId, $"{game.Away} @ {game.Home}"))">
+                                            </button>
+                                            <button @onclick="@(() => AddLeg($"{game.Away} ML", game.AwayML, game.GameId, $"{game.Away} @ {game.Home}"))" 
+                                                    class="px-2 py-1 bg-slate-800 hover:bg-blue-600 border border-slate-700 rounded text-xs text-white transition-colors">
                                                 @game.Away.Split(' ').Last() @FormatOdds(game.AwayML)
-                                            </MudButton>
+                                            </button>
                                         }
                                         @if (game.Total > 0)
                                         {
-                                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Tertiary"
-                                                       OnClick="@(() => AddLeg($"O {game.Total}", -110, game.GameId, $"{game.Away} @ {game.Home}"))">O @game.Total</MudButton>
-                                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Tertiary"
-                                                       OnClick="@(() => AddLeg($"U {game.Total}", -110, game.GameId, $"{game.Away} @ {game.Home}"))">U @game.Total</MudButton>
+                                            <button @onclick="@(() => AddLeg($"O {game.Total}", -110, game.GameId, $"{game.Away} @ {game.Home}"))" 
+                                                    class="px-2 py-1 bg-slate-800 hover:bg-emerald-600 border border-slate-700 rounded text-xs text-white transition-colors">
+                                                O @game.Total
+                                            </button>
+                                            <button @onclick="@(() => AddLeg($"U {game.Total}", -110, game.GameId, $"{game.Away} @ {game.Home}"))" 
+                                                    class="px-2 py-1 bg-slate-800 hover:bg-emerald-600 border border-slate-700 rounded text-xs text-white transition-colors">
+                                                U @game.Total
+                                            </button>
                                         }
-                                    </MudStack>
-                                </MudCardContent>
-                            </MudCard>
+                                    </div>
+                                </div>
+                            }
                         }
-                    }
-                    else
-                    {
-                        <MudAlert Severity="Severity.Info" Dense="true">
-                            No games. Click "Analyze + Cache" on Live Odds first.
-                        </MudAlert>
-                    }
-                </MudPaper>
-            </MudItem>
+                        else
+                        {
+                            <TwAlert Severity="info">No live games found. Try analyzing odds first.</TwAlert>
+                        }
+                    </div>
+                </TwCard>
+            </div>
 
             <!-- Right: Bet Slip + History -->
-            <MudItem xs="12" md="7">
+            <div class="md:col-span-7 space-y-6">
                 <!-- Bet Slip -->
-                <MudPaper Class="pa-4" Elevation="2">
-                    <MudText Typo="Typo.h6" Class="mb-2">
-                        Bet Slip
-                        @if (_legs.Any())
-                        {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ml-2">
-                                @(_legs.Count == 1 ? "Single" : $"{_legs.Count}-Leg Parlay")
-                            </MudChip>
-                        }
-                    </MudText>
+                <TwCard>
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                            Bet Slip
+                            @if (_legs.Any())
+                            {
+                                <TwChip Color="blue" Size="xs" Variant="solid">@(_legs.Count == 1 ? "Single" : $"{_legs.Count}-Leg Parlay")</TwChip>
+                            }
+                        </h2>
+                    </div>
 
                     @if (!_legs.Any())
                     {
-                        <MudText Color="Color.Secondary" Typo="Typo.body2">Click a bet to add.</MudText>
+                        <div class="text-slate-500 text-sm py-4 italic text-center border-2 border-dashed border-slate-800 rounded-lg">
+                            Click a bet from available games to add to slip.
+                        </div>
                     }
                     else
                     {
-                        @foreach (var leg in _legs)
-                        {
-                            <MudPaper Class="pa-2 mb-1" Style="background: rgba(0,0,0,0.05);">
-                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                                    <MudText Typo="Typo.body2">@leg.Description (@FormatOdds(leg.Odds))</MudText>
-                                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="@(() => _legs.Remove(leg))" />
-                                </MudStack>
-                            </MudPaper>
-                        }
+                        <div class="space-y-2 mb-4">
+                            @foreach (var leg in _legs)
+                            {
+                                <div class="flex justify-between items-center p-3 bg-slate-900/50 border border-slate-800 rounded-lg group">
+                                    <span class="text-sm font-medium text-white">@leg.Description <span class="text-blue-400">(@FormatOdds(leg.Odds))</span></span>
+                                    <button @onclick="@(() => _legs.Remove(leg))" class="text-slate-500 hover:text-red-400 p-1">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                    </button>
+                                </div>
+                            }
+                        </div>
 
                         @if (_legs.Count > 1)
                         {
-                            <MudText Typo="Typo.body2" Class="mt-2">
-                                Parlay Odds: <strong style="color:#2196f3;">@FormatOdds(GetParlayOdds())</strong>
-                            </MudText>
+                             <div class="mb-4 text-right">
+                                <span class="text-sm text-slate-400">Parlay Odds:</span>
+                                <span class="text-lg font-bold text-blue-400 ml-2">@FormatOdds(GetParlayOdds())</span>
+                            </div>
                         }
 
-                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End" Class="mt-3">
-                            <MudSelect T="string" @bind-Value="_sportsbook" Label="Book" Variant="Variant.Outlined" Dense="true" Style="width:140px;">
-                                <MudSelectItem Value="@("fanduel")">FanDuel</MudSelectItem>
-                                <MudSelectItem Value="@("draftkings")">DraftKings</MudSelectItem>
-                                <MudSelectItem Value="@("betmgm")">BetMGM</MudSelectItem>
-                            </MudSelect>
-                            <MudTextField T="decimal" @bind-Value="_stake" Label="Stake" Variant="Variant.Outlined" Dense="true"
-                                          Style="width:100px;" Adornment="Adornment.Start" AdornmentText="$" />
-                            <div>
-                                <MudText Typo="Typo.caption">Total Payout</MudText>
-                                <MudText Typo="Typo.body1" Style="color:#4caf50;"><strong>$@CalcPayout().ToString("F2")</strong></MudText>
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">(+$@CalcWin().ToString("F2") profit)</MudText>
+                        <div class="grid grid-cols-12 gap-3 items-end bg-slate-900/30 p-4 rounded-xl border border-slate-800">
+                            <div class="col-span-4">
+                                <TwSelect TValue="string" @bind-Value="_sportsbook" Label="Sportsbook" FullWidth="true">
+                                    <option value="fanduel">FanDuel</option>
+                                    <option value="draftkings">DraftKings</option>
+                                    <option value="betmgm">BetMGM</option>
+                                </TwSelect>
                             </div>
-                        </MudStack>
-                        <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true" Class="mt-2"
-                                   OnClick="PlaceBet" Disabled="@(_stake <= 0)">Place Bet</MudButton>
+                            <div class="col-span-3">
+                                <div class="relative w-full">
+                                    <label class="block text-xs text-slate-500 mb-1 font-medium">Stake</label>
+                                    <div class="relative">
+                                        <div class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">$</div>
+                                        <input type="number" @bind="_stake" class="appearance-none bg-slate-800 text-sm text-slate-100 border border-slate-700 rounded-xl px-4 py-2.5 pl-7 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all placeholder-slate-500 w-full" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-span-5 text-right pb-1">
+                                <div class="text-xs text-slate-500 uppercase font-bold">Payout</div>
+                                <div class="text-xl font-bold text-emerald-400">$@CalcPayout().ToString("F2")</div>
+                                <div class="text-xs text-emerald-600">+$@CalcWin().ToString("F2") profit</div>
+                            </div>
+                        </div>
+                        
+                        <TwButton Variant="primary" FullWidth="true" OnClick="PlaceBet" Disabled="@(_stake <= 0)" Class="mt-4 font-bold py-3 shadow-lg shadow-blue-500/20">
+                            Place Bet
+                        </TwButton>
                     }
-                </MudPaper>
+                </TwCard>
 
                 <!-- Manual Add -->
-                <MudExpansionPanels Class="mt-3">
-                    <MudExpansionPanel Text="Manual Entry">
-                        <MudStack Spacing="2">
-                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End">
-                                <MudTextField T="string" @bind-Value="_manualDesc" Label="Description" Dense="true" 
-                                              Placeholder="Chiefs ML" Style="flex:2;" />
-                                <MudTextField T="int" @bind-Value="_manualOdds" Label="Odds" Dense="true" Style="width:90px;" />
-                            </MudStack>
-                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End">
-                                <MudTextField T="string" @bind-Value="_manualGame" Label="Game (optional)" Dense="true" 
-                                              Placeholder="Chiefs vs Bills" Style="flex:2;" />
-                                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="AddManualLeg">
-                                    <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-1" Size="Size.Small" /> Add to Slip
-                                </MudButton>
-                            </MudStack>
-                        </MudStack>
-                    </MudExpansionPanel>
-                </MudExpansionPanels>
+                <div class="border border-slate-800 rounded-xl overflow-hidden">
+                    <details class="group bg-slate-900">
+                        <summary class="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-800/50 transition-colors">
+                            <span class="font-bold text-white text-sm">Manual Entry</span>
+                            <svg class="w-5 h-5 text-slate-400 group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </summary>
+                        <div class="p-4 border-t border-slate-800 bg-slate-950/50">
+                            <div class="grid grid-cols-12 gap-3 mb-3">
+                                <div class="col-span-8">
+                                    <TwInput @bind-Value="_manualDesc" Label="Description" Placeholder="Ex: Chiefs ML" FullWidth="true" />
+                                </div>
+                                <div class="col-span-4">
+                                     <div class="relative w-full">
+                                        <label class="block text-xs text-slate-500 mb-1 font-medium">Odds</label>
+                                        <input type="number" @bind="_manualOdds" class="appearance-none bg-slate-800 text-sm text-slate-100 border border-slate-700 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all placeholder-slate-500 w-full" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex gap-3 items-end">
+                                <div class="flex-1">
+                                    <TwInput @bind-Value="_manualGame" Label="Game (Optional)" Placeholder="Ex: Chiefs vs Bills" FullWidth="true" />
+                                </div>
+                                <TwButton Variant="outline" OnClick="AddManualLeg" StartIcon="M12 6v6m0 0v6m0-6h6m-6 0H6">Add</TwButton>
+                            </div>
+                        </div>
+                    </details>
+                </div>
 
                 <!-- History -->
-                <MudPaper Class="pa-4 mt-3" Elevation="2">
-                    <MudText Typo="Typo.h6" Class="mb-2">Recent Bets</MudText>
+                <TwCard>
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-lg font-bold text-white">Recent Bets</h2>
+                    </div>
+                    
                     @if (_bets.Any())
                     {
-                        <MudSimpleTable Dense="true" Hover="true" Style="max-height:250px; overflow-y:auto;">
-                            <thead>
-                                <tr><th>Type</th><th>Game</th><th>Bet</th><th>Stake</th><th>Odds</th><th>Result</th><th></th></tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var b in _bets)
-                                {
+                        <div class="overflow-x-auto max-h-[300px] overflow-y-auto custom-scrollbar rounded-lg border border-slate-800">
+                            <table class="w-full text-sm text-left text-slate-300">
+                                <thead class="text-xs text-slate-400 uppercase bg-slate-900 sticky top-0">
                                     <tr>
-                                        <td>
-                                            <MudTooltip Text="@b.Source">
-                                                <MudIcon Icon="@(b.Source == "manual" ? Icons.Material.Filled.EditNote : Icons.Material.Filled.SmartToy)" Size="Size.Small" Color="@(b.Source == "manual" ? Color.Default : Color.Primary)" />
-                                            </MudTooltip>
-                                        </td>
-                                        <td><MudText Typo="Typo.caption">@(b.GameName ?? "-")</MudText></td>
-                                        <td>@b.Description</td>
-                                        <td>$@b.Stake.ToString("F2")</td>
-                                        <td>@FormatOdds(b.Odds)</td>
-                                        <td>
-                                            <MudButtonGroup Size="Size.Small">
-                                                <MudButton Color="@(b.Outcome=="win"?Color.Success:Color.Default)" Variant="@(b.Outcome=="win"?Variant.Filled:Variant.Outlined)"
-                                                           OnClick="@(()=>SetOutcome(b.Id, b.Outcome=="win"?"pending":"win"))">W</MudButton>
-                                                <MudButton Color="@(b.Outcome=="loss"?Color.Error:Color.Default)" Variant="@(b.Outcome=="loss"?Variant.Filled:Variant.Outlined)"
-                                                           OnClick="@(()=>SetOutcome(b.Id, b.Outcome=="loss"?"pending":"loss"))">L</MudButton>
-                                                <MudButton Color="@(b.Outcome=="cashout"?Color.Warning:Color.Default)" Variant="@(b.Outcome=="cashout"?Variant.Filled:Variant.Outlined)"
-                                                           OnClick="@(()=>CashOut(b))">C</MudButton>
-                                            </MudButtonGroup>
-                                        </td>
-                                        <td>
-                                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Info"
-                                                           OnClick="@(() => OpenEditDialog(b))" Title="Edit bet" />
-                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                                                           OnClick="@(() => DeleteBet(b.Id))" Title="Delete bet" />
-                                        </td>
+                                        <th class="px-4 py-2">Type</th>
+                                        <th class="px-4 py-2">Game</th>
+                                        <th class="px-4 py-2">Bet</th>
+                                        <th class="px-4 py-2">Stake</th>
+                                        <th class="px-4 py-2">Odds</th>
+                                        <th class="px-4 py-2">Result</th>
+                                        <th class="px-4 py-2 text-right">Actions</th>
                                     </tr>
-                                }
-                            </tbody>
-                        </MudSimpleTable>
+                                </thead>
+                                <tbody class="divide-y divide-slate-800 bg-slate-900/30">
+                                    @foreach (var b in _bets)
+                                    {
+                                        <tr class="hover:bg-slate-800/50 transition-colors">
+                                            <td class="px-4 py-2">
+                                                @if (b.Source == "manual")
+                                                {
+                                                    <span title="Manual" class="text-slate-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg></span>
+                                                }
+                                                else
+                                                {
+                                                     <span title="Auto" class="text-blue-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg></span>
+                                                }
+                                            </td>
+                                            <td class="px-4 py-2 text-xs text-slate-500">@(b.GameName ?? "-")</td>
+                                            <td class="px-4 py-2 font-medium text-white">@b.Description</td>
+                                            <td class="px-4 py-2 text-emerald-400">$@b.Stake.ToString("F2")</td>
+                                            <td class="px-4 py-2">@FormatOdds(b.Odds)</td>
+                                            <td class="px-4 py-2">
+                                                <div class="flex gap-1">
+                                                    <button @onclick="@(()=>SetOutcome(b.Id, b.Outcome=="win"?"pending":"win"))" class="px-2 py-0.5 text-xs rounded border @(b.Outcome=="win" ? "bg-emerald-500 text-white border-emerald-500" : "border-slate-700 hover:border-emerald-500 text-slate-500")">W</button>
+                                                    <button @onclick="@(()=>SetOutcome(b.Id, b.Outcome=="loss"?"pending":"loss"))" class="px-2 py-0.5 text-xs rounded border @(b.Outcome=="loss" ? "bg-red-500 text-white border-red-500" : "border-slate-700 hover:border-red-500 text-slate-500")">L</button>
+                                                    <button @onclick="@(()=>CashOut(b))" class="px-2 py-0.5 text-xs rounded border @(b.Outcome=="cashout" ? "bg-amber-500 text-white border-amber-500" : "border-slate-700 hover:border-amber-500 text-slate-500")">C</button>
+                                                </div>
+                                            </td>
+                                            <td class="px-4 py-2 text-right">
+                                                <div class="flex justify-end gap-2">
+                                                    <button @onclick="@(() => OpenEditDialog(b))" class="text-blue-400 hover:text-white"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg></button>
+                                                    <button @onclick="@(() => DeleteBet(b.Id))" class="text-red-400 hover:text-white"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
                     }
                     else
                     {
-                        <MudText Color="Color.Secondary">No bets yet.</MudText>
+                        <p class="text-slate-500 text-sm">No bets yet.</p>
                     }
-                </MudPaper>
-            </MudItem>
-        </MudGrid>
+                </TwCard>
+            </div>
+        </div>
 
         <!-- Analytics Section -->
-        <MudExpansionPanels Class="mt-4">
-            <MudExpansionPanel Text="📊 Analytics" IsInitiallyExpanded="false">
-                <MudStack Spacing="3">
-                    <MudStack Row="true" Spacing="2" Class="mb-2">
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="LoadChartData" Disabled="@_loadingCharts">
-                            @if (_loadingCharts)
-                            {
-                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                            }
+        <div class="border border-slate-800 rounded-xl overflow-hidden mt-4">
+             <details class="group bg-slate-900" open>
+                 <summary class="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-800/50 transition-colors bg-slate-900/80">
+                    <span class="font-bold text-white text-base flex items-center gap-2">
+                        <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                        Analytics
+                    </span>
+                    <svg class="w-5 h-5 text-slate-400 group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </summary>
+                <div class="p-6 border-t border-slate-800 bg-slate-950/30">
+                     <div class="flex flex-wrap gap-4 mb-6">
+                        <TwButton Size="sm" Variant="outline" OnClick="LoadChartData" IsLoading="@_loadingCharts" Disabled="@_loadingCharts">
                             Refresh Charts
-                        </MudButton>
-                        <MudSelect T="int" @bind-Value="_chartDays" Label="Period" Dense="true" Variant="Variant.Outlined" Style="width:120px;">
-                            <MudSelectItem Value="7">7 Days</MudSelectItem>
-                            <MudSelectItem Value="30">30 Days</MudSelectItem>
-                            <MudSelectItem Value="90">90 Days</MudSelectItem>
-                            <MudSelectItem Value="0">All Time</MudSelectItem>
-                        </MudSelect>
-                    </MudStack>
+                        </TwButton>
+                        <div class="w-32">
+                             <TwSelect TValue="string" @bind-Value="_chartDays" Label="Period" Dense="true" FullWidth="true" Class="text-sm">
+                                <option value="7">7 Days</option>
+                                <option value="30">30 Days</option>
+                                <option value="90">90 Days</option>
+                                <option value="0">All Time</option>
+                            </TwSelect>
+                        </div>
+                    </div>
 
                     @if (_chartData != null)
                     {
-                        <MudGrid Spacing="3">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                             <!-- Summary Cards -->
-                            <MudItem xs="12" md="3">
-                                <MudPaper Class="pa-3" Elevation="2" Style="text-align:center;">
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">ROI</MudText>
-                                    <MudText Typo="Typo.h5" Color="@(_chartRoi >= 0 ? Color.Success : Color.Error)">
-                                        @(_chartRoi >= 0 ? "+" : "")@_chartRoi.ToString("F1")%
-                                    </MudText>
-                                </MudPaper>
-                            </MudItem>
-                            <MudItem xs="12" md="3">
-                                <MudPaper Class="pa-3" Elevation="2" Style="text-align:center;">
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Total Profit</MudText>
-                                    <MudText Typo="Typo.h5" Color="@(_chartProfit >= 0 ? Color.Success : Color.Error)">
-                                        @(_chartProfit >= 0 ? "+" : "")$@_chartProfit.ToString("F2")
-                                    </MudText>
-                                </MudPaper>
-                            </MudItem>
-                            <MudItem xs="12" md="3">
-                                <MudPaper Class="pa-3" Elevation="2" Style="text-align:center;">
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Win Rate</MudText>
-                                    <MudText Typo="Typo.h5" Color="Color.Info">
-                                        @_chartWinRate.ToString("F1")%
-                                    </MudText>
-                                </MudPaper>
-                            </MudItem>
-                            <MudItem xs="12" md="3">
-                                <MudPaper Class="pa-3" Elevation="2" Style="text-align:center;">
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Total Bets</MudText>
-                                    <MudText Typo="Typo.h5">@_chartTotalBets</MudText>
-                                </MudPaper>
-                            </MudItem>
+                            <TwStatCard Label="ROI" Value="@($"{(_chartRoi >= 0 ? "+" : "")}{_chartRoi:F1}%")" Color="@(_chartRoi >= 0 ? "emerald" : "red")" />
+                            <TwStatCard Label="Total Profit" Value="@($"{(_chartProfit >= 0 ? "+" : "")}${_chartProfit:F2}")" Color="@(_chartProfit >= 0 ? "emerald" : "red")" />
+                            <TwStatCard Label="Win Rate" Value="@($"{_chartWinRate:F1}%")" Color="blue" />
+                            <TwStatCard Label="Total Bets" Value="@_chartTotalBets.ToString()" Color="slate" />
+                        </div>
 
-                            <!-- Win/Loss/Cashout Distribution -->
-                            <MudItem xs="12" md="4">
-                                <MudPaper Class="pa-4" Elevation="2">
-                                    <MudText Typo="Typo.h6" Class="mb-3">Outcome Distribution</MudText>
-                                    <MudStack Spacing="2">
-                                        @{
-                                            var totalOutcomes = _outcomeWins + _outcomeLosses + _outcomeCashouts;
-                                            var winPct = totalOutcomes > 0 ? (_outcomeWins * 100.0 / totalOutcomes) : 0;
-                                            var lossPct = totalOutcomes > 0 ? (_outcomeLosses * 100.0 / totalOutcomes) : 0;
-                                            var cashPct = totalOutcomes > 0 ? (_outcomeCashouts * 100.0 / totalOutcomes) : 0;
-                                        }
-                                        <div>
-                                            <MudStack Row="true" Justify="Justify.SpaceBetween">
-                                                <MudText Typo="Typo.body2">Wins (@_outcomeWins)</MudText>
-                                                <MudText Typo="Typo.body2" Color="Color.Success">@winPct.ToString("F1")%</MudText>
-                                            </MudStack>
-                                            <MudProgressLinear Color="Color.Success" Value="@winPct" />
-                                        </div>
-                                        <div>
-                                            <MudStack Row="true" Justify="Justify.SpaceBetween">
-                                                <MudText Typo="Typo.body2">Losses (@_outcomeLosses)</MudText>
-                                                <MudText Typo="Typo.body2" Color="Color.Error">@lossPct.ToString("F1")%</MudText>
-                                            </MudStack>
-                                            <MudProgressLinear Color="Color.Error" Value="@lossPct" />
-                                        </div>
-                                        <div>
-                                            <MudStack Row="true" Justify="Justify.SpaceBetween">
-                                                <MudText Typo="Typo.body2">Cashouts (@_outcomeCashouts)</MudText>
-                                                <MudText Typo="Typo.body2" Color="Color.Warning">@cashPct.ToString("F1")%</MudText>
-                                            </MudStack>
-                                            <MudProgressLinear Color="Color.Warning" Value="@cashPct" />
-                                        </div>
-                                    </MudStack>
-                                </MudPaper>
-                            </MudItem>
+                         <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+                            <!-- Outcomes -->
+                            <div class="md:col-span-4">
+                                <TwCard Class="h-full">
+                                    <h3 class="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4">Outcome Distribution</h3>
+                                    @{
+                                        var totalOutcomes = _outcomeWins + _outcomeLosses + _outcomeCashouts;
+                                        var winPct = totalOutcomes > 0 ? (_outcomeWins * 100.0 / totalOutcomes) : 0;
+                                        var lossPct = totalOutcomes > 0 ? (_outcomeLosses * 100.0 / totalOutcomes) : 0;
+                                        var cashPct = totalOutcomes > 0 ? (_outcomeCashouts * 100.0 / totalOutcomes) : 0;
+                                    }
+                                    <div class="space-y-4">
+                                        <TwProgressBar Value="@((int)winPct)" Color="emerald" Label="@($"Wins ({_outcomeWins})")" Size="md" />
+                                        <TwProgressBar Value="@((int)lossPct)" Color="red" Label="@($"Losses ({_outcomeLosses})")" Size="md" />
+                                        <TwProgressBar Value="@((int)cashPct)" Color="amber" Label="@($"Cashouts ({_outcomeCashouts})")" Size="md" />
+                                    </div>
+                                </TwCard>
+                            </div>
 
-                            <!-- Daily Profit Trend -->
-                            <MudItem xs="12" md="8">
-                                <MudPaper Class="pa-4" Elevation="2">
-                                    <MudText Typo="Typo.h6" Class="mb-3">Daily Profit/ROI Trend</MudText>
+                            <!-- Daily Trend -->
+                            <div class="md:col-span-8">
+                                <TwCard Class="h-full flex flex-col">
+                                    <h3 class="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4">Daily Trend (Last 10 Active Days)</h3>
                                     @if (_dailyData.Any())
                                     {
-                                        <MudSimpleTable Dense="true" Hover="true" Style="max-height:200px; overflow-y:auto;">
-                                            <thead>
-                                                <tr><th>Date</th><th>Bets</th><th>W/L/C</th><th>Profit</th><th>Cum. ROI</th></tr>
-                                            </thead>
-                                            <tbody>
-                                                @foreach (var d in _dailyData.TakeLast(10).Reverse())
-                                                {
-                                                    <tr>
-                                                        <td>@d.Date</td>
-                                                        <td>@d.Bets</td>
-                                                        <td style="color:green;">@d.Wins<span style="color:gray;">/</span><span style="color:red;">@d.Losses</span>@(d.Cashouts > 0 ? $"/{d.Cashouts}" : "")</td>
-                                                        <td style="color:@(d.Profit >= 0 ? "green" : "red")">@(d.Profit >= 0 ? "+" : "")$@d.Profit.ToString("F2")</td>
-                                                        <td style="color:@(d.CumulativeRoi >= 0 ? "green" : "red")">@(d.CumulativeRoi >= 0 ? "+" : "")@d.CumulativeRoi.ToString("F1")%</td>
+                                        <div class="overflow-x-auto flex-1">
+                                            <table class="w-full text-xs text-left text-slate-400">
+                                                <thead>
+                                                    <tr class="border-b border-slate-800">
+                                                        <th class="py-2">Date</th>
+                                                        <th class="py-2">Bets</th>
+                                                        <th class="py-2">W/L/C</th>
+                                                        <th class="py-2">Profit</th>
+                                                        <th class="py-2">ROI</th>
                                                     </tr>
-                                                }
-                                            </tbody>
-                                        </MudSimpleTable>
+                                                </thead>
+                                                <tbody class="divide-y divide-slate-800/50">
+                                                    @foreach (var d in _dailyData.TakeLast(10).Reverse())
+                                                    {
+                                                        <tr>
+                                                            <td class="py-2">@d.Date</td>
+                                                            <td class="py-2 text-white">@d.Bets</td>
+                                                            <td class="py-2"><span class="text-emerald-500">@d.Wins</span>/<span class="text-red-500">@d.Losses</span>@if(d.Cashouts>0){<span class="text-amber-500">/@d.Cashouts</span>}</td>
+                                                            <td class="py-2 font-medium @(d.Profit >= 0 ? "text-emerald-400" : "text-red-400")">@d.Profit.ToString("F2")</td>
+                                                            <td class="py-2 @(d.CumulativeRoi >= 0 ? "text-emerald-400" : "text-red-400")">@d.CumulativeRoi.ToString("F1")%</td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     }
                                     else
                                     {
-                                        <MudText Color="Color.Secondary">No data yet. Place some bets first!</MudText>
+                                        <div class="flex-1 flex items-center justify-center text-slate-600">No data found.</div>
                                     }
-                                </MudPaper>
-                            </MudItem>
-                        </MudGrid>
+                                </TwCard>
+                            </div>
+                        </div>
                     }
                     else
                     {
-                        <MudAlert Severity="Severity.Info">Click "Refresh Charts" to load analytics.</MudAlert>
+                        <TwAlert Severity="info">Click "Refresh Charts" to load detailed analytics.</TwAlert>
                     }
-                </MudStack>
-            </MudExpansionPanel>
-        </MudExpansionPanels>
-    </MudStack>
-</MudContainer>
+                </div>
+            </details>
+        </div>
+    </div>
+</TwContainer>
 
-<!-- Import Preview Dialog -->
-<MudDialog @bind-Visible="_importPreviewOpen" Options="new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true }">
-    <TitleContent>
-        <MudText Typo="Typo.h6">Review Import: @_previewBets.Count BetsFound</MudText>
-    </TitleContent>
-    <DialogContent>
-        <MudAlert Severity="Severity.Info" Class="mb-4">Review the mapped data. We've automatically matched your spreadsheet columns.</MudAlert>
-        <MudTable Items="@_previewBets" Dense="true" Hover="true" FixedHeader="true" Height="400px">
-            <HeaderContent>
-                <MudTh>Date</MudTh>
-                <MudTh>Description</MudTh>
-                <MudTh>Sport</MudTh>
-                <MudTh>Stake</MudTh>
-                <MudTh>Odds</MudTh>
-                <MudTh>Result</MudTh>
-                <MudTh>Type</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd>@context.Date</MudTd>
-                <MudTd>@context.Description</MudTd>
-                <MudTd>@context.Sport</MudTd>
-                <MudTd>$@context.Stake.ToString("F2")</MudTd>
-                <MudTd>@FormatOdds(context.Odds)</MudTd>
-                <MudTd>
-                    <MudChip T="string" Size="Size.Small" Color="@(context.Outcome == "win" ? Color.Success : context.Outcome == "loss" ? Color.Error : Color.Warning)">
-                        @context.Outcome
-                    </MudChip>
-                </MudTd>
-                <MudTd>@context.BetType</MudTd>
-            </RowTemplate>
-        </MudTable>
-    </DialogContent>
-    <DialogActions>
-        <MudButton OnClick="@(() => _importPreviewOpen = false)">Cancel</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="ConfirmImport">Confirm & Save</MudButton>
-    </DialogActions>
-</MudDialog>
+<!-- Import Modal using Tailwind Overlay -->
+@if (_importPreviewOpen)
+{
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <!-- Backdrop -->
+        <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" @onclick="@(() => _importPreviewOpen = false)"></div>
+        
+        <!-- Modal Content -->
+        <div class="relative w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900">
+                <h3 class="text-xl font-bold text-white">Review Import</h3>
+                <button @onclick="@(() => _importPreviewOpen = false)" class="text-slate-400 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto bg-slate-950/50">
+                <TwAlert Severity="info" Class="mb-4">Review mapped data. @_previewBets.Count bets found.</TwAlert>
+                <div class="border border-slate-800 rounded-lg overflow-hidden">
+                    <table class="w-full text-xs text-left text-slate-300">
+                        <thead class="bg-slate-900 text-slate-400 uppercase font-medium">
+                            <tr>
+                                <th class="px-4 py-2">Date</th>
+                                <th class="px-4 py-2">Description</th>
+                                <th class="px-4 py-2">Sport</th>
+                                <th class="px-4 py-2">Stake</th>
+                                <th class="px-4 py-2">Odds</th>
+                                <th class="px-4 py-2">Result</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800">
+                            @foreach(var bet in _previewBets)
+                            {
+                                <tr class="bg-slate-900/40">
+                                    <td class="px-4 py-2">@bet.Date</td>
+                                    <td class="px-4 py-2">@bet.Description</td>
+                                    <td class="px-4 py-2">@bet.Sport</td>
+                                    <td class="px-4 py-2">$@bet.Stake</td>
+                                    <td class="px-4 py-2">@FormatOdds(bet.Odds)</td>
+                                    <td class="px-4 py-2">@bet.Outcome</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="p-6 border-t border-slate-800 bg-slate-900 flex justify-end gap-3">
+                <TwButton Variant="outline" OnClick="@(() => _importPreviewOpen = false)">Cancel</TwButton>
+                <TwButton Variant="primary" OnClick="ConfirmImport">Confirm & Import</TwButton>
+            </div>
+        </div>
+    </div>
+}
 
-<!-- Edit Bet Dialog -->
-<MudDialog @bind-Visible="_editDialogOpen" Options="new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true }">
-    <TitleContent>
-        <MudText Typo="Typo.h6">Edit Bet</MudText>
-    </TitleContent>
-    <DialogContent>
-        <MudStack Spacing="3">
-            <MudTextField T="string" @bind-Value="_editDescription" Label="Description" Variant="Variant.Outlined" />
-            <MudStack Row="true" Spacing="2">
-                <MudTextField T="decimal" @bind-Value="_editStake" Label="Stake" Variant="Variant.Outlined" 
-                              Adornment="Adornment.Start" AdornmentText="$" />
-                <MudTextField T="int" @bind-Value="_editOdds" Label="Odds" Variant="Variant.Outlined" />
-            </MudStack>
-            <MudSelect T="string" @bind-Value="_editSportsbook" Label="Sportsbook" Variant="Variant.Outlined">
-                <MudSelectItem Value="@("fanduel")">FanDuel</MudSelectItem>
-                <MudSelectItem Value="@("draftkings")">DraftKings</MudSelectItem>
-                <MudSelectItem Value="@("betmgm")">BetMGM</MudSelectItem>
-            </MudSelect>
-        </MudStack>
-    </DialogContent>
-    <DialogActions>
-        <MudButton OnClick="@(() => _editDialogOpen = false)">Cancel</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveEdit">Save</MudButton>
-    </DialogActions>
-</MudDialog>
+<!-- Edit Modal -->
+@if (_editDialogOpen)
+{
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" @onclick="@(() => _editDialogOpen = false)"></div>
+        
+        <div class="relative w-full max-w-lg bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-6">
+            <h3 class="text-xl font-bold text-white mb-6">Edit Bet</h3>
+            
+            <div class="space-y-4">
+                <TwInput @bind-Value="_editDescription" Label="Description" FullWidth="true" />
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="relative w-full">
+                        <label class="block text-xs text-slate-500 mb-1 font-medium">Stake</label>
+                        <input type="number" @bind="_editStake" class="appearance-none bg-slate-800 text-sm text-slate-100 border border-slate-700 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all placeholder-slate-500 w-full" />
+                    </div>
+                    <div class="relative w-full">
+                        <label class="block text-xs text-slate-500 mb-1 font-medium">Odds</label>
+                        <input type="number" @bind="_editOdds" class="appearance-none bg-slate-800 text-sm text-slate-100 border border-slate-700 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all placeholder-slate-500 w-full" />
+                    </div>
+                </div>
+                <TwSelect TValue="string" @bind-Value="_editSportsbook" Label="Sportsbook" FullWidth="true">
+                    <option value="fanduel">FanDuel</option>
+                    <option value="draftkings">DraftKings</option>
+                    <option value="betmgm">BetMGM</option>
+                </TwSelect>
+            </div>
+            
+            <div class="mt-8 flex justify-end gap-3">
+                <TwButton Variant="outline" OnClick="@(() => _editDialogOpen = false)">Cancel</TwButton>
+                <TwButton Variant="primary" OnClick="SaveEdit">Save Changes</TwButton>
+            </div>
+        </div>
+    </div>
+}
+
 
 @code {
     // State
@@ -436,14 +480,14 @@
     private decimal _stake = 10;
     private string _manualDesc = "";
     private int _manualOdds = -110;
-    private string _manualGame = "";  // Optional game name for tracking
+    private string _manualGame = "";
     private List<Bet> _bets = new();
     private int _wins = 0, _losses = 0;
     private decimal _netProfit = 0;
 
     // Chart state
     private bool _loadingCharts = false;
-    private int _chartDays = 30;
+    private string _chartDays = "30";
     private JsonElement? _chartData = null;
     private decimal _chartRoi = 0;
     private decimal _chartProfit = 0;
@@ -462,6 +506,7 @@
 
     // Import state
     private bool _isImporting = false;
+    private string _importStatus = "📡 Reading bet history...";
     private bool _importPreviewOpen = false;
     private List<DataCollectionService.ImportBetPreview> _previewBets = new();
 
@@ -480,14 +525,12 @@
         
         try
         {
-            // Fetch LIVE odds directly from the odds endpoint
             var resp = await Http.GetAsync($"http://backend:8000/odds/{_sport}?sportsbook=fanduel");
             if (resp.IsSuccessStatusCode)
             {
                 var json = await resp.Content.ReadAsStringAsync();
                 var doc = JsonDocument.Parse(json);
                 
-                // The /odds endpoint returns games in different formats - parse flexibly
                 if (doc.RootElement.TryGetProperty("games", out var gamesArr) || 
                     doc.RootElement.TryGetProperty("odds", out gamesArr))
                 {
@@ -498,7 +541,6 @@
                 }
                 else if (doc.RootElement.ValueKind == JsonValueKind.Object)
                 {
-                    // Format: {"TeamA:TeamB": {...odds...}}
                     foreach (var prop in doc.RootElement.EnumerateObject())
                     {
                         var teams = prop.Name.Split(':');
@@ -525,7 +567,6 @@
                 }
             }
             
-            // If no live games, try cache as fallback
             if (_games.Count == 0)
             {
                 var cacheResp = await Http.GetAsync($"http://backend:8000/cache/games/{_sport}?include_expired=true");
@@ -563,7 +604,6 @@
         int homeML = 0, awayML = 0;
         decimal total = 0;
         
-        // Check nested odds_data first (cached format)
         if (g.TryGetProperty("odds_data", out var odds) && odds.ValueKind == JsonValueKind.Object)
         {
             if (odds.TryGetProperty("home_ml", out var hm) && hm.ValueKind == JsonValueKind.Number)
@@ -574,7 +614,6 @@
                 total = t.GetDecimal();
         }
         
-        // Fallback: check top-level fields (live odds API format)
         if (homeML == 0 && g.TryGetProperty("home_moneyline", out var hlm) && hlm.ValueKind == JsonValueKind.Number)
             homeML = (int)Math.Round(hlm.GetDouble());
         if (awayML == 0 && g.TryGetProperty("away_moneyline", out var alm) && alm.ValueKind == JsonValueKind.Number)
@@ -596,7 +635,6 @@
         int homeML = 0, awayML = 0;
         decimal total = 0;
         
-        // Check nested odds_data first
         if (g.TryGetProperty("odds_data", out var odds) && odds.ValueKind == JsonValueKind.Object)
         {
             if (odds.TryGetProperty("home_ml", out var hm) && hm.ValueKind == JsonValueKind.Number)
@@ -607,7 +645,6 @@
                 total = t.GetDecimal();
         }
         
-        // Fallback: check top-level fields
         if (homeML == 0 && g.TryGetProperty("home_moneyline", out var hlm) && hlm.ValueKind == JsonValueKind.Number)
             homeML = (int)Math.Round(hlm.GetDouble());
         if (awayML == 0 && g.TryGetProperty("away_moneyline", out var alm) && alm.ValueKind == JsonValueKind.Number)
@@ -631,7 +668,6 @@
     {
         if (string.IsNullOrWhiteSpace(_manualDesc)) return;
         
-        // Create a game ID from the game name if provided
         var gameId = !string.IsNullOrWhiteSpace(_manualGame) ? $"manual:{_manualGame.Replace(" ", "_")}" : null;
         
         _legs.Add(new Leg { 
@@ -926,7 +962,8 @@
 
         try
         {
-            var resp = await Http.GetFromJsonAsync<JsonElement>($"http://backend:8000/bets/stats/chart-data?days={_chartDays}");
+            var daysParam = int.TryParse(_chartDays, out var parsedDays) ? parsedDays : 30;
+            var resp = await Http.GetFromJsonAsync<JsonElement>($"http://backend:8000/bets/stats/chart-data?days={daysParam}");
             _chartData = resp;
 
             // Parse summary

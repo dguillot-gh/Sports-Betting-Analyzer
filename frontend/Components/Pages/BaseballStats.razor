@@ -1,7 +1,7 @@
 @page "/baseball-stats"
 @page "/college-baseball"
 @rendermode InteractiveServer
-@using MudBlazor
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
 @using System.Text.Json
 @inject HttpClient Http
 @inject ISnackbar Snackbar
@@ -9,310 +9,358 @@
 
 <PageTitle>College Baseball Stats</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
-    <MudStack Spacing="4">
-        <!-- Header -->
-        <MudPaper Class="pa-4 mb-4" Elevation="1" Style="background: linear-gradient(135deg, #002d72 0%, #ce1141 100%);">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                <MudStack Row="true" AlignItems="AlignItems.Center">
-                    <MudIcon Icon="@Icons.Material.Filled.SportsBaseball" Size="Size.Large" Style="color: white;" Class="mr-3" />
-                    <div>
-                        <MudText Typo="Typo.h5" Style="color: white;">College Baseball Analytics</MudText>
-                        <MudText Typo="Typo.subtitle2" Style="color: rgba(255,255,255,0.8);">NCAA Division I, II, III batting and pitching statistics</MudText>
+<TwContainer MaxWidth="extraLarge" Class="mt-8">
+    <!-- Header -->
+    <div class="p-6 mb-8 rounded-xl shadow-lg bg-gradient-to-br from-[#002d72] to-[#ce1141] text-white relative overflow-hidden">
+        <div class="absolute inset-0 bg-white/5 bg-[radial-gradient(#ffffff15_1px,transparent_1px)] [background-size:16px_16px]"></div>
+        <div class="relative z-10 flex flex-col md:flex-row justify-between items-center gap-6">
+            <div class="flex items-center gap-4">
+                <div class="p-3 bg-white/10 rounded-lg backdrop-blur-sm border border-white/20">
+                    <TwIcon Icon="M12 21a9 9 0 100-18 9 9 0 000 18z M12 3v18 M3 12h18 M16.5 16.5l-9-9 M16.5 7.5l-9 9" Class="w-8 h-8 text-white" />
+                </div>
+                <div>
+                    <h1 class="text-3xl font-bold tracking-tight text-white">College Baseball Analytics</h1>
+                    <p class="text-white/80 mt-1">NCAA Division I, II, III batting and pitching statistics</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <TwButton Variant="secondary" 
+                           Href="/college-baseball-player-profiles"
+                           StartIcon="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                           Class="bg-white/10 border-white/20 hover:bg-white/20 text-white font-bold">
+                    Player Profiles
+                </TwButton>
+                <TwChip Color="amber" Variant="solid" Size="md" Class="font-bold">
+                    DIVISION @_selectedDivision
+                </TwChip>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Team Selection & Import -->
+    <TwCard Class="p-6 mb-8">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div>
+                <TwSelect TValue="int" @bind-Value="_selectedDivision" Label="Division" FullWidth="true">
+                    <option value="1">Division I</option>
+                    <option value="2">Division II</option>
+                    <option value="3">Division III</option>
+                </TwSelect>
+            </div>
+            <div class="md:col-span-1">
+                <div class="flex flex-col gap-1.5 text-left">
+                    <label class="text-sm font-semibold text-slate-300">Search Teams</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <TwIcon Icon="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" Class="w-4 h-4 text-slate-500" />
+                        </div>
+                        <input type="text" 
+                               value="@_searchString" 
+                               @oninput="@(e => UpdateSearch(e.Value?.ToString() ?? ""))"
+                               placeholder="Type to search teams..." 
+                               class="w-full bg-slate-900 border border-slate-700 rounded-lg py-2.5 pl-10 pr-4 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all placeholder:text-slate-600" />
+                        
+                        @if (!string.IsNullOrEmpty(_searchString) && _filteredTeams.Any())
+                        {
+                            <div class="absolute z-20 w-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl max-h-60 overflow-y-auto">
+                                @foreach (var team in _filteredTeams)
+                                {
+                                    <button @onclick="() => SelectTeamInternal(team)" class="w-full text-left px-4 py-2 hover:bg-slate-700 text-slate-200 transition-colors border-b border-slate-700/50 last:border-0">
+                                        @team.TeamName
+                                    </button>
+                                }
+                            </div>
+                        }
                     </div>
-                </MudStack>
-                <MudStack Row="true" Spacing="2">
-                    <MudButton Variant="Variant.Filled" Color="Color.Warning" StartIcon="@Icons.Material.Filled.PersonSearch"
-                               Href="/college-baseball-player-profiles">
-                        Player Profiles
-                    </MudButton>
-                    <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled">D@_selectedDivision</MudChip>
-                </MudStack>
-            </MudStack>
-        </MudPaper>
+                </div>
+            </div>
+            <div>
+                <TwButton Variant="outline" 
+                           OnClick="LoadTeams" 
+                           IsLoading="@_isLoading" 
+                           Disabled="@_isLoading" 
+                           FullWidth="true"
+                           Class="border-slate-700 text-slate-300 hover:bg-slate-800">
+                    @(_teams.Any() ? "Refresh Teams" : "Load Teams")
+                </TwButton>
+            </div>
+            <div>
+                <TwToolTip Text="Imports all divisions (D1, D3, D2) with smart year detection">
+                    <TwButton Variant="secondary" 
+                               OnClick="ImportAllTeams" 
+                               IsLoading="@_isImporting" 
+                               Disabled="@_isImporting" 
+                               FullWidth="true"
+                               StartIcon="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                               Class="bg-amber-600/20 hover:bg-amber-600/30 border-amber-600/30 text-amber-500 font-bold">
+                        Import All Teams
+                    </TwButton>
+                </TwToolTip>
+            </div>
+        </div>
         
-        <!-- Team Selection -->
-        <MudPaper Class="pa-4" Elevation="2">
-            <MudGrid Spacing="2">
-                <MudItem xs="12" md="2">
-                    <MudSelect T="int" @bind-Value="_selectedDivision" Label="Division" 
-                               Variant="Variant.Outlined" Dense="true">
-                        <MudSelectItem Value="1">Division I</MudSelectItem>
-                        <MudSelectItem Value="2">Division II</MudSelectItem>
-                        <MudSelectItem Value="3">Division III</MudSelectItem>
-                    </MudSelect>
-                </MudItem>
-                <MudItem xs="12" md="4">
-                    <MudAutocomplete T="TeamInfo" @bind-Value="_selectedTeam" Label="Search Teams" 
-                                     SearchFunc="@SearchTeams" ToStringFunc="@(t => t?.TeamName ?? "")"
-                                     Variant="Variant.Outlined" Dense="true"
-                                     AdornmentIcon="@Icons.Material.Filled.Search" AdornmentColor="Color.Primary"
-                                     Placeholder="Type to search teams..." />
-                </MudItem>
-                <MudItem xs="12" md="3">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadTeams"
-                               Disabled="@_isLoading" FullWidth="true" Size="Size.Medium">
-                        @if (_isLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
-                        @(_teams.Any() ? "Refresh Teams" : "Load Teams")
-                    </MudButton>
-                </MudItem>
-                <MudItem xs="12" md="3">
-                    <MudTooltip Text="Imports all divisions (D1, D3, D2) with smart year detection">
-                        <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="ImportAllTeams"
-                                   Disabled="@_isImporting" FullWidth="true" Size="Size.Medium"
-                                   StartIcon="@Icons.Material.Filled.CloudDownload">
-                            @if (_isImporting) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
-                            Import All Teams
-                        </MudButton>
-                    </MudTooltip>
-                </MudItem>
-            </MudGrid>
-            
-            @if (!string.IsNullOrEmpty(_importStatus))
-            {
-                <MudAlert Severity="@(_importStatus.Contains("Error") ? Severity.Error : Severity.Info)" 
-                          Class="mt-3" Dense="true">@_importStatus</MudAlert>
-            }
-            
-            @if (_noDataAvailable)
-            {
-                <MudAlert Severity="Severity.Warning" Class="mt-3">
-                    <strong>No team data found for D@_selectedDivision.</strong> 
-                    Click "Import All Teams" to fetch all divisions automatically.
-                </MudAlert>
-            }
-        </MudPaper>
+        @if (!string.IsNullOrEmpty(_importStatus))
+        {
+            <TwAlert Severity="@(_importStatus.Contains("Error") ? "error" : "info")" Class="mt-4">
+                @_importStatus
+            </TwAlert>
+        }
+        
+        @if (_noDataAvailable)
+        {
+            <TwAlert Severity="warning" Class="mt-4">
+                <span class="font-bold">No team data found for D@_selectedDivision.</span> 
+                Click "Import All Teams" to fetch all divisions automatically.
+            </TwAlert>
+        }
+    </TwCard>
         
         <!-- Team Stats Section (shows after team is selected) -->
         @if (_selectedTeam != null)
         {
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="flex-wrap">
-                    <MudIcon Icon="@Icons.Material.Filled.SportsBaseball" Color="Color.Info" />
-                    <MudText Typo="Typo.h6">@_selectedTeam.TeamName</MudText>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary">@_selectedTeam.Conference</MudChip>
-                    <MudSpacer />
-                    <MudSelect T="int" @bind-Value="_selectedYear" Label="Season Year" 
-                               Variant="Variant.Outlined" Dense="true" Style="width: 120px;">
-                        @for (int y = DateTime.Now.Year; y >= 2015; y--)
-                        {
-                            var year = y;  @* Local copy to avoid closure capture bug *@
-                            <MudSelectItem Value="@year">@year</MudSelectItem>
-                        }
-                    </MudSelect>
-                    <MudButton Variant="Variant.Filled" Color="Color.Info" OnClick="LoadTeamStats"
-                               Disabled="@_isLoadingStats" Size="Size.Medium">
-                        @if (_isLoadingStats) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
-                        Load @_selectedYear Stats
-                    </MudButton>
-                </MudStack>
-            </MudPaper>
+            <TwCard Class="p-4 mb-8">
+                <div class="flex flex-wrap items-center gap-4">
+                    <div class="flex items-center gap-2">
+                        <TwIcon Icon="M12 21a9 9 0 100-18 9 9 0 000 18z M12 3v18 M3 12h18 M16.5 16.5l-9-9 M16.5 7.5l-9 9" Class="w-5 h-5 text-blue-500" />
+                        <h2 class="text-xl font-bold text-white">@_selectedTeam.TeamName</h2>
+                    </div>
+                    <TwChip Color="secondary" Variant="solid" Size="sm">@_selectedTeam.Conference</TwChip>
+                    <div class="flex-grow"></div>
+                    <div class="flex items-center gap-3">
+                        <div class="w-24 text-left">
+                            <TwSelect TValue="int" @bind-Value="_selectedYear" Label="Season" FullWidth="true">
+                                @for (int y = DateTime.Now.Year; y >= 2015; y--)
+                                {
+                                    <option value="@y">@y</option>
+                                }
+                            </TwSelect>
+                        </div>
+                        <TwButton Variant="secondary" 
+                                   OnClick="LoadTeamStats" 
+                                   IsLoading="@_isLoadingStats" 
+                                   Disabled="@_isLoadingStats"
+                                   Class="bg-blue-600/20 hover:bg-blue-600/30 border-blue-600/30 text-blue-400 font-bold">
+                            Load @_selectedYear Stats
+                        </TwButton>
+                    </div>
+                </div>
+            </TwCard>
         }
         
         <!-- Stats Tabs -->
         @if (_battingStats.Any() || _pitchingStats.Any())
         {
-            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
-                <!-- Batting Stats Tab -->
-                <MudTabPanel Text="Batting" Icon="@Icons.Material.Filled.Sports">
+            <TwTabs>
+                <TwTabPanel Title="Batting" Icon="M12 21a9 9 0 100-18 9 9 0 000 18z">
                     @if (_battingStats.Any())
                     {
-                        <MudText Typo="Typo.h6" Class="mb-3">
-                            @_selectedTeam?.TeamName Batting Statistics (@_selectedYear)
-                        </MudText>
-                        <MudTable Items="@_battingStats" Dense="true" Hover="true" Striped="true" 
-                                  FixedHeader="true" Height="500px">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-bold text-white">
+                                @_selectedTeam?.TeamName Batting Statistics (@_selectedYear)
+                            </h3>
+                        </div>
+                        
+                        <TwTable Items="@_battingStats" IsLoading="@_isLoadingStats" Class="bg-slate-900/50">
                             <HeaderContent>
-                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.Name)">Player</MudTableSortLabel></MudTh>
-                                <MudTh>Pos</MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.GP)">GP</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.AB)">AB</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.R)">R</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.H)">H</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.Doubles)">2B</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.Triples)">3B</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.HR)">HR</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.RBI)">RBI</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel InitialDirection="SortDirection.Descending" SortBy="new Func<BattingPlayer, object>(x => x.AVG)">AVG</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.OBP)">OBP</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<BattingPlayer, object>(x => x.SLG)">SLG</MudTableSortLabel></MudTh>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Player</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Pos</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">GP</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">AB</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">R</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">H</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">2B</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">3B</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">HR</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">RBI</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">AVG</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">OBP</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">SLG</th>
                             </HeaderContent>
                             <RowTemplate>
-                                <MudTd DataLabel="Player">
-                                    <div class="d-flex align-center">
-                                        <MudAvatar Color="Color.Primary" Size="Size.Small" Class="mr-2">@(string.IsNullOrEmpty(context.Name) ? "?" : context.Name[0].ToString())</MudAvatar>
-                                        <MudLink Href="@($"/college-baseball-player-profiles?player={Uri.EscapeDataString(context.Name)}")" 
-                                                 Underline="Underline.Hover" Color="Color.Primary">
+                                <td class="px-4 py-3 whitespace-nowrap">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold text-white uppercase">
+                                            @(string.IsNullOrEmpty(context.Name) ? "?" : context.Name[0].ToString())
+                                        </div>
+                                        <a href="/college-baseball-player-profiles?player=@Uri.EscapeDataString(context.Name)" 
+                                           class="text-blue-400 hover:text-blue-300 font-medium transition-colors">
                                             @context.Name
-                                        </MudLink>
+                                        </a>
                                     </div>
-                                </MudTd>
-                                <MudTd DataLabel="Pos">@context.Position</MudTd>
-                                <MudTd DataLabel="GP">@context.GP</MudTd>
-                                <MudTd DataLabel="AB">@context.AB</MudTd>
-                                <MudTd DataLabel="R">@context.R</MudTd>
-                                <MudTd DataLabel="H">@context.H</MudTd>
-                                <MudTd DataLabel="2B">@context.Doubles</MudTd>
-                                <MudTd DataLabel="3B">@context.Triples</MudTd>
-                                <MudTd DataLabel="HR">@context.HR</MudTd>
-                                <MudTd DataLabel="RBI">@context.RBI</MudTd>
-                                <MudTd DataLabel="AVG">
-                                    <MudChip T="string" Size="Size.Small" Color="@GetAvgColor(context.AVG)">@context.AVG.ToString("F3")</MudChip>
-                                </MudTd>
-                                <MudTd DataLabel="OBP">@context.OBP.ToString("F3")</MudTd>
-                                <MudTd DataLabel="SLG">@context.SLG.ToString("F3")</MudTd>
+                                </td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.Position</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.GP</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.AB</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.R</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.H</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.Doubles</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.Triples</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.HR</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.RBI</td>
+                                <td class="px-4 py-3 whitespace-nowrap">
+                                    <TwChip Color="@GetAvgColor(context.AVG).ToString().ToLower()" Variant="solid" Size="sm">
+                                        @context.AVG.ToString("F3")
+                                    </TwChip>
+                                </td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.OBP.ToString("F3")</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.SLG.ToString("F3")</td>
                             </RowTemplate>
-                        </MudTable>
+                        </TwTable>
                     }
                     else
                     {
-                        <MudAlert Severity="Severity.Info">Select a team and click "Load Stats" to view batting statistics.</MudAlert>
+                        <TwAlert Severity="info">Select a team and click "Load Stats" to view batting statistics.</TwAlert>
                     }
-                </MudTabPanel>
+                </TwTabPanel>
                 
-                <!-- Pitching Stats Tab -->
-                <MudTabPanel Text="Pitching" Icon="@Icons.Material.Filled.Speed">
+                <TwTabPanel Title="Pitching" Icon="M13 10V3L4 14h7v7l9-11h-7z">
                     @if (_pitchingStats.Any())
                     {
-                        <MudText Typo="Typo.h6" Class="mb-3">
-                            @_selectedTeam?.TeamName Pitching Statistics (@_selectedYear)
-                        </MudText>
-                        <MudTable Items="@_pitchingStats" Dense="true" Hover="true" Striped="true"
-                                  FixedHeader="true" Height="500px">
+                        <div class="flex items-center justify-between mb-4 mt-6">
+                            <h3 class="text-lg font-bold text-white">
+                                @_selectedTeam?.TeamName Pitching Statistics (@_selectedYear)
+                            </h3>
+                        </div>
+                        
+                        <TwTable Items="@_pitchingStats" IsLoading="@_isLoadingStats" Class="bg-slate-900/50">
                             <HeaderContent>
-                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.Name)">Player</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.W)">W</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.L)">L</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel InitialDirection="SortDirection.Ascending" SortBy="new Func<PitchingPlayer, object>(x => x.ERA)">ERA</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.GP)">GP</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.GS)">GS</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.IP)">IP</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.H)">H</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.R)">R</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.ER)">ER</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.BB)">BB</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.SO)">SO</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<PitchingPlayer, object>(x => x.SV)">SV</MudTableSortLabel></MudTh>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Player</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">W</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">L</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">ERA</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">GP</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">GS</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">IP</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">H</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">R</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">ER</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">BB</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">SO</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">SV</th>
                             </HeaderContent>
                             <RowTemplate>
-                                <MudTd DataLabel="Player">
-                                    <div class="d-flex align-center">
-                                        <MudAvatar Color="Color.Secondary" Size="Size.Small" Class="mr-2">@(string.IsNullOrEmpty(context.Name) ? "?" : context.Name[0].ToString())</MudAvatar>
-                                        <MudLink Href="@($"/college-baseball-player-profiles?player={Uri.EscapeDataString(context.Name)}")" 
-                                                 Underline="Underline.Hover" Color="Color.Secondary">
+                                <td class="px-4 py-3 whitespace-nowrap">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold text-white uppercase">
+                                            @(string.IsNullOrEmpty(context.Name) ? "?" : context.Name[0].ToString())
+                                        </div>
+                                        <a href="/college-baseball-player-profiles?player=@Uri.EscapeDataString(context.Name)" 
+                                           class="text-purple-400 hover:text-purple-300 font-medium transition-colors">
                                             @context.Name
-                                        </MudLink>
+                                        </a>
                                     </div>
-                                </MudTd>
-                                <MudTd DataLabel="W">@context.W</MudTd>
-                                <MudTd DataLabel="L">@context.L</MudTd>
-                                <MudTd DataLabel="ERA">
-                                    <MudChip T="string" Size="Size.Small" Color="@GetEraColor(context.ERA)">@context.ERA.ToString("F2")</MudChip>
-                                </MudTd>
-                                <MudTd DataLabel="GP">@context.GP</MudTd>
-                                <MudTd DataLabel="GS">@context.GS</MudTd>
-                                <MudTd DataLabel="IP">@context.IP.ToString("F1")</MudTd>
-                                <MudTd DataLabel="H">@context.H</MudTd>
-                                <MudTd DataLabel="R">@context.R</MudTd>
-                                <MudTd DataLabel="ER">@context.ER</MudTd>
-                                <MudTd DataLabel="BB">@context.BB</MudTd>
-                                <MudTd DataLabel="SO">@context.SO</MudTd>
-                                <MudTd DataLabel="SV">@context.SV</MudTd>
+                                </td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.W</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.L</td>
+                                <td class="px-4 py-3 whitespace-nowrap">
+                                    <TwChip Color="@GetEraColor(context.ERA).ToString().ToLower()" Variant="solid" Size="sm">
+                                        @context.ERA.ToString("F2")
+                                    </TwChip>
+                                </td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.GP</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.GS</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.IP.ToString("F1")</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.H</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.R</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.ER</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.BB</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.SO</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.SV</td>
                             </RowTemplate>
-                        </MudTable>
+                        </TwTable>
                     }
                     else
                     {
-                        <MudAlert Severity="Severity.Info">Select a team and click "Load Stats" to view pitching statistics.</MudAlert>
+                        <TwAlert Severity="info">Select a team and click "Load Stats" to view pitching statistics.</TwAlert>
                     }
-                </MudTabPanel>
+                </TwTabPanel>
 
-                <!-- Schedule Tab -->
-                <MudTabPanel Text="Schedule" Icon="@Icons.Material.Filled.CalendarMonth">
+                <TwTabPanel Title="Schedule" Icon="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z">
                     @if (_schedule.Any())
                     {
-                        <MudText Typo="Typo.h6" Class="mb-3">
-                            @_selectedTeam?.TeamName Schedule (@_selectedYear)
-                        </MudText>
-                        <MudTable Items="@_schedule" Dense="true" Hover="true" Striped="true"
-                                  FixedHeader="true" Height="500px">
+                        <div class="flex items-center justify-between mb-4 mt-6">
+                            <h3 class="text-lg font-bold text-white">
+                                @_selectedTeam?.TeamName Schedule (@_selectedYear)
+                            </h3>
+                        </div>
+                        
+                        <TwTable Items="@_schedule" IsLoading="@_isLoadingStats" Class="bg-slate-900/50">
                             <HeaderContent>
-                                <MudTh>Date</MudTh>
-                                <MudTh>Opponent</MudTh>
-                                <MudTh>Result</MudTh>
-                                <MudTh>Score</MudTh>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Date</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Opponent</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Result</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Score</th>
                             </HeaderContent>
                             <RowTemplate>
-                                <MudTd DataLabel="Date">@context.Date</MudTd>
-                                <MudTd DataLabel="Opponent">
-                                    @if (context.IsHome)
-                                    {
-                                        <span>vs @context.Opponent</span>
-                                    }
-                                    else
-                                    {
-                                        <span>@@ @context.Opponent</span>
-                                    }
-                                </MudTd>
-                                <MudTd DataLabel="Result">
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-300">@context.Date</td>
+                                <td class="px-4 py-3 whitespace-nowrap">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-slate-500 text-xs font-bold w-6">
+                                            @(context.IsHome ? "VS" : "AT")
+                                        </span>
+                                        <span class="text-slate-200">@context.Opponent</span>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3 whitespace-nowrap">
                                     @if (!string.IsNullOrEmpty(context.Result))
                                     {
-                                        <MudChip T="string" Size="Size.Small" 
-                                                 Color="@(context.Result == "W" ? Color.Success : context.Result == "L" ? Color.Error : Color.Default)">
+                                        <TwChip Color="@(context.Result == "W" ? "emerald" : context.Result == "L" ? "rose" : "slate")" 
+                                                Variant="solid" Size="sm">
                                             @context.Result
-                                        </MudChip>
+                                        </TwChip>
                                     }
-                                </MudTd>
-                                <MudTd DataLabel="Score">@context.Score</MudTd>
+                                </td>
+                                <td class="px-4 py-3 whitespace-nowrap font-mono text-slate-300">@context.Score</td>
                             </RowTemplate>
-                        </MudTable>
+                        </TwTable>
                     }
                     else
                     {
-                        <MudAlert Severity="Severity.Info">Select a team and click "Load Stats" to view schedule.</MudAlert>
+                        <TwAlert Severity="info">Select a team and click "Load Stats" to view schedule.</TwAlert>
                     }
-                </MudTabPanel>
-            </MudTabs>
+                </TwTabPanel>
+            </TwTabs>
         }
         else if (!_isLoading && !_isLoadingStats)
         {
-            <MudPaper Class="pa-6" Elevation="2">
-                <div class="d-flex flex-column align-center">
-                    <MudIcon Icon="@Icons.Material.Filled.SportsBaseball" Size="Size.Large" Color="Color.Secondary" Class="mb-4" />
-                    <MudText Typo="Typo.h6" Color="Color.Secondary">Select a division and team to view stats</MudText>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
-                        Click "Load Teams" to fetch the team list, then select a team and click "Load Stats"
-                    </MudText>
+            <TwCard Class="p-12">
+                <div class="flex flex-col items-center text-center">
+                    <div class="p-4 bg-slate-800 rounded-full mb-6">
+                        <TwIcon Icon="M12 21a9 9 0 100-18 9 9 0 000 18z M12 3v18 M3 12h18 M16.5 16.5l-9-9 M16.5 7.5l-9 9" 
+                                Class="w-12 h-12 text-blue-500" />
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-2">Select a division and team to view stats</h3>
+                    <p class="text-slate-400 max-w-md">
+                        Click "Load Teams" to fetch the team list, then select a team and click "Load Stats" to see detailed analytics.
+                    </p>
                 </div>
-            </MudPaper>
+            </TwCard>
         }
         
         <!-- Team List -->
         @if (_teams.Any() && _selectedTeam == null)
         {
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudText Typo="Typo.h6" Class="mb-3">Division @_selectedDivision Teams (@_teams.Count)</MudText>
-                <MudGrid Spacing="2">
+            <TwCard Class="p-6">
+                <h3 class="text-lg font-bold text-white mb-6">Division @_selectedDivision Teams (@_teams.Count)</h3>
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                     @foreach (var team in _teams.Take(50))
                     {
-                        <MudItem xs="6" sm="4" md="3" lg="2">
-                            <MudButton Variant="Variant.Outlined" Color="Color.Info" FullWidth="true"
-                                       OnClick="@(() => SelectTeam(team))">
-                                @team.TeamName
-                            </MudButton>
-                        </MudItem>
+                        <button @onclick="@(() => SelectTeam(team))" 
+                                class="px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-800/50 text-slate-200 text-sm font-medium hover:bg-slate-700 hover:border-blue-500 hover:text-white transition-all text-left truncate">
+                            @team.TeamName
+                        </button>
                     }
-                </MudGrid>
+                </div>
                 @if (_teams.Count > 50)
                 {
-                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                    <div class="mt-6 flex items-center gap-2 text-slate-500 text-sm italic">
+                        <TwIcon Icon="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-4 h-4" />
                         Showing first 50 of @_teams.Count teams. Use the search to find specific teams.
-                    </MudText>
+                    </div>
                 }
-            </MudPaper>
+            </TwCard>
         }
-    </MudStack>
-</MudContainer>
+</TwContainer>
 
 @code {
     // State
@@ -324,6 +372,8 @@
     private bool _isImporting = false;
     private bool _noDataAvailable = false;
     private string _importStatus = "";
+    private string _searchString = "";
+    private List<TeamInfo> _filteredTeams = new();
     
     // Data
     private List<TeamInfo> _teams = new();
@@ -334,6 +384,30 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadTeams();
+    }
+
+    private void UpdateSearch(string query)
+    {
+        _searchString = query;
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            _filteredTeams.Clear();
+        }
+        else
+        {
+            _filteredTeams = _teams
+                .Where(t => t.TeamName.Contains(query, StringComparison.OrdinalIgnoreCase))
+                .Take(10)
+                .ToList();
+        }
+    }
+
+    private async Task SelectTeamInternal(TeamInfo team)
+    {
+        _searchString = "";
+        _filteredTeams.Clear();
+        SelectTeam(team);
+        await Task.CompletedTask;
     }
     
     private async Task LoadTeams()
@@ -612,20 +686,20 @@
         return fallback;
     }
     
-    private Color GetAvgColor(double avg)
+    private string GetAvgColor(double avg)
     {
-        if (avg >= 0.300) return Color.Success;
-        if (avg >= 0.250) return Color.Info;
-        if (avg >= 0.200) return Color.Warning;
-        return Color.Error;
+        if (avg >= 0.300) return "emerald";
+        if (avg >= 0.250) return "blue";
+        if (avg >= 0.200) return "amber";
+        return "red";
     }
     
-    private Color GetEraColor(double era)
+    private string GetEraColor(double era)
     {
-        if (era <= 2.50) return Color.Success;
-        if (era <= 3.50) return Color.Info;
-        if (era <= 4.50) return Color.Warning;
-        return Color.Error;
+        if (era <= 2.50) return "emerald";
+        if (era <= 3.50) return "blue";
+        if (era <= 4.50) return "amber";
+        return "red";
     }
     
     // Models

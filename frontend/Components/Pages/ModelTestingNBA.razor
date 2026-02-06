@@ -1,14 +1,27 @@
 @page "/model-testing-nba"
 @page "/live-nba-odds"
 @using System.Text.Json
+@using SportsBettingAnalyzer.Services
+@using SportsBettingAnalyzer.Models
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
+@using System.Text.Json
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject ILogger<ModelTestingNBA> Logger
 @inject PythonMLServiceClient MLServiceClient
+@rendermode InteractiveServer
 
 <PageTitle>NBA Model Testing</PageTitle>
 
 <TwContainer MaxWidth="extraLarge" Class="mt-8 px-4 pb-12">
+    <!-- Loading Overlay -->
+    <TwLoadingOverlay 
+        IsVisible="@_isLoading"
+        Title="Crunching NBA Data..."
+        Color="amber"
+        CurrentStatusMessage="@_analysisStatus"
+        ShowProgress="false" />
+
     @* Header Section *@
     <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
         <div>
@@ -21,7 +34,7 @@
 
         <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto">
             <div class="w-full sm:w-40">
-                <TwSelect @bind-Value="_selectedSportsbook" Class="w-full">
+                <TwSelect TValue="string" @bind-Value="_selectedSportsbook" Class="w-full">
                     <option value="fanduel">FanDuel</option>
                     <option value="draftkings">DraftKings</option>
                     <option value="betmgm">BetMGM</option>
@@ -29,16 +42,12 @@
             </div>
             
             <TwButton Variant="primary" OnClick="@RunAnalysis" IsLoading="_isLoading" Disabled="@_isLoading">
-                <PrefixContent>
-                    @if (!_isLoading) { <TwIcon Icon="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" Class="w-4 h-4" /> }
-                </PrefixContent>
+                @if (!_isLoading) { <TwIcon Icon="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" Class="w-4 h-4 mr-2" /> }
                 @(_isLoading ? "Analyzing..." : "Analyze Games")
             </TwButton>
 
             <TwButton Variant="secondary" OnClick="@SaveAllToCache" IsLoading="_isSavingAll" Disabled="@(!_games.Any() || _isSavingAll)">
-                <PrefixContent>
-                    @if (!_isSavingAll) { <TwIcon Icon="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" Class="w-4 h-4" /> }
-                </PrefixContent>
+                @if (!_isSavingAll) { <TwIcon Icon="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" Class="w-4 h-4 mr-2" /> }
                 Snapshot Results
             </TwButton>
 
@@ -51,12 +60,12 @@
 
     @* Strategy Chips *@
     <div class="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 mb-8 flex flex-wrap items-center gap-4">
-        <div class="flex items-center gap-2 group cursor-help">
+        <div class="flex items-center gap-2 group cursor-help" title="The Holy Grail: Strong Signal (Agree) & Positive EV (Green)">
             <TwChip Color="blue" Size="sm" Class="flex items-center gap-1.5 font-bold">
                 <TwIcon Icon="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" Class="w-3.5 h-3.5" />
                 EV = Edge
             </TwChip>
-            <span class="text-[11px] text-slate-500 group-hover:text-slate-300 transition-colors hidden sm:block">Value detection</span>
+            <span class="text-[11px] text-slate-500 group-hover:text-slate-300 transition-colors hidden sm:block">Value detection (Hover for Guide)</span>
         </div>
         <div class="flex items-center gap-2 group cursor-help">
             <TwChip Color="purple" Size="sm" Class="flex items-center gap-1.5 font-bold">
@@ -82,7 +91,7 @@
     @if (_error != null)
     {
         <div class="mb-8">
-            <TwAlert Color="red">@_error</TwAlert>
+            <TwAlert Severity="error">@_error</TwAlert>
         </div>
     }
 
@@ -313,7 +322,7 @@
                                                     @if (game.GeminiAnalysis == null)
                                                     {
                                                         <TwButton Variant="primary" Class="w-full bg-indigo-600 hover:bg-indigo-500" OnClick="@(() => GetGeminiAnalysis(game))" IsLoading="game.IsGeneratingAi">
-                                                            <PrefixContent><TwIcon Icon="M13 10V3L4 14h7v7l9-11h-7z" Class="w-4 h-4" /></PrefixContent>
+                                                            <TwIcon Icon="M13 10V3L4 14h7v7l9-11h-7z" Class="w-4 h-4 mr-2" />
                                                             Get AI Rationale
                                                         </TwButton>
                                                     }
@@ -379,7 +388,7 @@
 
                     @if (_espnError != null)
                     {
-                        <TwAlert Color="red">@_espnError</TwAlert>
+                        <TwAlert Severity="error">@_espnError</TwAlert>
                     }
 
                     @if (_espnLoading)
@@ -488,6 +497,7 @@
     private string _selectedSportsbook = "fanduel";
     private string _date = "";
     private List<GamePrediction> _games = new();
+    private string _analysisStatus = "🏀 Warming up the algorithms...";
     
     // ESPN BPI state
     private bool _espnLoading = false;
@@ -497,6 +507,7 @@
     private async Task RunAnalysis()
     {
         _isLoading = true;
+        _analysisStatus = "🏀 Warming up the algorithms...";
         _error = null;
         _games.Clear();
         StateHasChanged();

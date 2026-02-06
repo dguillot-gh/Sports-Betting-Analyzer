@@ -10,15 +10,17 @@
 <PageTitle>CFB Live Odds</PageTitle>
 
 <TwContainer>
+    <!-- Loading Overlay for Analysis -->
+    <TwLoadingOverlay 
+        IsVisible="@_isLoading"
+        Title="Analyzing Matches..."
+        Color="blue"
+        CurrentStatusMessage="@_analysisStatus"
+        ShowProgress="false" />
+
     <div class="flex flex-col gap-6">
         <!-- Header & Loading Status -->
         <TwCard Class="p-1 relative overflow-hidden">
-            @if (_isLoading)
-            {
-                <div class="absolute top-0 left-0 right-0 h-1 bg-slate-800">
-                    <div class="h-full bg-blue-500 animate-progress" style="width: 75%"></div>
-                </div>
-            }
             <div class="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div>
                     <h1 class="text-3xl font-bold text-white flex items-center gap-3">
@@ -187,6 +189,7 @@
     private List<GameData> _games = new();
     private int _valueBets = 0;
     private string _source = "";
+    private string _analysisStatus = "🏈 Studying the playbook...";
 
     private async Task RunAnalysis()
     {

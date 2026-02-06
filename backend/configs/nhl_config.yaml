@@ -1,0 +1,21 @@
+name: nhl
+data:
+  series: nhl
+features:
+  categorical:
+    - team
+    - opponent
+    - location
+  boolean: []
+  numeric:
+    - season
+    - goals
+    - shotsOnGoalFor
+    - xGoalsFor
+    - faceOffWinPctFor
+    - powerPlayOpportunities
+    - powerPlayGoals
+    - penaltyMinutesFor
+targets:
+  classification: win
+  regression: goals

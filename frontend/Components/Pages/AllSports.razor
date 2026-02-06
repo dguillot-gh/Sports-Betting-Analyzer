@@ -1,8 +1,8 @@
 @page "/all-sports"
-@using MudBlazor
 @using System.Text.Json
 @using SportsBettingAnalyzer.Services
 @using SportsBettingAnalyzer.Models
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
 @inject DataCollectionService DataCollectionService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -10,156 +10,157 @@
 
 <PageTitle>All Sports Analysis</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-8">
-    <MudPaper Class="pa-6 mb-6" Elevation="3" Style="background: linear-gradient(135deg, #1a237e 0%, #0d47a1 100%); color: white;">
-        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+<TwContainer MaxWidth="extraLarge" Class="mt-8">
+    <div class="p-6 mb-6 rounded-xl shadow-lg bg-gradient-to-br from-indigo-900 to-blue-900 text-white relative overflow-hidden">
+        <div class="absolute inset-0 bg-white/5 bg-[radial-gradient(#ffffff15_1px,transparent_1px)] [background-size:16px_16px]"></div>
+        <div class="relative z-10 flex flex-col md:flex-row justify-between items-center gap-6">
             <div>
-                <MudText Typo="Typo.h4" Style="font-weight: 700;">Multi-Sport Dashboard</MudText>
-                <MudText Typo="Typo.subtitle1">Running AI analysis across all live markets simultaneously.</MudText>
+                <h1 class="text-3xl font-bold tracking-tight">Multi-Sport Dashboard</h1>
+                <p class="text-indigo-200 mt-1">Running AI analysis across all live markets simultaneously.</p>
             </div>
-            <MudStack Row="true" Spacing="2">
-                <MudSelect T="string" @bind-Value="_selectedSportsbook" Label="Sportsbook" Variant="Variant.Filled" Dense="true" Style="background: rgba(255,255,255,0.1); color: white; width: 150px;">
-                    <MudSelectItem Value="@("fanduel")">FanDuel</MudSelectItem>
-                    <MudSelectItem Value="@("draftkings")">DraftKings</MudSelectItem>
-                    <MudSelectItem Value="@("betmgm")">BetMGM</MudSelectItem>
-                </MudSelect>
-                <MudButton Variant="Variant.Filled" 
-                           Color="Color.Secondary" 
-                           StartIcon="@Icons.Material.Filled.Search" 
-                           Size="Size.Large"
+            <div class="flex flex-wrap items-end gap-3">
+                <div class="w-40">
+                    <TwSelect TValue="string" @bind-Value="_selectedSportsbook" Label="Sportsbook" FullWidth="true" Class="bg-white/10 border-white/20 text-white">
+                        <option value="fanduel">FanDuel</option>
+                        <option value="draftkings">DraftKings</option>
+                        <option value="betmgm">BetMGM</option>
+                    </TwSelect>
+                </div>
+                <TwButton Variant="secondary" 
+                           StartIcon="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" 
+                           Size="lg"
                            OnClick="RunFullAnalysis" 
+                           IsLoading="@_isLoading"
                            Disabled="@_isLoading"
-                           Style="font-weight: 600;">
-                    @(_isLoading ? "Scanning..." : "Scan All Sports")
-                </MudButton>
+                           Class="bg-white/10 hover:bg-white/20 border-white/20 text-white font-bold">
+                    Scan All Sports
+                </TwButton>
                 @if (_games.Any(g => g.HasValue))
                 {
-                    <MudButton Variant="Variant.Filled" 
-                               Color="Color.Info" 
-                               StartIcon="@Icons.Material.Filled.Bolt" 
-                               Size="Size.Large"
+                    <TwButton Variant="primary" 
+                               StartIcon="M13 10V3L4 14h7v7l9-11h-7z" 
+                               Size="lg"
                                OnClick="RunDeepAiScan" 
+                               IsLoading="@_isLoading"
                                Disabled="@_isLoading"
-                               Style="font-weight: 600;">
+                               Class="bg-blue-500 hover:bg-blue-600 border-blue-400 font-bold shadow-lg shadow-blue-900/50">
                         Deep AI Scan
-                    </MudButton>
+                    </TwButton>
                 }
-            </MudStack>
-        </MudStack>
+            </div>
+        </div>
 
         @if (_analysisResult != null)
         {
-            <MudGrid Class="mt-6">
-                <MudItem xs="12" sm="4">
-                    <MudPaper Class="pa-4 bg-glass" Elevation="0">
-                        <MudText Typo="Typo.caption" Style="opacity: 0.7;">Total Games Scanned</MudText>
-                        <MudText Typo="Typo.h3">@_analysisResult.TotalGames</MudText>
-                    </MudPaper>
-                </MudItem>
-                <MudItem xs="12" sm="4">
-                    <MudPaper Class="pa-4 bg-glass" Elevation="0">
-                        <MudText Typo="Typo.caption" Style="opacity: 0.7;">Value Bets Found</MudText>
-                        <MudText Typo="Typo.h3" Color="Color.Secondary">@_analysisResult.TotalValueBets</MudText>
-                    </MudPaper>
-                </MudItem>
-                <MudItem xs="12" sm="4">
-                    <MudPaper Class="pa-4 bg-glass" Elevation="0">
-                        <MudText Typo="Typo.caption" Style="opacity: 0.7;">Last Updated</MudText>
-                        <MudText Typo="Typo.h5" Class="mt-2">@(_lastUpdate?.ToString("HH:mm:ss"))</MudText>
-                    </MudPaper>
-                </MudItem>
-            </MudGrid>
+            <div class="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-6">
+                <div class="p-4 rounded-lg bg-white/10 border border-white/10 backdrop-blur-sm">
+                    <span class="text-xs uppercase tracking-wider font-bold opacity-70">Total Games Scanned</span>
+                    <div class="text-3xl font-bold mt-1">@_analysisResult.TotalGames</div>
+                </div>
+                <div class="p-4 rounded-lg bg-white/10 border border-white/10 backdrop-blur-sm">
+                    <span class="text-xs uppercase tracking-wider font-bold opacity-70">Value Bets Found</span>
+                    <div class="text-3xl font-bold mt-1 text-emerald-300">@_analysisResult.TotalValueBets</div>
+                </div>
+                <div class="p-4 rounded-lg bg-white/10 border border-white/10 backdrop-blur-sm">
+                    <span class="text-xs uppercase tracking-wider font-bold opacity-70">Last Updated</span>
+                    <div class="text-xl font-bold mt-1.5">@(_lastUpdate?.ToString("HH:mm:ss"))</div>
+                </div>
+            </div>
         }
-    </MudPaper>
+    </div>
 
     @if (_isLoading)
     {
-        <MudPaper Class="pa-12 d-flex flex-column align-center justify-center" Elevation="2">
-            <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true" />
-            <MudText Typo="Typo.h6" Class="mt-4">Scanning Odds & Running AI Models...</MudText>
-            <MudText Typo="Typo.body2" Color="Color.Secondary">This may take 10-20 seconds across all sports</MudText>
-        </MudPaper>
+        <TwCard Class="p-12 flex flex-col items-center justify-center text-center">
+            <TwProgressBar Indeterminate="true" Color="blue" Class="w-1/2 mb-6" />
+            <h3 class="text-xl font-bold text-white">Scanning Odds & Running AI Models...</h3>
+            <p class="text-slate-400 mt-2">This may take 10-20 seconds across all sports</p>
+        </TwCard>
     }
     else if (_games.Any())
     {
-        <MudTable Items="@_games" Hover="true" Striped="true" Filter="new Func<AnalyzedGame,bool>(FilterFunc)" Elevation="2">
-            <ToolBarContent>
-                <MudText Typo="Typo.h6">Consolidated Value Bets</MudText>
-                <MudSpacer />
-                <MudTextField @bind-Value="_searchString" Placeholder="Search teams or sports..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
-                <MudSwitch T="bool" @bind-Value="_onlyValue" Color="Color.Info" Label="Only Show Value Bets" Class="ml-4" />
-            </ToolBarContent>
-            <HeaderContent>
-                <MudTh>Sport</MudTh>
-                <MudTh>Matchup</MudTh>
-                <MudTh>Odds (ML)</MudTh>
-                <MudTh>Analysis</MudTh>
-                <MudTh>Edge</MudTh>
-                <MudTh>Action</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Sport">
-                    <MudChip T="string" Color="@GetSportColor(context.SportKey)" Size="Size.Small" Variant="Variant.Text">
-                        @context.SportKey.ToUpper()
-                    </MudChip>
-                </MudTd>
-                <MudTd DataLabel="Matchup">
-                    <div class="d-flex flex-column">
-                        <MudText Typo="Typo.body1" Style="font-weight: 500;">@context.AwayTeam vs @context.HomeTeam</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">@context.GameTime</MudText>
+        <TwCard NoPadding="true" Class="overflow-hidden">
+             <div class="p-4 border-b border-slate-800 flex flex-wrap gap-4 items-center justify-between bg-slate-900/50">
+                <h2 class="text-lg font-bold text-white">Consolidated Value Bets</h2>
+                <div class="flex items-center gap-4">
+                    <div class="w-64">
+                         <TwInput @bind-Value="_searchString" Placeholder="Search teams or sports..." Class="bg-slate-950">
+                            <PrefixContent>
+                                <TwIcon Icon="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" Class="w-4 h-4 text-slate-500" />
+                            </PrefixContent>
+                         </TwInput>
                     </div>
-                </MudTd>
-                <MudTd DataLabel="Odds">
-                    <MudStack Row="true" Spacing="1">
-                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@FormatML(context.AwayML)</MudChip>
-                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@FormatML(context.HomeML)</MudChip>
-                    </MudStack>
-                </MudTd>
-                <MudTd DataLabel="Analysis">
-                    @if (context.HasValue)
-                    {
-                        <MudChip T="string" Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.TrendingUp">GOOD BET</MudChip>
-                    }
-                    else
-                    {
-                        <MudChip T="string" Color="Color.Default" Size="Size.Small">Neutral</MudChip>
-                    }
-                </MudTd>
-                <MudTd DataLabel="Edge">
-                    @if (context.Edge > 0)
-                    {
-                        <MudText Color="Color.Success" Style="font-weight: 700;">+@context.Edge.ToString("F1")%</MudText>
-                    }
-                    else
-                    {
-                        <MudText Typo="Typo.body2">--</MudText>
-                    }
-                </MudTd>
-                <MudTd DataLabel="Action">
-                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" OnClick="@(() => OpenAnalysisDialog(context))">Analyze Details</MudButton>
-                </MudTd>
-            </RowTemplate>
-            <PagerContent>
-                <MudTablePager />
-            </PagerContent>
-        </MudTable>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" @bind="_onlyValue" class="form-checkbox rounded bg-slate-800 border-slate-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-slate-900 h-4 w-4">
+                        <span class="text-sm font-medium text-slate-300">Only Value Bets</span>
+                    </label>
+                </div>
+            </div>
+
+            <TwTable TItem="AnalyzedGame" Items="@_games" Filter="FilterFunc">
+                <HeaderContent>
+                    <TwTh>Sport</TwTh>
+                    <TwTh>Matchup</TwTh>
+                    <TwTh>Odds (ML)</TwTh>
+                    <TwTh>Analysis</TwTh>
+                    <TwTh>Edge</TwTh>
+                    <TwTh>Action</TwTh>
+                </HeaderContent>
+                <RowTemplate Context="game">
+                    <TwTd>
+                        <TwChip Color="@GetSportColor(game.SportKey)" Size="xs" Variant="outline" Class="uppercase font-bold tracking-wider">
+                            @game.SportKey.Replace("_", " ").ToUpper()
+                        </TwChip>
+                    </TwTd>
+                    <TwTd>
+                        <div class="flex flex-col">
+                            <span class="font-medium text-white">@game.AwayTeam vs @game.HomeTeam</span>
+                            <span class="text-xs text-slate-500">@game.GameTime</span>
+                        </div>
+                    </TwTd>
+                    <TwTd>
+                        <div class="flex gap-2">
+                            <span class="px-2 py-1 rounded bg-slate-800 text-xs font-mono text-slate-300 border border-slate-700">@FormatML(game.AwayML)</span>
+                            <span class="px-2 py-1 rounded bg-slate-800 text-xs font-mono text-slate-300 border border-slate-700">@FormatML(game.HomeML)</span>
+                        </div>
+                    </TwTd>
+                    <TwTd>
+                        @if (game.HasValue)
+                        {
+                            <TwChip Color="emerald" Size="xs" Variant="solid">GOOD BET</TwChip>
+                        }
+                        else
+                        {
+                            <TwChip Color="slate" Size="xs" Variant="outline">Neutral</TwChip>
+                        }
+                    </TwTd>
+                    <TwTd>
+                        @if (game.Edge > 0)
+                        {
+                            <span class="font-bold text-emerald-400">+@game.Edge.ToString("F1")%</span>
+                        }
+                        else
+                        {
+                            <span class="text-slate-600">--</span>
+                        }
+                    </TwTd>
+                    <TwTd>
+                        <TwButton Variant="outline" Size="sm" OnClick="@(() => OpenAnalysisDialog(game))">
+                            Analyze Details
+                        </TwButton>
+                    </TwTd>
+                </RowTemplate>
+
+            </TwTable>
+        </TwCard>
     }
     else if (!_isLoading)
     {
-        <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Class="mt-4">
+        <TwAlert Severity="info" Class="mt-4">
             No games found. Click "Scan All Sports" to fetch latest odds.
-        </MudAlert>
+        </TwAlert>
     }
-</MudContainer>
-
-<style>
-    .bg-glass {
-        background: rgba(255, 255, 255, 0.15) !important;
-        backdrop-filter: blur(10px);
-        color: white;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-    }
-</style>
+</TwContainer>
 
 @code {
     private bool _isLoading = false;
@@ -248,14 +249,14 @@
         };
     }
 
-    private Color GetSportColor(string sport) => sport switch
+    private string GetSportColor(string sport) => sport switch
     {
-        "nfl" => Color.Warning,
-        "nba" => Color.Secondary,
-        "ncaab" => Color.Info,
-        "college-baseball" => Color.Success,
-        "cfb" => Color.Error,
-        _ => Color.Default
+        "nfl" => "amber",
+        "nba" => "indigo",
+        "ncaab" => "blue",
+        "college-baseball" => "emerald",
+        "cfb" => "rose",
+        _ => "slate"
     };
 
     private string FormatML(int ml) => ml > 0 ? $"+{ml}" : ml.ToString();
@@ -307,19 +308,14 @@
 
     private async Task OpenAnalysisDialog(AnalyzedGame game)
     {
-        var parameters = new DialogParameters<Dialogs.AnalysisDialog>
+        var parameters = new DialogParameters
         {
-            { x => x.FullGameData, game.RawData },
-            { x => x.Sportsbook, _selectedSportsbook }
+            { "FullGameData", game.RawData },
+             { "Sportsbook", _selectedSportsbook }
         };
 
         var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
         await DialogService.ShowAsync<Dialogs.AnalysisDialog>("Detailed AI Matchup Analysis", parameters, options);
-    }
-
-    private void AddToSlip(AnalyzedGame game)
-    {
-        Snackbar.Add("Feature coming soon: Direct slip integration", Severity.Info);
     }
 
     public class AnalyzedGame

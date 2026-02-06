@@ -1,4 +1,5 @@
 @page "/logs"
+@rendermode InteractiveServer
 @using System.Text.Json
 @using SportsBettingAnalyzer.Components.Shared.Tailwind
 @implements IDisposable
@@ -38,11 +39,7 @@
                     </TwSelect>
                 </div>
                 <div class="flex-grow min-w-[200px]">
-                    <TwInput TValue="string" @bind-Value="_searchText" Label="Search" Placeholder="Filter logs..." FullWidth="true">
-                        <PrefixContent>
-                            <TwIcon Icon="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" Class="w-4 h-4 text-slate-500" />
-                        </PrefixContent>
-                    </TwInput>
+                    <TwInput TValue="string" @bind-Value="_searchText" Label="Search" Placeholder="Filter logs..." FullWidth="true" ShowSearchIcon="true" />
                 </div>
                 <div class="flex items-center gap-3 h-11">
                     <TwButton Variant="primary" OnClick="RefreshLogs" IsLoading="@_isLoading" Disabled="@_isLoading">
@@ -118,36 +115,34 @@
                 }
                 else
                 {
-                    <TwTable Dense="true" Hover="true" TItem="object">
-                        <thead class="sticky top-0 bg-slate-950 border-b border-slate-800 z-10">
-                            <tr class="text-slate-500">
-                                <th class="px-3 py-2 text-left w-40">Timestamp</th>
-                                <th class="px-3 py-2 text-left w-24">Source</th>
-                                <th class="px-3 py-2 text-left w-20">Level</th>
-                                <th class="px-3 py-2 text-left">Message</th>
-                            </tr>
-                        </thead>
-                        <tbody>
+                    <TwTable Dense="true" Hover="true" TItem="LogEntry">
+                        <HeaderContent>
+                            <TwTh Class="w-40">Timestamp</TwTh>
+                            <TwTh Class="w-24">Source</TwTh>
+                            <TwTh Class="w-20">Level</TwTh>
+                            <TwTh>Message</TwTh>
+                        </HeaderContent>
+                        <ChildContent>
                             @foreach (var log in FilteredLogs)
                             {
-                                <tr class="hover:bg-slate-900/50 border-b border-slate-900/30">
-                                    <td class="px-3 py-1 text-slate-600 whitespace-nowrap">@log.Timestamp.ToString("HH:mm:ss.fff")</td>
-                                    <td class="px-3 py-1">
+                                <TwTr>
+                                    <TwTd Class="px-3 py-1 text-slate-600 whitespace-nowrap">@log.Timestamp.ToString("HH:mm:ss.fff")</TwTd>
+                                    <TwTd Class="px-3 py-1">
                                          <span class="@($"px-1.5 py-0.5 rounded text-[9px] font-bold {(log.Source == "backend" ? "bg-blue-500/10 text-blue-400" : "bg-amber-500/10 text-amber-400")}")">
                                             @log.Source.ToUpper()
                                         </span>
-                                    </td>
-                                    <td class="px-3 py-1">
+                                    </TwTd>
+                                    <TwTd Class="px-3 py-1">
                                         <span class="@($"px-1.5 py-0.5 rounded text-[9px] font-bold {GetLevelClasses(log.Level)}")">
                                             @log.Level.ToUpper()
                                         </span>
-                                    </td>
-                                    <td class="@($"px-3 py-1 break-words font-mono {GetLevelTextClasses(log.Level)}")">
+                                    </TwTd>
+                                    <TwTd Class="@($"px-3 py-1 break-words font-mono {GetLevelTextClasses(log.Level)}")">
                                         @log.Message
-                                    </td>
-                                </tr>
+                                    </TwTd>
+                                </TwTr>
                             }
-                        </tbody>
+                        </ChildContent>
                     </TwTable>
                 }
             </div>
@@ -193,24 +188,36 @@
     private string _backendUrl = "";
     private Timer? _refreshTimer;
 
+
+
     protected override async Task OnInitializedAsync()
     {
+        // Ensure we have a valid base address or use absolute URLs
         _backendUrl = Http.BaseAddress?.ToString() ?? "http://backend:8000";
-        await CheckBackendHealth();
-        await RefreshLogs();
         
-        // Start auto-refresh timer
-        _refreshTimer = new Timer(async _ => 
+        // Start initialization safely
+        try 
         {
-            if (_autoRefresh)
+            await CheckBackendHealth();
+            await RefreshLogs();
+            
+            // Start auto-refresh timer
+            _refreshTimer = new Timer(async _ => 
             {
-                await InvokeAsync(async () =>
+                if (_autoRefresh)
                 {
-                    await RefreshLogs();
-                    StateHasChanged();
-                });
-            }
-        }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+                    await InvokeAsync(async () =>
+                    {
+                        await RefreshLogs();
+                        StateHasChanged();
+                    });
+                }
+            }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initializing Logs page");
+        }
     }
 
     private IEnumerable<LogEntry> FilteredLogs => _logs
@@ -225,7 +232,9 @@
     {
         try
         {
-            var response = await Http.GetAsync("/health");
+            // Ensure absolute URI if BaseAddress is missing
+            var uri = Http.BaseAddress == null ? "http://backend:8000/health" : "health";
+            var response = await Http.GetAsync(uri);
             _backendHealthy = response.IsSuccessStatusCode;
         }
         catch
@@ -248,7 +257,9 @@
             {
                 try
                 {
-                    var backendLogs = await Http.GetFromJsonAsync<BackendLogsResponse>("/logs");
+                    // Ensure absolute URI if BaseAddress is missing
+                    var uri = Http.BaseAddress == null ? "http://backend:8000/logs" : "logs";
+                    var backendLogs = await Http.GetFromJsonAsync<BackendLogsResponse>(uri);
                     if (backendLogs?.Logs != null)
                     {
                         foreach (var log in backendLogs.Logs)

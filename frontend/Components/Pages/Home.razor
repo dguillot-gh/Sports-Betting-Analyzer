@@ -2,11 +2,9 @@
 @using SportsBettingAnalyzer.Models
 @using SportsBettingAnalyzer.Services
 @using SportsBettingAnalyzer.Components.Shared.Tailwind
-@using MudBlazor
 @inject BetAnalysisService BetAnalysisService
 @inject DataCollectionService DataCollectionService
 @inject PythonMLServiceClient MLServiceClient
-@inject ISnackbar Snackbar
 @inject IJSRuntime JSRuntime
 @rendermode InteractiveServer
 
@@ -283,6 +281,8 @@
                         </div>
                     }
                 </TwCard>
+
+                <BettingCalculator />
 
                 <div class="bg-slate-900 rounded-2xl p-6 relative overflow-hidden border border-slate-800">
                     <div class="relative z-10">

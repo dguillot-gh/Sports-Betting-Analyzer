@@ -1,0 +1,182 @@
+@using Microsoft.AspNetCore.Components.Rendering
+
+@* 
+    TwLoadingOverlay - Premium loading overlay with animated progress and clever messages
+    
+    Usage:
+    <TwLoadingOverlay 
+        IsVisible="@_isLoading"
+        Title="Processing Data"
+        Color="purple"
+        StatusMessages="@_messages"
+        Progress="@_progress"
+        CurrentPhase="Loading..."
+        OnCancel="@HandleCancel" />
+*@
+
+@if (IsVisible)
+{
+    <div class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center">
+        <div class="bg-slate-800 rounded-2xl p-8 max-w-md w-full mx-4 border border-slate-700 shadow-2xl animate-fadeIn">
+            <!-- Animated Spinner -->
+            <div class="flex justify-center mb-6">
+                <div class="relative">
+                    <div class="w-16 h-16 border-4 border-slate-600 rounded-full"></div>
+                    <div class="absolute top-0 left-0 w-16 h-16 border-4 border-t-@(Color)-500 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin"></div>
+                    <div class="absolute top-2 left-2 w-12 h-12 border-4 border-t-transparent border-r-@(Color)-400 border-b-transparent border-l-transparent rounded-full animate-spin" style="animation-direction: reverse; animation-duration: 1.5s;"></div>
+                </div>
+            </div>
+            
+            <!-- Title -->
+            <h3 class="text-xl font-bold text-white text-center mb-2">
+                @Title
+            </h3>
+            
+            <!-- Status Message -->
+            <p class="text-@(Color)-400 text-center mb-4 font-medium min-h-[1.5rem]">
+                @CurrentStatusMessage
+            </p>
+            
+            <!-- Progress Bar -->
+            @if (ShowProgress)
+            {
+                <div class="w-full bg-slate-700 rounded-full h-2 mb-4 overflow-hidden">
+                    <div class="h-full bg-gradient-to-r from-@(Color)-500 to-@(Color)-400 rounded-full transition-all duration-500" 
+                         style="width: @(Progress)%;"></div>
+                </div>
+                
+                <p class="text-slate-400 text-sm text-center">
+                    @Progress% complete @if (!string.IsNullOrEmpty(CurrentPhase)) { <text>• @CurrentPhase</text> }
+                </p>
+            }
+            
+            <!-- Cancel Button -->
+            @if (OnCancel.HasDelegate)
+            {
+                <div class="mt-6 flex justify-center">
+                    <button @onclick="OnCancel" class="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors">
+                        Cancel
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    /// <summary>Whether the overlay is visible</summary>
+    [Parameter] public bool IsVisible { get; set; }
+    
+    /// <summary>Title displayed in the overlay header</summary>
+    [Parameter] public string Title { get; set; } = "Loading...";
+    
+    /// <summary>Theme color (purple, orange, green, red, blue, emerald, amber)</summary>
+    [Parameter] public string Color { get; set; } = "blue";
+    
+    /// <summary>Array of clever status messages to cycle through</summary>
+    [Parameter] public string[]? StatusMessages { get; set; }
+    
+    /// <summary>Current status message to display (overrides cycling)</summary>
+    [Parameter] public string? CurrentStatusMessage { get; set; }
+    
+    /// <summary>Whether to show the progress bar</summary>
+    [Parameter] public bool ShowProgress { get; set; } = true;
+    
+    /// <summary>Progress percentage (0-100)</summary>
+    [Parameter] public int Progress { get; set; } = 0;
+    
+    /// <summary>Current phase label (shown next to progress)</summary>
+    [Parameter] public string? CurrentPhase { get; set; }
+    
+    /// <summary>Cancel button callback</summary>
+    [Parameter] public EventCallback OnCancel { get; set; }
+    
+    // Built-in message presets by category
+    public static class MessagePresets
+    {
+        public static readonly string[] NHL = new[] {
+            "🏒 Checking if the ice is ready...",
+            "⚡ Loading 5-on-5 analytics...",
+            "🥅 Calculating save percentages...",
+            "📊 Analyzing power play efficiency...",
+            "🔥 Hot streak detection in progress...",
+            "🎯 Validating Corsi and Fenwick...",
+            "💰 Computing expected value...",
+            "🏆 Walk-forward validation underway..."
+        };
+        
+        public static readonly string[] NBA = new[] {
+            "🏀 Warming up the algorithms...",
+            "📈 Crunching player efficiency ratings...",
+            "🎯 Analyzing three-point trends...",
+            "⚡ Processing pace-adjusted stats...",
+            "🔄 Running possession simulations...",
+            "📊 Evaluating rest day impact...",
+            "💪 Calculating clutch performance...",
+            "🏆 Finalizing win probability models..."
+        };
+        
+        public static readonly string[] NFL = new[] {
+            "🏈 Reviewing the game film...",
+            "📊 Processing EPA per play...",
+            "⚡ Analyzing red zone efficiency...",
+            "🎯 Calculating QB ratings...",
+            "🔄 Simulating 4th quarter scenarios...",
+            "📈 Evaluating turnover margins...",
+            "💨 Processing yards after catch...",
+            "🏆 Running playoff probability models..."
+        };
+        
+        public static readonly string[] NASCAR = new[] {
+            "🏎️ Firing up the engines...",
+            "⛽ Calculating fuel strategies...",
+            "🔧 Analyzing pit stop efficiency...",
+            "📍 Processing track position data...",
+            "🌡️ Evaluating tire degradation...",
+            "📊 Running Monte Carlo simulations...",
+            "🏁 Calculating finish position odds...",
+            "🏆 Finalizing ensemble predictions..."
+        };
+        
+        public static readonly string[] MLTraining = new[] {
+            "🧠 Training neural pathways...",
+            "⚡ Optimizing hyperparameters...",
+            "📊 Cross-validating folds...",
+            "🔄 Iterating through epochs...",
+            "📈 Minimizing loss function...",
+            "🎯 Tuning decision boundaries...",
+            "💾 Caching feature vectors...",
+            "🏆 Finalizing model weights..."
+        };
+        
+        public static readonly string[] DataImport = new[] {
+            "📡 Connecting to data source...",
+            "📥 Downloading records...",
+            "🔍 Parsing response data...",
+            "🧹 Cleaning and validating...",
+            "💾 Inserting to database...",
+            "🔗 Linking relationships...",
+            "✅ Verifying integrity...",
+            "🎉 Almost done..."
+        };
+        
+        public static readonly string[] BetAnalysis = new[] {
+            "💰 Counting your chips...",
+            "📊 Calculating ROI...",
+            "🎯 Measuring your edge...",
+            "📈 Tracking win streaks...",
+            "🔍 Analyzing bet patterns...",
+            "💡 Finding value opportunities...",
+            "📉 Computing max drawdown...",
+            "🏆 Summarizing performance..."
+        };
+        
+        public static readonly string[] Generic = new[] {
+            "⏳ Processing your request...",
+            "🔄 Working on it...",
+            "📊 Crunching numbers...",
+            "⚡ Almost there...",
+            "🎯 Finalizing results..."
+        };
+    }
+}

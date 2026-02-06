@@ -56,11 +56,21 @@ NBA_API_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 }
 
-# NBA API URL for team stats (same as reference repo)
-NBA_TEAM_STATS_URL = (
+# NBA API URL templates
+NBA_STATS_BASE_URL = (
     "https://stats.nba.com/stats/leaguedashteamstats?"
     "Conference=&DateFrom=&DateTo=&Division=&GameScope=&GameSegment=&Height=&"
     "ISTRound=&LastNGames=0&LeagueID=00&Location=&MeasureType=Base&Month=0&"
+    "OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=PerGame&Period=0&"
+    "PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=Y&Season={season}&"
+    "SeasonSegment=&SeasonType=Regular%20Season&ShotClockRange=&StarterBench=&"
+    "TeamID=0&TwoWay=0&VsConference=&VsDivision="
+)
+
+NBA_STATS_ADV_URL = (
+    "https://stats.nba.com/stats/leaguedashteamstats?"
+    "Conference=&DateFrom=&DateTo=&Division=&GameScope=&GameSegment=&Height=&"
+    "ISTRound=&LastNGames=0&LeagueID=00&Location=&MeasureType=Advanced&Month=0&"
     "OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=PerGame&Period=0&"
     "PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=Y&Season={season}&"
     "SeasonSegment=&SeasonType=Regular%20Season&ShotClockRange=&StarterBench=&"
@@ -71,95 +81,77 @@ NBA_TEAM_STATS_URL = (
 async def fetch_nba_team_stats_from_api() -> Dict[str, Dict]:
     """
     Fetch current season team stats directly from NBA's official API.
-    This is the same approach used by the reference repo.
-    Returns dict keyed by team name with ALL stats.
+    Fetches BOTH Base and Advanced stats to support different models.
     """
     import aiohttp
+    import pandas as pd
     
-    # Determine current season (e.g., "2025-26")
+    # Determine current season
     now = datetime.now()
     if now.month >= 10:
         season = f"{now.year}-{str(now.year + 1)[2:]}"
     else:
         season = f"{now.year - 1}-{str(now.year)[2:]}"
     
-    url = NBA_TEAM_STATS_URL.format(season=season)
+    base_url = NBA_STATS_BASE_URL.format(season=season)
+    adv_url = NBA_STATS_ADV_URL.format(season=season)
     
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=NBA_API_HEADERS, timeout=30) as response:
-                if response.status != 200:
-                    logger.warning(f"NBA API returned {response.status}")
+            # 1. Fetch Base stats (required for XGBoost/kyleskom)
+            async with session.get(base_url, headers=NBA_API_HEADERS, timeout=20) as resp1:
+                if resp1.status != 200:
+                    logger.warning(f"NBA API Base returned {resp1.status}")
                     return {}
-                
-                data = await response.json()
-                
-        # Parse the response (same structure as reference repo)
-        result_sets = data.get('resultSets', [])
-        if not result_sets:
-            return {}
+                base_data = await resp1.json()
+            
+            # 2. Fetch Advanced stats (required for Improved Simple Model)
+            async with session.get(adv_url, headers=NBA_API_HEADERS, timeout=20) as resp2:
+                if resp2.status != 200:
+                    logger.warning(f"NBA API Adv returned {resp2.status}")
+                    return {}
+                adv_data = await resp2.json()
+
+        # Parse dataframes
+        def to_df(data):
+            rs = data.get('resultSets', [])[0]
+            return pd.DataFrame(data=rs['rowSet'], columns=rs['headers'])
+
+        df_base = to_df(base_data)
+        df_adv = to_df(adv_data)
         
-        team_data = result_sets[0]
-        headers = team_data.get('headers', [])
-        rows = team_data.get('rowSet', [])
+        # Merge datasets on TEAM_ID to create a comprehensive stat block
+        # We drop duplicate columns from df_adv to avoid suffixes
+        cols_to_use = df_adv.columns.difference(df_base.columns).tolist() + ['TEAM_ID']
+        df_combined = pd.merge(df_base, df_adv[cols_to_use], on='TEAM_ID', how='inner')
         
         # Populate shared cache for kyleskom adapter
         try:
             from scripts.nba_cache import set_nba_df
-            import pandas as pd
-            df = pd.DataFrame(data=rows, columns=headers)
-            set_nba_df(df)
+            set_nba_df(df_combined)
         except Exception as e:
             logger.warning(f"Failed to populate shared NBA cache: {e}")
 
-        # Convert to dict keyed by team name
+        # Convert to dict keyed by team name for Simple Model
         team_stats = {}
-        for row in rows:
-            row_dict = dict(zip(headers, row))
-            team_name = row_dict.get('TEAM_NAME', '')
-            
-            # Map to our expected format
+        for _, row in df_combined.iterrows():
+            team_name = row.get('TEAM_NAME', '')
             team_stats[team_name] = {
-                # Core stats
-                'win_pct': row_dict.get('W_PCT', 0.5),
-                'ppg': row_dict.get('PTS', 112),
-                'oppg': row_dict.get('OPP_PTS', 112) if 'OPP_PTS' in row_dict else 112,
-                
-                # Shooting
-                'fg_pct': row_dict.get('FG_PCT', 0.46),
-                'fg3_pct': row_dict.get('FG3_PCT', 0.36),
-                'ft_pct': row_dict.get('FT_PCT', 0.78),
-                
-                # Box score
-                'reb': row_dict.get('REB', 44),
-                'oreb': row_dict.get('OREB', 10),
-                'dreb': row_dict.get('DREB', 34),
-                'ast': row_dict.get('AST', 25),
-                'tov': row_dict.get('TOV', 14),
-                'stl': row_dict.get('STL', 7.5),
-                'blk': row_dict.get('BLK', 5),
-                'pf': row_dict.get('PF', 20),
-                
-                # Advanced
-                'plus_minus': row_dict.get('PLUS_MINUS', 0),
-                
-                # Raw values for XGBoost (all columns from API)
-                'W': row_dict.get('W', 0),
-                'L': row_dict.get('L', 0),
-                'GP': row_dict.get('GP', 0),
-                'FGM': row_dict.get('FGM', 0),
-                'FGA': row_dict.get('FGA', 0),
-                'FG3M': row_dict.get('FG3M', 0),
-                'FG3A': row_dict.get('FG3A', 0),
-                'FTM': row_dict.get('FTM', 0),
-                'FTA': row_dict.get('FTA', 0),
-                
-                # Rest days (will be calculated separately)
-                'rest_days': 1,
+                'win_pct': row.get('W_PCT', 0.5),
+                'off_rating': row.get('OFF_RATING', 115.0),
+                'def_rating': row.get('DEF_RATING', 115.0),
+                'pace': row.get('PACE', 100.0),
+                'ppg': row.get('PTS', 115.0),
+                'oppg': row.get('OPP_PTS', 115.0),
+                'rest_days': 1
             }
         
-        logger.info(f"Fetched stats for {len(team_stats)} NBA teams from API")
+        logger.info(f"Combined Base + Advanced stats for {len(team_stats)} NBA teams")
         return team_stats
+        
+    except Exception as e:
+        logger.error(f"Error fetching/merging NBA API data: {e}")
+        return {}
         
     except Exception as e:
         logger.error(f"Error fetching from NBA API: {e}")
@@ -653,47 +645,49 @@ async def predict_nba_simple(
     away_ml: int = None
 ) -> Dict[str, Any]:
     """
-    Make NBA prediction using simple statistical model.
-    Uses the passed stats (from NBA API) instead of database defaults.
+    Make NBA prediction using advanced rating-based simple model.
+    Formula: (OffRating_A + DefRating_B) / 2 * (Pace / 100)
     """
     try:
         import math
         
-        # Use passed stats, with fallbacks to league averages
-        home_ppg = home_stats.get('ppg', home_stats.get('PTS', 114.0))
-        away_ppg = away_stats.get('ppg', away_stats.get('PTS', 114.0))
-        home_oppg = home_stats.get('oppg', home_stats.get('OPP_PTS', 114.0))
-        away_oppg = away_stats.get('oppg', away_stats.get('OPP_PTS', 114.0))
-        home_win_pct = home_stats.get('win_pct', home_stats.get('W_PCT', 0.5))
-        away_win_pct = away_stats.get('win_pct', away_stats.get('W_PCT', 0.5))
+        # Use passed stats (Advanced Ratings), with realistic league fallbacks
+        home_off = float(home_stats.get('off_rating', 115.0))
+        home_def = float(home_stats.get('def_rating', 115.0))
+        home_pace = float(home_stats.get('pace', 100.0))
+        home_win_pct = float(home_stats.get('win_pct', 0.5))
         
-        # Ensure numeric values
-        home_ppg = float(home_ppg) if home_ppg else 114.0
-        away_ppg = float(away_ppg) if away_ppg else 114.0
-        home_oppg = float(home_oppg) if home_oppg else 114.0
-        away_oppg = float(away_oppg) if away_oppg else 114.0
-        home_win_pct = float(home_win_pct) if home_win_pct else 0.5
-        away_win_pct = float(away_win_pct) if away_win_pct else 0.5
+        away_off = float(away_stats.get('off_rating', 115.0))
+        away_def = float(away_stats.get('def_rating', 115.0))
+        away_pace = float(away_stats.get('pace', 100.0))
+        away_win_pct = float(away_stats.get('win_pct', 0.5))
         
-        # Home court advantage (typically 2-3 points in NBA)
-        home_advantage = 2.5
+        # Predicted Pace (Average of both teams)
+        predicted_pace = (home_pace + away_pace) / 2
         
-        # Calculate expected points
-        home_expected = (home_ppg + away_oppg) / 2 + home_advantage / 2
-        away_expected = (away_ppg + home_oppg) / 2 - home_advantage / 2
+        # Home court advantage adjustments
+        # Typically ~+2.5 points total distributed as +1.25 OffRating for home, -1.25 DefRating for home
+        home_hca_adj = 1.25
+        
+        # Expected points per 100 possessions
+        # Home offense vs Away defense
+        home_exp_100 = (home_off + home_hca_adj + away_def) / 2
+        # Away offense vs Home defense
+        away_exp_100 = (away_off + home_def - home_hca_adj) / 2
+        
+        # Final score projection adjusted for pace
+        home_expected = home_exp_100 * (predicted_pace / 100)
+        away_expected = away_exp_100 * (predicted_pace / 100)
         
         # Predicted margin (positive = home win)
         predicted_margin = home_expected - away_expected
         
-        # Factor in win percentage
-        win_pct_diff = home_win_pct - away_win_pct
-        adjusted_margin = predicted_margin + (win_pct_diff * 5)  # Win% adds up to ~5 pts
-        
         # Predicted total
         predicted_total = home_expected + away_expected
         
-        # Win probability using logistic function
-        home_win_prob = 1 / (1 + math.exp(-adjusted_margin * 0.15))
+        # Win probability using logistic function based on margin
+        # 0.15 is a common scaling factor for NBA point spreads
+        home_win_prob = 1 / (1 + math.exp(-predicted_margin * 0.15))
         away_win_prob = 1 - home_win_prob
         
         # Build prediction result
@@ -701,12 +695,16 @@ async def predict_nba_simple(
             'model': 'simple',
             'home_team': home_team,
             'away_team': away_team,
-            'predicted_winner': home_team if adjusted_margin > 0 else away_team,
+            'predicted_winner': home_team if predicted_margin > 0 else away_team,
             'home_win_probability': round(home_win_prob, 4),
             'away_win_probability': round(away_win_prob, 4),
-            'predicted_margin': round(adjusted_margin, 1),
+            'predicted_margin': round(predicted_margin, 1),
             'predicted_total': round(predicted_total, 1),
             'confidence': round(max(home_win_prob, away_win_prob) * 100, 1),
+            # Metadata for UI stats table
+            'pace_projection': round(predicted_pace, 1),
+            'home_off_rating': round(home_off, 1),
+            'away_off_rating': round(away_off, 1)
         }
         
         # Add EV and Kelly if odds provided

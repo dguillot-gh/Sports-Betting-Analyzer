@@ -33,11 +33,15 @@
             }
             else if (RowTemplate != null)
             {
-                @foreach (var item in Items)
+                var filteredItems = Filter != null ? Items?.Where(Filter) : Items;
+                @if (filteredItems != null)
                 {
-                    <tr>
-                        @RowTemplate(item)
-                    </tr>
+                    @foreach (var item in filteredItems)
+                    {
+                        <tr>
+                            @RowTemplate(item)
+                        </tr>
+                    }
                 }
             }
             else
@@ -53,6 +57,7 @@
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public RenderFragment<TItem>? RowTemplate { get; set; }
     [Parameter] public IEnumerable<TItem>? Items { get; set; }
+    [Parameter] public Func<TItem, bool>? Filter { get; set; }
     [Parameter] public bool IsLoading { get; set; }
     [Parameter] public string EmptyMessage { get; set; } = "No items found.";
     [Parameter] public string Class { get; set; } = "";

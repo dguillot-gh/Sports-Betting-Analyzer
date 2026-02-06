@@ -1,155 +1,146 @@
 @page "/race-results"
 @rendermode InteractiveServer
-@using MudBlazor
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 
 <PageTitle>NASCAR Race Results</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
-    <MudText Typo="Typo.h4" Class="mb-4">
-        <MudIcon Icon="@Icons.Material.Filled.EmojiEvents" Class="mr-2" />
-        NASCAR Race Results
-    </MudText>
+<TwContainer MaxWidth="extraLarge" Class="mt-8">
+    <div class="mb-6 px-4">
+        <h1 class="text-3xl font-bold text-white flex items-center gap-3">
+            <TwIcon Icon="M16.5 18.75h-9m9 0a8.25 8.25 0 1 0-16.5 0 8.25 8.25 0 0 0 16.5 0ZM7.5 12h9m-9 0a8.25 8.25 0 1 0 16.5 0 8.25 8.25 0 0 0-16.5 0Z" Class="w-8 h-8 text-blue-400" />
+            NASCAR Race Results
+        </h1>
+    </div>
 
     <!-- Filters -->
-    <MudPaper Class="pa-4 mb-4" Elevation="2">
-        <MudGrid>
-            <MudItem xs="12" sm="6" md="3">
-                <MudSelect T="string" Label="Series" @bind-Value="_selectedSeries" 
-                           Variant="Variant.Outlined" Dense="true">
-                    <MudSelectItem Value="@("cup")">Cup Series</MudSelectItem>
-                    <MudSelectItem Value="@("xfinity")">Xfinity Series</MudSelectItem>
-                    <MudSelectItem Value="@("trucks")">Trucks Series</MudSelectItem>
-                </MudSelect>
-            </MudItem>
+    <TwCard Class="p-4 mb-6 bg-slate-900 border-slate-800">
+        <div class="flex flex-wrap items-end gap-4">
+            <div class="w-40">
+                <TwSelect TValue="string" Label="Series" @bind-Value="_selectedSeries" FullWidth="true">
+                    <option value="cup">Cup Series</option>
+                    <option value="xfinity">Xfinity Series</option>
+                    <option value="trucks">Trucks Series</option>
+                </TwSelect>
+            </div>
             
-            <MudItem xs="12" sm="6" md="2">
-                <MudSelect T="int?" Label="Season" @bind-Value="_selectedSeason" 
-                           Variant="Variant.Outlined" Dense="true" Clearable="true">
+            <div class="w-28">
+                <TwSelect TValue="int?" Label="Season" @bind-Value="_selectedSeason" FullWidth="true">
+                    <option value="">All</option>
                     @foreach (var season in _availableSeasons)
                     {
-                        <MudSelectItem T="int?" Value="@season">@season</MudSelectItem>
+                        <option value="@season">@season</option>
                     }
-                </MudSelect>
-            </MudItem>
+                </TwSelect>
+            </div>
             
-            <MudItem xs="12" sm="6" md="3">
-                <MudAutocomplete T="string" Label="Driver"
-                                 Value="_selectedDriver"
-                                 ValueChanged="OnDriverChanged"
-                                 SearchFunc="SearchDrivers"
-                                 Variant="Variant.Outlined"
-                                 Dense="true"
-                                 Clearable="true"
-                                 Placeholder="Filter by driver..." />
-            </MudItem>
+            <div class="flex-grow min-w-[200px]">
+                <TwInput TValue="string" @bind-Value="_selectedDriver" Label="Driver" Placeholder="Filter by driver..." FullWidth="true" />
+            </div>
             
-            <MudItem xs="12" sm="6" md="2">
-                <MudSelect T="int?" Label="Results" @bind-Value="_finishFilter" 
-                           Variant="Variant.Outlined" Dense="true" Clearable="true">
-                    <MudSelectItem T="int?" Value="@((int?)1)">Wins Only</MudSelectItem>
-                    <MudSelectItem T="int?" Value="@((int?)5)">Top 5</MudSelectItem>
-                    <MudSelectItem T="int?" Value="@((int?)10)">Top 10</MudSelectItem>
-                </MudSelect>
-            </MudItem>
+            <div class="w-32">
+                <TwSelect TValue="int?" Label="Results" @bind-Value="_finishFilter" FullWidth="true">
+                    <option value="">All</option>
+                    <option value="1">Wins Only</option>
+                    <option value="5">Top 5</option>
+                    <option value="10">Top 10</option>
+                </TwSelect>
+            </div>
             
-            <MudItem xs="12" sm="6" md="2">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" 
-                           OnClick="LoadResults" Disabled="_isLoading" FullWidth="true">
-                    @if (_isLoading)
-                    {
-                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                    }
-                    Search
-                </MudButton>
-            </MudItem>
-        </MudGrid>
-    </MudPaper>
+            <TwButton Variant="primary" OnClick="LoadResults" IsLoading="@_isLoading" Disabled="@_isLoading">
+                Search
+            </TwButton>
+        </div>
+    </TwCard>
 
     <!-- Results Table -->
     @if (_isLoading)
     {
-        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+        <div class="mb-6">
+            <TwProgressBar Indeterminate="true" Color="blue" />
+        </div>
     }
     
     @if (_results.Any())
     {
-        <MudPaper Elevation="2">
-            <MudTable Items="@_results" Dense="true" Hover="true" Striped="true" 
-                      FixedHeader="true" Height="600px">
-                <HeaderContent>
-                    <MudTh>Season</MudTh>
-                    <MudTh>Race</MudTh>
-                    <MudTh>Track</MudTh>
-                    <MudTh>Driver</MudTh>
-                    <MudTh>Finish</MudTh>
-                    <MudTh>Start</MudTh>
-                    <MudTh>Led</MudTh>
-                    <MudTh>Pts</MudTh>
-                    <MudTh>Status</MudTh>
-                    <MudTh>Team</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd DataLabel="Season">@context.Season</MudTd>
-                    <MudTd DataLabel="Race">@($"R{context.RaceNum}")</MudTd>
-                    <MudTd DataLabel="Track">
-                        <span title="@context.RaceName">@TruncateTrack(context.Track)</span>
-                    </MudTd>
-                    <MudTd DataLabel="Driver">
-                        <MudLink Href="@($"/driver-profiles?driver={Uri.EscapeDataString(context.Driver ?? "")}&series={_selectedSeries}")" 
-                                 Color="Color.Primary">
-                            @context.Driver
-                        </MudLink>
-                    </MudTd>
-                    <MudTd DataLabel="Finish">
-                        <MudChip T="string" Size="Size.Small" 
-                                 Color="@GetFinishColor(context.Finish)">
-                            P@(context.Finish)
-                        </MudChip>
-                    </MudTd>
-                    <MudTd DataLabel="Start">@(context.Start?.ToString() ?? "-")</MudTd>
-                    <MudTd DataLabel="Led">
-                        @if (context.Led > 0)
-                        {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">@context.Led</MudChip>
-                        }
-                        else
-                        {
-                            @:0
-                        }
-                    </MudTd>
-                    <MudTd DataLabel="Pts">@(context.Pts?.ToString() ?? "-")</MudTd>
-                    <MudTd DataLabel="Status">
-                        @if (context.Status != null && context.Status.ToLower() != "running")
-                        {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Error">@context.Status</MudChip>
-                        }
-                        else
-                        {
-                            <MudText Typo="Typo.caption" Color="Color.Success">Running</MudText>
-                        }
-                    </MudTd>
-                    <MudTd DataLabel="Team">
-                        <MudText Typo="Typo.caption">@TruncateTeam(context.Team)</MudText>
-                    </MudTd>
-                </RowTemplate>
-                <PagerContent>
-                    <MudTablePager PageSizeOptions="new int[] { 50, 100, 200, 500 }" />
-                </PagerContent>
-            </MudTable>
-        </MudPaper>
+        <TwCard NoPadding="true" Class="bg-slate-950 border-slate-800 overflow-hidden shadow-2xl">
+            <div class="overflow-x-auto max-h-[70vh] custom-scrollbar">
+                <TwTable TItem="RaceResultItem" Items="@_results" Hover="true" Dense="true">
+                    <HeaderContent>
+                        <TwTh>Ssn</TwTh>
+                        <TwTh>Race</TwTh>
+                        <TwTh>Track</TwTh>
+                        <TwTh>Driver</TwTh>
+                        <TwTh>Finish</TwTh>
+                        <TwTh>Start</TwTh>
+                        <TwTh>Led</TwTh>
+                        <TwTh>Pts</TwTh>
+                        <TwTh>Status</TwTh>
+                        <TwTh>Team</TwTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <TwTd>@context.Season</TwTd>
+                        <TwTd>@($"R{context.RaceNum}")</TwTd>
+                        <TwTd>
+                            <span class="text-xs text-slate-400" title="@context.RaceName">@TruncateTrack(context.Track)</span>
+                        </TwTd>
+                        <TwTd>
+                            <TwButton Variant="text" Class="p-0 text-blue-400 hover:text-blue-300 font-bold" 
+                                      Href="@($"/driver-profiles?driver={Uri.EscapeDataString(context.Driver ?? "")}&series={_selectedSeries}")">
+                                @context.Driver
+                            </TwButton>
+                        </TwTd>
+                        <TwTd>
+                            <TwChip Size="sm" Color="@GetFinishColor(context.Finish)">
+                                P@(context.Finish)
+                            </TwChip>
+                        </TwTd>
+                        <TwTd>@(context.Start?.ToString() ?? "-")</TwTd>
+                        <TwTd>
+                            @if (context.Led > 0)
+                            {
+                                <TwChip Size="sm" Color="amber" Variant="outline">@context.Led</TwChip>
+                            }
+                            else
+                            {
+                                <span class="text-slate-600">0</span>
+                            }
+                        </TwTd>
+                        <TwTd>@(context.Pts?.ToString() ?? "-")</TwTd>
+                        <TwTd>
+                            @if (context.Status != null && context.Status.ToLower() != "running")
+                            {
+                                <TwChip Size="sm" Color="red" Variant="outline">@context.Status</TwChip>
+                            }
+                            else
+                            {
+                                <span class="text-emerald-500 text-[10px] font-bold">RUNNING</span>
+                            }
+                        </TwTd>
+                        <TwTd>
+                            <span class="text-xs text-slate-500">@TruncateTeam(context.Team)</span>
+                        </TwTd>
+                    </RowTemplate>
+                </TwTable>
+            </div>
+        </TwCard>
         
-        <MudText Typo="Typo.caption" Class="mt-2">
-            Showing @_results.Count of @_totalResults results
-        </MudText>
+        <div class="mt-4 flex justify-between items-center px-2">
+            <span class="text-xs text-slate-500 italic">
+                Showing @_results.Count of @_totalResults results
+            </span>
+            <div class="flex gap-2">
+                @* Potential Pagination here *@
+            </div>
+        </div>
     }
     else if (!_isLoading && _hasSearched)
     {
-        <MudAlert Severity="Severity.Info">No results found. Try adjusting your filters.</MudAlert>
+        <TwAlert Severity="info" Class="mx-4">No results found. Try adjusting your filters.</TwAlert>
     }
-</MudContainer>
+</TwContainer>
 
 @code {
     private string _selectedSeries = "cup";
@@ -211,39 +202,17 @@
         finally
         {
             _isLoading = false;
+            StateHasChanged();
         }
     }
 
-    private async Task<IEnumerable<string>> SearchDrivers(string value, CancellationToken ct)
+    private string GetFinishColor(int? finish) => finish switch
     {
-        if (string.IsNullOrEmpty(value) || value.Length < 2)
-            return Enumerable.Empty<string>();
-        
-        try
-        {
-            var response = await Http.GetFromJsonAsync<DriversResponse>(
-                $"http://backend:8000/db/races/nascar/drivers?series={_selectedSeries}&search={Uri.EscapeDataString(value)}&limit=20",
-                ct);
-            return response?.Drivers ?? Enumerable.Empty<string>();
-        }
-        catch
-        {
-            return Enumerable.Empty<string>();
-        }
-    }
-
-    private void OnDriverChanged(string driver)
-    {
-        _selectedDriver = driver;
-    }
-
-    private Color GetFinishColor(int? finish) => finish switch
-    {
-        1 => Color.Success,
-        <= 3 => Color.Success,
-        <= 5 => Color.Info,
-        <= 10 => Color.Info,
-        _ => Color.Default
+        1 => "emerald",
+        <= 3 => "emerald",
+        <= 5 => "blue",
+        <= 10 => "blue",
+        _ => "slate"
     };
 
     private string TruncateTrack(string? track) => 

@@ -1,204 +1,186 @@
 @page "/feature-engineering"
 @using SportsBettingAnalyzer.Services
 @using System.Text.Json
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
 @inject PythonMLServiceClient MLService
 @inject ISnackbar Snackbar
 @rendermode InteractiveServer
 
 <PageTitle>Feature Engineering</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
-    <MudText Typo="Typo.h3" GutterBottom="true">Feature Engineering Pipeline</MudText>
-    <MudText Typo="Typo.subtitle1" Class="mb-4">
-        Manage and enhance your data with advanced predictive features.
-    </MudText>
+<TwContainer MaxWidth="extraLarge" Class="mt-8">
+    <div class="space-y-6">
+        <!-- Header -->
+        <TwCard Class="p-6">
+             <div class="flex items-center gap-4">
+                <div class="p-3 bg-cyan-500/10 rounded-xl">
+                    <TwIcon Name="auto_fix_high" Class="w-8 h-8 text-cyan-500" />
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold text-slate-100">Feature Engineering Pipeline</h1>
+                    <p class="text-slate-400">Manage and enhance your data with advanced predictive features</p>
+                </div>
+            </div>
+        </TwCard>
 
-    <MudGrid>
-        <!-- Control Panel -->
-        <MudItem xs="12" md="4">
-            <MudPaper Class="p-4" Elevation="3">
-                <MudText Typo="Typo.h6" GutterBottom="true">Actions</MudText>
-                <MudText Typo="Typo.body2" Class="mb-4">
-                    Run the enhancement pipeline to calculate new features (e.g., career stats, rolling averages) for all NASCAR series.
-                </MudText>
-
-                @if (_isEnhancing)
-                {
-                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" Class="mb-3" />
-                    <MudText>Processing data... This may take a moment.</MudText>
-                }
-                else
-                {
-                    <MudButton Variant="Variant.Filled" 
-                               Color="Color.Primary" 
-                               StartIcon="@Icons.Material.Filled.AutoFixHigh"
-                               OnClick="RunEnhancement"
-                               FullWidth="true"
-                               Size="Size.Large">
-                        Run Feature Enhancement
-                    </MudButton>
-                }
-
-                @if (!string.IsNullOrEmpty(_lastRunMessage))
-                {
-                    <MudAlert Severity="@(_lastRunSuccess ? Severity.Success : Severity.Error)" Class="mt-4">
-                        @_lastRunMessage
-                    </MudAlert>
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+            <!-- Control Panel -->
+            <div class="md:col-span-4 space-y-6">
+                <!-- Actions -->
+                <TwCard Class="p-6 h-full">
+                    <h3 class="font-bold text-slate-100 mb-2">Actions</h3>
+                    <p class="text-sm text-slate-400 mb-6">Run the enhancement pipeline to calculate new features (e.g., career stats, rolling averages) for all NASCAR series.</p>
                     
-                    @if (_lastRunSuccess && _enhancedSeries.Any())
+                    @if (_isEnhancing)
                     {
-                        <MudList T="string" Dense="true" Class="mt-2">
-                            @foreach (var seriesName in _enhancedSeries)
-                            {
-                                <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">
-                                    <MudText Typo="Typo.body2"><b>@seriesName</b>: Enhanced</MudText>
-                                </MudListItem>
-                            }
-                        </MudList>
+                         <div class="bg-blue-500/10 border border-blue-500/30 p-4 rounded-xl text-center">
+                            <TwProgressBar Indeterminate="true" Color="blue" Height="h-1" Class="mb-3" />
+                            <p class="text-blue-400 text-sm font-medium">Processing data...</p>
+                        </div>
                     }
-                }
-            </MudPaper>
-            
-            <MudPaper Class="p-4 mt-4" Elevation="3">
-                <MudText Typo="Typo.h6" GutterBottom="true">Pipeline Info</MudText>
-                <MudList T="string" Dense="true">
-                    <MudListItem Icon="@Icons.Material.Filled.Source">
-                        <MudText Typo="Typo.caption">Input: Raw .rda files (data/nascar/raw)</MudText>
-                    </MudListItem>
-                    <MudListItem Icon="@Icons.Material.Filled.Output">
-                        <MudText Typo="Typo.caption">Output: Enhanced .csv files (data/nascar)</MudText>
-                    </MudListItem>
-                    <MudListItem Icon="@Icons.Material.Filled.Functions">
-                        <MudText Typo="Typo.caption">Features: 27+ New Contextual Features</MudText>
-                    </MudListItem>
-                    <MudListItem Icon="@Icons.Material.Filled.FilterAlt">
-                        <MudText Typo="Typo.caption">Filter: Modern Era (2012-2025)</MudText>
-                    </MudListItem>
-                </MudList>
-            </MudPaper>
-        </MudItem>
-
-        <!-- Data Preview -->
-        <MudItem xs="12" md="8">
-            <MudPaper Class="p-4" Elevation="3">
-                <MudGrid Class="mb-4 align-center">
-                    <MudItem xs="12" sm="3">
-                        <MudText Typo="Typo.h6">Data Preview</MudText>
-                    </MudItem>
-                    <MudItem xs="12" sm="3">
-                        <MudSelect T="int?" Label="Filter by Season" Value="@_selectedSeason" ValueChanged="OnSeasonChanged" Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense" Clearable="true">
-                            <MudSelectItem T="int?" Value="null">All Seasons</MudSelectItem>
-                            @for (int year = DateTime.Now.Year + 1; year >= 2012; year--)
+                    else
+                    {
+                        <TwButton Variant="solid" Color="cyan" FullWidth="true" OnClick="RunEnhancement">
+                            <div class="flex items-center justify-center gap-2 py-1">
+                                <TwIcon Name="auto_fix_high" />
+                                <span>Run Feature Enhancement</span>
+                            </div>
+                        </TwButton>
+                    }
+                    
+                    @if (!string.IsNullOrEmpty(_lastRunMessage))
+                    {
+                        <div class="mt-4">
+                            <TwAlert Severity="@(_lastRunSuccess ? "success" : "error")">
+                                @_lastRunMessage
+                            </TwAlert>
+                             @if (_lastRunSuccess && _enhancedSeries.Any())
                             {
-                                var y = year;
-                                <MudSelectItem T="int?" Value="@y">@y</MudSelectItem>
+                                <div class="mt-2 space-y-1">
+                                    @foreach (var seriesName in _enhancedSeries)
+                                    {
+                                        <div class="flex items-center gap-2 text-sm text-emerald-400">
+                                            <TwIcon Name="check_circle" Class="w-4 h-4" />
+                                            <span class="font-bold uppercase">@seriesName Enhanced</span>
+                                        </div>
+                                    }
+                                </div>
                             }
-                        </MudSelect>
-                    </MudItem>
-                    <MudItem xs="12" sm="3">
-                        <MudSelect T="string" Label="Track Type" Value="@_selectedTrackType" ValueChanged="OnTrackTypeChanged" Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense" Clearable="true">
-                            <MudSelectItem T="string" Value="null">All Types</MudSelectItem>
-                            @foreach (var type in _trackTypes)
-                            {
-                                <MudSelectItem T="string" Value="@type">@type</MudSelectItem>
-                            }
-                        </MudSelect>
-                    </MudItem>
-                    <MudItem xs="12" sm="3">
-                        <MudTextField T="string" Label="Driver Filter" Value="@_driverFilter" ValueChanged="OnDriverFilterChanged" Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search" DebounceInterval="500" />
-                    </MudItem>
-                </MudGrid>
+                        </div>
+                    }
+                </TwCard>
                 
-                <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
-                    <MudTabPanel Text="Cup Series" OnClick="@(() => LoadData("cup"))">
-                        @if (_isLoadingData)
-                        {
-                            <MudProgressLinear Color="Color.Secondary" Indeterminate="true" />
-                        }
-                        else
-                        {
-                            <MudTable Items="@_cupData" Dense="true" Hover="true" Striped="true" FixedHeader="true" Height="400px">
-                                <HeaderContent>
-                                    @foreach (var col in _displayColumns)
+                <!-- Info -->
+                <TwCard Class="p-6">
+                     <h3 class="font-bold text-slate-100 mb-4">Pipeline Info</h3>
+                     <div class="space-y-4">
+                         <div class="flex items-center gap-3 text-slate-400">
+                             <TwIcon Name="source" Class="text-slate-500" />
+                             <span class="text-sm">Input: Raw .rda files (data/nascar/raw)</span>
+                         </div>
+                         <div class="flex items-center gap-3 text-slate-400">
+                             <TwIcon Name="output" Class="text-slate-500" />
+                             <span class="text-sm">Output: Enhanced .csv files (data/nascar)</span>
+                         </div>
+                          <div class="flex items-center gap-3 text-slate-400">
+                             <TwIcon Name="functions" Class="text-slate-500" />
+                             <span class="text-sm">Features: 27+ New Contextual Features</span>
+                         </div>
+                          <div class="flex items-center gap-3 text-slate-400">
+                             <TwIcon Name="filter_alt" Class="text-slate-500" />
+                             <span class="text-sm">Filter: Modern Era (2012-2025)</span>
+                         </div>
+                     </div>
+                </TwCard>
+            </div>
+            
+            <!-- Data Preview -->
+             <div class="md:col-span-8">
+                 <TwCard Class="p-6 h-full">
+                     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                         <h3 class="font-bold text-slate-100">Data Preview</h3>
+                         
+                         <div class="flex gap-2 flex-col md:flex-row">
+                             <div class="w-full md:w-32">
+                                <TwSelect TValue="int?" Value="@_selectedSeason" ValueChanged="OnSeasonChanged" Label="Season" FullWidth="true">
+                                    <option value="">All</option>
+                                    @for (int year = DateTime.Now.Year + 1; year >= 2012; year--)
                                     {
-                                        <MudTh>@col</MudTh>
+                                        <option value="@year">@year</option>
                                     }
-                                </HeaderContent>
-                                <RowTemplate>
-                                    @foreach (var col in _displayColumns)
-                                    {
-                                        <MudTd DataLabel="@col">@context[col]</MudTd>
-                                    }
-                                </RowTemplate>
-                                <PagerContent>
-                                    <MudTablePager />
-                                </PagerContent>
-                            </MudTable>
-                            <MudText Typo="Typo.caption" Class="mt-2">Showing top 1000 rows. Total rows: @_totalRows</MudText>
-                        }
-                    </MudTabPanel>
-                    
-                    <MudTabPanel Text="Xfinity Series" OnClick="@(() => LoadData("xfinity"))">
-                        <!-- Same structure, just re-uses _cupData for now as we load on click -->
-                         @if (_isLoadingData)
-                        {
-                            <MudProgressLinear Color="Color.Secondary" Indeterminate="true" />
-                        }
-                        else
-                        {
-                            <MudTable Items="@_cupData" Dense="true" Hover="true" Striped="true" FixedHeader="true" Height="400px">
-                                <HeaderContent>
-                                    @foreach (var col in _displayColumns)
-                                    {
-                                        <MudTh>@col</MudTh>
-                                    }
-                                </HeaderContent>
-                                <RowTemplate>
-                                    @foreach (var col in _displayColumns)
-                                    {
-                                        <MudTd DataLabel="@col">@context[col]</MudTd>
-                                    }
-                                </RowTemplate>
-                                <PagerContent>
-                                    <MudTablePager />
-                                </PagerContent>
-                            </MudTable>
-                             <MudText Typo="Typo.caption" Class="mt-2">Showing top 1000 rows. Total rows: @_totalRows</MudText>
-                        }
-                    </MudTabPanel>
-                    
-                    <MudTabPanel Text="Truck Series" OnClick="@(() => LoadData("truck"))">
-                         @if (_isLoadingData)
-                        {
-                            <MudProgressLinear Color="Color.Secondary" Indeterminate="true" />
-                        }
-                        else
-                        {
-                            <MudTable Items="@_cupData" Dense="true" Hover="true" Striped="true" FixedHeader="true" Height="400px">
-                                <HeaderContent>
-                                    @foreach (var col in _displayColumns)
-                                    {
-                                        <MudTh>@col</MudTh>
-                                    }
-                                </HeaderContent>
-                                <RowTemplate>
-                                    @foreach (var col in _displayColumns)
-                                    {
-                                        <MudTd DataLabel="@col">@context[col]</MudTd>
-                                    }
-                                </RowTemplate>
-                                <PagerContent>
-                                    <MudTablePager />
-                                </PagerContent>
-                            </MudTable>
-                             <MudText Typo="Typo.caption" Class="mt-2">Showing top 1000 rows. Total rows: @_totalRows</MudText>
-                        }
-                    </MudTabPanel>
-                </MudTabs>
-            </MudPaper>
-        </MudItem>
-    </MudGrid>
-</MudContainer>
+                                </TwSelect>
+                             </div>
+                             <div class="w-full md:w-40">
+                                 <TwSelect TValue="string" Value="@_selectedTrackType" ValueChanged="OnTrackTypeChanged" Label="Track Type" FullWidth="true">
+                                     <option value="">All Types</option>
+                                     @foreach (var type in _trackTypes)
+                                     {
+                                         <option value="@type">@type</option>
+                                     }
+                                 </TwSelect>
+                             </div>
+                              <div class="relative w-full md:w-48">
+                                <label class="block text-xs text-slate-500 mb-1 font-medium">Driver</label>
+                                <input type="text" @bind="_driverFilter" @bind:event="oninput" @onkeyup="@(async (e) => { if (e.Key == "Enter") await OnDriverFilterChanged(_driverFilter); })" placeholder="Search..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500" />
+                            </div>
+                         </div>
+                     </div>
+                     
+                     <TwTabs DefaultTab="0">
+                         <TwTabPanel Title="Cup Series" OnClick="@(() => LoadData("cup"))">
+                             <div class="pt-4">
+                                <TwTable TItem="Dictionary<string, object>" Items="@_cupData" IsLoading="@_isLoadingData">
+                                    <HeaderContent>
+                                        @foreach (var col in _displayColumns) { <TwTh>@col</TwTh> }
+                                    </HeaderContent>
+                                    <RowTemplate Context="row">
+                                         @foreach (var col in _displayColumns) { <TwTd>@row.GetValueOrDefault(col, "")</TwTd> }
+                                    </RowTemplate>
+                                </TwTable>
+                                <!-- Simple pagination/limit indicator -->
+                                <div class="flex justify-between items-center mt-4 text-xs text-slate-500 border-t border-slate-800 pt-4">
+                                    <span>Showing top 100 rows. Total: @_totalRows</span>
+                                </div>
+                             </div>
+                         </TwTabPanel>
+                         
+                         <TwTabPanel Title="Xfinity Series" OnClick="@(() => LoadData("xfinity"))">
+                             <div class="pt-4">
+                                  <TwTable TItem="Dictionary<string, object>" Items="@_cupData" IsLoading="@_isLoadingData">
+                                    <HeaderContent>
+                                        @foreach (var col in _displayColumns) { <TwTh>@col</TwTh> }
+                                    </HeaderContent>
+                                    <RowTemplate Context="row">
+                                         @foreach (var col in _displayColumns) { <TwTd>@row.GetValueOrDefault(col, "")</TwTd> }
+                                    </RowTemplate>
+                                </TwTable>
+                                 <div class="flex justify-between items-center mt-4 text-xs text-slate-500 border-t border-slate-800 pt-4">
+                                    <span>Showing top 100 rows. Total: @_totalRows</span>
+                                </div>
+                             </div>
+                         </TwTabPanel>
+                         
+                         <TwTabPanel Title="Truck Series" OnClick="@(() => LoadData("truck"))">
+                             <div class="pt-4">
+                                  <TwTable TItem="Dictionary<string, object>" Items="@_cupData" IsLoading="@_isLoadingData">
+                                    <HeaderContent>
+                                        @foreach (var col in _displayColumns) { <TwTh>@col</TwTh> }
+                                    </HeaderContent>
+                                    <RowTemplate Context="row">
+                                         @foreach (var col in _displayColumns) { <TwTd>@row.GetValueOrDefault(col, "")</TwTd> }
+                                    </RowTemplate>
+                                </TwTable>
+                                 <div class="flex justify-between items-center mt-4 text-xs text-slate-500 border-t border-slate-800 pt-4">
+                                    <span>Showing top 100 rows. Total: @_totalRows</span>
+                                </div>
+                             </div>
+                         </TwTabPanel>
+                     </TwTabs>
+                 </TwCard>
+             </div>
+        </div>
+    </div>
+</TwContainer>
 
 @code {
     private bool _isEnhancing = false;
@@ -231,6 +213,7 @@
     private async Task OnTrackTypeChanged(string? trackType)
     {
         _selectedTrackType = trackType;
+        if (string.IsNullOrEmpty(trackType)) _selectedTrackType = null;
         await LoadData(_currentSeries);
     }
 
@@ -256,9 +239,7 @@
                 _lastRunSuccess = true;
                 _lastRunMessage = result.Message ?? "Enhancement completed successfully!";
                 _enhancedSeries = result.SeriesEnhanced ?? new List<string>();
-                
                 Snackbar.Add("Data Enhancement Successful", Severity.Success);
-                // Reload data to show new features
                 await LoadData(_currentSeries);
             }
             else
@@ -271,7 +252,7 @@
         catch (Exception ex)
         {
             _lastRunSuccess = false;
-            _lastRunMessage = $"Error: {ex.Message}";
+             _lastRunMessage = $"Error: {ex.Message}";
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
         }
         finally
@@ -285,33 +266,32 @@
     {
         _currentSeries = series;
         _isLoadingData = true;
-        StateHasChanged();
+        StateHasChanged(); // Force update
 
         try
         {
-            // Load data for the specific series
-            // Note: We use the 'series' parameter in GetDataAsync which maps to the config override
-            // If a specific season is selected, filter by it (min=max=season). If null, show all (or default limit).
-            var data = await MLService.GetDataAsync("nascar", limit: 100, series: series, seasonMin: _selectedSeason, seasonMax: _selectedSeason, trackType: _selectedTrackType, driver: _driverFilter); 
+            var data = await MLService.GetDataAsync(
+                "nascar", 
+                limit: 100, 
+                series: series, 
+                seasonMin: _selectedSeason, 
+                seasonMax: _selectedSeason, 
+                trackType: _selectedTrackType, 
+                driver: _driverFilter
+            ); 
             
             if (data != null && data.Rows.Count > 0)
             {
                 _cupData = data.Rows;
                 _totalRows = data.TotalRows;
                 
-                // Select key columns to display
                 var allCols = data.Columns;
                 var priorityCols = new[] { "year", "race_num", "driver", "finishing_position", "start", "track", "career_wins", "avg_finish_last_5" };
                 
                 _displayColumns = priorityCols.Where(c => allCols.Contains(c)).ToList();
-                
-                // Add a few more if available
                 foreach(var col in allCols.Take(5))
                 {
-                    if (!_displayColumns.Contains(col))
-                    {
-                        _displayColumns.Add(col);
-                    }
+                    if (!_displayColumns.Contains(col)) _displayColumns.Add(col);
                 }
             }
             else
@@ -327,7 +307,7 @@
         finally
         {
             _isLoadingData = false;
-            StateHasChanged();
+             StateHasChanged();
         }
     }
 }

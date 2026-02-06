@@ -263,9 +263,7 @@ async def get_todays_nfl_odds(sportsbook: str = "fanduel") -> Dict[str, Any]:
     falls back to sbrscrape if API key not available.
     """
     import os
-    from datetime import date
-    
-    today = date.today()
+    today = (datetime.utcnow() - timedelta(hours=6)).date()
     
     # Map sportsbook names to Odds API format
     SPORTSBOOK_MAP = {

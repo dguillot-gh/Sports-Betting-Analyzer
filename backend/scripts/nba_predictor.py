@@ -85,12 +85,22 @@ class NBAPredictor:
                 row = await self.db.fetchrow("""
                     SELECT 
                         AVG(pts) as ppg,
+                        AVG(opp_pts) as oppg,
                         AVG(reb) as rpg,
                         AVG(ast) as apg,
+                        -- Simple Pace estimate: FGA + 0.44 * FTA + TOV - OREB
+                        AVG(fga + 0.44 * fta + tov - oreb) as est_possessions,
                         COUNT(CASE WHEN pts > opp_pts THEN 1 END)::float / NULLIF(COUNT(*), 0) as win_pct
                     FROM (
-                        SELECT r.data->>'pts' as pts, r.data->>'reb' as reb, 
-                               r.data->>'ast' as ast, r.data->>'opp_pts' as opp_pts
+                        SELECT 
+                            (r.data->>'pts')::float as pts, 
+                            (r.data->>'opp_pts')::float as opp_pts,
+                            (r.data->>'reb')::float as reb, 
+                            (r.data->>'ast')::float as ast,
+                            (r.data->>'fga')::float as fga,
+                            (r.data->>'fta')::float as fta,
+                            (r.data->>'tov')::float as tov,
+                            (r.data->>'oreb')::float as oreb
                         FROM results r
                         JOIN entities e ON r.entity_id = e.id
                         WHERE e.name ILIKE $1 AND r.series = 'nba_game_log'
@@ -100,8 +110,17 @@ class NBAPredictor:
                 """, f"%{team}%")
                 
                 if row and row['ppg']:
-                    stats['ppg'] = float(row['ppg'] or 114)
+                    stats['ppg'] = float(row['ppg'] or 115)
+                    stats['oppg'] = float(row['oppg'] or 115)
                     stats['win_pct'] = float(row['win_pct'] or 0.5)
+                    stats['rpg'] = float(row['rpg'] or 44)
+                    stats['apg'] = float(row['apg'] or 25)
+                    
+                    # Calculate ratings based on possessions
+                    poss = float(row['est_possessions'] or 100)
+                    stats['off_rating'] = (stats['ppg'] / poss) * 100 if poss > 0 else 115
+                    stats['def_rating'] = (stats['oppg'] / poss) * 100 if poss > 0 else 115
+                    stats['pace'] = poss # Average possessions per game (~48 mins)
             except Exception as e:
                 logger.warning(f"Could not fetch stats for {team}: {e}")
         
@@ -118,13 +137,28 @@ class NBAPredictor:
         home_stats = await self.get_team_stats(home_team)
         away_stats = await self.get_team_stats(away_team)
         
-        # Home court advantage (typically 2-3 points in NBA)
-        home_advantage = 2.5
+        # Home court advantage (typically +1.25 OffRating / -1.25 DefRating)
+        hca_adj = 1.25
         
-        # Calculate expected points
-        # Use average of team's offense vs opponent's defense
-        home_expected = (home_stats['ppg'] + away_stats['oppg']) / 2 + home_advantage / 2
-        away_expected = (away_stats['ppg'] + home_stats['oppg']) / 2 - home_advantage / 2
+        # Predicted Pace (Average of both teams)
+        home_pace = home_stats.get('pace', 100.0)
+        away_pace = away_stats.get('pace', 100.0)
+        predicted_pace = (home_pace + away_pace) / 2
+        
+        # Expected points per 100 possessions
+        home_off = home_stats.get('off_rating', 115.0)
+        home_def = home_stats.get('def_rating', 115.0)
+        away_off = away_stats.get('off_rating', 115.0)
+        away_def = away_stats.get('def_rating', 115.0)
+        
+        # Home offense vs Away defense
+        home_exp_100 = (home_off + hca_adj + away_def) / 2
+        # Away offense vs Home defense
+        away_exp_100 = (away_off + home_def - hca_adj) / 2
+        
+        # Final score projection adjusted for pace
+        home_expected = home_exp_100 * (predicted_pace / 100)
+        away_expected = away_exp_100 * (predicted_pace / 100)
         
         # Predicted margin (positive = home win)
         predicted_margin = home_expected - away_expected
@@ -133,7 +167,6 @@ class NBAPredictor:
         predicted_total = home_expected + away_expected
         
         # Win probability using logistic function
-        # Steepness factor: each point of predicted margin = ~4% win probability shift
         import math
         home_win_prob = 1 / (1 + math.exp(-predicted_margin * 0.15))
         
