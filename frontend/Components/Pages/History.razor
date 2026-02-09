@@ -55,6 +55,7 @@
                                 <th class="px-4 py-3">Bet Type</th>
                                 <th class="px-4 py-3">Odds</th>
                                 <th class="px-4 py-3">Wager</th>
+                                <th class="px-4 py-3">CLV</th>
                                 <th class="px-4 py-3">Recommendation</th>
                                 <th class="px-4 py-3">Result</th>
                                 <th class="px-4 py-3 text-right">Actions</th>
@@ -78,6 +79,13 @@
                                         {
                                             <div class="font-medium text-white">@bet.PlayerName</div>
                                         }
+                                        
+                                        @if (bet.IsMock)
+                                        {
+                                            <div class="mt-1">
+                                                <TwChip Color="indigo" Size="xs" Variant="solid">PAPER</TwChip>
+                                            </div>
+                                        }
                                     </td>
                                     <td class="px-4 py-3">
                                         <TwChip Size="xs" Variant="outline" Color="slate">@bet.Sport.ToUpper()</TwChip>
@@ -85,6 +93,18 @@
                                     <td class="px-4 py-3">@bet.BetType</td>
                                     <td class="px-4 py-3 font-mono">@bet.Odds</td>
                                     <td class="px-4 py-3 text-emerald-400 font-mono">$@bet.WagerAmount.ToString("F2")</td>
+                                    <td class="px-4 py-3">
+                                        @if (bet.ClvPercent.HasValue)
+                                        {
+                                            <span class="@(bet.ClvPercent >= 0 ? "text-emerald-400" : "text-amber-500") font-mono text-xs">
+                                                @(bet.ClvPercent >= 0 ? "+" : "")@bet.ClvPercent.Value.ToString("F1")%
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-slate-600">-</span>
+                                        }
+                                    </td>
                                     <td class="px-4 py-3">
                                         <TwChip Size="xs" Variant="solid"
                                                 Color="@(bet.Recommendation == "GoodBet" ? "emerald" : bet.Recommendation == "BadBet" ? "red" : "amber")">

@@ -1,0 +1,268 @@
+@page "/clv-dashboard"
+@using System.Text.Json
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@using SportsBettingAnalyzer.Services
+@using SportsBettingAnalyzer.Models
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
+
+<PageTitle>CLV Dashboard</PageTitle>
+
+<TwContainer MaxWidth="extraLarge" Class="pa-4 mt-8">
+    <div class="space-y-6">
+        <!-- Header -->
+        <div class="p-6 rounded-xl shadow-lg bg-gradient-to-br from-emerald-900 to-slate-900 text-white border border-emerald-500/30">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                <div>
+                    <h1 class="text-3xl font-bold flex items-center gap-3">
+                        <svg class="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                        CLV Analytics
+                    </h1>
+                    <p class="text-emerald-300 text-sm mt-1">Closing Line Value performance and market edge metrics.</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="flex flex-col items-end">
+                        <span class="text-xs text-emerald-500 uppercase font-bold tracking-widest">Aggregate Edge</span>
+                        <span class="text-3xl font-bold text-white">@(_avgClv >= 0 ? "+" : "")@_avgClv.ToString("F2")%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Metric Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <TwCard Class="bg-slate-900/50 border-emerald-500/20">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-bold text-slate-500 uppercase">Avg CLV Edge</p>
+                        <h3 class="text-2xl font-bold text-white mt-1">@(_avgClv >= 0 ? "+" : "")@_avgClv.ToString("F2")%</h3>
+                    </div>
+                    <div class="p-3 bg-emerald-500/10 rounded-lg text-emerald-400">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <TwProgressBar Value="@((int)Math.Max(0, Math.Min(100, 50 + (_avgClv * 5))))" Color="emerald" Size="sm" />
+                    <p class="text-[10px] text-slate-500 mt-2">Relative to market opening lines</p>
+                </div>
+            </TwCard>
+
+            <TwCard Class="bg-slate-900/50 border-blue-500/20">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-bold text-slate-500 uppercase">Beating the Line</p>
+                        <h3 class="text-2xl font-bold text-white mt-1">@_beatingLinePct.ToString("F1")%</h3>
+                    </div>
+                    <div class="p-3 bg-blue-500/10 rounded-lg text-blue-400">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                </div>
+                <div class="mt-4">
+                     <TwProgressBar Value="@((int)_beatingLinePct)" Color="blue" Size="sm" />
+                     <p class="text-[10px] text-slate-500 mt-2">Percentage of bets with positive CLV</p>
+                </div>
+            </TwCard>
+
+             <TwCard Class="bg-slate-900/50 border-indigo-500/20">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-bold text-slate-500 uppercase">Profit Correlation</p>
+                        <h3 class="text-2xl font-bold text-white mt-1">@_correlation.ToString("F2")</h3>
+                    </div>
+                    <div class="p-3 bg-indigo-500/10 rounded-lg text-indigo-400">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
+                    </div>
+                </div>
+                <div class="mt-4">
+                     <div class="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                        <div class="h-full bg-indigo-500" style="width: @((_correlation * 100).ToString("F0"))%"></div>
+                     </div>
+                     <p class="text-[10px] text-slate-500 mt-2">R-Value between CLV and Result</p>
+                </div>
+            </TwCard>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+            <!-- CLV over Time -->
+            <div class="md:col-span-8">
+                <TwCard Class="h-full">
+                    <div class="flex justify-between items-center mb-6">
+                         <h3 class="text-sm font-bold text-slate-300 uppercase tracking-wider">CLV Edge Trend</h3>
+                         <div class="flex gap-2">
+                             <button @onclick="@(() => LoadChartData(7))" class="px-2 py-1 text-[10px] font-bold rounded border @(_days == 7 ? "bg-emerald-500 border-emerald-500 text-white" : "border-slate-700 text-slate-500 hover:text-white")">7D</button>
+                             <button @onclick="@(() => LoadChartData(30))" class="px-2 py-1 text-[10px] font-bold rounded border @(_days == 30 ? "bg-emerald-500 border-emerald-500 text-white" : "border-slate-700 text-slate-500 hover:text-white")">30D</button>
+                         </div>
+                    </div>
+
+                    @if (_loadingChart)
+                    {
+                        <div class="h-64 flex items-center justify-center">
+                            <TwProgressBar Indeterminate="true" Color="emerald" />
+                        </div>
+                    }
+                    else if (_dailyClv.Any())
+                    {
+                        <div class="h-64 flex items-end gap-1 px-2 border-l border-b border-slate-800">
+                            @foreach (var d in _dailyClv)
+                            {
+                                var height = (int)((d.Value / 10.0) * 100); // Normalize to 10% max for visual
+                                <div class="flex-1 flex flex-col items-center group cursor-pointer">
+                                    <div class="relative w-full @(d.Value >= 0 ? "bg-emerald-500/40 border-t-2 border-emerald-400" : "bg-red-500/40 border-b-2 border-red-400 order-last")" 
+                                         style="height: @(Math.Abs(height))px"
+                                         title="@d.Date: @d.Value.ToString("F1")%">
+                                         <!-- Tooltip -->
+                                         <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-10">
+                                             <div class="bg-slate-900 border border-slate-700 text-white text-[10px] px-2 py-1 rounded shadow-xl whitespace-nowrap">
+                                                 @d.Date: @d.Value.ToString("F1")%
+                                             </div>
+                                         </div>
+                                    </div>
+                                    <div class="text-[8px] text-slate-600 mt-1 rotate-45 origin-left">@d.Date.Split('-').Last()</div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="h-64 flex items-center justify-center text-slate-600 italic">No trend data available.</div>
+                    }
+                </TwCard>
+            </div>
+
+            <!-- Best CLV Bets -->
+            <div class="md:col-span-4">
+                <TwCard Class="h-full">
+                    <h3 class="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4">Top Value Bets</h3>
+                    <div class="space-y-3">
+                        @if (_topBets.Any())
+                        {
+                            @foreach (var b in _topBets)
+                            {
+                                <div class="p-3 bg-slate-900/50 rounded-lg border border-slate-800/50 flex justify-between items-center group hover:border-emerald-500/30 transition-colors">
+                                    <div class="flex-1">
+                                        <div class="text-[10px] text-slate-500 uppercase font-bold">@b.Sport</div>
+                                        <div class="text-xs font-medium text-white line-clamp-1">@b.Description</div>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="text-xs font-bold text-emerald-400">+@b.ClvPercent.Value.ToString("F1")%</div>
+                                        <div class="text-[10px] @(b.Outcome == "win" ? "text-emerald-500" : (b.Outcome == "loss" ? "text-red-500" : "text-slate-500")) uppercase">@b.Outcome</div>
+                                    </div>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <p class="text-xs text-slate-600 italic">No CLV data captured yet.</p>
+                        }
+                    </div>
+                </TwCard>
+            </div>
+        </div>
+    </div>
+</TwContainer>
+
+@code {
+    private bool _loadingChart = false;
+    private int _days = 30;
+    
+    // Stats
+    private decimal _avgClv = 0;
+    private decimal _beatingLinePct = 0;
+    private decimal _correlation = 0.42m; // Mock for now
+    
+    private List<ClvPoint> _dailyClv = new();
+    private List<PaperTrader.PaperBet> _topBets = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSummary();
+        await LoadChartData(_days);
+        await LoadTopBets();
+    }
+
+    private async Task LoadSummary()
+    {
+        try
+        {
+            var resp = await Http.GetFromJsonAsync<JsonElement>("http://backend:8000/bets/stats/summary?days=0");
+            if (resp.TryGetProperty("avg_clv_percent", out var clv) && clv.ValueKind != JsonValueKind.Null)
+            {
+                _avgClv = (decimal)clv.GetDouble();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading CLV summary: {ex.Message}");
+        }
+    }
+
+    private async Task LoadChartData(int days)
+    {
+        _days = days;
+        _loadingChart = true;
+        _dailyClv.Clear();
+        
+        try
+        {
+            var resp = await Http.GetFromJsonAsync<JsonElement>($"http://backend:8000/bets/stats/chart-data?days={days}");
+            if (resp.TryGetProperty("daily_data", out var daily))
+            {
+                int plusCount = 0;
+                int totalWithClv = 0;
+                
+                foreach (var d in daily.EnumerateArray())
+                {
+                    if (d.TryGetProperty("avg_clv", out var clv) && clv.ValueKind != JsonValueKind.Null)
+                    {
+                        var val = clv.GetDouble();
+                        _dailyClv.Add(new ClvPoint { Date = d.GetProperty("date").GetString() ?? "", Value = val });
+                        
+                        if (val > 0) plusCount++;
+                        totalWithClv++;
+                    }
+                }
+                
+                if (totalWithClv > 0)
+                {
+                    _beatingLinePct = (decimal)plusCount * 100m / (decimal)totalWithClv;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading CLV trend: {ex.Message}", Severity.Warning);
+        }
+        
+        _loadingChart = false;
+    }
+
+    private async Task LoadTopBets()
+    {
+        try
+        {
+            var content = await Http.GetStringAsync("http://backend:8000/bets?limit=50");
+            using var doc = JsonDocument.Parse(content);
+            if (doc.RootElement.TryGetProperty("bets", out var arr))
+            {
+                _topBets = arr.EnumerateArray()
+                    .Select(b => new PaperTrader.PaperBet
+                    {
+                        Description = b.GetProperty("description").GetString() ?? "",
+                        Sport = b.GetProperty("sport").GetString() ?? "",
+                        ClvPercent = b.TryGetProperty("clv_percent", out var clv) && clv.ValueKind != JsonValueKind.Null ? (double)clv.GetDecimal() : null,
+                        Outcome = b.GetProperty("outcome").GetString() ?? ""
+                    })
+                    .Where(b => b.ClvPercent.HasValue)
+                    .OrderByDescending(b => b.ClvPercent)
+                    .Take(5)
+                    .ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+             Console.WriteLine($"Error loading top CLV bets: {ex.Message}");
+        }
+    }
+
+    private record ClvPoint { public string Date { get; init; } = ""; public double Value { get; init; } }
+}

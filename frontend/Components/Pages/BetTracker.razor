@@ -18,6 +18,219 @@
         Color="blue"
         CurrentStatusMessage="@_importStatus"
         ShowProgress="false" />
+    
+    <!-- Loading Overlay for Resolve -->
+    <TwLoadingOverlay 
+        IsVisible="@_isResolving"
+        Title="Resolving Pending Bets"
+        Color="emerald"
+        CurrentStatusMessage="@_resolveStatus"
+        ShowProgress="false" />
+
+    <!-- Paper Trading Dialog -->
+    @if (_paperTradingDialogOpen)
+    {
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <div class="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-slate-700 shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+                <!-- Header -->
+                <div class="p-6 border-b border-slate-700 flex justify-between items-center bg-gradient-to-r from-emerald-900/50 to-blue-900/50">
+                    <div class="flex items-center gap-4">
+                        <div class="p-3 bg-emerald-500/20 rounded-xl">
+                            <svg class="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h2 class="text-2xl font-bold text-white">Paper Trading Deck</h2>
+                            <p class="text-sm text-slate-400">Select games and lines to add to your trading deck</p>
+                        </div>
+                    </div>
+                    <button @onclick="@(() => _paperTradingDialogOpen = false)" class="p-2 hover:bg-slate-700 rounded-lg transition-colors">
+                        <svg class="w-6 h-6 text-slate-400 hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Sport Tabs -->
+                <div class="px-6 py-4 border-b border-slate-700 flex gap-3">
+                    <button @onclick="@(() => { _dialogSport = "nfl"; _ = LoadDialogGames(); })" 
+                            class="px-4 py-2 rounded-lg font-semibold transition-all @(_dialogSport == "nfl" ? "bg-blue-600 text-white shadow-lg shadow-blue-500/25" : "bg-slate-800 text-slate-400 hover:text-white")">
+                        🏈 NFL
+                    </button>
+                    <button @onclick="@(() => { _dialogSport = "nba"; _ = LoadDialogGames(); })" 
+                            class="px-4 py-2 rounded-lg font-semibold transition-all @(_dialogSport == "nba" ? "bg-orange-600 text-white shadow-lg shadow-orange-500/25" : "bg-slate-800 text-slate-400 hover:text-white")">
+                        🏀 NBA
+                    </button>
+                    <button @onclick="@(() => { _dialogSport = "nhl"; _ = LoadDialogGames(); })" 
+                            class="px-4 py-2 rounded-lg font-semibold transition-all @(_dialogSport == "nhl" ? "bg-cyan-600 text-white shadow-lg shadow-cyan-500/25" : "bg-slate-800 text-slate-400 hover:text-white")">
+                        🏒 NHL
+                    </button>
+                    <button @onclick="@(() => { _dialogSport = "ncaab"; _ = LoadDialogGames(); })" 
+                            class="px-4 py-2 rounded-lg font-semibold transition-all @(_dialogSport == "ncaab" ? "bg-amber-600 text-white shadow-lg shadow-amber-500/25" : "bg-slate-800 text-slate-400 hover:text-white")">
+                        🎓 NCAAB
+                    </button>
+                    <div class="flex-grow"></div>
+                    <button @onclick="LoadDialogGames" class="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    </button>
+                </div>
+
+                <!-- Content Grid -->
+                <div class="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-2 gap-0">
+                    <!-- Left: Available Games -->
+                    <div class="border-r border-slate-700 flex flex-col overflow-hidden">
+                        <div class="px-6 py-3 bg-slate-800/50 border-b border-slate-700">
+                            <h3 class="text-sm font-semibold text-slate-300 uppercase tracking-wide">Available Games</h3>
+                        </div>
+                        <div class="flex-1 overflow-y-auto p-4 space-y-3">
+                            @if (_loadingDialogGames)
+                            {
+                                <div class="flex items-center justify-center h-40">
+                                    <div class="text-center">
+                                        <div class="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-3"></div>
+                                        <p class="text-sm text-slate-400">Loading games...</p>
+                                    </div>
+                                </div>
+                            }
+                            else if (_dialogGames.Any())
+                            {
+                                @foreach (var game in _dialogGames)
+                                {
+                                    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4 hover:border-blue-500/50 transition-all group">
+                                        <div class="flex justify-between items-start mb-3">
+                                            <div>
+                                                <div class="text-base font-semibold text-white">@game.Away</div>
+                                                <div class="text-xs text-slate-500">@@ </div>
+                                                <div class="text-base font-semibold text-white">@game.Home</div>
+                                            </div>
+                                            <span class="text-xs px-2 py-1 bg-slate-700 rounded text-slate-400">@game.GameId?.Substring(0, Math.Min(8, game.GameId?.Length ?? 0))...</span>
+                                        </div>
+                                        <div class="flex flex-wrap gap-2">
+                                            @if (game.HomeML != 0)
+                                            {
+                                                <button @onclick="@(() => AddToDeck(game, "ml", game.Home, game.HomeML, null))" 
+                                                        class="px-3 py-1.5 bg-slate-700 hover:bg-blue-600 border border-slate-600 hover:border-blue-500 rounded-lg text-sm text-white transition-all flex items-center gap-2">
+                                                    <span class="font-medium">@game.Home.Split(' ').Last()</span>
+                                                    <span class="text-xs bg-slate-800 px-1.5 py-0.5 rounded">@FormatOdds(game.HomeML)</span>
+                                                </button>
+                                                <button @onclick="@(() => AddToDeck(game, "ml", game.Away, game.AwayML, null))" 
+                                                        class="px-3 py-1.5 bg-slate-700 hover:bg-blue-600 border border-slate-600 hover:border-blue-500 rounded-lg text-sm text-white transition-all flex items-center gap-2">
+                                                    <span class="font-medium">@game.Away.Split(' ').Last()</span>
+                                                    <span class="text-xs bg-slate-800 px-1.5 py-0.5 rounded">@FormatOdds(game.AwayML)</span>
+                                                </button>
+                                            }
+                                            @if (game.HomeSpread != null)
+                                            {
+                                                <button @onclick="@(() => AddToDeck(game, "spread", game.Home, -110, game.HomeSpread))" 
+                                                        class="px-3 py-1.5 bg-slate-700 hover:bg-indigo-600 border border-slate-600 hover:border-indigo-500 rounded-lg text-sm text-white transition-all flex items-center gap-2">
+                                                    <span class="font-medium">@game.Home.Split(' ').Last()</span>
+                                                    <span class="text-xs bg-indigo-900/50 px-1.5 py-0.5 rounded">@(game.HomeSpread > 0 ? "+" : "")@game.HomeSpread</span>
+                                                </button>
+                                                <button @onclick="@(() => AddToDeck(game, "spread", game.Away, -110, game.AwaySpread))" 
+                                                        class="px-3 py-1.5 bg-slate-700 hover:bg-indigo-600 border border-slate-600 hover:border-indigo-500 rounded-lg text-sm text-white transition-all flex items-center gap-2">
+                                                    <span class="font-medium">@game.Away.Split(' ').Last()</span>
+                                                    <span class="text-xs bg-indigo-900/50 px-1.5 py-0.5 rounded">@(game.AwaySpread > 0 ? "+" : "")@game.AwaySpread</span>
+                                                </button>
+                                            }
+                                            @if (game.Total > 0)
+                                            {
+                                                <button @onclick="@(() => AddToDeck(game, "total", "Over", -110, game.Total))" 
+                                                        class="px-3 py-1.5 bg-slate-700 hover:bg-emerald-600 border border-slate-600 hover:border-emerald-500 rounded-lg text-sm text-white transition-all flex items-center gap-2">
+                                                    <span class="font-medium">Over</span>
+                                                    <span class="text-xs bg-emerald-900/50 px-1.5 py-0.5 rounded">@game.Total</span>
+                                                </button>
+                                                <button @onclick="@(() => AddToDeck(game, "total", "Under", -110, game.Total))" 
+                                                        class="px-3 py-1.5 bg-slate-700 hover:bg-emerald-600 border border-slate-600 hover:border-emerald-500 rounded-lg text-sm text-white transition-all flex items-center gap-2">
+                                                    <span class="font-medium">Under</span>
+                                                    <span class="text-xs bg-emerald-900/50 px-1.5 py-0.5 rounded">@game.Total</span>
+                                                </button>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="flex flex-col items-center justify-center h-40 text-center">
+                                    <svg class="w-12 h-12 text-slate-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    <p class="text-slate-400">No games available for @_dialogSport.ToUpper()</p>
+                                    <p class="text-xs text-slate-500 mt-1">Try analyzing odds on the Live Odds page first</p>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Right: Trading Deck -->
+                    <div class="flex flex-col overflow-hidden">
+                        <div class="px-6 py-3 bg-emerald-900/30 border-b border-slate-700 flex justify-between items-center">
+                            <h3 class="text-sm font-semibold text-emerald-300 uppercase tracking-wide flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                                </svg>
+                                Your Trading Deck
+                            </h3>
+                            <span class="text-xs px-2 py-1 bg-emerald-600/20 text-emerald-400 rounded-full">@_tradingDeck.Count picks</span>
+                        </div>
+                        <div class="flex-1 overflow-y-auto p-4">
+                            @if (_tradingDeck.Any())
+                            {
+                                <div class="space-y-2">
+                                    @foreach (var pick in _tradingDeck)
+                                    {
+                                        <div class="bg-emerald-900/20 border border-emerald-700/50 rounded-lg p-3 flex justify-between items-center hover:bg-emerald-900/30 transition-colors">
+                                            <div class="flex-1">
+                                                <div class="font-medium text-white">@pick.Description</div>
+                                                <div class="text-xs text-slate-400">@pick.GameName • @FormatOdds(pick.Odds)</div>
+                                            </div>
+                                            <button @onclick="@(() => _tradingDeck.Remove(pick))" class="p-1 text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded transition-colors">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="flex flex-col items-center justify-center h-40 text-center">
+                                    <svg class="w-12 h-12 text-slate-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                    </svg>
+                                    <p class="text-slate-400">Your deck is empty</p>
+                                    <p class="text-xs text-slate-500 mt-1">Click on betting lines to add them</p>
+                                </div>
+                            }
+                        </div>
+
+                        <!-- Deck Footer -->
+                        <div class="p-4 border-t border-slate-700 bg-slate-800/50">
+                            <div class="flex gap-3 mb-4">
+                                <div class="flex-1">
+                                    <label class="text-xs text-slate-500 block mb-1">Stake per bet</label>
+                                    <input type="number" @bind="_deckStake" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="$10" />
+                                </div>
+                            </div>
+                            <div class="flex gap-3">
+                                <button @onclick="PlaceAllAsParlay" disabled="@(_tradingDeck.Count < 2)" 
+                                        class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white font-medium transition-colors">
+                                    🎲 Place as Parlay
+                                </button>
+                                <button @onclick="PlaceAllAsSingles" disabled="@(!_tradingDeck.Any())" 
+                                        class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white font-medium transition-colors">
+                                    📊 Place as Singles
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
     <div class="space-y-6">
         <!-- Header -->
         <div class="p-6 rounded-xl shadow-lg bg-gradient-to-br from-slate-900 to-slate-800 text-white border border-slate-700">
@@ -34,6 +247,19 @@
                     <TwChip Color="@(_netProfit >= 0 ? "emerald" : "red")" Size="sm" Variant="outline">
                         @(_netProfit >= 0 ? "+" : "")$@_netProfit.ToString("F2")
                     </TwChip>
+                    
+                    <button @onclick="OpenPaperTradingDialog" 
+                            class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-emerald-600 to-blue-600 hover:from-emerald-700 hover:to-blue-700 text-white text-sm font-medium rounded-md shadow-sm transition-all border border-transparent">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                        Paper Trade
+                    </button>
+                    
+                    <button @onclick="ResolvePendingBets" 
+                            disabled="@_isResolving"
+                            class="inline-flex items-center px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-medium rounded-md shadow-sm transition-colors border border-transparent">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        @(_isResolving ? "Resolving..." : "Resolve Bets")
+                    </button>
                     
                     <div class="relative">
                         <label class="cursor-pointer inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md shadow-sm transition-colors border border-transparent">
@@ -75,22 +301,33 @@
                                     <div class="flex flex-wrap gap-2">
                                         @if (game.HomeML != 0)
                                         {
-                                            <button @onclick="@(() => AddLeg($"{game.Home} ML", game.HomeML, game.GameId, $"{game.Away} @ {game.Home}"))" 
+                                            <button @onclick="@(() => AddLeg($"{game.Home} ML", game.HomeML, game.GameId, $"{game.Away} @ {game.Home}", new { type = "ml", team = game.Home }))" 
                                                     class="px-2 py-1 bg-slate-800 hover:bg-blue-600 border border-slate-700 rounded text-xs text-white transition-colors">
                                                 @game.Home.Split(' ').Last() @FormatOdds(game.HomeML)
                                             </button>
-                                            <button @onclick="@(() => AddLeg($"{game.Away} ML", game.AwayML, game.GameId, $"{game.Away} @ {game.Home}"))" 
+                                            <button @onclick="@(() => AddLeg($"{game.Away} ML", game.AwayML, game.GameId, $"{game.Away} @ {game.Home}", new { type = "ml", team = game.Away }))" 
                                                     class="px-2 py-1 bg-slate-800 hover:bg-blue-600 border border-slate-700 rounded text-xs text-white transition-colors">
                                                 @game.Away.Split(' ').Last() @FormatOdds(game.AwayML)
                                             </button>
                                         }
+                                        @if (game.HomeSpread != null)
+                                        {
+                                            <button @onclick="@(() => AddLeg($"{game.Home} {(game.HomeSpread > 0 ? "+" : "")}{game.HomeSpread}", -110, game.GameId, $"{game.Away} @ {game.Home}", new { type = "spread", team = game.Home, value = game.HomeSpread }))" 
+                                                    class="px-2 py-1 bg-slate-800 hover:bg-indigo-600 border border-slate-700 rounded text-xs text-white transition-colors">
+                                                @game.Home.Split(' ').Last() @(game.HomeSpread > 0 ? "+" : "")@game.HomeSpread
+                                            </button>
+                                            <button @onclick="@(() => AddLeg($"{game.Away} {(game.AwaySpread > 0 ? "+" : "")}{game.AwaySpread}", -110, game.GameId, $"{game.Away} @ {game.Home}", new { type = "spread", team = game.Away, value = game.AwaySpread }))" 
+                                                    class="px-2 py-1 bg-slate-800 hover:bg-indigo-600 border border-slate-700 rounded text-xs text-white transition-colors">
+                                                @game.Away.Split(' ').Last() @(game.AwaySpread > 0 ? "+" : "")@game.AwaySpread
+                                            </button>
+                                        }
                                         @if (game.Total > 0)
                                         {
-                                            <button @onclick="@(() => AddLeg($"O {game.Total}", -110, game.GameId, $"{game.Away} @ {game.Home}"))" 
+                                            <button @onclick="@(() => AddLeg($"O {game.Total}", -110, game.GameId, $"{game.Away} @ {game.Home}", new { type = "total", side = "over", value = game.Total }))" 
                                                     class="px-2 py-1 bg-slate-800 hover:bg-emerald-600 border border-slate-700 rounded text-xs text-white transition-colors">
                                                 O @game.Total
                                             </button>
-                                            <button @onclick="@(() => AddLeg($"U {game.Total}", -110, game.GameId, $"{game.Away} @ {game.Home}"))" 
+                                            <button @onclick="@(() => AddLeg($"U {game.Total}", -110, game.GameId, $"{game.Away} @ {game.Home}", new { type = "total", side = "under", value = game.Total }))" 
                                                     class="px-2 py-1 bg-slate-800 hover:bg-emerald-600 border border-slate-700 rounded text-xs text-white transition-colors">
                                                 U @game.Total
                                             </button>
@@ -173,9 +410,14 @@
                             </div>
                         </div>
                         
-                        <TwButton Variant="primary" FullWidth="true" OnClick="PlaceBet" Disabled="@(_stake <= 0)" Class="mt-4 font-bold py-3 shadow-lg shadow-blue-500/20">
-                            Place Bet
-                        </TwButton>
+                        <div class="grid grid-cols-2 gap-3 mt-4">
+                            <TwButton Variant="primary" FullWidth="true" OnClick="PlaceBet" Disabled="@(_stake <= 0)" Class="font-bold py-3 shadow-lg shadow-blue-500/20">
+                                Place Bet
+                            </TwButton>
+                            <TwButton Variant="outline" FullWidth="true" OnClick="() => PlaceBet(true)" Disabled="@(_stake <= 0)" Class="font-bold py-3 text-indigo-400 border-indigo-500/50 hover:bg-indigo-500/10">
+                                Place as Mock
+                            </TwButton>
+                        </div>
                     }
                 </TwCard>
 
@@ -233,15 +475,21 @@
                                     @foreach (var b in _bets)
                                     {
                                         <tr class="hover:bg-slate-800/50 transition-colors">
-                                            <td class="px-4 py-2">
-                                                @if (b.Source == "manual")
-                                                {
-                                                    <span title="Manual" class="text-slate-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg></span>
-                                                }
-                                                else
-                                                {
-                                                     <span title="Auto" class="text-blue-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg></span>
-                                                }
+                                             <td class="px-4 py-2">
+                                                <div class="flex items-center gap-2">
+                                                    @if (b.IsMock)
+                                                    {
+                                                        <TwChip Color="indigo" Size="xs" Variant="solid">Paper</TwChip>
+                                                    }
+                                                    @if (b.Source == "manual")
+                                                    {
+                                                        <span title="Manual" class="text-slate-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg></span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span title="Auto" class="text-blue-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg></span>
+                                                    }
+                                                </div>
                                             </td>
                                             <td class="px-4 py-2 text-xs text-slate-500">@(b.GameName ?? "-")</td>
                                             <td class="px-4 py-2 font-medium text-white">@b.Description</td>
@@ -510,6 +758,35 @@
     private bool _importPreviewOpen = false;
     private List<DataCollectionService.ImportBetPreview> _previewBets = new();
 
+    // Resolve state
+    private bool _isResolving = false;
+    private string _resolveStatus = "🎯 Checking pending bets...";
+    private readonly string[] _resolveMessages = new[]
+    {
+        "🎯 Checking pending bets...",
+        "📊 Consulting the sports gods...",
+        "🏈 Reviewing final scores...",
+        "🎰 Spinning the wheel of fortune...",
+        "🔮 Peering into the crystal ball...",
+        "📡 Intercepting Vegas signals...",
+        "🎲 Rolling the dice of destiny...",
+        "🏀 Analyzing box scores...",
+        "⚡ Channeling degenerate energy...",
+        "🦅 Waiting for the eagle to land...",
+        "💰 Counting hypothetical money...",
+        "🎪 The circus is almost over...",
+        "🏆 Determining winners and losers...",
+        "✅ Finalizing results..."
+    };
+
+    // Paper Trading Dialog state
+    private bool _paperTradingDialogOpen = false;
+    private string _dialogSport = "nfl";
+    private bool _loadingDialogGames = false;
+    private List<Game> _dialogGames = new();
+    private List<Leg> _tradingDeck = new();
+    private decimal _deckStake = 10m;
+
     protected override async Task OnInitializedAsync()
     {
         await LoadGames();
@@ -596,6 +873,247 @@
         _loadingGames = false;
     }
 
+    // Paper Trading Dialog functions
+    private async Task OpenPaperTradingDialog()
+    {
+        _paperTradingDialogOpen = true;
+        _dialogSport = _sport;
+        await LoadDialogGames();
+    }
+
+    private async Task LoadDialogGames()
+    {
+        _loadingDialogGames = true;
+        _dialogGames.Clear();
+        StateHasChanged();
+
+        try
+        {
+            var resp = await Http.GetAsync($"http://backend:8000/odds/{_dialogSport}?sportsbook=fanduel");
+            if (resp.IsSuccessStatusCode)
+            {
+                var json = await resp.Content.ReadAsStringAsync();
+                var doc = JsonDocument.Parse(json);
+
+                if (doc.RootElement.TryGetProperty("games", out var gamesArr) || 
+                    doc.RootElement.TryGetProperty("odds", out gamesArr))
+                {
+                    foreach (var g in gamesArr.EnumerateArray())
+                    {
+                        ParseDialogGame(g);
+                    }
+                }
+            }
+
+            // Fallback to cache
+            if (_dialogGames.Count == 0)
+            {
+                var cacheResp = await Http.GetAsync($"http://backend:8000/cache/games/{_dialogSport}?include_expired=true");
+                if (cacheResp.IsSuccessStatusCode)
+                {
+                    var json = await cacheResp.Content.ReadAsStringAsync();
+                    var doc = JsonDocument.Parse(json);
+                    if (doc.RootElement.TryGetProperty("games", out var gamesArr))
+                    {
+                        foreach (var g in gamesArr.EnumerateArray())
+                        {
+                            ParseDialogGame(g);
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading games: {ex.Message}", Severity.Error);
+        }
+
+        _loadingDialogGames = false;
+        StateHasChanged();
+    }
+
+    private void ParseDialogGame(JsonElement g)
+    {
+        var home = g.TryGetProperty("home_team", out var h) ? h.GetString() ?? "" : "";
+        var away = g.TryGetProperty("away_team", out var a) ? a.GetString() ?? "" : "";
+        var gid = g.TryGetProperty("game_id", out var id) ? id.GetString() ?? $"{home}:{away}" : $"{home}:{away}";
+        int homeML = 0, awayML = 0;
+        decimal total = 0;
+
+        if (g.TryGetProperty("odds_data", out var odds) && odds.ValueKind == JsonValueKind.Object)
+        {
+            if (odds.TryGetProperty("home_ml", out var hm) && hm.ValueKind == JsonValueKind.Number)
+                homeML = (int)Math.Round(hm.GetDouble());
+            if (odds.TryGetProperty("away_ml", out var am) && am.ValueKind == JsonValueKind.Number)
+                awayML = (int)Math.Round(am.GetDouble());
+            if (odds.TryGetProperty("total", out var t) && t.ValueKind == JsonValueKind.Number)
+                total = t.GetDecimal();
+        }
+
+        if (homeML == 0 && g.TryGetProperty("home_moneyline", out var hlm) && hlm.ValueKind == JsonValueKind.Number)
+            homeML = (int)Math.Round(hlm.GetDouble());
+        if (awayML == 0 && g.TryGetProperty("away_moneyline", out var alm) && alm.ValueKind == JsonValueKind.Number)
+            awayML = (int)Math.Round(alm.GetDouble());
+        if (total == 0 && g.TryGetProperty("over_under", out var ou) && ou.ValueKind == JsonValueKind.Number)
+            total = ou.GetDecimal();
+
+        if (!string.IsNullOrEmpty(home) && !string.IsNullOrEmpty(away))
+        {
+            decimal? homeSpread = g.TryGetProperty("home_spread", out var hs) && hs.ValueKind == JsonValueKind.Number ? hs.GetDecimal() : null;
+            decimal? awaySpread = g.TryGetProperty("away_spread", out var ars) && ars.ValueKind == JsonValueKind.Number ? ars.GetDecimal() : null;
+
+            _dialogGames.Add(new Game { 
+                GameId = gid, 
+                Home = home, 
+                Away = away, 
+                HomeML = homeML, 
+                AwayML = awayML, 
+                Total = total,
+                HomeSpread = homeSpread,
+                AwaySpread = awaySpread
+            });
+        }
+    }
+
+    private void AddToDeck(Game game, string type, string team, int odds, decimal? value)
+    {
+        string description = type switch
+        {
+            "ml" => $"{team} ML",
+            "spread" => $"{team} {(value > 0 ? "+" : "")}{value}",
+            "total" => $"{team} {value}",
+            _ => team
+        };
+
+        var metadata = type switch
+        {
+            "ml" => new { type = "ml", team = team },
+            "spread" => (object)new { type = "spread", team = team, value = value },
+            "total" => new { type = "total", side = team.ToLower(), value = value },
+            _ => null
+        };
+
+        var leg = new Leg
+        {
+            Description = description,
+            Odds = odds,
+            GameId = game.GameId,
+            GameName = $"{game.Away} @ {game.Home}",
+            Metadata = metadata
+        };
+
+        // Check for duplicates
+        if (!_tradingDeck.Any(l => l.Description == leg.Description && l.GameId == leg.GameId))
+        {
+            _tradingDeck.Add(leg);
+            Snackbar.Add($"Added: {description}", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("Already in deck!", Severity.Warning);
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task PlaceAllAsParlay()
+    {
+        if (_tradingDeck.Count < 2) return;
+
+        try
+        {
+            var parlayOdds = CalculateParlayOdds(_tradingDeck);
+            var req = new
+            {
+                sport = _dialogSport,
+                bet_type = "parlay",
+                sportsbook = "paper",
+                stake = _deckStake,
+                odds = parlayOdds,
+                description = $"{_tradingDeck.Count}-leg: {string.Join(", ", _tradingDeck.Select(l => l.Description))}",
+                source = "auto",
+                is_mock = true,
+                legs = _tradingDeck.Select(l => new { description = l.Description, odds = l.Odds, game_id = l.GameId, metadata = l.Metadata }).ToList(),
+                bet_metadata = new { type = "parlay", legs = _tradingDeck.Count }
+            };
+
+            var resp = await Http.PostAsJsonAsync("http://backend:8000/bets", req);
+            if (resp.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"🎲 Parlay placed! {_tradingDeck.Count} legs at {FormatOdds(parlayOdds)}", Severity.Success);
+                _tradingDeck.Clear();
+                _paperTradingDialogOpen = false;
+                await LoadBets();
+                await LoadStats();
+            }
+            else
+            {
+                var errorBody = await resp.Content.ReadAsStringAsync();
+                Snackbar.Add($"Error: {errorBody}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task PlaceAllAsSingles()
+    {
+        if (!_tradingDeck.Any()) return;
+
+        int placed = 0;
+        foreach (var leg in _tradingDeck.ToList())
+        {
+            try
+            {
+                var req = new
+                {
+                    sport = _dialogSport,
+                    bet_type = "single",
+                    sportsbook = "paper",
+                    stake = _deckStake,
+                    odds = leg.Odds,
+                    game_id = leg.GameId,
+                    description = leg.Description,
+                    game_name = leg.GameName,
+                    source = "auto",
+                    is_mock = true,
+                    bet_metadata = leg.Metadata
+                };
+
+                var resp = await Http.PostAsJsonAsync("http://backend:8000/bets", req);
+                if (resp.IsSuccessStatusCode) placed++;
+            }
+            catch { /* Continue */ }
+        }
+
+        Snackbar.Add($"📊 Placed {placed} singles @ ${_deckStake} each", Severity.Success);
+        _tradingDeck.Clear();
+        _paperTradingDialogOpen = false;
+        await LoadBets();
+        await LoadStats();
+    }
+
+    private int CalculateParlayOdds(List<Leg> legs)
+    {
+        if (!legs.Any()) return 0;
+        
+        decimal decimalOdds = 1.0m;
+        foreach (var leg in legs)
+        {
+            if (leg.Odds > 0)
+                decimalOdds *= (decimal)leg.Odds / 100m + 1;
+            else
+                decimalOdds *= 100m / (decimal)Math.Abs(leg.Odds) + 1;
+        }
+        
+        if (decimalOdds >= 2)
+            return (int)((decimalOdds - 1) * 100);
+        else
+            return (int)(-100m / (decimalOdds - 1));
+    }
+
     private void ParseAndAddGame(JsonElement g)
     {
         var home = g.TryGetProperty("home_team", out var h) ? h.GetString() ?? "" : "";
@@ -623,7 +1141,19 @@
         
         if (!string.IsNullOrEmpty(home) && !string.IsNullOrEmpty(away))
         {
-            _games.Add(new Game { GameId = gid, Home = home, Away = away, HomeML = homeML, AwayML = awayML, Total = total });
+            decimal? homeSpread = g.TryGetProperty("home_spread", out var hs) && hs.ValueKind == JsonValueKind.Number ? hs.GetDecimal() : null;
+            decimal? awaySpread = g.TryGetProperty("away_spread", out var ars) && ars.ValueKind == JsonValueKind.Number ? ars.GetDecimal() : (g.TryGetProperty("spread", out var s) && s.ValueKind == JsonValueKind.Number ? s.GetDecimal() : null);
+
+            _games.Add(new Game { 
+                GameId = gid, 
+                Home = home, 
+                Away = away, 
+                HomeML = homeML, 
+                AwayML = awayML, 
+                Total = total,
+                HomeSpread = homeSpread,
+                AwaySpread = awaySpread
+            });
         }
     }
 
@@ -654,13 +1184,30 @@
         
         if (!string.IsNullOrEmpty(home) && !string.IsNullOrEmpty(away))
         {
-            _games.Add(new Game { GameId = gid, Home = home, Away = away, HomeML = homeML, AwayML = awayML, Total = total });
+            decimal? homeSpread = null;
+            decimal? awaySpread = null;
+            if (g.TryGetProperty("odds_data", out var oddsData))
+            {
+                if (oddsData.TryGetProperty("home_spread", out var hs) && hs.ValueKind == JsonValueKind.Number) homeSpread = hs.GetDecimal();
+                if (oddsData.TryGetProperty("away_spread", out var ars) && ars.ValueKind == JsonValueKind.Number) awaySpread = ars.GetDecimal();
+            }
+
+            _games.Add(new Game { 
+                GameId = gid, 
+                Home = home, 
+                Away = away, 
+                HomeML = homeML, 
+                AwayML = awayML, 
+                Total = total,
+                HomeSpread = homeSpread,
+                AwaySpread = awaySpread
+            });
         }
     }
 
-    private void AddLeg(string desc, int odds, string gameId, string gameName)
+    private void AddLeg(string desc, int odds, string gameId, string gameName, object? metadata = null)
     {
-        _legs.Add(new Leg { Description = desc, Odds = odds, GameId = gameId, GameName = gameName });
+        _legs.Add(new Leg { Description = desc, Odds = odds, GameId = gameId, GameName = gameName, Metadata = metadata });
         Snackbar.Add($"Added: {desc}", Severity.Success);
     }
 
@@ -706,7 +1253,9 @@
         return _stake + CalcWin();
     }
 
-    private async Task PlaceBet()
+    private async Task PlaceBet() => await PlaceBet(false);
+
+    private async Task PlaceBet(bool isMock)
     {
         if (_stake <= 0 || !_legs.Any()) return;
         try
@@ -715,18 +1264,20 @@
             {
                 sport = _sport,
                 bet_type = _legs.Count > 1 ? "parlay" : "single",
-                sportsbook = _sportsbook,
+                sportsbook = isMock ? "paper" : _sportsbook,
                 stake = _stake,
                 odds = GetParlayOdds(),
                 description = _legs.Count > 1 ? $"{_legs.Count}-leg: {string.Join(", ", _legs.Select(l => l.Description))}" : _legs[0].Description,
                 game_name = _legs.Count == 1 ? _legs[0].GameName : null,
                 source = _legs.Any(l => l.GameId != null && l.GameId.StartsWith("manual")) ? "manual" : "auto",
-                legs = _legs.Select(l => new { description = l.Description, odds = l.Odds, game_id = l.GameId }).ToList()
+                is_mock = isMock,
+                legs = _legs.Select(l => new { description = l.Description, odds = l.Odds, game_id = l.GameId, metadata = l.Metadata }).ToList(),
+                bet_metadata = _legs.Count == 1 ? _legs[0].Metadata : null
             };
             var resp = await Http.PostAsJsonAsync("http://backend:8000/bets", req);
             if (resp.IsSuccessStatusCode)
             {
-                Snackbar.Add($"Bet placed! Payout: ${CalcPayout():F2}", Severity.Success);
+                Snackbar.Add(isMock ? "Mock trade placed!" : $"Bet placed! Payout: ${CalcPayout():F2}", Severity.Success);
                 _legs.Clear();
                 await LoadBets();
                 await LoadStats();
@@ -765,7 +1316,8 @@
                             Odds = b.TryGetProperty("odds", out var o) && o.ValueKind == JsonValueKind.Number ? (int)Math.Round(o.GetDouble()) : 0,
                             Outcome = b.TryGetProperty("outcome", out var oc) ? (oc.ValueKind == JsonValueKind.String ? oc.GetString() ?? "pending" : "pending") : "pending",
                             GameName = b.TryGetProperty("game_name", out var gn) ? (gn.ValueKind == JsonValueKind.String ? gn.GetString() : null) : null,
-                            Source = b.TryGetProperty("source", out var src) ? (src.ValueKind == JsonValueKind.String ? src.GetString() ?? "manual" : "manual") : "manual"
+                            Source = b.TryGetProperty("source", out var src) ? (src.ValueKind == JsonValueKind.String ? src.GetString() ?? "manual" : "manual") : "manual",
+                            IsMock = b.TryGetProperty("is_mock", out var im) && im.ValueKind == JsonValueKind.True
                         };
                         _bets.Add(bet);
                     }
@@ -781,6 +1333,72 @@
             Snackbar.Add($"Error loading bets: {ex.Message}", Severity.Error);
         }
         StateHasChanged();
+    }
+
+    private async Task ResolvePendingBets()
+    {
+        try
+        {
+            _isResolving = true;
+            _resolveStatus = _resolveMessages[0];
+            StateHasChanged();
+
+            // Start a background task to cycle through funny messages
+            var cts = new CancellationTokenSource();
+            var messageTask = Task.Run(async () =>
+            {
+                int idx = 0;
+                while (!cts.Token.IsCancellationRequested)
+                {
+                    await Task.Delay(1500);
+                    idx = (idx + 1) % _resolveMessages.Length;
+                    _resolveStatus = _resolveMessages[idx];
+                    await InvokeAsync(StateHasChanged);
+                }
+            }, cts.Token);
+
+            // Call the API
+            var resp = await Http.PostAsync("http://backend:8000/bets/resolve-pending", null);
+            cts.Cancel();
+
+            if (resp.IsSuccessStatusCode)
+            {
+                var json = await resp.Content.ReadAsStringAsync();
+                var doc = JsonDocument.Parse(json);
+                var resolved = doc.RootElement.TryGetProperty("summary", out var summary)
+                    ? summary.GetProperty("resolved").GetInt32()
+                    : 0;
+                var wins = summary.TryGetProperty("wins", out var w) ? w.GetInt32() : 0;
+                var losses = summary.TryGetProperty("losses", out var l) ? l.GetInt32() : 0;
+
+                if (resolved > 0)
+                {
+                    Snackbar.Add($"✅ Resolved {resolved} bets! ({wins}W/{losses}L)", Severity.Success);
+                }
+                else
+                {
+                    Snackbar.Add("No pending bets to resolve (games may not be final yet).", Severity.Info);
+                }
+
+                await LoadBets();
+                await LoadStats();
+                await LoadChartData();
+            }
+            else
+            {
+                var errorBody = await resp.Content.ReadAsStringAsync();
+                Snackbar.Add($"Resolution failed: {errorBody}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isResolving = false;
+            StateHasChanged();
+        }
     }
 
     private async Task LoadStats()
@@ -950,9 +1568,9 @@
     }
 
     // Simple models
-    private record Game { public string GameId { get; init; } = ""; public string Home { get; init; } = ""; public string Away { get; init; } = ""; public int HomeML { get; init; } public int AwayML { get; init; } public decimal Total { get; init; } }
-    private record Leg { public string Description { get; init; } = ""; public int Odds { get; init; } public string? GameId { get; init; } public string? GameName { get; init; } }
-    private record Bet { public int Id { get; init; } public string Description { get; init; } = ""; public decimal Stake { get; init; } public int Odds { get; init; } public string Outcome { get; init; } = "pending"; public string? GameName { get; init; } public string Source { get; init; } = "manual"; }
+    private record Game { public string GameId { get; init; } = ""; public string Home { get; init; } = ""; public string Away { get; init; } = ""; public int HomeML { get; init; } public int AwayML { get; init; } public decimal Total { get; init; } public decimal? HomeSpread { get; init; } public decimal? AwaySpread { get; init; } }
+    private record Leg { public string Description { get; init; } = ""; public int Odds { get; init; } public string? GameId { get; init; } public string? GameName { get; init; } public object? Metadata { get; init; } }
+    private record Bet { public int Id { get; init; } public string Description { get; init; } = ""; public decimal Stake { get; init; } public int Odds { get; init; } public string Outcome { get; init; } = "pending"; public string? GameName { get; init; } public string Source { get; init; } = "manual"; public bool IsMock { get; init; } }
     private record DailyData { public string Date { get; init; } = ""; public decimal Profit { get; init; } public int Bets { get; init; } public int Wins { get; init; } public int Losses { get; init; } public int Cashouts { get; init; } public decimal CumulativeRoi { get; init; } }
 
     private async Task LoadChartData()

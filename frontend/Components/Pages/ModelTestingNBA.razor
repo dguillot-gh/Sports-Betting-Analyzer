@@ -138,7 +138,7 @@
                                             <div class="col-span-1">Metric</div>
                                             <div class="text-center">Simple</div>
                                             <div class="text-center">XGB</div>
-                                            <div class="text-center">Exp</div>
+                                            <div class="text-center">CBS</div>
                                         </div>
                                         
                                         @* Win Prob Row *@
@@ -149,17 +149,23 @@
                                                 @if (game.XgbModel?.Error == null) { @(((game.XgbModel?.HomeWinProb ?? 0) * 100).ToString("F1"))<span>%</span> }
                                                 else { <span class="text-[8px] text-amber-500 uppercase tracking-tighter">Train Req</span> }
                                             </div>
-                                            <div class="text-center text-purple-400 font-bold text-xs">
-                                                @(game.ExperimentalModel?.HomeWinProb != null ? ((game.ExperimentalModel.HomeWinProb ?? 0) * 100).ToString("F1") + "%" : "—")
+                                            <div class="text-center text-slate-600 text-[10px]">
+                                                —
                                             </div>
                                         </div>
 
                                         @* Pick Row *@
+                                        @{
+                                            var cbsPick = _expertPicks.FirstOrDefault(p => 
+                                                p.HomeTeam.Contains(game.HomeTeam) || game.HomeTeam.Contains(p.HomeTeam));
+                                        }
                                         <div class="grid grid-cols-4 items-center bg-slate-950/30 rounded-xl p-2.5 border border-slate-800/50">
                                             <div class="text-[11px] text-slate-300 font-medium text-xs">Pick</div>
                                             <div class="text-center text-emerald-500/80 font-semibold text-[10px] truncate">@((game.SimpleModel?.PredictedWinner ?? "—").Split(' ').Last())</div>
                                             <div class="text-center text-blue-500/80 font-semibold text-[10px] truncate">@((game.XgbModel?.PredictedWinner ?? "—").Split(' ').Last())</div>
-                                            <div class="text-center text-purple-500/80 font-semibold text-[10px] truncate">@((game.ExperimentalModel?.PredictedWinner ?? "—").Split(' ').Last())</div>
+                                            <div class="text-center text-amber-500/80 font-semibold text-[9px] truncate">
+                                                @(cbsPick?.SpreadPickTeam != null ? $"{cbsPick.SpreadPickTeam} {cbsPick.SpreadValue?.ToString("+#.0;-#.0")}" : "—")
+                                            </div>
                                         </div>
 
                                         @* EV Row *@
@@ -182,26 +188,29 @@
                                             <div class="text-center text-slate-600">—</div>
                                         </div>
 
-                                        @if (game.XgbModel?.OverUnder != null || game.ExperimentalModel?.OverUnder != null)
-                                        {
-                                            <div class="grid grid-cols-4 items-center bg-slate-950/30 rounded-xl p-2.5 border border-slate-800/50">
-                                                <div class="text-[11px] text-slate-300 font-medium">O/U Line</div>
-                                                <div class="text-center text-slate-600">—</div>
-                                                <div class="text-center">
-                                                    @if (game.XgbModel?.OverUnder != null){
-                                                        <TwChip Color="@(game.XgbModel.OverUnder.Pick == "OVER" ? "blue" : "purple")" Size="sm" Class="text-[9px] px-1 py-0">
-                                                            @game.XgbModel.OverUnder.Pick @game.XgbModel.OverUnder.TotalLine
-                                                        </TwChip>
-                                                    }
-                                                </div>
-                                                <div class="text-center">
-                                                     @if (game.ExperimentalModel?.OverUnder != null){
-                                                         <span class="text-[10px] text-indigo-400 font-bold">@game.ExperimentalModel.OverUnder.TotalLine.ToString("F1")</span>
-                                                     }
-                                                </div>
+                                        @* O/U Row *@
+                                        <div class="grid grid-cols-4 items-center bg-slate-950/30 rounded-xl p-2.5 border border-slate-800/50">
+                                            <div class="text-[11px] text-slate-300 font-medium">O/U Line</div>
+                                            <div class="text-center text-slate-600">—</div>
+                                            <div class="text-center">
+                                                @if (game.XgbModel?.OverUnder != null){
+                                                    <TwChip Color="@(game.XgbModel.OverUnder.Pick == "OVER" ? "blue" : "purple")" Size="sm" Class="text-[9px] px-1 py-0">
+                                                        @game.XgbModel.OverUnder.Pick @game.XgbModel.OverUnder.TotalLine
+                                                    </TwChip>
+                                                }
                                             </div>
-                                        }
+                                            <div class="text-center">
+                                                @if (cbsPick?.TotalPick != null) {
+                                                    <span class="text-[9px] font-bold @(cbsPick.TotalPick == "Over" ? "text-emerald-400" : "text-amber-400")">
+                                                        @(cbsPick.TotalPick.Substring(0,1)) @cbsPick.TotalValue?.ToString("F1")
+                                                    </span>
+                                                } else {
+                                                    <span class="text-slate-600">—</span>
+                                                }
+                                            </div>
+                                        </div>
                                     </div>
+                                </div>
 
                                     @* Agreement Badge *@
                                     @{
@@ -225,8 +234,7 @@
                                             </TwChip>
                                         }
                                     </div>
-                                </div>
-                            </TwCard>
+                                </TwCard>
                         }
                     </TwGrid>
                 }
@@ -503,6 +511,9 @@
     private bool _espnLoading = false;
     private string? _espnError = null;
     private List<EspnGame> _espnGames = new();
+    
+    // CBS Expert Picks state
+    private List<ExpertPick> _expertPicks = new();
 
     private async Task RunAnalysis()
     {
@@ -518,6 +529,10 @@
                 $"http://backend:8000/model-testing/nba/predictions?sportsbook={_selectedSportsbook}", 
                 null
             );
+            
+            // Also fetch expert picks in parallel
+            var expertPicksTask = Http.GetFromJsonAsync<List<ExpertPick>>($"http://backend:8000/expert-picks/NBA");
+            _expertPicks = (await expertPicksTask) ?? new();
             
             if (response.IsSuccessStatusCode)
             {
@@ -771,6 +786,22 @@
         public string Pick { get; set; } = "";
         public double TotalLine { get; set; }
         public double Confidence { get; set; }
+    }
+
+    private class ExpertPick
+    {
+        public int Id { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public string Sport { get; set; } = "";
+        public DateTime GameDate { get; set; }
+        public string AwayTeam { get; set; } = "";
+        public string HomeTeam { get; set; } = "";
+        public string ExpertName { get; set; } = "";
+        public string? SpreadPickTeam { get; set; }
+        public double? SpreadValue { get; set; }
+        public string? TotalPick { get; set; }
+        public double? TotalValue { get; set; }
+        public string? SourceUrl { get; set; }
     }
 
     // AI Engine Predictions

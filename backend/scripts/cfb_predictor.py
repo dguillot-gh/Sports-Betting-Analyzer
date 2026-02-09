@@ -214,7 +214,9 @@ async def get_todays_cfb_odds(sportsbook: str = "fanduel") -> Dict[str, Any]:
                          "error": f"The Odds API returned status {response.status_code}",
                          "details": response.text,
                          "games": []
-                    }
+                     }
+        except Exception as e:
+            logger.warning(f"The Odds API request failed: {e}")
                     
     # Fallback to sbrscrape
     try:

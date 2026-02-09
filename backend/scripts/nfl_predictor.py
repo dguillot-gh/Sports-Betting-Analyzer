@@ -5,7 +5,7 @@ Simple statistical model (EPA-ready for future enhancement)
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 import math
 import numpy as np

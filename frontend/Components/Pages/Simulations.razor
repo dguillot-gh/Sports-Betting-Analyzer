@@ -24,7 +24,7 @@
         <p class="text-slate-400 mt-1">Monte Carlo simulations for NASCAR, NFL, and NBA seasons</p>
     </div>
 
-    <TwTabs @bind-ActivePanelIndex="_activeTab">
+    <TwTabs @bind-ActiveTab="_activeTab">
         <!-- Tab: NBA Season Simulator -->
         <TwTabPanel Title="NBA Season" TabIcon="@Icons.Material.Filled.SportsBasketball">
             <TwGrid Columns="1" md="12" Gap="6">
@@ -62,7 +62,8 @@
                                 <span class="text-xs font-normal text-slate-500 italic">@_nbaSeasonResults.GamesRemaining games remaining</span>
                             </h3>
                             
-                            <TwTabs Elevation="0">
+                            <!-- Fixed Elevation -->
+                            <TwTabs>
                                 <TwTabPanel Title="Eastern Conference">
                                     <div class="overflow-x-auto">
                                         <table class="w-full text-left">
@@ -558,7 +559,7 @@
                     @if (_nflSimResults != null && !HasError(_nflSimResults))
                     {
                         <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-                            <TwTabs Elevation="0" Class="p-2">
+                            <TwTabs Class="p-2">
                                 <TwTabPanel Title="Super Bowl Odds" TabIcon="@Icons.Material.Filled.EmojiEvents">
                                     <div class="p-4 overflow-x-auto">
                                         <table class="w-full text-left">

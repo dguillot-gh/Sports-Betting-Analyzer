@@ -6,6 +6,7 @@
 @inject DataCollectionService DataCollectionService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject NavigationManager NavigationManager
 @rendermode InteractiveServer
 
 <PageTitle>All Sports Analysis</PageTitle>
@@ -99,6 +100,12 @@
 
             <TwTable TItem="AnalyzedGame" Items="@_games" Filter="FilterFunc">
                 <HeaderContent>
+                    <TwTh Class="w-10">
+                        <input type="checkbox" 
+                               @onchange="ToggleSelectAll"
+                               checked="@(_selectedGameIds.Count == _games.Count && _games.Count > 0)"
+                               class="w-4 h-4 rounded border-slate-600 bg-slate-800 text-emerald-500 focus:ring-emerald-500" />
+                    </TwTh>
                     <TwTh>Sport</TwTh>
                     <TwTh>Matchup</TwTh>
                     <TwTh>Odds (ML)</TwTh>
@@ -107,6 +114,12 @@
                     <TwTh>Action</TwTh>
                 </HeaderContent>
                 <RowTemplate Context="game">
+                    <TwTd>
+                        <input type="checkbox" 
+                               checked="@_selectedGameIds.Contains(GetGameId(game))"
+                               @onchange="@(() => ToggleGameSelection(game))"
+                               class="w-4 h-4 rounded border-slate-600 bg-slate-800 text-emerald-500 focus:ring-emerald-500" />
+                    </TwTd>
                     <TwTd>
                         <TwChip Color="@GetSportColor(game.SportKey)" Size="xs" Variant="outline" Class="uppercase font-bold tracking-wider">
                             @game.SportKey.Replace("_", " ").ToUpper()
@@ -160,6 +173,39 @@
             No games found. Click "Scan All Sports" to fetch latest odds.
         </TwAlert>
     }
+
+    <!-- Floating Paper Trading Action Bar -->
+    @if (_showPaperTradingBar)
+    {
+        <div class="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50">
+            <div class="bg-gradient-to-r from-slate-900 to-slate-800 border border-emerald-500/50 rounded-2xl shadow-2xl shadow-emerald-500/20 px-6 py-4 flex items-center gap-6">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-emerald-500/20 rounded-lg">
+                        <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-white font-semibold">@_selectedGameIds.Count game@(_selectedGameIds.Count != 1 ? "s" : "") selected</div>
+                        <div class="text-xs text-slate-400">Ready to add to paper trading</div>
+                    </div>
+                </div>
+                
+                <div class="flex gap-3">
+                    <button @onclick="AddSelectedToPaperTrading" 
+                            class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        Add to Deck
+                    </button>
+                    <button @onclick="ClearSelection" 
+                            class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors">
+                        Clear
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
 </TwContainer>
 
 @code {
@@ -170,6 +216,10 @@
     private DateTime? _lastUpdate;
     private DataCollectionService.MultiSportAnalysisResponse? _analysisResult;
     private List<AnalyzedGame> _games = new();
+
+    // Paper Trading Selection State
+    private HashSet<string> _selectedGameIds = new();
+    private bool _showPaperTradingBar => _selectedGameIds.Count > 0;
 
     private async Task RunFullAnalysis()
     {
@@ -330,5 +380,45 @@
         public decimal Edge { get; set; }
         public JsonElement RawData { get; set; } // Store the raw JSON element for full analysis
         public string? AiSummary { get; set; } // Cache for bulk scan results
+    }
+
+    // Paper Trading Selection Functions
+    private string GetGameId(AnalyzedGame game) => $"{game.AwayTeam}:{game.HomeTeam}";
+
+    private void ToggleGameSelection(AnalyzedGame game)
+    {
+        var gameId = GetGameId(game);
+        if (_selectedGameIds.Contains(gameId))
+            _selectedGameIds.Remove(gameId);
+        else
+            _selectedGameIds.Add(gameId);
+        StateHasChanged();
+    }
+
+    private void ToggleSelectAll()
+    {
+        if (_selectedGameIds.Count == _games.Count)
+            _selectedGameIds.Clear();
+        else
+        {
+            foreach (var game in _games)
+                _selectedGameIds.Add(GetGameId(game));
+        }
+        StateHasChanged();
+    }
+
+    private void ClearSelection()
+    {
+        _selectedGameIds.Clear();
+        StateHasChanged();
+    }
+
+    private void AddSelectedToPaperTrading()
+    {
+        var gamesParam = string.Join(",", _selectedGameIds);
+        NavigationManager.NavigateTo($"/bet-tracker?games={Uri.EscapeDataString(gamesParam)}&sport=multi");
+        
+        Snackbar.Add($"Opening Paper Trading with {_selectedGameIds.Count} games...", Severity.Success);
+        ClearSelection();
     }
 }

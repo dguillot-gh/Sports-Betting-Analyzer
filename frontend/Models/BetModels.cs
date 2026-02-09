@@ -60,6 +60,8 @@
         public decimal ConfidenceScore { get; set; }
         public bool? Won { get; set; } // Null = unknown, true = won, false = lost
         public decimal? Payout { get; set; }
+        public bool IsMock { get; set; }
+        public decimal? ClvPercent { get; set; }
         public DateTime AnalyzedAt { get; set; } = DateTime.UtcNow;
         public DateTime? ResultDate { get; set; }
     }

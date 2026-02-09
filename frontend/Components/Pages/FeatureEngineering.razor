@@ -14,7 +14,7 @@
         <TwCard Class="p-6">
              <div class="flex items-center gap-4">
                 <div class="p-3 bg-cyan-500/10 rounded-xl">
-                    <TwIcon Name="auto_fix_high" Class="w-8 h-8 text-cyan-500" />
+                    <TwIcon Icon="auto_fix_high" Class="w-8 h-8 text-cyan-500" />
                 </div>
                 <div>
                     <h1 class="text-2xl font-bold text-slate-100">Feature Engineering Pipeline</h1>
@@ -42,7 +42,7 @@
                     {
                         <TwButton Variant="solid" Color="cyan" FullWidth="true" OnClick="RunEnhancement">
                             <div class="flex items-center justify-center gap-2 py-1">
-                                <TwIcon Name="auto_fix_high" />
+                                <TwIcon Icon="auto_fix_high" />
                                 <span>Run Feature Enhancement</span>
                             </div>
                         </TwButton>
@@ -60,7 +60,7 @@
                                     @foreach (var seriesName in _enhancedSeries)
                                     {
                                         <div class="flex items-center gap-2 text-sm text-emerald-400">
-                                            <TwIcon Name="check_circle" Class="w-4 h-4" />
+                                            <TwIcon Icon="check_circle" Class="w-4 h-4" />
                                             <span class="font-bold uppercase">@seriesName Enhanced</span>
                                         </div>
                                     }
@@ -75,19 +75,19 @@
                      <h3 class="font-bold text-slate-100 mb-4">Pipeline Info</h3>
                      <div class="space-y-4">
                          <div class="flex items-center gap-3 text-slate-400">
-                             <TwIcon Name="source" Class="text-slate-500" />
+                             <TwIcon Icon="source" Class="text-slate-500" />
                              <span class="text-sm">Input: Raw .rda files (data/nascar/raw)</span>
                          </div>
                          <div class="flex items-center gap-3 text-slate-400">
-                             <TwIcon Name="output" Class="text-slate-500" />
+                             <TwIcon Icon="output" Class="text-slate-500" />
                              <span class="text-sm">Output: Enhanced .csv files (data/nascar)</span>
                          </div>
                           <div class="flex items-center gap-3 text-slate-400">
-                             <TwIcon Name="functions" Class="text-slate-500" />
+                             <TwIcon Icon="functions" Class="text-slate-500" />
                              <span class="text-sm">Features: 27+ New Contextual Features</span>
                          </div>
                           <div class="flex items-center gap-3 text-slate-400">
-                             <TwIcon Name="filter_alt" Class="text-slate-500" />
+                             <TwIcon Icon="filter_alt" Class="text-slate-500" />
                              <span class="text-sm">Filter: Modern Era (2012-2025)</span>
                          </div>
                      </div>

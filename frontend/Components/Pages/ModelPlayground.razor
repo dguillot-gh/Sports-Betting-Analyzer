@@ -30,7 +30,7 @@
         <TwCard Class="p-6">
             <div class="flex items-center gap-4">
                 <div class="p-3 bg-indigo-500/10 rounded-xl">
-                    <TwIcon Name="science" Class="w-8 h-8 text-indigo-500" />
+                    <TwIcon Icon="science" Class="w-8 h-8 text-indigo-500" />
                 </div>
                 <div>
                     <h1 class="text-2xl font-bold text-slate-100">Model Playground</h1>
@@ -46,7 +46,7 @@
                     <!-- Training Config -->
                     <TwCard Class="p-6 h-full">
                         <div class="flex items-center gap-2 mb-6">
-                            <TwIcon Name="fitness_center" Class="text-blue-500" />
+                            <TwIcon Icon="fitness_center" Class="text-blue-500" />
                             <h3 class="font-bold text-slate-100">Train Apex Model</h3>
                         </div>
 
@@ -67,7 +67,7 @@
                             </div>
 
                             <TwButton Variant="solid" Color="blue" OnClick="TrainApex" Disabled="@_isTraining" FullWidth="true" Class="h-12">
-                                @if (_isTraining) { <span>Training...</span> } else { <span class="flex items-center gap-2"><TwIcon Name="play_arrow" /> Train Model</span> }
+                                @if (_isTraining) { <span>Training...</span> } else { <span class="flex items-center gap-2"><TwIcon Icon="play_arrow" /> Train Model</span> }
                             </TwButton>
 
                             @if (_trainingResult != null)
@@ -85,7 +85,7 @@
                     <TwCard Class="p-6 h-full">
                          <div class="flex items-center justify-between mb-6">
                             <div class="flex items-center gap-2">
-                                <TwIcon Name="info" Class="text-blue-500" />
+                                <TwIcon Icon="model_training" Class="w-12 h-12 mb-4 opacity-50" />
                                 <h3 class="font-bold text-slate-100">Model Status</h3>
                             </div>
                             <TwButton Variant="outline" Size="sm" OnClick="LoadModelStatus">Refresh</TwButton>
@@ -106,21 +106,21 @@
                                     <tbody class="divide-y divide-slate-700 bg-slate-900/50">
                                         <tr>
                                             <td class="px-4 py-3 font-medium text-slate-200">Simple</td>
-                                            <td class="px-4 py-3"><TwIcon Name="check_circle" Class="text-emerald-500 w-5 h-5" /></td>
+                                            <td class="px-4 py-3"><TwIcon Icon="check_circle" Class="text-emerald-500 w-5 h-5" /></td>
                                             <td class="px-4 py-3">10</td>
                                             <td class="px-4 py-3">~55%</td>
                                         </tr>
                                         <tr>
                                             <td class="px-4 py-3 font-medium text-slate-200">Kyle</td>
-                                            <td class="px-4 py-3"><TwIcon Name="check_circle" Class="text-emerald-500 w-5 h-5" /></td>
+                                            <td class="px-4 py-3"><TwIcon Icon="check_circle" Class="text-emerald-500 w-5 h-5" /></td>
                                             <td class="px-4 py-3">106</td>
                                             <td class="px-4 py-3">68.9%</td>
                                         </tr>
                                         <tr>
                                             <td class="px-4 py-3 font-medium text-slate-200">Apex (NBA)</td>
                                             <td class="px-4 py-3">
-                                                @if (GetStatusBool("nba_available")) { <TwIcon Name="check_circle" Class="text-emerald-500 w-5 h-5" /> }
-                                                else { <TwIcon Name="cancel" Class="text-red-500 w-5 h-5" /> }
+                                                @if (GetStatusBool("nba_available")) { <TwIcon Icon="check_circle" Class="text-emerald-500 w-5 h-5" /> }
+                                                else { <TwIcon Icon="cancel" Class="text-red-500 w-5 h-5" /> }
                                             </td>
                                             <td class="px-4 py-3">@GetStatusValue("nba_features", "0")</td>
                                             <td class="px-4 py-3">@GetTrainingAccuracy("nba")%</td>
@@ -128,8 +128,8 @@
                                          <tr>
                                             <td class="px-4 py-3 font-medium text-slate-200">Apex (NFL)</td>
                                             <td class="px-4 py-3">
-                                                @if (GetStatusBool("nfl_available")) { <TwIcon Name="check_circle" Class="text-emerald-500 w-5 h-5" /> }
-                                                else { <TwIcon Name="cancel" Class="text-red-500 w-5 h-5" /> }
+                                                @if (GetStatusBool("nfl_available")) { <TwIcon Icon="check_circle" Class="text-emerald-500 w-5 h-5" /> }
+                                                else { <TwIcon Icon="cancel" Class="text-red-500 w-5 h-5" /> }
                                             </td>
                                             <td class="px-4 py-3">@GetStatusValue("nfl_features", "0")</td>
                                             <td class="px-4 py-3">@GetTrainingAccuracy("nfl")%</td>
@@ -328,7 +328,7 @@
                     {
                         <TwCard Class="p-6">
                             <div class="flex items-center gap-2 mb-4 text-emerald-400">
-                                <TwIcon Name="analytics" />
+                                <TwIcon Icon="analytics" />
                                 <h3 class="font-bold">Results: @GetBacktestValue("games_tested") Games Tested</h3>
                             </div>
                             

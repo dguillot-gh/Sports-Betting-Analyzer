@@ -74,6 +74,12 @@
                     {
                         <TwCard NoPadding="true" Class="overflow-hidden">
                             <TwTable TItem="object">
+                                <TwTh Class="w-10">
+                                    <input type="checkbox" 
+                                           @onchange="ToggleSelectAll"
+                                           checked="@(_selectedGameIds.Count == validEvents.Count && validEvents.Count > 0)"
+                                           class="w-4 h-4 rounded border-slate-600 bg-slate-800 text-emerald-500 focus:ring-emerald-500" />
+                                </TwTh>
                                 <TwTh>Time</TwTh>
                                 <TwTh>Matchup</TwTh>
                                 <TwTh>DraftKings</TwTh>
@@ -82,7 +88,13 @@
                                 <TwTh Class="text-right">Analysis</TwTh>
                                 @foreach (var context in validEvents)
                                 {
-                                    <TwTr>
+                                    <TwTr Class="@(_selectedGameIds.Contains(GetGameId(context)) ? "bg-emerald-900/20" : "")">
+                                        <TwTd>
+                                            <input type="checkbox" 
+                                                   checked="@_selectedGameIds.Contains(GetGameId(context))"
+                                                   @onchange="@(() => ToggleGameSelection(GetGameId(context), context))"
+                                                   class="w-4 h-4 rounded border-slate-600 bg-slate-800 text-emerald-500 focus:ring-emerald-500" />
+                                        </TwTd>
                                         <TwTd><span class="text-slate-400">@context.CommenceTime.ToLocalTime().ToString("MM/dd HH:mm")</span></TwTd>
                                         <TwTd>
                                             <div class="flex flex-col">
@@ -345,6 +357,38 @@
         </TwTabPanel>
     </TwTabs>
 
+    <!-- Floating Paper Trading Action Bar -->
+    @if (_showPaperTradingBar)
+    {
+        <div class="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50">
+            <div class="bg-gradient-to-r from-slate-900 to-slate-800 border border-emerald-500/50 rounded-2xl shadow-2xl shadow-emerald-500/20 px-6 py-4 flex items-center gap-6">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-emerald-500/20 rounded-lg">
+                        <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-white font-semibold">@_selectedGameIds.Count game@(_selectedGameIds.Count != 1 ? "s" : "") selected</div>
+                        <div class="text-xs text-slate-400">Ready to add to paper trading</div>
+                    </div>
+                </div>
+                
+                <div class="flex gap-3">
+                    <button @onclick="AddSelectedToPaperTrading" 
+                            class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        Add to Deck
+                    </button>
+                    <button @onclick="ClearSelection" 
+                            class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors">
+                        Clear
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
 </TwContainer>
 
 @code {
@@ -373,6 +417,10 @@
     private bool _isTrendLoading = false;
     private HitRateResult? _hitRateResult;
     private List<string> _teamList = new();
+
+    // Paper Trading Selection State
+    private HashSet<string> _selectedGameIds = new();
+    private bool _showPaperTradingBar => _selectedGameIds.Count > 0;
 
     // ESPN Tab State
     private string _espnSport = "ncaab";
@@ -721,5 +769,63 @@
     {
         if (!point.HasValue) return "";
         return point > 0 ? $"+{point}" : point.ToString();
+    }
+
+    // Paper Trading Selection Functions
+    private Dictionary<string, OddsEvent> _selectedEventsData = new();
+
+    private void ToggleGameSelection(string gameId, OddsEvent eventData)
+    {
+        if (_selectedGameIds.Contains(gameId))
+        {
+            _selectedGameIds.Remove(gameId);
+            _selectedEventsData.Remove(gameId);
+        }
+        else
+        {
+            _selectedGameIds.Add(gameId);
+            _selectedEventsData[gameId] = eventData;
+        }
+        StateHasChanged();
+    }
+
+    private string GetGameId(OddsEvent evt) => $"{evt.AwayTeam}:{evt.HomeTeam}";
+
+    private void ToggleSelectAll()
+    {
+        var validEvents = _events.Where(e => !string.IsNullOrEmpty(e.HomeTeam) && !string.IsNullOrEmpty(e.AwayTeam)).ToList();
+        
+        if (_selectedGameIds.Count == validEvents.Count)
+        {
+            _selectedGameIds.Clear();
+            _selectedEventsData.Clear();
+        }
+        else
+        {
+            foreach (var evt in validEvents)
+            {
+                var gameId = $"{evt.AwayTeam}:{evt.HomeTeam}";
+                _selectedGameIds.Add(gameId);
+                _selectedEventsData[gameId] = evt;
+            }
+        }
+        StateHasChanged();
+    }
+
+    private void ClearSelection()
+    {
+        _selectedGameIds.Clear();
+        _selectedEventsData.Clear();
+        StateHasChanged();
+    }
+
+    private void AddSelectedToPaperTrading()
+    {
+        // Store selection in session and navigate to bet tracker with query param
+        var gamesParam = string.Join(",", _selectedGameIds);
+        NavigationManager.NavigateTo($"/bet-tracker?games={Uri.EscapeDataString(gamesParam)}&sport={_selectedSportKey}");
+        
+        Snackbar.Add($"Opening Paper Trading with {_selectedGameIds.Count} games...", Severity.Success);
+        ClearSelection();
     }
 }
