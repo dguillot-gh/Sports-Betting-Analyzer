@@ -1,0 +1,230 @@
+@using System.Text.Json
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
+@inject HttpClient Http
+
+<div class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-rose-900 via-red-900 to-orange-900 p-8 shadow-2xl mb-8">
+    <div class="absolute top-0 right-0 -mt-20 -mr-20 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
+    <div class="absolute bottom-0 left-0 -mb-20 -ml-20 w-80 h-80 bg-orange-500/20 rounded-full blur-3xl"></div>
+    
+    <div class="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div class="space-y-2">
+            <div class="flex items-center gap-3">
+                <div class="p-3 bg-white/10 backdrop-blur-md rounded-2xl">
+                    <TwIcon Icon="sports_football" Class="w-8 h-8 text-white" />
+                </div>
+                <h2 class="text-3xl font-black text-white tracking-tight">
+                    ESPN <span class="text-orange-400">FPI</span> Predictions
+                </h2>
+            </div>
+            <p class="text-rose-100/70 text-lg font-medium max-w-2xl">
+                Football Power Index rankings, win probabilities, and O/U projections.
+            </p>
+        </div>
+        
+        <TwButton Variant="solid" Color="amber" OnClick="LoadEspnData" Disabled="@_loading" Class="shadow-lg shadow-amber-500/20">
+            @if (_loading) { <span>Refreshing...</span> } else { <span>Refresh Data</span> }
+        </TwButton>
+    </div>
+</div>
+
+@if (_error != null)
+{
+    <TwAlert Severity="error" Class="mb-6">@_error</TwAlert>
+}
+
+@if (_loading)
+{
+    <div class="py-12 flex flex-col items-center justify-center space-y-4">
+        <div class="w-16 h-16 border-4 border-rose-500/20 border-t-rose-500 rounded-full animate-spin"></div>
+        <p class="text-rose-400 font-black uppercase tracking-widest text-xs animate-pulse">Loading FPI Data...</p>
+    </div>
+}
+else if (_games.Any())
+{
+    <TwGrid Columns="3" Gap="6">
+        @foreach (var game in _games)
+        {
+            <div class="group relative bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 @(!game.HasFpi ? "opacity-60" : "")">
+                <div class="absolute left-0 top-0 bottom-0 w-1.5 @(GetCardBorderColor(game))"></div>
+                
+                <div class="p-6">
+                    <div class="flex items-center justify-between mb-6">
+                        <div class="flex-1">
+                            <h3 class="text-lg font-black text-white leading-tight">@game.AwayTeam</h3>
+                            <span class="text-[10px] text-slate-500 font-black uppercase tracking-widest block">@game.AwayRecord</span>
+                        </div>
+                        <div class="px-4 text-slate-500 font-black italic">@@</div>
+                        <div class="flex-1 text-right">
+                            <h3 class="text-lg font-black text-white leading-tight">@game.HomeTeam</h3>
+                            <span class="text-[10px] text-slate-500 font-black uppercase tracking-widest block">@game.HomeRecord</span>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-center mb-6">
+                        <TwChip Size="sm" Color="@GetStatusColor(game.Status)">@game.Status</TwChip>
+                    </div>
+
+                    <div class="h-px bg-slate-800 mb-6"></div>
+
+                    @if (game.HasFpi)
+                    {
+                        <div class="space-y-3 mb-6">
+                            <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest block text-center">Win Probability</span>
+                            <div class="flex items-center gap-3">
+                                <div class="flex-1 bg-slate-950/50 rounded-2xl p-4 border @(game.AwayWinProb > 0.5 ? "border-emerald-500/20 bg-emerald-500/5" : "border-slate-800")">
+                                    <div class="text-center">
+                                        <span class="text-[10px] font-black text-slate-500 uppercase block mb-1">@game.AwayAbbrev</span>
+                                        <span class="text-xl font-black @(game.AwayWinProb > 0.5 ? "text-emerald-400" : "text-white")">@((game.AwayWinProb * 100).ToString("F0"))%</span>
+                                    </div>
+                                </div>
+                                <div class="flex-1 bg-slate-950/50 rounded-2xl p-4 border @(game.HomeWinProb > 0.5 ? "border-emerald-500/20 bg-emerald-500/5" : "border-slate-800")">
+                                    <div class="text-center">
+                                        <span class="text-[10px] font-black text-slate-500 uppercase block mb-1">@game.HomeAbbrev</span>
+                                        <span class="text-xl font-black @(game.HomeWinProb > 0.5 ? "text-emerald-400" : "text-white")">@((game.HomeWinProb * 100).ToString("F0"))%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-indigo-950/20 border border-indigo-500/10 rounded-2xl p-5 shadow-inner mb-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest">O/U Probability</span>
+                                <TwChip Size="sm" Color="@(game.TotalOverProb > 0.5 ? "indigo" : "purple")">
+                                    @(game.TotalOverProb > 0.5 ? "OVER" : "UNDER") Favored
+                                </TwChip>
+                            </div>
+                            
+                            <div class="relative h-2 bg-slate-800 rounded-full overflow-hidden mb-2">
+                                <div class="absolute inset-y-0 left-0 bg-indigo-500 transition-all duration-1000" style="width: @(game.TotalOverProb * 100)%"></div>
+                            </div>
+                            
+                            <div class="flex justify-between text-[10px] font-black text-slate-500 px-1">
+                                <span>UNDER @((100 - game.TotalOverProb * 100).ToString("F0"))%</span>
+                                <span class="text-white text-xs">@((Math.Max(game.TotalOverProb, 1 - game.TotalOverProb) * 100).ToString("F0"))% Max</span>
+                                <span>OVER @((game.TotalOverProb * 100).ToString("F0"))%</span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between px-2">
+                            <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Spread Cover (Home):</span>
+                            <span class="text-lg font-black text-indigo-400">@((game.SpreadCoverHomeProb * 100).ToString("F0"))%</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="py-8 text-center bg-slate-950/50 rounded-3xl border border-dashed border-slate-800">
+                            <TwIcon Icon="info" Class="w-8 h-8 text-slate-700 mx-auto mb-2" />
+                            <p class="text-[10px] font-black text-slate-600 uppercase tracking-widest">FPI Data Not Available</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </TwGrid>
+}
+else
+{
+    <!-- Empty State -->
+    <div class="bg-rose-950/20 border border-rose-500/20 rounded-3xl p-12 text-center space-y-4">
+        <TwIcon Icon="sports_football" Class="w-16 h-16 text-rose-500/30 mx-auto" />
+        <div class="space-y-2">
+            <h3 class="text-xl font-black text-white">FPI Center</h3>
+            <p class="text-slate-400 max-w-md mx-auto">Click refresh to load the latest Football Power Index data.</p>
+        </div>
+    </div>
+}
+
+<div class="mt-8 flex items-center gap-4 p-4 bg-rose-500/5 border border-rose-500/10 rounded-2xl">
+    <div class="p-2 bg-rose-500/20 rounded-xl">
+         <TwIcon Icon="info" Class="w-5 h-5 text-rose-500" />
+    </div>
+    <p class="text-xs text-rose-200/50 leading-relaxed italic">
+        Data sourced from ESPN's unofficial FPI API. Use as a "second opinion" alongside your model predictions.
+    </p>
+</div>
+
+@code {
+    private bool _loading = false;
+    private string? _error;
+    private List<EspnNflGame> _games = new();
+
+    private async Task LoadEspnData()
+    {
+        _loading = true;
+        _error = null;
+        _games.Clear();
+        StateHasChanged();
+
+        try
+        {
+            var resp = await Http.GetAsync("http://backend:8000/espn/nfl");
+            if (resp.IsSuccessStatusCode)
+            {
+                var json = await resp.Content.ReadAsStringAsync();
+                var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("games", out var gamesArray))
+                {
+                    foreach (var game in gamesArray.EnumerateArray())
+                    {
+                        _games.Add(new EspnNflGame
+                        {
+                            EventId = game.GetProperty("event_id").GetString() ?? "",
+                            HomeTeam = game.GetProperty("home_team").GetString() ?? "",
+                            AwayTeam = game.GetProperty("away_team").GetString() ?? "",
+                            HomeAbbrev = game.GetProperty("home_abbrev").GetString() ?? "",
+                            AwayAbbrev = game.GetProperty("away_abbrev").GetString() ?? "",
+                            HomeRecord = game.GetProperty("home_record").GetString() ?? "",
+                            AwayRecord = game.GetProperty("away_record").GetString() ?? "",
+                            Status = game.GetProperty("status").GetString() ?? "",
+                            Spread = game.GetProperty("spread").GetString() ?? "",
+                            OverUnder = game.TryGetProperty("over_under", out var ou) && ou.ValueKind != JsonValueKind.Null ? ou.GetDecimal() : 0,
+                            HomeWinProb = game.GetProperty("home_win_prob").GetDouble(),
+                            AwayWinProb = game.GetProperty("away_win_prob").GetDouble(),
+                            TotalOverProb = game.GetProperty("total_over_prob").GetDouble(),
+                            SpreadCoverHomeProb = game.GetProperty("spread_cover_home_prob").GetDouble(),
+                            HasFpi = game.GetProperty("has_fpi").GetBoolean()
+                        });
+                    }
+                }
+                if (!_games.Any()) _error = "No active NFL games found with FPI data.";
+            }
+            else _error = $"Failed to load ESPN data: {resp.StatusCode}";
+        }
+        catch (Exception ex) { _error = $"Error: {ex.Message}"; }
+        finally { _loading = false; }
+    }
+
+    private string GetCardBorderColor(EspnNflGame game)
+    {
+        if (!game.HasFpi) return "";
+        if (game.TotalOverProb < 0.35) return "border-l-4 border-purple-500";
+        if (game.TotalOverProb > 0.65) return "border-l-4 border-blue-500";
+        return "";
+    }
+
+    private string GetStatusColor(string status)
+    {
+        if (status.Contains("Final")) return "emerald";
+        if (status.Contains("progress") || status.Contains("Half")) return "amber";
+        return "slate";
+    }
+
+    public class EspnNflGame
+    {
+        public string EventId { get; set; } = "";
+        public string HomeTeam { get; set; } = "";
+        public string AwayTeam { get; set; } = "";
+        public string HomeAbbrev { get; set; } = "";
+        public string AwayAbbrev { get; set; } = "";
+        public string HomeRecord { get; set; } = "";
+        public string AwayRecord { get; set; } = "";
+        public string Status { get; set; } = "";
+        public string Spread { get; set; } = "";
+        public decimal OverUnder { get; set; }
+        public double HomeWinProb { get; set; }
+        public double AwayWinProb { get; set; }
+        public double TotalOverProb { get; set; }
+        public double SpreadCoverHomeProb { get; set; }
+        public bool HasFpi { get; set; }
+    }
+}

@@ -1,0 +1,288 @@
+@using System.Text.Json
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+<TwCard Class="p-6 bg-slate-900 border-slate-800">
+    <div class="space-y-6">
+        <div class="flex items-center justify-between border-b border-slate-700 pb-4">
+             <div>
+                <h3 class="font-bold text-slate-100">Historical Backtesting</h3>
+                <p class="text-slate-400 text-sm">Verify model accuracy against past seasons.</p>
+             </div>
+             <div class="flex items-center gap-3">
+                 <div class="text-right">
+                     <span class="block text-xs text-slate-500 uppercase">Current Model Accuracy</span>
+                     <span class="block font-mono font-bold text-emerald-400">@GetTrainingAccuracy(Sport)%</span>
+                 </div>
+                 <TwButton Variant="outline" Size="sm" OnClick="LoadModelStatus">Refresh Status</TwButton>
+             </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div class="col-span-1 border-r border-slate-700 pr-6">
+                 <h4 class="font-bold text-slate-300 mb-4 text-sm">Target Params</h4>
+                 <div class="space-y-4">
+                     <div>
+                         <label class="block text-xs text-slate-500 mb-1 font-medium">Test Year</label>
+                         <input type="number" @bind="_backtestYear" min="2020" max="2025" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-slate-200 focus:outline-none focus:border-blue-500 text-sm" />
+                     </div>
+                     <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="text-xs text-slate-500">Sample Size</label>
+                            <span class="text-xs font-bold text-slate-300">@_backtestSampleSize Games</span>
+                        </div>
+                        <input type="range" min="10" max="200" step="10" @bind="_backtestSampleSize" @bind:event="oninput" 
+                               class="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
+                    </div>
+                    
+                    <TwButton Variant="solid" Color="emerald" OnClick="RunBacktest" Disabled="@_isBacktesting" FullWidth="true">
+                        @if (_isBacktesting) { <span>Running...</span> } else { <span>Run Verification</span> }
+                    </TwButton>
+                 </div>
+            </div>
+
+            <div class="col-span-3 pl-2">
+                 @if (_backtestResult != null)
+                 {
+                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                         <div class="bg-slate-950 rounded-xl p-4 border border-slate-800">
+                             <div class="text-xs text-slate-500 uppercase mb-1">Total Games Tested</div>
+                             <div class="text-2xl font-black text-white">@GetBacktestValue("games_tested")</div>
+                         </div>
+                         <div class="bg-slate-950 rounded-xl p-4 border border-slate-800">
+                             <div class="text-xs text-slate-500 uppercase mb-1">Best Performing Model</div>
+                             <div class="text-2xl font-black text-emerald-400">@GetBestModelName()</div>
+                         </div>
+                     </div>
+
+                    <table class="w-full text-sm text-left text-slate-300 mb-6">
+                        <thead class="bg-slate-800 text-slate-400 uppercase text-xs">
+                            <tr>
+                                <th class="px-4 py-3 rounded-l-lg">Model</th>
+                                <th class="px-4 py-3 text-center">Correct</th>
+                                <th class="px-4 py-3 text-center">Accuracy</th>
+                                <th class="px-4 py-3 rounded-r-lg text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800">
+                            @foreach (var model in GetModels())
+                            {
+                                var stats = GetBacktestModelStats(model);
+                                var acc = GetBacktestAccuracy(model);
+                                var isBest = acc > 0 && acc >= GetBestAccuracy();
+                                <tr class="@(isBest ? "bg-emerald-500/5" : "")">
+                                    <td class="px-4 py-3 font-bold text-slate-200 uppercase">@model</td>
+                                    <td class="px-4 py-3 text-center">@GetModelStatValue(stats, "correct") / @GetModelStatValue(stats, "total")</td>
+                                    <td class="px-4 py-3 font-bold text-center @(acc >= 60 ? "text-emerald-400" : (acc >= 50 ? "text-amber-400" : "text-red-400"))">
+                                        @acc%
+                                    </td>
+                                    <td class="px-4 py-3 text-center">
+                                         @if (isBest && acc > 0)
+                                         {
+                                             <TwChip Color="emerald" Size="xs">BEST</TwChip>
+                                         }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+
+                    <div class="text-right">
+                         <TwButton Variant="ghost" Size="sm" OnClick="@(() => _showGameLog = !_showGameLog)">
+                             @(_showGameLog ? "Hide Logs" : "View Game Logs")
+                         </TwButton>
+                    </div>
+
+                    @if (_showGameLog)
+                    {
+                        <div class="mt-4 max-h-60 overflow-y-auto border border-slate-700 rounded-xl">
+                            <table class="w-full text-xs text-left text-slate-300">
+                                <thead class="bg-slate-800 sticky top-0">
+                                    <tr>
+                                        <th class="px-4 py-2">Matchup</th>
+                                        <th class="px-4 py-2">Winner</th>
+                                        <th class="px-4 py-2">Apex Prediction</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-800">
+                                    @foreach (var game in GetGameResults().Take(20))
+                                    {
+                                        <tr class="hover:bg-slate-800/30">
+                                            <td class="px-4 py-2">@GetGameTeams(game)</td>
+                                            <td class="px-4 py-2 font-bold text-slate-200">@GetGameValue(game, "actual_winner")</td>
+                                            <td class="px-4 py-2">@RenderPrediction(game, "apex")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                 }
+                 else
+                 {
+                     <div class="flex flex-col items-center justify-center h-48 text-slate-600 border-2 border-dashed border-slate-800 rounded-xl">
+                        <TwIcon Icon="science" Class="w-10 h-10 mb-2 opacity-50" />
+                        <p>Configure and run a backtest to see analysis</p>
+                    </div>
+                 }
+            </div>
+        </div>
+    </div>
+</TwCard>
+
+@code {
+    [Parameter] public string Sport { get; set; } = "nfl";
+
+    private int _backtestYear = 2024;
+    private int _backtestSampleSize = 50;
+    private bool _isBacktesting = false;
+    private JsonElement? _backtestResult;
+    private JsonElement? _modelStatus;
+    private bool _showGameLog = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadModelStatus();
+    }
+    
+    private async Task LoadModelStatus()
+    {
+        try
+        {
+            var response = await Http.GetAsync("http://backend:8000/apex/status");
+            if (response.IsSuccessStatusCode)
+                _modelStatus = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
+        }
+        catch { /* Ignore */ }
+    }
+
+    private async Task RunBacktest()
+    {
+        _isBacktesting = true;
+        try 
+        {
+            var url = $"http://backend:8000/apex/backtest?sport={Sport}&test_year={_backtestYear}&sample_size={_backtestSampleSize}";
+             var response = await Http.GetAsync(url);
+            if (response.IsSuccessStatusCode)
+            {
+                _backtestResult = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
+                Snackbar.Add("Backtest verified", Severity.Success);
+            }
+            else { Snackbar.Add("Backtest failed", Severity.Error); }
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _isBacktesting = false; }
+    }
+
+    private string GetTrainingAccuracy(string sport)
+    {
+        if (_modelStatus == null) return "N/A";
+        if (_modelStatus.Value.TryGetProperty("training_metadata", out var metadata))
+        {
+            if (metadata.TryGetProperty(sport, out var sportData))
+                if (sportData.TryGetProperty("ml_accuracy", out var acc)) return acc.ToString();
+        }
+        return "N/A";
+    }
+
+    private List<string> GetModels() => new() { "simple", "kyle", "apex" };
+
+    private string GetBacktestValue(string property)
+    {
+        if (_backtestResult == null) return "0";
+        if (_backtestResult.Value.TryGetProperty(property, out var value)) return value.ToString();
+        return "0";
+    }
+    
+    private string GetBestModelName()
+    {
+        var best = "";
+        double bestAcc = 0;
+        foreach (var m in GetModels())
+        {
+            var acc = GetBacktestAccuracy(m);
+            if (acc > bestAcc) { bestAcc = acc; best = m; }
+        }
+        return string.IsNullOrEmpty(best) ? "N/A" : best.ToUpper();
+    }
+    
+    // Helpers copied from ModelPlayground
+    private JsonElement? GetBacktestModelStats(string model)
+    {
+        if (_backtestResult == null) return null;
+        if (_backtestResult.Value.TryGetProperty("models", out var models))
+            if (models.TryGetProperty(model, out var modelStats)) return modelStats;
+        return null;
+    }
+    
+    private double GetBacktestAccuracy(string model)
+    {
+        var stats = GetBacktestModelStats(model);
+        if (stats == null) return 0;
+        if (stats.Value.TryGetProperty("accuracy", out var acc)) return acc.GetDouble();
+        return 0;
+    }
+    
+    private double GetBestAccuracy()
+    {
+        double best = 0;
+        foreach (var model in GetModels())
+        {
+            var acc = GetBacktestAccuracy(model);
+            if (acc > best) best = acc;
+        }
+        return best;
+    }
+    
+    private string GetModelStatValue(JsonElement? stats, string property)
+    {
+        if (stats == null) return "0";
+        if (stats.Value.TryGetProperty(property, out var value)) return value.ToString();
+        return "0";
+    }
+    
+    private List<JsonElement> GetGameResults()
+    {
+        var results = new List<JsonElement>();
+        if (_backtestResult == null) return results;
+        if (_backtestResult.Value.TryGetProperty("game_results", out var games))
+            foreach (var game in games.EnumerateArray()) results.Add(game);
+        return results;
+    }
+    
+    private string GetGameTeams(JsonElement game)
+    {
+        string home = game.TryGetProperty("home_team", out var h) ? h.ToString() : "?";
+        string away = game.TryGetProperty("away_team", out var a) ? a.ToString() : "?";
+        return $"{away} @ {home}";
+    }
+    
+    private string GetGameValue(JsonElement game, string property)
+    {
+        if (game.TryGetProperty(property, out var value)) return value.ToString();
+        return "";
+    }
+    
+    private RenderFragment RenderPrediction(JsonElement game, string model)
+    {
+        return builder =>
+        {
+            if (game.TryGetProperty("predictions", out var preds) && preds.TryGetProperty(model, out var pred))
+            {
+                var winner = pred.TryGetProperty("winner", out var w) ? w.ToString() : "";
+                var actual = game.TryGetProperty("actual_winner", out var a) ? a.ToString() : "";
+                var isCorrect = winner == actual;
+                
+                builder.OpenElement(0, "span");
+                builder.AddAttribute(1, "class", isCorrect ? "text-emerald-400 font-bold" : "text-red-400");
+                builder.AddContent(2, winner);
+                builder.CloseElement();
+            }
+            else
+            {
+                builder.AddContent(0, "-");
+            }
+        };
+    }
+}

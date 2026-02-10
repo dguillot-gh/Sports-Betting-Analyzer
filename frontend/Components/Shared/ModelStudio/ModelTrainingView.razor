@@ -1,0 +1,338 @@
+@using System.Text.Json
+@using SportsBettingAnalyzer.Services
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
+@inject PythonMLServiceClient MLClient
+@inject ILogger<ModelTrainingView> Logger
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<div class="space-y-6">
+    @if (!_isPythonServiceAvailable)
+    {
+        <TwAlert Severity="error">
+            Python ML Service is not available. Please ensure the service is running at @_pythonServiceUrl
+        </TwAlert>
+    }
+
+    <TwCard Class="p-4 bg-slate-900 border-slate-800">
+        <div class="flex flex-col md:flex-row gap-6">
+            <!-- Left Column: Controls -->
+            <div class="w-full md:w-1/3 space-y-4">
+                 <h3 class="font-bold text-slate-100 border-b border-slate-700 pb-2">Configuration</h3>
+                 
+                 <!-- Sport Selector (Syncs with parent if set, else allows free selection) -->
+                 <TwSelect TValue="string" Value="@_selectedSport" ValueChanged="SelectSport" Label="Sport" FullWidth="true">
+                    @foreach (var s in _availableSports)
+                    {
+                        <option value="@s">@s.ToUpper()</option>
+                    }
+                </TwSelect>
+
+                @if (_selectedSport == "nascar")
+                {
+                    <TwSelect TValue="int?" @bind-Value="_selectedSeason" Label="Season" FullWidth="true">
+                        <option value="">All Seasons</option>
+                        @foreach (var item in _featureValues.GetValueOrDefault("year", new List<object>()))
+                        {
+                           var val = ConvertToInt(item);
+                           <option value="@val">@val</option>
+                        }
+                    </TwSelect>
+
+                    <TwSelect TValue="string" @bind-Value="_selectedTrackType" Label="Track Type" FullWidth="true">
+                        <option value="">All Types</option>
+                        @foreach (var item in _featureValues.GetValueOrDefault("track_type", new List<object>()))
+                        {
+                            <option value="@item">@item</option>
+                        }
+                    </TwSelect>
+                }
+                
+                <TwButton Variant="solid" OnClick="OnFilterChanged" FullWidth="true" Class="mt-2">
+                    Reload Data
+                </TwButton>
+
+                <div class="mt-8 pt-6 border-t border-slate-700">
+                    <h4 class="font-bold text-slate-100 mb-3">Train New Model</h4>
+                    <TwSelect TValue="string" @bind-Value="_trainingTask" Label="Task Type" FullWidth="true" Class="mb-3">
+                        <option value="classification">Classification (Win/Loss)</option>
+                        <option value="regression">Regression (Score Prediction)</option>
+                    </TwSelect>
+
+                    <TwSelect TValue="string" @bind-Value="_selectedModelType" Label="Algorithm" FullWidth="true" Class="mb-3">
+                        <option value="rf">Random Forest (Baseline)</option>
+                        <option value="xgboost">XGBoost (Gradient Boosting)</option>
+                    </TwSelect>
+
+                    <TwButton Variant="solid" Color="emerald" FullWidth="true" OnClick="StartTraining" Disabled="@(_isTraining || !_isPythonServiceAvailable)">
+                        @if (_isTraining) { <span>Training...</span> } else { <span>Start Training</span> }
+                    </TwButton>
+                </div>
+            </div>
+
+            <!-- Right Column: Data & Results -->
+            <div class="w-full md:w-2/3 space-y-6">
+                <!-- Data Preview -->
+                <TwCard Class="p-0 overflow-hidden">
+                    <div class="px-4 py-3 bg-slate-800/50 border-b border-slate-700 flex justify-between items-center">
+                        <h3 class="font-bold text-slate-200">Data Preview</h3>
+                         @if (_dataSchema != null)
+                        {
+                            <TwChip Color="blue" Size="xs" Variant="outline">@_dataSchema.TotalRows Rows</TwChip>
+                        }
+                    </div>
+                    
+                    <div class="p-4">
+                        <TwTable TItem="Dictionary<string, object>" Items="@_tableItems" IsLoading="@_isLoadingData" Class="text-xs">
+                            <HeaderContent>
+                                @if (_dataSchema?.Columns != null)
+                                {
+                                    @foreach (var col in _dataSchema.Columns.Take(6)) 
+                                    {
+                                        <TwTh>@col</TwTh>
+                                    }
+                                }
+                            </HeaderContent>
+                            <RowTemplate Context="row">
+                                @if (_dataSchema?.Columns != null)
+                                {
+                                    @foreach (var col in _dataSchema.Columns.Take(6))
+                                    {
+                                        <TwTd>@row.GetValueOrDefault(col, "")</TwTd>
+                                    }
+                                }
+                            </RowTemplate>
+                        </TwTable>
+                         <!-- Pagination -->
+                        <div class="flex items-center justify-between mt-2 pt-2 border-t border-slate-700/50">
+                            <TwButton OnClick="PrevPage" Disabled="@(_currentPage == 0)" Variant="ghost" Size="sm">Prev</TwButton>
+                            <span class="text-slate-500 text-xs">Page @(_currentPage + 1)</span>
+                            <TwButton OnClick="NextPage" Disabled="@((_currentPage + 1) * _pageSize >= (_dataSchema?.TotalRows ?? 0))" Variant="ghost" Size="sm">Next</TwButton>
+                        </div>
+                    </div>
+                </TwCard>
+
+                <!-- Model Management -->
+                <TwCard Class="p-0 overflow-hidden">
+                     <div class="px-4 py-3 bg-slate-800/50 border-b border-slate-700 flex justify-between items-center">
+                        <h3 class="font-bold text-slate-200">Trained Models</h3>
+                        <TwButton Variant="ghost" Size="xs" OnClick="LoadModels">Refresh</TwButton>
+                    </div>
+                    <div class="p-4">
+                         <TwTable TItem="ModelInfo" Items="@_trainedModels" IsLoading="@_isLoadingModels" Class="text-xs">
+                             <HeaderContent>
+                                 <TwTh>Sport</TwTh>
+                                 <TwTh>Task</TwTh>
+                                 <TwTh>Updated</TwTh>
+                                 <TwTh>Actions</TwTh>
+                             </HeaderContent>
+                             <RowTemplate Context="model">
+                                 <TwTd>@model.Sport.ToUpper()</TwTd>
+                                 <TwTd>@model.Task</TwTd>
+                                 <TwTd>@DateTimeOffset.FromUnixTimeSeconds((long)model.LastUpdated).ToLocalTime().ToString("MM/dd HH:mm")</TwTd>
+                                 <TwTd>
+                                     <div class="flex gap-2">
+                                         <TwButton Variant="subtle" Color="red" Size="xs" OnClick="@(() => DeleteModel(model))">Delete</TwButton>
+                                     </div>
+                                 </TwTd>
+                             </RowTemplate>
+                         </TwTable>
+                    </div>
+                </TwCard>
+            </div>
+        </div>
+    </TwCard>
+</div>
+
+<!-- Training Progress Dialog -->
+<TwDialog @bind-IsOpen="_showTrainingDialog" Title="Training Progress" MaxWidth="lg">
+    <div class="space-y-4">
+        <TwProgressBar Value="100" Indeterminate="@(_trainingStatus == "running")" Color="@(_trainingStatus == "failed" ? "red" : "blue")" Height="h-2" />
+        
+        <div class="flex items-center justify-between text-sm">
+             <span class="text-slate-400">Status:</span>
+             <span class="@(_trainingStatus == "completed" ? "text-emerald-400" : "text-blue-400") font-bold uppercase">@(_trainingStatus ?? "Initializing...")</span>
+        </div>
+
+        <div class="bg-slate-950 rounded-lg p-3 h-64 overflow-y-auto font-mono text-xs space-y-1 scrollbar-thin scrollbar-thumb-slate-700">
+            @foreach (var line in _trainingProgress)
+            {
+                <div class="@(line.Contains("Error") ? "text-red-400" : "text-emerald-500/80")">@line</div>
+            }
+        </div>
+
+        @if (_trainingStatus == "completed" || _trainingStatus == "failed")
+        {
+            <div class="flex justify-end pt-4">
+                <TwButton OnClick="CloseTrainingDialog" Variant="solid" Color="slate">Close</TwButton>
+            </div>
+        }
+    </div>
+</TwDialog>
+
+@code {
+    [Parameter] public string Sport { get; set; } = "nfl";
+
+    private string _pythonServiceUrl = "http://localhost:8000";
+    private bool _isPythonServiceAvailable = false;
+    
+    // Dataset Explorer
+    private List<string> _availableSports = new();
+    private string _selectedSport = "nfl";
+    private DataSchema _dataSchema;
+    private bool _isLoadingData = false;
+    private List<Dictionary<string, object>> _tableItems = new();
+    private int _currentPage = 0;
+    private int _pageSize = 10;
+    
+    // Filters
+    private int? _selectedSeason;
+    private string? _selectedTrackType;
+    private Dictionary<string, List<object>> _featureValues = new();
+
+    // Training state
+    private string _trainingTask = "classification";
+    private string _selectedModelType = "rf";
+    private bool _isTraining = false;
+    private TrainResponse _trainingResult;
+    private bool _showAdvanced = false;
+
+    // Model Management
+    private List<ModelInfo> _trainedModels = new();
+    private bool _isLoadingModels = false;
+
+    // Dialog
+    private bool _showTrainingDialog = false;
+    private string? _trainingStatus;
+    private List<string> _trainingProgress = new();
+
+    private int ConvertToInt(object item) {
+        if (item is JsonElement element) return element.GetInt32();
+        return Convert.ToInt32(item);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _selectedSport = Sport;
+        try
+        {
+            _isPythonServiceAvailable = await MLClient.IsHealthyAsync();
+            _availableSports = await MLClient.GetAvailableSportsAsync();
+            await LoadModels();
+            await SelectSport(_selectedSport);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initializing");
+        }
+    }
+    
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_selectedSport != Sport)
+        {
+            await SelectSport(Sport);
+        }
+    }
+
+    private async Task SelectSport(string sport)
+    {
+        _selectedSport = sport;
+        _selectedSeason = null;
+        _selectedTrackType = null;
+        _currentPage = 0;
+        
+        try 
+        {
+            var series = sport == "nascar" ? "cup" : null;
+            _featureValues = await MLClient.GetFeatureValuesAsync(sport, series);
+        }
+        catch { /* Ignore */ }
+
+        await LoadData();
+    }
+    
+    // ... Copy remaining methods from MLTraining.razor (LoadData, StartTraining, etc.) ...
+    // Note: I am truncating the methods here for brevity in the artifact, but in the actual file I will include them.
+    // Simplifying: LoadData, PrevPage, NextPage, OnFilterChanged, StartTraining, LoadModels, DeleteModel, CloseTrainingDialog
+    
+    private async Task LoadData()
+    {
+        if (string.IsNullOrEmpty(_selectedSport)) return;
+        _isLoadingData = true;
+        StateHasChanged();
+        try
+        {
+            var series = _selectedSport == "nascar" ? "cup" : null;
+            var data = await MLClient.GetDataAsync(_selectedSport, _pageSize, _currentPage * _pageSize, _selectedSeason, _selectedSeason, series, null, _selectedTrackType);
+            _dataSchema = data;
+            _tableItems = data.Rows;
+        }
+        catch (Exception ex) { Snackbar.Add($"Error loading data: {ex.Message}", Severity.Error); }
+        finally { _isLoadingData = false; StateHasChanged(); }
+    }
+
+    private async Task PrevPage() { if (_currentPage > 0) { _currentPage--; await LoadData(); } }
+    private async Task NextPage() { if (((_currentPage + 1) * _pageSize) < (_dataSchema?.TotalRows ?? 0)) { _currentPage++; await LoadData(); } }
+    private async Task OnFilterChanged() { _currentPage = 0; await LoadData(); }
+
+    private async Task StartTraining()
+    {
+        _isTraining = true;
+        _showTrainingDialog = true;
+        _trainingStatus = "running";
+        _trainingProgress.Clear();
+        _trainingProgress.Add($"Starting {_selectedSport} training...");
+        
+        try
+        {
+             var hyperparams = new Dictionary<string, object> { { "model_type", _selectedModelType }, { "n_estimators", 100 } };
+             if (_trainingTask == "classification") hyperparams.Add("class_weight", "balanced");
+
+            _trainingResult = await MLClient.TrainAsync(_selectedSport, _trainingTask, null, null, hyperparams, _selectedSport == "nascar" ? "cup" : null);
+            
+            _trainingStatus = "completed";
+            _trainingProgress.Add("Training completed successfully!");
+            _trainingProgress.Add($"Model saved: {_trainingResult.ModelPath}");
+            await LoadModels();
+        }
+        catch (Exception ex)
+        {
+            _trainingStatus = "failed";
+            _trainingProgress.Add($"Error: {ex.Message}");
+        }
+        finally { _isTraining = false; }
+    }
+
+    private void CloseTrainingDialog() => _showTrainingDialog = false;
+
+    private async Task LoadModels()
+    {
+        _isLoadingModels = true;
+        try
+        {
+            var allModels = new List<ModelInfo>();
+             // Only load for current sport to keep it clean, or all? "Model Studio" is sport specific context usually.
+             // Let's load for the selected sport.
+             if (!string.IsNullOrEmpty(_selectedSport))
+                allModels.AddRange(await MLClient.GetModelsAsync(_selectedSport));
+             else 
+             {
+                 foreach(var s in _availableSports) allModels.AddRange(await MLClient.GetModelsAsync(s));
+             }
+            _trainedModels = allModels.OrderByDescending(m => m.LastUpdated).ToList();
+        }
+        finally { _isLoadingModels = false; }
+    }
+
+    private async Task DeleteModel(ModelInfo model)
+    {
+         try 
+         {
+             await MLClient.DeleteModelAsync(model.Sport, model.Series, model.Task);
+             Snackbar.Add("Model deleted", Severity.Success);
+             await LoadModels();
+         }
+         catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+}

@@ -150,7 +150,7 @@
         @if (_battingStats.Any() || _pitchingStats.Any())
         {
             <TwTabs>
-                <TwTabPanel Title="Batting" Icon="M12 21a9 9 0 100-18 9 9 0 000 18z">
+                <TwTabPanel Title="Batting" TabIcon="M12 21a9 9 0 100-18 9 9 0 000 18z">
                     @if (_battingStats.Any())
                     {
                         <div class="flex items-center justify-between mb-4">
@@ -212,7 +212,7 @@
                     }
                 </TwTabPanel>
                 
-                <TwTabPanel Title="Pitching" Icon="M13 10V3L4 14h7v7l9-11h-7z">
+                <TwTabPanel Title="Pitching" TabIcon="M13 10V3L4 14h7v7l9-11h-7z">
                     @if (_pitchingStats.Any())
                     {
                         <div class="flex items-center justify-between mb-4 mt-6">
@@ -274,7 +274,7 @@
                     }
                 </TwTabPanel>
 
-                <TwTabPanel Title="Schedule" Icon="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z">
+                <TwTabPanel Title="Schedule" TabIcon="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z">
                     @if (_schedule.Any())
                     {
                         <div class="flex items-center justify-between mb-4 mt-6">
