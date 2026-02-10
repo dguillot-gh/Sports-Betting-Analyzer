@@ -73,6 +73,24 @@ class SchedulerService:
             id="daily_import",
             replace_existing=True
         )
+
+        # Schedule Bet Grading every 6 hours
+        cls._scheduler.add_job(
+            cls._grade_bets_task,
+            'interval',
+            hours=6,
+            id="bet_grading",
+            replace_existing=True
+        )
+
+        # Schedule Closing Line Capture every 30 minutes
+        cls._scheduler.add_job(
+            cls._capture_closing_lines_task,
+            'interval',
+            minutes=30,
+            id="capture_closing_lines",
+            replace_existing=True
+        )
         
         cls._scheduler.start()
         logger.info("APScheduler started. Job 'daily_import' scheduled for 03:00.")
@@ -277,3 +295,29 @@ class SchedulerService:
              raise Exception("College Baseball import failed: All sources failed")
              
         return {"rows": rows}
+
+    @staticmethod
+    async def _grade_bets_task():
+        """Worker for automated bet grading."""
+        try:
+            from services.bet_grader import BetGrader
+            grader = BetGrader()
+            count = await grader.grade_all_pending()
+            logger.info(f"Auto-grader job finished. Graded {count} bets.")
+            return {"rows": count}
+        except Exception as e:
+            logger.error(f"Bet grading task failed: {e}")
+            return {"rows": 0, "error": str(e)}
+
+    @staticmethod
+    async def _capture_closing_lines_task():
+        """Worker for capturing closing lines at game start."""
+        try:
+            from services.clv_calculator import CLVCalculator
+            calc = CLVCalculator()
+            count = await calc.snapshot_closing_lines()
+            logger.info(f"Closing line capture finished. Updated {count} bets.")
+            return {"rows": count}
+        except Exception as e:
+            logger.error(f"Closing line capture failed: {e}")
+            return {"rows": 0, "error": str(e)}

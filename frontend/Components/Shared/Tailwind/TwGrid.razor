@@ -1,0 +1,32 @@
+@namespace SportsBettingAnalyzer.Components.Shared.Tailwind
+
+<div class="grid @ColumnsClass @GapClass @Class" @attributes="AdditionalAttributes">
+    @ChildContent
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public int Columns { get; set; } = 1; // Default columns
+    [Parameter] public int? ColumnsSm { get; set; }
+    [Parameter] public int? ColumnsMd { get; set; }
+    [Parameter] public int? ColumnsLg { get; set; }
+    [Parameter] public int? ColumnsXl { get; set; }
+    [Parameter] public int Gap { get; set; } = 4; // Gap size (tailwind scale)
+    [Parameter] public string Class { get; set; } = "";
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string ColumnsClass
+    {
+        get
+        {
+            var classes = new List<string> { $"grid-cols-{Columns}" };
+            if (ColumnsSm.HasValue) classes.Add($"sm:grid-cols-{ColumnsSm}");
+            if (ColumnsMd.HasValue) classes.Add($"md:grid-cols-{ColumnsMd}");
+            if (ColumnsLg.HasValue) classes.Add($"lg:grid-cols-{ColumnsLg}");
+            if (ColumnsXl.HasValue) classes.Add($"xl:grid-cols-{ColumnsXl}");
+            return string.Join(" ", classes);
+        }
+    }
+
+    private string GapClass => $"gap-{Gap}";
+}

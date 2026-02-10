@@ -1,0 +1,49 @@
+@namespace SportsBettingAnalyzer.Components.Shared.Tailwind
+
+<div class="w-full bg-slate-800 rounded-full overflow-hidden @HeightClass @Class">
+    @if (Indeterminate)
+    {
+        <div class="@ColorClass h-full animate-progress-indeterminate"></div>
+    }
+    else
+    {
+        <div class="@ColorClass h-full transition-all duration-300 ease-out" style="width: @Value%"></div>
+    }
+</div>
+
+<style>
+    @@keyframes progress-indeterminate {
+        0% { width: 0%; margin-left: 0%; }
+        50% { width: 30%; margin-left: 35%; }
+        100% { width: 0%; margin-left: 100%; }
+    }
+    .animate-progress-indeterminate {
+        animation: progress-indeterminate 1.5s infinite ease-in-out;
+    }
+</style>
+
+@code {
+    [Parameter] public int Value { get; set; } = 0; // 0-100
+    [Parameter] public bool Indeterminate { get; set; } = false;
+    [Parameter] public string Color { get; set; } = "blue"; // blue, emerald, amber, red, purple
+    [Parameter] public string Size { get; set; } = "md"; // sm, md, lg
+    [Parameter] public string Class { get; set; } = "";
+
+    private string ColorClass => Color switch
+    {
+        "blue" => "bg-blue-500",
+        "emerald" => "bg-emerald-500",
+        "amber" => "bg-amber-500",
+        "red" => "bg-red-500",
+        "purple" => "bg-purple-500",
+        _ => "bg-blue-500"
+    };
+
+    private string HeightClass => Size switch
+    {
+        "sm" => "h-1",
+        "md" => "h-2",
+        "lg" => "h-3",
+        _ => "h-2"
+    };
+}

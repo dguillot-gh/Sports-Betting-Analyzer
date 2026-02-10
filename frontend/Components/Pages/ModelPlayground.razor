@@ -1,6 +1,7 @@
 @page "/model-playground"
 @using System.Text.Json
 @using System.Text
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 
@@ -9,430 +10,410 @@
 <!-- Loading Dialog Overlay -->
 @if (_showLoadingDialog)
 {
-    <MudOverlay Visible="true" DarkBackground="true" ZIndex="9999">
-        <MudPaper Class="pa-6" Elevation="4" Style="min-width: 350px; text-align: center;">
-            <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true" />
-            <MudText Typo="Typo.h6" Class="mt-4">@_loadingTitle</MudText>
-            <MudText Typo="Typo.body2" Class="mt-2 mud-text-secondary">@_loadingMessage</MudText>
+    <div class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+        <div class="bg-slate-900 border border-slate-700 p-8 rounded-2xl max-w-md w-full text-center shadow-2xl">
+            <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <h3 class="text-xl font-bold text-white mb-2">@_loadingTitle</h3>
+            <p class="text-slate-400 mb-2">@_loadingMessage</p>
             @if (!string.IsNullOrEmpty(_loadingDetail))
             {
-                <MudText Typo="Typo.caption" Class="mt-2" Color="Color.Info">@_loadingDetail</MudText>
+                <p class="text-xs text-blue-400 font-mono mb-4">@_loadingDetail</p>
             }
-            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-4" />
-        </MudPaper>
-    </MudOverlay>
+            <TwProgressBar Indeterminate="true" Color="blue" Height="h-1" />
+        </div>
+    </div>
 }
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
-    <MudText Typo="Typo.h4" Class="mb-4">
-        <MudIcon Icon="@Icons.Material.Filled.Science" Class="mr-2" />
-        Model Playground
-    </MudText>
-    
-    <MudText Typo="Typo.subtitle1" Class="mb-4 mud-text-secondary">
-        Train and compare predictions from Simple, Kyle, and Apex models
-    </MudText>
+<TwContainer MaxWidth="extraLarge" Class="mt-8">
+    <div class="space-y-6">
+        <!-- Header -->
+        <TwCard Class="p-6">
+            <div class="flex items-center gap-4">
+                <div class="p-3 bg-indigo-500/10 rounded-xl">
+                    <TwIcon Icon="science" Class="w-8 h-8 text-indigo-500" />
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold text-slate-100">Model Playground</h1>
+                    <p class="text-slate-400">Train and compare predictions from Simple, Kyle, and Apex models</p>
+                </div>
+            </div>
+        </TwCard>
 
-    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
-        <!-- Training Tab -->
-        <MudTabPanel Text="Training" Icon="@Icons.Material.Filled.ModelTraining">
-            <MudGrid>
-                <MudItem xs="12" md="6">
-                    <MudPaper Class="pa-4" Elevation="2">
-                        <MudText Typo="Typo.h6" Class="mb-3">
-                            <MudIcon Icon="@Icons.Material.Filled.FitnessCenter" Class="mr-2" />
-                            Train Apex Model
-                        </MudText>
-                        
-                        <MudSelect T="string" @bind-Value="_trainSport" Label="Sport" Variant="Variant.Outlined" Class="mb-3">
-                            <MudSelectItem Value="@("all")">All (NBA + NFL)</MudSelectItem>
-                            <MudSelectItem Value="@("nba")">NBA Only</MudSelectItem>
-                            <MudSelectItem Value="@("nfl")">NFL Only</MudSelectItem>
-                        </MudSelect>
-                        
-                        <MudSlider @bind-Value="_epochs" Min="100" Max="1000" Step="100" Color="Color.Primary" Class="mb-3">
-                            Epochs: @_epochs
-                        </MudSlider>
-                        
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="TrainApex" 
-                                   Disabled="@_isTraining" FullWidth="true">
-                            @if (_isTraining)
+        <TwTabs DefaultTab="0">
+            <!-- Training Tab -->
+            <TwTabPanel Title="Training" TabIcon="@Icons.Material.Filled.ModelTraining">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6">
+                    <!-- Training Config -->
+                    <TwCard Class="p-6 h-full">
+                        <div class="flex items-center gap-2 mb-6">
+                            <TwIcon Icon="fitness_center" Class="text-blue-500" />
+                            <h3 class="font-bold text-slate-100">Train Apex Model</h3>
+                        </div>
+
+                        <div class="space-y-6">
+                            <TwSelect TValue="string" @bind-Value="_trainSport" Label="Sport" FullWidth="true">
+                                <option value="all">All (NBA + NFL)</option>
+                                <option value="nba">NBA Only</option>
+                                <option value="nfl">NFL Only</option>
+                            </TwSelect>
+
+                            <div>
+                                <div class="flex justify-between mb-2">
+                                    <label class="text-sm text-slate-400">Epochs</label>
+                                    <span class="text-sm font-bold text-slate-200">@_epochs</span>
+                                </div>
+                                <input type="range" min="100" max="1000" step="100" @bind="_epochs" @bind:event="oninput" 
+                                       class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+                            </div>
+
+                            <TwButton Variant="solid" Color="blue" OnClick="TrainApex" Disabled="@_isTraining" FullWidth="true" Class="h-12">
+                                @if (_isTraining) { <span>Training...</span> } else { <span class="flex items-center gap-2"><TwIcon Icon="play_arrow" /> Train Model</span> }
+                            </TwButton>
+
+                            @if (_trainingResult != null)
                             {
-                                <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
-                                <span>Training...</span>
+                                <TwAlert Severity="success">
+                                    <div class="max-h-40 overflow-y-auto text-xs font-mono">
+                                        <pre>@JsonSerializer.Serialize(_trainingResult, new JsonSerializerOptions { WriteIndented = true })</pre>
+                                    </div>
+                                </TwAlert>
                             }
-                            else
-                            {
-                                <MudIcon Icon="@Icons.Material.Filled.PlayArrow" Class="mr-2" />
-                                <span>Train Model</span>
-                            }
-                        </MudButton>
-                        
-                        @if (_trainingResult != null)
-                        {
-                            <MudAlert Severity="Severity.Success" Class="mt-3">
-                                <pre>@JsonSerializer.Serialize(_trainingResult, new JsonSerializerOptions { WriteIndented = true })</pre>
-                            </MudAlert>
-                        }
-                    </MudPaper>
-                </MudItem>
-                
-                <MudItem xs="12" md="6">
-                    <MudPaper Class="pa-4" Elevation="2">
-                        <MudText Typo="Typo.h6" Class="mb-3">
-                            <MudIcon Icon="@Icons.Material.Filled.Info" Class="mr-2" />
-                            Model Status
-                        </MudText>
-                        
-                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadModelStatus" Class="mb-3">
-                            <MudIcon Icon="@Icons.Material.Filled.Refresh" Class="mr-2" />
-                            Refresh Status
-                        </MudButton>
-                        
+                        </div>
+                    </TwCard>
+
+                    <!-- Model Status -->
+                    <TwCard Class="p-6 h-full">
+                         <div class="flex items-center justify-between mb-6">
+                            <div class="flex items-center gap-2">
+                                <TwIcon Icon="model_training" Class="w-12 h-12 mb-4 opacity-50" />
+                                <h3 class="font-bold text-slate-100">Model Status</h3>
+                            </div>
+                            <TwButton Variant="outline" Size="sm" OnClick="LoadModelStatus">Refresh</TwButton>
+                        </div>
+
                         @if (_modelStatus != null)
                         {
-                            <MudSimpleTable Dense="true" Bordered="true">
-                                <thead>
-                                    <tr>
-                                        <th>Model</th>
-                                        <th>Available</th>
-                                        <th>Features</th>
-                                        <th>Accuracy</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td><strong>Simple</strong></td>
-                                        <td><MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" /></td>
-                                        <td>10</td>
-                                        <td>~55%</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Kyle</strong></td>
-                                        <td><MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" /></td>
-                                        <td>106</td>
-                                        <td>68.9%</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Apex (NBA)</strong></td>
-                                        <td>
-                                            @if (GetStatusBool("nba_available"))
-                                            {
-                                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
-                                            }
-                                            else
-                                            {
-                                                <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Size="Size.Small" />
-                                            }
-                                        </td>
-                                        <td>@GetStatusValue("nba_features", "0")</td>
-                                        <td>@GetTrainingAccuracy("nba")%</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Apex (NFL)</strong></td>
-                                        <td>
-                                            @if (GetStatusBool("nfl_available"))
-                                            {
-                                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
-                                            }
-                                            else
-                                            {
-                                                <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Size="Size.Small" />
-                                            }
-                                        </td>
-                                        <td>@GetStatusValue("nfl_features", "0")</td>
-                                        <td>@GetTrainingAccuracy("nfl")%</td>
-                                    </tr>
-                                </tbody>
-                            </MudSimpleTable>
-                        }
-                    </MudPaper>
-                </MudItem>
-            </MudGrid>
-        </MudTabPanel>
-        
-        <!-- NBA Comparison Tab -->
-        <MudTabPanel Text="NBA Comparison" Icon="@Icons.Material.Filled.SportsBasketball">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudGrid>
-                    <MudItem xs="12" md="4">
-                        <MudAutocomplete T="string" @bind-Value="_nbaHomeTeam" Label="Home Team" 
-                                         SearchFunc="@SearchNbaTeams" Variant="Variant.Outlined" />
-                    </MudItem>
-                    <MudItem xs="12" md="4">
-                        <MudAutocomplete T="string" @bind-Value="_nbaAwayTeam" Label="Away Team" 
-                                         SearchFunc="@SearchNbaTeams" Variant="Variant.Outlined" />
-                    </MudItem>
-                    <MudItem xs="12" md="4">
-                        <MudNumericField @bind-Value="_nbaTotalLine" Label="O/U Line" Variant="Variant.Outlined" />
-                    </MudItem>
-                </MudGrid>
-                
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CompareNba" 
-                           Disabled="@_isComparing" Class="mt-4">
-                    @if (_isComparing)
-                    {
-                        <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
-                        <span>Comparing...</span>
-                    }
-                    else
-                    {
-                        <MudIcon Icon="@Icons.Material.Filled.Compare" Class="mr-2" />
-                        <span>Compare All Models</span>
-                    }
-                </MudButton>
-                
-                @if (_nbaComparison != null)
-                {
-                    <MudDivider Class="my-4" />
-                    <MudText Typo="Typo.h6" Class="mb-3">Results</MudText>
-                    
-                    <MudGrid>
-                        @foreach (var model in GetModels())
-                        {
-                            <MudItem xs="12" md="4">
-                                <MudCard Elevation="3">
-                                    <MudCardHeader>
-                                        <CardHeaderContent>
-                                            <MudText Typo="Typo.h6">@model.ToUpper()</MudText>
-                                        </CardHeaderContent>
-                                    </MudCardHeader>
-                                    <MudCardContent>
-                                        @{
-                                            var modelData = GetModelResult(model);
-                                            if (modelData != null)
-                                            {
-                                                var hasError = modelData.Value.TryGetProperty("error", out var error);
-                                                if (hasError)
-                                                {
-                                                    <MudAlert Severity="Severity.Warning">@error.GetString()</MudAlert>
-                                                }
-                                                else
-                                                {
-                                                    <MudText><strong>Winner:</strong> @GetJsonValue(modelData.Value, "predicted_winner")</MudText>
-                                                    <MudText><strong>Confidence:</strong> @GetJsonValue(modelData.Value, "confidence")%</MudText>
-                                                    <MudText><strong>Home Win:</strong> @(GetJsonDouble(modelData.Value, "home_win_probability") * 100)%</MudText>
-                                                    <MudText><strong>Away Win:</strong> @(GetJsonDouble(modelData.Value, "away_win_probability") * 100)%</MudText>
-                                                }
-                                            }
-                                        }
-                                    </MudCardContent>
-                                </MudCard>
-                            </MudItem>
-                        }
-                    </MudGrid>
-                }
-            </MudPaper>
-        </MudTabPanel>
-        
-        <!-- NFL Comparison Tab -->
-        <MudTabPanel Text="NFL Comparison" Icon="@Icons.Material.Filled.SportsFootball">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudGrid>
-                    <MudItem xs="12" md="4">
-                        <MudAutocomplete T="string" @bind-Value="_nflHomeTeam" Label="Home Team" 
-                                         SearchFunc="@SearchNflTeams" Variant="Variant.Outlined" />
-                    </MudItem>
-                    <MudItem xs="12" md="4">
-                        <MudAutocomplete T="string" @bind-Value="_nflAwayTeam" Label="Away Team" 
-                                         SearchFunc="@SearchNflTeams" Variant="Variant.Outlined" />
-                    </MudItem>
-                    <MudItem xs="12" md="4">
-                        <MudNumericField @bind-Value="_nflTotalLine" Label="O/U Line" Variant="Variant.Outlined" />
-                    </MudItem>
-                </MudGrid>
-                
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CompareNfl" 
-                           Disabled="@_isComparing" Class="mt-4">
-                    @if (_isComparing)
-                    {
-                        <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
-                        <span>Comparing...</span>
-                    }
-                    else
-                    {
-                        <MudIcon Icon="@Icons.Material.Filled.Compare" Class="mr-2" />
-                        <span>Compare Models</span>
-                    }
-                </MudButton>
-                
-                <MudAlert Severity="Severity.Info" Class="mt-3">
-                    <MudIcon Icon="@Icons.Material.Filled.Info" Class="mr-2" />
-                    Note: Kyle model is NBA-only. NFL comparison shows Simple and Apex models.
-                </MudAlert>
-                
-                @if (_nflComparison != null)
-                {
-                    <MudDivider Class="my-4" />
-                    <MudText Typo="Typo.h6" Class="mb-3">Results</MudText>
-                    
-                    <MudGrid>
-                        @foreach (var model in GetModels())
-                        {
-                            <MudItem xs="12" md="4">
-                                <MudCard Elevation="3">
-                                    <MudCardHeader>
-                                        <CardHeaderContent>
-                                            <MudText Typo="Typo.h6">@model.ToUpper()</MudText>
-                                        </CardHeaderContent>
-                                    </MudCardHeader>
-                                    <MudCardContent>
-                                        @{
-                                            var modelData = GetNflModelResult(model);
-                                            if (modelData != null)
-                                            {
-                                                var hasError = modelData.Value.TryGetProperty("error", out var error);
-                                                if (hasError)
-                                                {
-                                                    <MudAlert Severity="Severity.Warning">@error.GetString()</MudAlert>
-                                                }
-                                                else
-                                                {
-                                                    <MudText><strong>Winner:</strong> @GetJsonValue(modelData.Value, "predicted_winner")</MudText>
-                                                    <MudText><strong>Confidence:</strong> @GetJsonValue(modelData.Value, "confidence")%</MudText>
-                                                    <MudText><strong>Home Win:</strong> @(GetJsonDouble(modelData.Value, "home_win_probability") * 100)%</MudText>
-                                                    <MudText><strong>Away Win:</strong> @(GetJsonDouble(modelData.Value, "away_win_probability") * 100)%</MudText>
-                                                }
-                                            }
-                                        }
-                                    </MudCardContent>
-                                </MudCard>
-                            </MudItem>
-                        }
-                    </MudGrid>
-                }
-            </MudPaper>
-        </MudTabPanel>
-        
-        <!-- Verification Tab -->
-        <MudTabPanel Text="Verification" Icon="@Icons.Material.Filled.VerifiedUser">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudText Typo="Typo.h6" Class="mb-3">
-                    <MudIcon Icon="@Icons.Material.Filled.Science" Class="mr-2" />
-                    Backtest on Historical Games
-                </MudText>
-                
-                <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
-                    Test all models on past games where we know the outcome. This gives <strong>concrete proof</strong> of which model is more accurate.
-                </MudText>
-                
-                <MudGrid>
-                    <MudItem xs="12" md="4">
-                        <MudSelect T="string" @bind-Value="_backtestSport" Label="Sport" Variant="Variant.Outlined">
-                            <MudSelectItem Value="@("nfl")">NFL</MudSelectItem>
-                            <MudSelectItem Value="@("nba")">NBA</MudSelectItem>
-                        </MudSelect>
-                    </MudItem>
-                    <MudItem xs="12" md="4">
-                        <MudNumericField @bind-Value="_backtestYear" Label="Test Year" Variant="Variant.Outlined" Min="2020" Max="2025" />
-                    </MudItem>
-                    <MudItem xs="12" md="4">
-                        <MudSlider @bind-Value="_backtestSampleSize" Min="10" Max="100" Step="10" Color="Color.Primary">
-                            Games to Test: @_backtestSampleSize
-                        </MudSlider>
-                    </MudItem>
-                </MudGrid>
-                
-                <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="RunBacktest" 
-                           Disabled="@_isBacktesting" Class="mt-4">
-                    @if (_isBacktesting)
-                    {
-                        <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
-                        <span>Running Backtest...</span>
-                    }
-                    else
-                    {
-                        <MudIcon Icon="@Icons.Material.Filled.PlayArrow" Class="mr-2" />
-                        <span>Run Backtest</span>
-                    }
-                </MudButton>
-                
-                @if (_backtestResult != null)
-                {
-                    <MudDivider Class="my-4" />
-                    
-                    <MudText Typo="Typo.h6" Class="mb-3">
-                        <MudIcon Icon="@Icons.Material.Filled.Analytics" Class="mr-2" />
-                        Results: @GetBacktestValue("games_tested") Games Tested
-                    </MudText>
-                    
-                    @if (HasBacktestNote())
-                    {
-                        <MudAlert Severity="Severity.Info" Class="mb-3">@GetBacktestValue("note")</MudAlert>
-                    }
-                    
-                    <MudSimpleTable Dense="true" Bordered="true" Striped="true">
-                        <thead>
-                            <tr style="background-color: var(--mud-palette-primary); color: white;">
-                                <th>Model</th>
-                                <th>Correct</th>
-                                <th>Total</th>
-                                <th>Accuracy</th>
-                                <th>Result</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var model in GetModels())
-                            {
-                                var modelStats = GetBacktestModelStats(model);
-                                var accuracy = GetBacktestAccuracy(model);
-                                var isBest = accuracy > 0 && accuracy >= GetBestAccuracy();
-                                <tr style="@(isBest ? "background-color: rgba(76, 175, 80, 0.1);" : "")">
-                                    <td><strong>@model.ToUpper()</strong></td>
-                                    <td>@GetModelStatValue(modelStats, "correct")</td>
-                                    <td>@GetModelStatValue(modelStats, "total")</td>
-                                    <td>
-                                        <MudText Color="@(accuracy >= 60 ? Color.Success : accuracy >= 50 ? Color.Warning : Color.Error)">
-                                            <strong>@accuracy%</strong>
-                                        </MudText>
-                                    </td>
-                                    <td>
-                                        @if (isBest && accuracy > 0)
-                                        {
-                                            <MudChip T="string" Color="Color.Success" Size="Size.Small">BEST</MudChip>
-                                        }
-                                        else if (HasModelNote(modelStats))
-                                        {
-                                            <MudText Typo="Typo.caption" Color="Color.Warning">@GetModelStatValue(modelStats, "note")</MudText>
-                                        }
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </MudSimpleTable>
-                    
-                    <MudExpansionPanels Class="mt-4">
-                        <MudExpansionPanel Text="View Game-by-Game Results">
-                            <MudSimpleTable Dense="true" Style="max-height: 300px; overflow-y: auto;">
-                                <thead>
-                                    <tr>
-                                        <th>Game</th>
-                                        <th>Actual Winner</th>
-                                        <th>Simple</th>
-                                        <th>Kyle</th>
-                                        <th>Apex</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var game in GetGameResults())
-                                    {
+                            <div class="overflow-hidden rounded-xl border border-slate-700">
+                                <table class="w-full text-sm text-left text-slate-300">
+                                    <thead class="bg-slate-800 text-slate-400 uppercase text-xs">
                                         <tr>
-                                            <td>@GetGameTeams(game)</td>
-                                            <td><strong>@GetGameValue(game, "actual_winner")</strong></td>
-                                            <td>@RenderPrediction(game, "simple")</td>
-                                            <td>@RenderPrediction(game, "kyle")</td>
-                                            <td>@RenderPrediction(game, "apex")</td>
+                                            <th class="px-4 py-3">Model</th>
+                                            <th class="px-4 py-3">Available</th>
+                                            <th class="px-4 py-3">Features</th>
+                                            <th class="px-4 py-3">Accuracy</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-700 bg-slate-900/50">
+                                        <tr>
+                                            <td class="px-4 py-3 font-medium text-slate-200">Simple</td>
+                                            <td class="px-4 py-3"><TwIcon Icon="check_circle" Class="text-emerald-500 w-5 h-5" /></td>
+                                            <td class="px-4 py-3">10</td>
+                                            <td class="px-4 py-3">~55%</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="px-4 py-3 font-medium text-slate-200">Kyle</td>
+                                            <td class="px-4 py-3"><TwIcon Icon="check_circle" Class="text-emerald-500 w-5 h-5" /></td>
+                                            <td class="px-4 py-3">106</td>
+                                            <td class="px-4 py-3">68.9%</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="px-4 py-3 font-medium text-slate-200">Apex (NBA)</td>
+                                            <td class="px-4 py-3">
+                                                @if (GetStatusBool("nba_available")) { <TwIcon Icon="check_circle" Class="text-emerald-500 w-5 h-5" /> }
+                                                else { <TwIcon Icon="cancel" Class="text-red-500 w-5 h-5" /> }
+                                            </td>
+                                            <td class="px-4 py-3">@GetStatusValue("nba_features", "0")</td>
+                                            <td class="px-4 py-3">@GetTrainingAccuracy("nba")%</td>
+                                        </tr>
+                                         <tr>
+                                            <td class="px-4 py-3 font-medium text-slate-200">Apex (NFL)</td>
+                                            <td class="px-4 py-3">
+                                                @if (GetStatusBool("nfl_available")) { <TwIcon Icon="check_circle" Class="text-emerald-500 w-5 h-5" /> }
+                                                else { <TwIcon Icon="cancel" Class="text-red-500 w-5 h-5" /> }
+                                            </td>
+                                            <td class="px-4 py-3">@GetStatusValue("nfl_features", "0")</td>
+                                            <td class="px-4 py-3">@GetTrainingAccuracy("nfl")%</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </TwCard>
+                </div>
+            </TwTabPanel>
+
+            <!-- NBA Comparison Tab -->
+            <TwTabPanel Title="NBA Comparison" TabIcon="@Icons.Material.Filled.SportsBasketball">
+                <div class="pt-6 space-y-6">
+                    <TwCard Class="p-6">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <!-- Custom Autocomplete for Home Team -->
+                            <div class="relative">
+                                <label class="block text-xs text-slate-500 mb-1 font-medium">Home Team</label>
+                                <input type="text" @bind="_nbaHomeTeam" placeholder="Search..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-slate-200 focus:outline-none focus:border-blue-500" />
+                            </div>
+                             <div class="relative">
+                                <label class="block text-xs text-slate-500 mb-1 font-medium">Away Team</label>
+                                <input type="text" @bind="_nbaAwayTeam" placeholder="Search..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-slate-200 focus:outline-none focus:border-blue-500" />
+                            </div>
+                             <div>
+                                <label class="block text-xs text-slate-500 mb-1 font-medium">O/U Line</label>
+                                <input type="number" @bind="_nbaTotalLine" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-slate-200 focus:outline-none focus:border-blue-500" />
+                            </div>
+                        </div>
+
+                        <TwButton Variant="solid" Color="blue" OnClick="CompareNba" Disabled="@_isComparing" Class="mt-6" FullWidth="true">
+                            @if (_isComparing) { <span>Comparing...</span> } else { <span>Compare All Models</span> }
+                        </TwButton>
+                    </TwCard>
+
+                    @if (_nbaComparison != null)
+                    {
+                        <div>
+                            <h3 class="font-bold text-slate-100 mb-4">Results</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                @foreach (var model in GetModels())
+                                {
+                                    <TwCard Class="p-6 border-t-4 border-t-blue-500">
+                                         <h4 class="font-bold text-lg text-slate-100 mb-4 uppercase">@model</h4>
+                                         @{
+                                             var modelData = GetModelResult(model);
+                                             if (modelData != null)
+                                             {
+                                                 if (modelData.Value.TryGetProperty("error", out var error))
+                                                 {
+                                                     <p class="text-red-400 text-sm">@error.GetString()</p>
+                                                 }
+                                                 else
+                                                 {
+                                                     <div class="space-y-2">
+                                                         <div class="flex justify-between">
+                                                             <span class="text-slate-400">Winner</span>
+                                                             <span class="font-bold text-emerald-400">@GetJsonValue(modelData.Value, "predicted_winner")</span>
+                                                         </div>
+                                                          <div class="flex justify-between">
+                                                             <span class="text-slate-400">Confidence</span>
+                                                             <span class="font-bold text-slate-200">@GetJsonValue(modelData.Value, "confidence")%</span>
+                                                         </div>
+                                                         <div class="h-px bg-slate-700 my-2"></div>
+                                                          <div class="flex justify-between text-sm">
+                                                             <span class="text-slate-500">Home Win %</span>
+                                                             <span class="text-slate-300">@(GetJsonDouble(modelData.Value, "home_win_probability") * 100)%</span>
+                                                         </div>
+                                                          <div class="flex justify-between text-sm">
+                                                             <span class="text-slate-500">Away Win %</span>
+                                                             <span class="text-slate-300">@(GetJsonDouble(modelData.Value, "away_win_probability") * 100)%</span>
+                                                         </div>
+                                                     </div>
+                                                 }
+                                             }
+                                         }
+                                    </TwCard>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </TwTabPanel>
+
+            <!-- NFL Comparison Tab -->
+             <TwTabPanel Title="NFL Comparison" TabIcon="@Icons.Material.Filled.SportsFootball">
+                <div class="pt-6 space-y-6">
+                    <TwCard Class="p-6">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                             <div class="relative">
+                                <label class="block text-xs text-slate-500 mb-1 font-medium">Home Team</label>
+                                <input type="text" @bind="_nflHomeTeam" placeholder="KC..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-slate-200 focus:outline-none focus:border-blue-500" />
+                            </div>
+                             <div class="relative">
+                                <label class="block text-xs text-slate-500 mb-1 font-medium">Away Team</label>
+                                <input type="text" @bind="_nflAwayTeam" placeholder="PHI..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-slate-200 focus:outline-none focus:border-blue-500" />
+                            </div>
+                             <div>
+                                <label class="block text-xs text-slate-500 mb-1 font-medium">O/U Line</label>
+                                <input type="number" @bind="_nflTotalLine" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-slate-200 focus:outline-none focus:border-blue-500" />
+                            </div>
+                        </div>
+
+                        <TwButton Variant="solid" Color="blue" OnClick="CompareNfl" Disabled="@_isComparing" Class="mt-6" FullWidth="true">
+                            @if (_isComparing) { <span>Comparing...</span> } else { <span>Compare Models</span> }
+                        </TwButton>
+
+                        <TwAlert Severity="info" Class="mt-4">
+                            Note: Kyle model is NBA-only. NFL comparison shows Simple and Apex models.
+                        </TwAlert>
+                    </TwCard>
+
+                    @if (_nflComparison != null)
+                    {
+                        <div>
+                            <h3 class="font-bold text-slate-100 mb-4">Results</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                @foreach (var model in GetModels())
+                                {
+                                    <TwCard Class="p-6 border-t-4 border-t-emerald-500">
+                                         <h4 class="font-bold text-lg text-slate-100 mb-4 uppercase">@model</h4>
+                                         @{
+                                             var modelData = GetNflModelResult(model);
+                                             if (modelData != null)
+                                             {
+                                                 if (modelData.Value.TryGetProperty("error", out var error))
+                                                 {
+                                                     <p class="text-red-400 text-sm">@error.GetString()</p>
+                                                 }
+                                                 else
+                                                 {
+                                                      <div class="space-y-2">
+                                                         <div class="flex justify-between">
+                                                             <span class="text-slate-400">Winner</span>
+                                                             <span class="font-bold text-emerald-400">@GetJsonValue(modelData.Value, "predicted_winner")</span>
+                                                         </div>
+                                                          <div class="flex justify-between">
+                                                             <span class="text-slate-400">Confidence</span>
+                                                             <span class="font-bold text-slate-200">@GetJsonValue(modelData.Value, "confidence")%</span>
+                                                         </div>
+                                                         <div class="h-px bg-slate-700 my-2"></div>
+                                                          <div class="flex justify-between text-sm">
+                                                             <span class="text-slate-500">Home Win %</span>
+                                                             <span class="text-slate-300">@(GetJsonDouble(modelData.Value, "home_win_probability") * 100)%</span>
+                                                         </div>
+                                                          <div class="flex justify-between text-sm">
+                                                             <span class="text-slate-500">Away Win %</span>
+                                                             <span class="text-slate-300">@(GetJsonDouble(modelData.Value, "away_win_probability") * 100)%</span>
+                                                         </div>
+                                                     </div>
+                                                 }
+                                             }
+                                         }
+                                    </TwCard>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </TwTabPanel>
+
+            <!-- Verification Tab -->
+            <TwTabPanel Title="Verification" TabIcon="@Icons.Material.Filled.VerifiedUser">
+                <div class="pt-6 space-y-6">
+                    <TwCard Class="p-6">
+                         <h3 class="font-bold text-slate-100 mb-2">Backtest on Historical Games</h3>
+                         <p class="text-slate-400 text-sm mb-6">Test all models on past games where we know the outcome. This gives concrete proof of which model is more accurate.</p>
+
+                         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                             <TwSelect TValue="string" @bind-Value="_backtestSport" Label="Sport" FullWidth="true">
+                                <option value="nfl">NFL</option>
+                                <option value="nba">NBA</option>
+                             </TwSelect>
+                             <div>
+                                 <label class="block text-xs text-slate-500 mb-1 font-medium">Test Year</label>
+                                 <input type="number" @bind="_backtestYear" min="2020" max="2025" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-slate-200 focus:outline-none focus:border-blue-500" />
+                             </div>
+                              <div>
+                                <div class="flex justify-between mb-2">
+                                    <label class="text-sm text-slate-400">Sample Size</label>
+                                    <span class="text-sm font-bold text-slate-200">@_backtestSampleSize</span>
+                                </div>
+                                <input type="range" min="10" max="100" step="10" @bind="_backtestSampleSize" @bind:event="oninput" 
+                                       class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
+                            </div>
+                         </div>
+
+                         <TwButton Variant="solid" Color="emerald" OnClick="RunBacktest" Disabled="@_isBacktesting" Class="mt-6" FullWidth="true">
+                            @if (_isBacktesting) { <span>Running Backtest...</span> } else { <span>Run Backtest</span> }
+                        </TwButton>
+                    </TwCard>
+                    
+                    @if (_backtestResult != null)
+                    {
+                        <TwCard Class="p-6">
+                            <div class="flex items-center gap-2 mb-4 text-emerald-400">
+                                <TwIcon Icon="analytics" />
+                                <h3 class="font-bold">Results: @GetBacktestValue("games_tested") Games Tested</h3>
+                            </div>
+                            
+                            @if (HasBacktestNote())
+                            {
+                                <div class="bg-blue-500/10 border border-blue-500/30 p-4 rounded-xl text-blue-300 text-sm mb-6">
+                                    @GetBacktestValue("note")
+                                </div>
+                            }
+                            
+                            <table class="w-full text-sm text-left text-slate-300 mb-6">
+                                <thead class="bg-emerald-900/40 text-emerald-200 uppercase text-xs">
+                                    <tr>
+                                        <th class="px-4 py-3 rounded-l-lg">Model</th>
+                                        <th class="px-4 py-3">Correct</th>
+                                        <th class="px-4 py-3">Total</th>
+                                        <th class="px-4 py-3">Accuracy</th>
+                                        <th class="px-4 py-3 rounded-r-lg">Result</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-800">
+                                    @foreach (var model in GetModels())
+                                    {
+                                        var modelStats = GetBacktestModelStats(model);
+                                        var accuracy = GetBacktestAccuracy(model);
+                                        var isBest = accuracy > 0 && accuracy >= GetBestAccuracy();
+                                        <tr class="@(isBest ? "bg-emerald-500/10" : "")">
+                                            <td class="px-4 py-3 font-bold text-slate-200 uppercase">@model</td>
+                                            <td class="px-4 py-3">@GetModelStatValue(modelStats, "correct")</td>
+                                            <td class="px-4 py-3">@GetModelStatValue(modelStats, "total")</td>
+                                            <td class="px-4 py-3 font-bold @(accuracy >= 60 ? "text-emerald-400" : (accuracy >= 50 ? "text-amber-400" : "text-red-400"))">
+                                                @accuracy%
+                                            </td>
+                                            <td class="px-4 py-3">
+                                                 @if (isBest && accuracy > 0)
+                                                 {
+                                                     <TwChip Color="emerald" Size="xs">BEST</TwChip>
+                                                 }
+                                            </td>
                                         </tr>
                                     }
                                 </tbody>
-                            </MudSimpleTable>
-                        </MudExpansionPanel>
-                    </MudExpansionPanels>
-                }
-            </MudPaper>
-        </MudTabPanel>
-    </MudTabs>
-</MudContainer>
+                            </table>
+                            
+                             <div class="border border-slate-700 rounded-xl overflow-hidden bg-slate-900/50">
+                                <div class="p-4 cursor-pointer flex justify-between items-center hover:bg-slate-800/50" @onclick="() => _showGameLog = !_showGameLog">
+                                    <span class="font-bold text-slate-300">View Game-by-Game Results</span>
+                                    <svg class="w-5 h-5 text-slate-500 transform transition-transform @(_showGameLog ? "rotate-180" : "")" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                </div>
+                                @if (_showGameLog)
+                                {
+                                    <div class="max-h-80 overflow-y-auto border-t border-slate-700">
+                                        <table class="w-full text-xs text-left text-slate-300">
+                                            <thead class="bg-slate-800 sticky top-0">
+                                                <tr>
+                                                    <th class="px-4 py-2">Game</th>
+                                                    <th class="px-4 py-2">Actual Winner</th>
+                                                    <th class="px-4 py-2">Simple</th>
+                                                    <th class="px-4 py-2">Kyle</th>
+                                                    <th class="px-4 py-2">Apex</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-slate-800">
+                                                @foreach (var game in GetGameResults())
+                                                {
+                                                    <tr class="hover:bg-slate-800/30">
+                                                        <td class="px-4 py-2">@GetGameTeams(game)</td>
+                                                        <td class="px-4 py-2 font-bold text-slate-200">@GetGameValue(game, "actual_winner")</td>
+                                                        <td class="px-4 py-2">@RenderPrediction(game, "simple")</td>
+                                                        <td class="px-4 py-2">@RenderPrediction(game, "kyle")</td>
+                                                        <td class="px-4 py-2">@RenderPrediction(game, "apex")</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                }
+                             </div>
+                        </TwCard>
+                    }
+                </div>
+            </TwTabPanel>
+        </TwTabs>
+    </div>
+</TwContainer>
 
 @code {
     // Training state
@@ -448,7 +429,7 @@
     private string _loadingMessage = "";
     private string _loadingDetail = "";
     
-    // NBA comparison state
+    // NBA comparison state (No autocomplete logic needed now, using simple inputs)
     private string _nbaHomeTeam = "Boston Celtics";
     private string _nbaAwayTeam = "Los Angeles Lakers";
     private double _nbaTotalLine = 225.0;
@@ -461,29 +442,38 @@
     private double _nflTotalLine = 45.0;
     private JsonElement? _nflComparison;
     
-    // Team lists
-    private List<string> _nbaTeams = new List<string>
-    {
-        "Atlanta Hawks", "Boston Celtics", "Brooklyn Nets", "Charlotte Hornets",
-        "Chicago Bulls", "Cleveland Cavaliers", "Dallas Mavericks", "Denver Nuggets",
-        "Detroit Pistons", "Golden State Warriors", "Houston Rockets", "Indiana Pacers",
-        "Los Angeles Clippers", "Los Angeles Lakers", "Memphis Grizzlies", "Miami Heat",
-        "Milwaukee Bucks", "Minnesota Timberwolves", "New Orleans Pelicans", "New York Knicks",
-        "Oklahoma City Thunder", "Orlando Magic", "Philadelphia 76ers", "Phoenix Suns",
-        "Portland Trail Blazers", "Sacramento Kings", "San Antonio Spurs", "Toronto Raptors",
-        "Utah Jazz", "Washington Wizards"
-    };
-    
-    private List<string> _nflTeams = new List<string>
-    {
-        "ARI", "ATL", "BAL", "BUF", "CAR", "CHI", "CIN", "CLE", "DAL", "DEN",
-        "DET", "GB", "HOU", "IND", "JAX", "KC", "LAC", "LAR", "LV", "MIA",
-        "MIN", "NE", "NO", "NYG", "NYJ", "PHI", "PIT", "SEA", "SF", "TB", "TEN", "WAS"
-    };
+    // Backtest state
+    private string _backtestSport = "nfl";
+    private int _backtestYear = 2024;
+    private int _backtestSampleSize = 50;
+    private bool _isBacktesting = false;
+    private JsonElement? _backtestResult;
+    private bool _showGameLog = false;
     
     protected override async Task OnInitializedAsync()
     {
         await LoadModelStatus();
+    }
+    
+    private void ShowLoading(string title, string message, string detail)
+    {
+        _loadingTitle = title;
+        _loadingMessage = message;
+        _loadingDetail = detail;
+        _showLoadingDialog = true;
+        StateHasChanged();
+    }
+    
+    private void HideLoading()
+    {
+        _showLoadingDialog = false;
+        StateHasChanged();
+    }
+    
+    private void UpdateLoadingDetail(string detail)
+    {
+        _loadingDetail = detail;
+        StateHasChanged();
     }
     
     private async Task TrainApex()
@@ -494,32 +484,18 @@
         try
         {
             UpdateLoadingDetail("Running cross-validation (5-fold TimeSeriesSplit)...");
-            
-            var response = await Http.PostAsync(
-                $"http://backend:8000/apex/train?sport={_trainSport}&epochs={_epochs}", 
-                null);
-            
+            var response = await Http.PostAsync($"http://backend:8000/apex/train?sport={_trainSport}&epochs={_epochs}", null);
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
                 _trainingResult = JsonSerializer.Deserialize<JsonElement>(json);
-                Snackbar.Add("Training complete!", Severity.Success);
-                await LoadModelStatus();
+                 Snackbar.Add("Training complete!", Severity.Success);
+                 await LoadModelStatus();
             }
-            else
-            {
-                Snackbar.Add("Training failed", Severity.Error);
-            }
+            else { Snackbar.Add("Training failed", Severity.Error); }
         }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _isTraining = false;
-            HideLoading();
-        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _isTraining = false; HideLoading(); }
     }
     
     private async Task LoadModelStatus()
@@ -529,14 +505,10 @@
             var response = await Http.GetAsync("http://backend:8000/apex/status");
             if (response.IsSuccessStatusCode)
             {
-                var json = await response.Content.ReadAsStringAsync();
-                _modelStatus = JsonSerializer.Deserialize<JsonElement>(json);
+                _modelStatus = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
             }
         }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error loading status: {ex.Message}", Severity.Warning);
-        }
+        catch (Exception ex) { Snackbar.Add($"Error loading status: {ex.Message}", Severity.Warning); }
         StateHasChanged();
     }
     
@@ -544,85 +516,46 @@
     {
         _isComparing = true;
         StateHasChanged();
-        
         try
         {
             var url = $"http://backend:8000/apex/compare/nba?home_team={Uri.EscapeDataString(_nbaHomeTeam)}&away_team={Uri.EscapeDataString(_nbaAwayTeam)}&total_line={_nbaTotalLine}";
             var response = await Http.GetAsync(url);
-            
             if (response.IsSuccessStatusCode)
             {
-                var json = await response.Content.ReadAsStringAsync();
-                _nbaComparison = JsonSerializer.Deserialize<JsonElement>(json);
+                _nbaComparison = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
                 Snackbar.Add("Comparison complete!", Severity.Success);
             }
         }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _isComparing = false;
-            StateHasChanged();
-        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _isComparing = false; StateHasChanged(); }
     }
     
     private async Task CompareNfl()
     {
-        _isComparing = true;
+         _isComparing = true;
         StateHasChanged();
-        
         try
         {
             var url = $"http://backend:8000/apex/compare/nfl?home_team={Uri.EscapeDataString(_nflHomeTeam)}&away_team={Uri.EscapeDataString(_nflAwayTeam)}&total_line={_nflTotalLine}";
             var response = await Http.GetAsync(url);
-            
             if (response.IsSuccessStatusCode)
             {
-                var json = await response.Content.ReadAsStringAsync();
-                _nflComparison = JsonSerializer.Deserialize<JsonElement>(json);
+                _nflComparison = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
                 Snackbar.Add("Comparison complete!", Severity.Success);
             }
         }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _isComparing = false;
-            StateHasChanged();
-        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _isComparing = false; StateHasChanged(); }
     }
     
-    private Task<IEnumerable<string>> SearchNbaTeams(string value, CancellationToken token)
-    {
-        if (string.IsNullOrEmpty(value))
-            return Task.FromResult<IEnumerable<string>>(_nbaTeams);
-        
-        return Task.FromResult<IEnumerable<string>>(
-            _nbaTeams.Where(x => x.Contains(value, StringComparison.OrdinalIgnoreCase)));
-    }
+    private List<string> GetModels() => new() { "simple", "kyle", "apex" };
     
-    private Task<IEnumerable<string>> SearchNflTeams(string value, CancellationToken token)
-    {
-        if (string.IsNullOrEmpty(value))
-            return Task.FromResult<IEnumerable<string>>(_nflTeams);
-        
-        return Task.FromResult<IEnumerable<string>>(
-            _nflTeams.Where(x => x.Contains(value, StringComparison.OrdinalIgnoreCase)));
-    }
-    
-    private List<string> GetModels() => new List<string> { "simple", "kyle", "apex" };
-    
-    private JsonElement? GetModelResult(string model)
+     private JsonElement? GetModelResult(string model)
     {
         if (_nbaComparison == null) return null;
         if (_nbaComparison.Value.TryGetProperty("models", out var models))
         {
-            if (models.TryGetProperty(model, out var result))
-                return result;
+            if (models.TryGetProperty(model, out var result)) return result;
         }
         return null;
     }
@@ -632,39 +565,34 @@
         if (_nflComparison == null) return null;
         if (_nflComparison.Value.TryGetProperty("models", out var models))
         {
-            if (models.TryGetProperty(model, out var result))
-                return result;
+            if (models.TryGetProperty(model, out var result)) return result;
         }
         return null;
     }
     
     private string GetJsonValue(JsonElement element, string property)
     {
-        if (element.TryGetProperty(property, out var value))
-            return value.ToString();
+        if (element.TryGetProperty(property, out var value)) return value.ToString();
         return "N/A";
     }
     
     private double GetJsonDouble(JsonElement element, string property)
     {
-        if (element.TryGetProperty(property, out var value))
-            return Math.Round(value.GetDouble() * 100, 1);
+        if (element.TryGetProperty(property, out var value)) return Math.Round(value.GetDouble() * 100, 1);
         return 0;
     }
     
     private bool GetStatusBool(string property)
     {
         if (_modelStatus == null) return false;
-        if (_modelStatus.Value.TryGetProperty(property, out var value))
-            return value.GetBoolean();
+        if (_modelStatus.Value.TryGetProperty(property, out var value)) return value.GetBoolean();
         return false;
     }
     
     private string GetStatusValue(string property, string defaultValue)
     {
         if (_modelStatus == null) return defaultValue;
-        if (_modelStatus.Value.TryGetProperty(property, out var value))
-            return value.ToString();
+        if (_modelStatus.Value.TryGetProperty(property, out var value)) return value.ToString();
         return defaultValue;
     }
     
@@ -675,59 +603,36 @@
         {
             if (metadata.TryGetProperty(sport, out var sportData))
             {
-                if (sportData.TryGetProperty("ml_accuracy", out var acc))
-                    return acc.ToString();
+                if (sportData.TryGetProperty("ml_accuracy", out var acc)) return acc.ToString();
             }
         }
         return "N/A";
     }
-    
-    // Backtest state
-    private string _backtestSport = "nfl";
-    private int _backtestYear = 2024;
-    private int _backtestSampleSize = 50;
-    private bool _isBacktesting = false;
-    private JsonElement? _backtestResult;
-    
-    private async Task RunBacktest()
+
+      private async Task RunBacktest()
     {
         _isBacktesting = true;
         ShowLoading("Running Backtest", $"Testing models on {_backtestSampleSize} {_backtestSport.ToUpper()} games from {_backtestYear}...", "Loading historical game data...");
-        
-        try
+        try 
         {
             UpdateLoadingDetail("Predicting game outcomes with all models...");
-            
             var url = $"http://backend:8000/apex/backtest?sport={_backtestSport}&test_year={_backtestYear}&sample_size={_backtestSampleSize}";
-            var response = await Http.GetAsync(url);
-            
+             var response = await Http.GetAsync(url);
             if (response.IsSuccessStatusCode)
             {
-                var json = await response.Content.ReadAsStringAsync();
-                _backtestResult = JsonSerializer.Deserialize<JsonElement>(json);
+                _backtestResult = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
                 Snackbar.Add("Backtest complete!", Severity.Success);
             }
-            else
-            {
-                Snackbar.Add("Backtest failed", Severity.Error);
-            }
+            else { Snackbar.Add("Backtest failed", Severity.Error); }
         }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _isBacktesting = false;
-            HideLoading();
-        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _isBacktesting = false; HideLoading(); }
     }
     
     private string GetBacktestValue(string property)
     {
         if (_backtestResult == null) return "0";
-        if (_backtestResult.Value.TryGetProperty(property, out var value))
-            return value.ToString();
+        if (_backtestResult.Value.TryGetProperty(property, out var value)) return value.ToString();
         return "0";
     }
     
@@ -737,23 +642,21 @@
         return _backtestResult.Value.TryGetProperty("note", out _);
     }
     
-    private JsonElement? GetBacktestModelStats(string model)
+     private JsonElement? GetBacktestModelStats(string model)
     {
         if (_backtestResult == null) return null;
         if (_backtestResult.Value.TryGetProperty("models", out var models))
         {
-            if (models.TryGetProperty(model, out var modelStats))
-                return modelStats;
+            if (models.TryGetProperty(model, out var modelStats)) return modelStats;
         }
         return null;
     }
     
-    private double GetBacktestAccuracy(string model)
+     private double GetBacktestAccuracy(string model)
     {
         var stats = GetBacktestModelStats(model);
         if (stats == null) return 0;
-        if (stats.Value.TryGetProperty("accuracy", out var acc))
-            return acc.GetDouble();
+        if (stats.Value.TryGetProperty("accuracy", out var acc)) return acc.GetDouble();
         return 0;
     }
     
@@ -771,15 +674,8 @@
     private string GetModelStatValue(JsonElement? stats, string property)
     {
         if (stats == null) return "0";
-        if (stats.Value.TryGetProperty(property, out var value))
-            return value.ToString();
+        if (stats.Value.TryGetProperty(property, out var value)) return value.ToString();
         return "0";
-    }
-    
-    private bool HasModelNote(JsonElement? stats)
-    {
-        if (stats == null) return false;
-        return stats.Value.TryGetProperty("note", out _);
     }
     
     private List<JsonElement> GetGameResults()
@@ -788,67 +684,43 @@
         if (_backtestResult == null) return results;
         if (_backtestResult.Value.TryGetProperty("game_results", out var games))
         {
-            foreach (var game in games.EnumerateArray())
-            {
-                results.Add(game);
-            }
+            foreach (var game in games.EnumerateArray()) results.Add(game);
         }
-        return results.Take(20).ToList(); // Limit to 20 games for display
+        return results.Take(50).ToList();
     }
     
     private string GetGameTeams(JsonElement game)
     {
-        var home = GetGameValue(game, "home");
-        var away = GetGameValue(game, "away");
+        string home = game.TryGetProperty("home_team", out var h) ? h.ToString() : "?";
+        string away = game.TryGetProperty("away_team", out var a) ? a.ToString() : "?";
         return $"{away} @ {home}";
     }
     
     private string GetGameValue(JsonElement game, string property)
     {
-        if (game.TryGetProperty(property, out var value))
-            return value.ToString();
-        return "N/A";
+        if (game.TryGetProperty(property, out var value)) return value.ToString();
+        return "";
     }
     
-    private MarkupString RenderPrediction(JsonElement game, string model)
+    private RenderFragment RenderPrediction(JsonElement game, string model)
     {
-        if (!game.TryGetProperty("predictions", out var predictions))
-            return new MarkupString("N/A");
-        
-        if (!predictions.TryGetProperty(model, out var pred))
-            return new MarkupString("N/A");
-        
-        if (pred.TryGetProperty("note", out var note))
-            return new MarkupString($"<span style='color: gray;'>{note}</span>");
-        
-        var winner = pred.TryGetProperty("winner", out var w) ? w.ToString() : "?";
-        var correct = pred.TryGetProperty("correct", out var c) && c.GetBoolean();
-        
-        var color = correct ? "green" : "red";
-        var icon = correct ? "✓" : "✗";
-        
-        return new MarkupString($"<span style='color: {color};'>{icon} {winner}</span>");
-    }
-    
-    // Loading dialog helpers
-    private void ShowLoading(string title, string message, string detail = "")
-    {
-        _loadingTitle = title;
-        _loadingMessage = message;
-        _loadingDetail = detail;
-        _showLoadingDialog = true;
-        StateHasChanged();
-    }
-    
-    private void UpdateLoadingDetail(string detail)
-    {
-        _loadingDetail = detail;
-        StateHasChanged();
-    }
-    
-    private void HideLoading()
-    {
-        _showLoadingDialog = false;
-        StateHasChanged();
+        return builder =>
+        {
+            if (game.TryGetProperty("predictions", out var preds) && preds.TryGetProperty(model, out var pred))
+            {
+                var winner = pred.TryGetProperty("winner", out var w) ? w.ToString() : "";
+                var actual = game.TryGetProperty("actual_winner", out var a) ? a.ToString() : "";
+                var isCorrect = winner == actual;
+                
+                builder.OpenElement(0, "span");
+                builder.AddAttribute(1, "class", isCorrect ? "text-emerald-400 font-bold" : "text-red-400");
+                builder.AddContent(2, winner);
+                builder.CloseElement();
+            }
+            else
+            {
+                builder.AddContent(0, "-");
+            }
+        };
     }
 }

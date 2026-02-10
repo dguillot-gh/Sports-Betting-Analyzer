@@ -1,0 +1,29 @@
+@* TwLink.razor - Tailwind CSS Link Component *@
+
+<a href="@Href" class="@GetClasses()" @attributes="AdditionalAttributes">
+    @ChildContent
+</a>
+
+@code {
+    [Parameter] public string Href { get; set; } = "#";
+    [Parameter] public string Color { get; set; } = "blue"; // blue, purple, emerald, amber, slate
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string GetClasses()
+    {
+        var color = Color switch
+        {
+            "purple" => "text-purple-400 hover:text-purple-300",
+            "emerald" => "text-emerald-400 hover:text-emerald-300",
+            "amber" => "text-amber-400 hover:text-amber-300",
+            "slate" => "text-slate-400 hover:text-slate-300",
+            _ => "text-blue-400 hover:text-blue-300"
+        };
+
+        var classes = $"{color} transition-colors underline-offset-2 hover:underline";
+        if (!string.IsNullOrEmpty(Class)) classes += $" {Class}";
+        return classes;
+    }
+}

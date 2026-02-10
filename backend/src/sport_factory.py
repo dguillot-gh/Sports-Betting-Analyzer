@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
 from fastapi import HTTPException
 
-from sports import NASCARSport, NFLSport, NBASport, BaseSport
+from sports import NASCARSport, NFLSport, NBASport, NHLSport, BaseSport
 
 # Define the root for configs relative to this file
 # src/sport_factory.py -> parent is src -> parent is root
@@ -41,6 +41,8 @@ class SportFactory:
             return SportFactory._create_nascar(series)
         elif sport_name == 'nba':
             return SportFactory._create_nba()
+        elif sport_name == 'nhl':
+            return SportFactory._create_nhl()
         else:
             raise HTTPException(status_code=400, detail=f"Unknown sport '{sport_name}'")
 
@@ -48,6 +50,11 @@ class SportFactory:
     def _create_nfl() -> Tuple[BaseSport, str]:
         cfg = SportFactory.load_yaml(CFG_DIR / 'nfl_config.yaml')
         return NFLSport(cfg), 'default'
+
+    @staticmethod
+    def _create_nhl() -> Tuple[BaseSport, str]:
+        cfg = SportFactory.load_yaml(CFG_DIR / 'nhl_config.yaml')
+        return NHLSport(cfg), 'default'
 
     @staticmethod
     def _create_nascar(series: Optional[str]) -> Tuple[BaseSport, str]:

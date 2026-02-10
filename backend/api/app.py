@@ -33,6 +33,8 @@ from api.scheduler_endpoints import router as scheduler_router
 from api.analysis_cache_endpoints import router as analysis_cache_router
 from api.cfb_endpoints import router as cfb_router
 from api.nascar_live_endpoints import router as nascar_live_router
+from api.nhl_endpoints import router as nhl_router
+from api.expert_picks_endpoints import router as expert_picks_router
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 # import pandas as pd  <-- Moved to local function scope
@@ -81,6 +83,8 @@ app.include_router(scheduler_router)  # Import Scheduler & Logs
 app.include_router(analysis_cache_router) # Manual Analysis Cache
 app.include_router(cfb_router)  # College Football Data
 app.include_router(nascar_live_router)  # NASCAR Live Dashboard Logic
+app.include_router(nhl_router)  # NHL Data and Predictions
+app.include_router(expert_picks_router)  # CBS Expert Picks scraper data
 
 # Dev CORS. Tighten for production.
 app.add_middleware(
@@ -3156,6 +3160,7 @@ async def get_nfl_model_testing_predictions(
     Uses nflverse data (EPA, success rate, etc.) with no hardcoded values.
     """
     try:
+        # Force reload check
         from scripts.nfl_predictor import get_todays_nfl_odds
         from scripts.nflverse_adapter import predict_with_nflverse, get_nflverse_predictor
         from scripts.model_testing_predictor import predict_nfl_simple

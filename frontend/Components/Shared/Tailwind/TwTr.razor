@@ -1,0 +1,11 @@
+@namespace SportsBettingAnalyzer.Components.Shared.Tailwind
+
+<tr class="hover:bg-slate-800/50 transition-colors @Class" @attributes="AdditionalAttributes">
+    @ChildContent
+</tr>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string Class { get; set; } = "";
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+}

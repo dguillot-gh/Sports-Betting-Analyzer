@@ -1,0 +1,106 @@
+@namespace SportsBettingAnalyzer.Components.Shared.Tailwind
+
+@if (!string.IsNullOrEmpty(Href))
+{
+    <a href="@Href" 
+       class="@ComputedClass"
+       @onclick="OnClick"
+       @attributes="AdditionalAttributes">
+        @if (IsLoading)
+        {
+            <span class="inline-block animate-spin mr-2">◌</span>
+        }
+        else if (!string.IsNullOrEmpty(StartIcon))
+        {
+            <TwIcon Icon="@StartIcon" Class="w-4 h-4 mr-2" />
+        }
+        @ChildContent
+        @if (!string.IsNullOrEmpty(EndIcon) && !IsLoading)
+        {
+            <TwIcon Icon="@EndIcon" Class="w-4 h-4 ml-2" />
+        }
+    </a>
+}
+else
+{
+    <button type="@Type" 
+            disabled="@Disabled"
+            @onclick="OnClick"
+            class="@ComputedClass"
+            @attributes="AdditionalAttributes">
+        @if (IsLoading)
+        {
+            <span class="inline-block animate-spin mr-2">◌</span>
+        }
+        else if (!string.IsNullOrEmpty(StartIcon))
+        {
+             <TwIcon Icon="@StartIcon" Class="w-4 h-4 mr-2" />
+        }
+        @ChildContent
+        @if (!string.IsNullOrEmpty(EndIcon) && !IsLoading)
+        {
+             <TwIcon Icon="@EndIcon" Class="w-4 h-4 ml-2" />
+        }
+    </button>
+}
+
+@code {
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? StartIcon { get; set; }
+    [Parameter] public string? EndIcon { get; set; }
+    [Parameter] public string Variant { get; set; } = "primary"; // primary, secondary, outline, danger, ghost
+    [Parameter] public string? Color { get; set; } // blue, emerald, amber,  slate (overrides variant color)
+    [Parameter] public string Size { get; set; } = "md"; // sm, md, lg
+    [Parameter] public bool Disabled { get; set; } = false;
+    [Parameter] public bool IsLoading { get; set; } = false;
+    [Parameter] public bool FullWidth { get; set; } = false;
+    [Parameter] public string Type { get; set; } = "button";
+    [Parameter] public string? Href { get; set; }
+    [Parameter] public string Class { get; set; } = "";
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    private string ComputedClass => $"{BaseClass} {VariantClass} {SizeClass} {WidthClass} {Class}".Trim();
+
+    private string BaseClass => "font-semibold rounded-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center";
+
+    private string VariantClass
+    {
+        get
+        {
+            // If Color is provided, constructing custom classes based on variant style but with that color
+            if (!string.IsNullOrEmpty(Color))
+            {
+                return Variant switch
+                {
+                    "outline" => $"bg-transparent border-2 border-{Color}-600 hover:border-{Color}-400 text-{Color}-300 hover:text-white",
+                    "ghost" => $"bg-transparent hover:bg-{Color}-800 text-{Color}-400 hover:text-white",
+                    "text" => $"bg-transparent hover:bg-slate-800 text-{Color}-400 hover:text-{Color}-300 p-0",
+                    _ => $"bg-{Color}-600 hover:bg-{Color}-500 text-white shadow-lg shadow-{Color}-600/20"
+                };
+            }
+
+            return Variant switch
+            {
+                "primary" => "bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20",
+                "secondary" => "bg-slate-700 hover:bg-slate-600 text-white",
+                "outline" => "bg-transparent border-2 border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white",
+                "danger" => "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20",
+                "ghost" => "bg-transparent hover:bg-slate-800 text-slate-400 hover:text-white",
+                "success" => "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20",
+                "text" => "bg-transparent hover:bg-slate-800 text-blue-400 hover:text-blue-300",
+                _ => "bg-blue-600 hover:bg-blue-500 text-white"
+            };
+        }
+    }
+
+    private string SizeClass => Size switch
+    {
+        "sm" => "px-3 py-1.5 text-xs",
+        "md" => "px-5 py-2.5 text-sm",
+        "lg" => "px-8 py-3.5 text-base",
+        _ => "px-5 py-2.5 text-sm"
+    };
+
+    private string WidthClass => FullWidth ? "w-full" : "";
+}

@@ -264,24 +264,38 @@ class KyleskomPredictor:
         import xgboost as xgb
         return model.predict(xgb.DMatrix(data))
 
-    async def fetch_data_from_nba_api(self, retry_count=2) -> bool:
+    async def fetch_data_from_nba_api(self, retry_count=2, target_season=None) -> bool:
         async with self._lock:
-            if self.df is not None: return True
+            # If we already have data for the requested season, use it
+            if self.df is not None and getattr(self, '_current_season_loaded', None) == target_season and target_season is not None:
+                return True
+
             try:
                 from scripts.nba_cache import get_nba_df
-                cached_df = get_nba_df()
-                if cached_df is not None:
-                    self.df = cached_df
-                    self._data_loaded = True
-                    logger.info("Kyleskom adapter using shared NBA data cache")
-                    return True
+                # Only use cache if it matches the target season (or if no specific season requested and cache is fresh)
+                # For now, simplistic cache check: if target_season is provided, skip default cache or check metadata
+                # We'll skip cache for specific historical queries to be safe, or implement better cache keys later
+                if target_season is None:
+                    cached_df = get_nba_df()
+                    if cached_df is not None:
+                        self.df = cached_df
+                        self._data_loaded = True
+                        logger.info("Kyleskom adapter using shared NBA data cache")
+                        return True
             except Exception as e:
                 logger.warning(f"Error checking shared cache: {e}")
 
-            if self._data_loaded: return True 
+            if target_season:
+                season = target_season
+            else:
+                now = datetime.now()
+                # Logic: If it's late in the year (Oct+), it's the start of new season (e.g. 2023 -> 2023-24)
+                # If it's early (Jan-July), it's the end of current season (e.g. 2024 -> 2023-24)
+                start_year = now.year if now.month >= 10 else now.year - 1
+                season = f"{start_year}-{str(start_year + 1)[2:]}"
             
-            now = datetime.now()
-            season = f"{now.year}-{str(now.year + 1)[2:]}" if now.month >= 10 else f"{now.year - 1}-{str(now.year)[2:]}"
+            self._current_season_loaded = season
+
             url = f"https://stats.nba.com/stats/leaguedashteamstats?Conference=&DateFrom=&DateTo=&Division=&GameScope=&GameSegment=&Height=&ISTRound=&LastNGames=0&LeagueID=00&Location=&MeasureType=Base&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=PerGame&Period=0&PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=Y&Season={season}&SeasonSegment=&SeasonType=Regular%20Season&ShotClockRange=&StarterBench=&TeamID=0&TwoWay=0&VsConference=&VsDivision="
             
             logger.info(f"Kyleskom adapter starting direct NBA API fetch for season {season}")

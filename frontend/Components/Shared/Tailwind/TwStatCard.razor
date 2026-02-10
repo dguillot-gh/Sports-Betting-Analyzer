@@ -1,0 +1,43 @@
+@* TwStatCard.razor - Tailwind CSS Stat Display Card *@
+
+<div class="@GetClasses()">
+    <div class="relative z-10">
+        <div class="text-2xl font-bold @GetValueColor()">@Value</div>
+        <div class="text-xs text-slate-400 mt-1">@Label</div>
+        @if (!string.IsNullOrEmpty(Subtext))
+        {
+            <div class="text-[10px] text-slate-500 mt-1">@Subtext</div>
+        }
+    </div>
+    
+    @if (!string.IsNullOrEmpty(Icon))
+    {
+        <TwIcon Icon="@Icon" Class="@($"absolute bottom-0 right-0 w-16 h-16 opacity-10 {GetValueColor()}")" />
+    }
+</div>
+
+@code {
+    [Parameter] public string Value { get; set; } = "0";
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string? Subtext { get; set; }
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public string Color { get; set; } = "slate"; // blue, emerald, amber, purple, red
+    [Parameter] public string? Class { get; set; }
+
+    private string GetClasses()
+    {
+        var classes = "bg-slate-800/50 border border-slate-700 rounded-xl p-4 min-w-[100px] relative overflow-hidden";
+        if (!string.IsNullOrEmpty(Class)) classes += $" {Class}";
+        return classes;
+    }
+
+    private string GetValueColor() => Color switch
+    {
+        "blue" => "text-blue-400",
+        "emerald" => "text-emerald-400",
+        "amber" => "text-amber-400",
+        "purple" => "text-purple-400",
+        "red" => "text-red-400",
+        _ => "text-slate-100"
+    };
+}

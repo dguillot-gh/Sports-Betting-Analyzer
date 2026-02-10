@@ -1,0 +1,67 @@
+@namespace SportsBettingAnalyzer.Components.Shared.Tailwind
+
+<span class="@ComputedClass" @attributes="AdditionalAttributes">
+    @if (ShowDot)
+    {
+        <span class="w-1.5 h-1.5 rounded-full @DotClass mr-1.5 @(Pulse ? "animate-pulse" : "")"></span>
+    }
+    @ChildContent
+    @if (Dismissible)
+    {
+        <button @onclick="OnDismiss" class="ml-1.5 opacity-60 hover:opacity-100 transition-opacity">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+        </button>
+    }
+</span>
+
+@code {
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string Color { get; set; } = "slate"; // slate, blue, emerald, amber, red, purple
+    [Parameter] public string Size { get; set; } = "md"; // sm, md, lg
+    [Parameter] public string Variant { get; set; } = "filled"; // filled, outline
+    [Parameter] public bool ShowDot { get; set; } = false;
+    [Parameter] public bool Pulse { get; set; } = false;
+    [Parameter] public bool Dismissible { get; set; } = false;
+    [Parameter] public string Class { get; set; } = "";
+    [Parameter] public EventCallback OnDismiss { get; set; }
+
+    private string ComputedClass => $"inline-flex items-center font-semibold rounded-full {SizeClass} {ColorClass} {Class}";
+
+    private string SizeClass => Size switch
+    {
+        "sm" => "px-2 py-0.5 text-[10px] uppercase tracking-wider",
+        "md" => "px-3 py-1 text-xs",
+        "lg" => "px-4 py-1.5 text-sm",
+        _ => "px-3 py-1 text-xs"
+    };
+
+    private string ColorClass => (Variant, Color) switch
+    {
+        ("filled", "slate") => "bg-slate-800 text-slate-300 border border-slate-700",
+        ("filled", "blue") => "bg-blue-500/20 text-blue-300 border border-blue-500/30",
+        ("filled", "emerald") => "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30",
+        ("filled", "amber") => "bg-amber-500/20 text-amber-300 border border-amber-500/30",
+        ("filled", "red") => "bg-red-500/20 text-red-300 border border-red-500/30",
+        ("filled", "purple") => "bg-purple-500/20 text-purple-300 border border-purple-500/30",
+        ("outline", "slate") => "bg-transparent text-slate-400 border border-slate-600",
+        ("outline", "blue") => "bg-transparent text-blue-400 border border-blue-500/50",
+        ("outline", "emerald") => "bg-transparent text-emerald-400 border border-emerald-500/50",
+        ("outline", "amber") => "bg-transparent text-amber-400 border border-amber-500/50",
+        ("outline", "red") => "bg-transparent text-red-400 border border-red-500/50",
+        ("outline", "purple") => "bg-transparent text-purple-400 border border-purple-500/50",
+        _ => "bg-slate-800 text-slate-300 border border-slate-700"
+    };
+
+    private string DotClass => Color switch
+    {
+        "blue" => "bg-blue-400",
+        "emerald" => "bg-emerald-400",
+        "amber" => "bg-amber-400",
+        "red" => "bg-red-400",
+        "purple" => "bg-purple-400",
+        _ => "bg-slate-400"
+    };
+}

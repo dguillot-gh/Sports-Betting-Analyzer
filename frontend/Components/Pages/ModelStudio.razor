@@ -1,0 +1,123 @@
+@page "/model-studio"
+@page "/model-studio/{Sport}"
+@using SportsBettingAnalyzer.Components.Shared.ModelStudio
+@inject NavigationManager Navigation
+
+<PageTitle>Model Studio - @(string.IsNullOrEmpty(Sport) ? "Hub" : Sport.ToUpper())</PageTitle>
+
+<div class="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
+    <TwContainer MaxWidth="extraLarge">
+        <!-- Header -->
+        <div class="mb-8">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div class="flex items-center gap-4">
+                    <div class="p-3 bg-indigo-500/10 rounded-2xl backdrop-blur-sm border border-indigo-500/20">
+                        <TwIcon Icon="science" Class="w-8 h-8 text-indigo-400" />
+                    </div>
+                    <div>
+                        <h1 class="text-3xl font-black text-white tracking-tight">
+                            Model Studio
+                            @if (!string.IsNullOrEmpty(Sport))
+                            {
+                                <span class="text-indigo-400 ml-2">@Sport.ToUpper()</span>
+                            }
+                        </h1>
+                        <p class="text-slate-400 font-medium">Unified AI Modeling, Training, and Verification Lab</p>
+                    </div>
+                </div>
+
+                <!-- Sport Switcher -->
+                <div class="flex bg-slate-900/50 p-1.5 rounded-xl border border-slate-800">
+                    <button @onclick="@(() => NavigateTo("nfl"))" 
+                            class="px-4 py-2 rounded-lg text-sm font-bold transition-all @(Sport == "nfl" ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/25" : "text-slate-400 hover:text-white")">
+                        NFL
+                    </button>
+                    <button @onclick="@(() => NavigateTo("nba"))" 
+                            class="px-4 py-2 rounded-lg text-sm font-bold transition-all @(Sport == "nba" ? "bg-orange-600 text-white shadow-lg shadow-orange-500/25" : "text-slate-400 hover:text-white")">
+                        NBA
+                    </button>
+                    <button @onclick="@(() => NavigateTo("nascar"))" 
+                            class="px-4 py-2 rounded-lg text-sm font-bold transition-all @(Sport == "nascar" ? "bg-yellow-600 text-white shadow-lg shadow-yellow-500/25" : "text-slate-400 hover:text-white")">
+                        NASCAR
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(Sport))
+        {
+            <TwTabs DefaultTab="0" HeaderClass="mb-6">
+                <!-- Lab Tab (Live Odds + Analysis) -->
+                <TwTabPanel Title="Lab & Analysis" TabIcon="science">
+                    <ModelLabView Sport="@Sport" />
+                </TwTabPanel>
+
+                <!-- Training Tab (ML Training) -->
+                <TwTabPanel Title="Training Gym" TabIcon="model_training">
+                    <ModelTrainingView Sport="@Sport" />
+                </TwTabPanel>
+
+                <!-- Backtest Tab (Verification) -->
+                <TwTabPanel Title="Verification" TabIcon="verified_user">
+                    <ModelBacktestView Sport="@Sport" />
+                </TwTabPanel>
+                
+                <!-- Insights Tab (Feature Importance) -->
+                <TwTabPanel Title="Insights" TabIcon="analytics">
+                     <div class="py-12 text-center text-slate-500">
+                        Insights coming soon...
+                     </div>
+                </TwTabPanel>
+            </TwTabs>
+        }
+        else
+        {
+            <!-- Landing State -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
+                <div class="col-span-1 md:col-span-3 text-center mb-8">
+                    <h2 class="text-2xl font-bold text-white mb-2">Select a Sport to Begin</h2>
+                    <p class="text-slate-400">Enter the laboratory to train custom models, analyze live odds, and verify performance.</p>
+                </div>
+                
+                <TwCard Hoverable="true" OnClick="@(() => NavigateTo("nfl"))" Class="cursor-pointer group border-indigo-500/30">
+                    <div class="flex flex-col items-center py-8">
+                        <TwIcon Icon="sports_football" Class="w-16 h-16 text-indigo-500 mb-4 group-hover:scale-110 transition-transform" />
+                        <h3 class="text-xl font-bold text-white">NFL Studio</h3>
+                        <p class="text-slate-400 text-sm mt-2">EPA/Play, ESPN FPI, and Weekly Matchups</p>
+                    </div>
+                </TwCard>
+                
+                <TwCard Hoverable="true" OnClick="@(() => NavigateTo("nba"))" Class="cursor-pointer group border-orange-500/30">
+                    <div class="flex flex-col items-center py-8">
+                        <TwIcon Icon="sports_basketball" Class="w-16 h-16 text-orange-500 mb-4 group-hover:scale-110 transition-transform" />
+                        <h3 class="text-xl font-bold text-white">NBA Studio</h3>
+                        <p class="text-slate-400 text-sm mt-2">Daily Games, Player Props, and Pace Factors</p>
+                    </div>
+                </TwCard>
+                
+                <TwCard Hoverable="true" OnClick="@(() => NavigateTo("nascar"))" Class="cursor-pointer group border-yellow-500/30">
+                    <div class="flex flex-col items-center py-8">
+                        <TwIcon Icon="sports_motorsports" Class="w-16 h-16 text-yellow-500 mb-4 group-hover:scale-110 transition-transform" />
+                        <h3 class="text-xl font-bold text-white">NASCAR Studio</h3>
+                        <p class="text-slate-400 text-sm mt-2">Track Types, Driver History, and Lap Times</p>
+                    </div>
+                </TwCard>
+            </div>
+        }
+    </TwContainer>
+</div>
+
+@code {
+    [Parameter] public string? Sport { get; set; }
+
+    protected override void OnInitialized()
+    {
+        // Default to NFL if no sport select (optional, or keep landing page)
+        // if (string.IsNullOrEmpty(Sport)) Navigation.NavigateTo("/model-studio/nfl");
+    }
+
+    private void NavigateTo(string sport)
+    {
+        Navigation.NavigateTo($"/model-studio/{sport}");
+    }
+}

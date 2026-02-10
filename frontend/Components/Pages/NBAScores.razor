@@ -1,0 +1,277 @@
+@page "/nba/scores"
+@rendermode InteractiveServer
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
+
+<PageTitle>NBA Game Results</PageTitle>
+
+<div class="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
+    <TwContainer MaxWidth="7xl">
+        <!-- Header -->
+        <header class="mb-8">
+            <div class="flex items-center gap-3 mb-2">
+                <div class="bg-orange-600 p-3 rounded-xl shadow-lg shadow-orange-900/20">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 003.75-.615A2.993 2.993 0 009.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 002.25 1.016c.896 0 1.7-.393 2.25-1.016a3.001 3.001 0 003.75.614m-16.5 0a3.004 3.004 0 01-.621-4.72L4.318 3.44A1.5 1.5 0 015.378 3h13.243a1.5 1.5 0 011.06.44l1.19 1.189a3 3 0 01-.621 4.72m-13.5 8.65h3.75a.75.75 0 00.75-.75V13.5a.75.75 0 00-.75-.75H6.75a.75.75 0 00-.75.75v3.75c0 .415.336.75.75.75z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-bold tracking-tight">NBA Game Results</h1>
+                    <p class="text-slate-400 text-sm">View scores, schedules, and top performers</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- Filters -->
+        <TwCard Class="mb-8" Color="slate">
+            <div class="flex flex-col md:flex-row gap-4 items-end">
+                <div class="w-full md:w-1/4">
+                    <TwSelect TValue="int?" Label="Season" @bind-Value="_selectedSeason" 
+                              Items="_availableSeasons.Select(s => new KeyValuePair<string, int?>(s.ToString(), s))" />
+                </div>
+                
+                <div class="w-full md:w-1/3">
+                    <TwSelect TValue="string" Label="Team" @bind-Value="_selectedTeam" 
+                              Items="_teamOptions" />
+                </div>
+
+                <div class="w-full md:w-auto">
+                    <TwButton Variant="primary" OnClick="LoadResults" IsLoading="_isLoading" Disabled="_isLoading">
+                        Search Games
+                    </TwButton>
+                </div>
+            </div>
+        </TwCard>
+
+        <!-- Results -->
+        @if (_isLoading)
+        {
+            <div class="flex flex-col items-center justify-center py-12">
+                <TwProgressBar Indeterminate="true" Color="orange" Class="w-1/2 mb-4" />
+                <p class="text-slate-400 animate-pulse">Loading games...</p>
+            </div>
+        }
+        else if (_games.Any())
+        {
+            <TwGrid Cols="1" ColsMd="2" ColsLg="3" Gap="6">
+                @foreach (var game in _games)
+                {
+                    <TwCard Hoverable="true" Class="h-full border border-slate-700/50 bg-slate-800/50 backdrop-blur-sm">
+                        <!-- Card Header -->
+                        <div class="flex justify-between items-start mb-4 pb-3 border-b border-slate-700">
+                            <div class="text-sm font-medium text-slate-400">
+                                @FormatDate(game.GameDate)
+                            </div>
+                            @if (game.IsCompleted)
+                            {
+                                <TwChip Size="sm" Color="emerald" Variant="subtle">Final</TwChip>
+                            }
+                            else
+                            {
+                                <TwChip Size="sm" Color="slate" Variant="subtle">Scheduled</TwChip>
+                            }
+                        </div>
+
+                        <!-- Teams and Scores -->
+                        <div class="space-y-4 mb-4">
+                            <!-- Away Team -->
+                            <div class="flex justify-between items-center p-2 rounded-lg @(game.AwayScore > game.HomeScore ? "bg-slate-700/50" : "")">
+                                <span class="font-bold text-lg @(game.AwayScore > game.HomeScore ? "text-white" : "text-slate-300")">
+                                    @game.AwayTeam
+                                </span>
+                                <span class="text-2xl font-mono @(game.AwayScore > game.HomeScore ? "text-orange-400 font-bold" : "text-slate-400")">
+                                    @game.AwayScore
+                                </span>
+                            </div>
+
+                            <!-- Home Team -->
+                            <div class="flex justify-between items-center p-2 rounded-lg @(game.HomeScore > game.AwayScore ? "bg-slate-700/50" : "")">
+                                <span class="font-bold text-lg @(game.HomeScore > game.AwayScore ? "text-white" : "text-slate-300")">
+                                    @game.HomeTeam
+                                </span>
+                                <span class="text-2xl font-mono @(game.HomeScore > game.AwayScore ? "text-orange-400 font-bold" : "text-slate-400")">
+                                    @game.HomeScore
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Top Scorer -->
+                        @if (!string.IsNullOrEmpty(game.TopScorer) && game.TopScorerPoints > 0)
+                        {
+                            <div class="mt-auto pt-3 border-t border-slate-700 flex items-center justify-between text-sm">
+                                <div class="flex items-center text-orange-400">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                                    </svg>
+                                    <span class="font-medium">Top Scorer</span>
+                                </div>
+                                <div class="text-slate-300">
+                                    <span class="font-semibold text-white">@game.TopScorer</span>
+                                    <span class="text-slate-500 mx-1">•</span>
+                                    <span>@game.TopScorerPoints pts</span>
+                                </div>
+                            </div>
+                        }
+                    </TwCard>
+                }
+            </TwGrid>
+            
+            <div class="mt-6 text-center">
+                <p class="text-slate-500 text-sm">Showing @_games.Count games</p>
+            </div>
+        }
+        else if (!_isLoading && _hasSearched)
+        {
+            <TwAlert Severity="info" Class="max-w-md mx-auto">
+                No games found. Try adjusting the season or team filter.
+            </TwAlert>
+        }
+        else
+        {
+            <div class="text-center py-16">
+                <div class="bg-slate-800/50 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-8 h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                </div>
+                <h3 class="text-lg font-medium text-slate-300">No Games Loaded</h3>
+                <p class="text-slate-500">Select filters and click search to view results</p>
+            </div>
+        }
+    </TwContainer>
+</div>
+
+@code {
+    private int? _selectedSeason;
+    private string? _selectedTeam;
+    private bool _isLoading = false;
+    private bool _hasSearched = false;
+    
+    private List<int> _availableSeasons = new();
+    private List<NBAGame> _games = new();
+    
+    private List<KeyValuePair<string, string?>> _teamOptions = new();
+    
+    private readonly Dictionary<string, string> _nbaTeams = new()
+    {
+        { "ATL", "Hawks" }, { "BOS", "Celtics" }, { "BKN", "Nets" }, { "CHA", "Hornets" },
+        { "CHI", "Bulls" }, { "CLE", "Cavaliers" }, { "DAL", "Mavericks" }, { "DEN", "Nuggets" },
+        { "DET", "Pistons" }, { "GSW", "Warriors" }, { "HOU", "Rockets" }, { "IND", "Pacers" },
+        { "LAC", "Clippers" }, { "LAL", "Lakers" }, { "MEM", "Grizzlies" }, { "MIA", "Heat" },
+        { "MIL", "Bucks" }, { "MIN", "Timberwolves" }, { "NOP", "Pelicans" }, { "NYK", "Knicks" },
+        { "OKC", "Thunder" }, { "ORL", "Magic" }, { "PHI", "76ers" }, { "PHX", "Suns" },
+        { "POR", "Trail Blazers" }, { "SAC", "Kings" }, { "SAS", "Spurs" }, { "TOR", "Raptors" },
+        { "UTA", "Jazz" }, { "WAS", "Wizards" }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _availableSeasons = Enumerable.Range(2020, 6).Reverse().ToList();
+        _selectedSeason = _availableSeasons.FirstOrDefault();
+        
+        // Initialize team options
+        _teamOptions.Add(new KeyValuePair<string, string?>("All Teams", null));
+        foreach (var team in _nbaTeams.OrderBy(t => t.Value))
+        {
+            _teamOptions.Add(new KeyValuePair<string, string?>(team.Value, team.Key));
+        }
+        
+        await LoadResults();
+    }
+    
+    private string FormatDate(string dateStr)
+    {
+        if (DateTime.TryParse(dateStr, out var date))
+            return date.ToString("MMM d, yyyy");
+        return dateStr;
+    }
+
+    private async Task LoadResults()
+    {
+        _isLoading = true;
+        _hasSearched = true;
+        StateHasChanged();
+        
+        try
+        {
+            var url = $"http://backend:8000/db/games/nba/schedule?limit=50";
+            
+            if (_selectedSeason.HasValue)
+                url += $"&season={_selectedSeason.Value}";
+            if (!string.IsNullOrEmpty(_selectedTeam))
+                url += $"&team={Uri.EscapeDataString(_selectedTeam)}";
+            
+            var response = await Http.GetFromJsonAsync<NBAScheduleResponse>(url);
+            
+            _games = (response?.Games ?? new())
+                .Select(g => new NBAGame
+                {
+                    GameDate = g.GameDate ?? "TBD",
+                    HomeTeam = g.HomeTeam ?? "Home",
+                    AwayTeam = g.AwayTeam ?? "Away",
+                    HomeScore = g.HomeScore ?? 0,
+                    AwayScore = g.AwayScore ?? 0,
+                    IsCompleted = g.IsCompleted ?? (g.HomeScore > 0 || g.AwayScore > 0),
+                    TopScorer = g.TopScorer,
+                    TopScorerPoints = g.TopScorerPoints ?? 0
+                })
+                .OrderByDescending(g => g.GameDate)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading games: {ex.Message}");
+            // Simplified error handling without snackbar
+            _games = new();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private class NBAScheduleResponse
+    {
+        public List<NBAGameItem> Games { get; set; } = new();
+    }
+
+    private class NBAGameItem
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("game_date")]
+        public string? GameDate { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("home_team")]
+        public string? HomeTeam { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("away_team")]
+        public string? AwayTeam { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("home_score")]
+        public int? HomeScore { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("away_score")]
+        public int? AwayScore { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("is_completed")]
+        public bool? IsCompleted { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("top_scorer")]
+        public string? TopScorer { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("top_scorer_points")]
+        public int? TopScorerPoints { get; set; }
+    }
+
+    private class NBAGame
+    {
+        public string GameDate { get; set; } = "";
+        public string HomeTeam { get; set; } = "";
+        public string AwayTeam { get; set; } = "";
+        public int HomeScore { get; set; }
+        public int AwayScore { get; set; }
+        public bool IsCompleted { get; set; }
+        public string? TopScorer { get; set; }
+        public int TopScorerPoints { get; set; }
+    }
+}

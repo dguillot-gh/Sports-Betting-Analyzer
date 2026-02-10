@@ -1,0 +1,27 @@
+@namespace SportsBettingAnalyzer.Components.Shared.Tailwind
+
+@if (string.IsNullOrWhiteSpace(Icon))
+{
+    return;
+}
+
+<svg class="@ComputedClass" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    @if (Icon.Trim().StartsWith("<"))
+    {
+        @((MarkupString)Icon)
+    }
+    else
+    {
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="@Icon"></path>
+    }
+</svg>
+
+@code {
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public string Class { get; set; } = "w-5 h-5";
+    
+    // Allow overriding the default class completely or appending? 
+    // Usually we want to set size and color.
+    // If Class is passed, we use it. If not, default to w-5 h-5.
+    private string ComputedClass => string.IsNullOrEmpty(Class) ? "w-5 h-5" : Class;
+}

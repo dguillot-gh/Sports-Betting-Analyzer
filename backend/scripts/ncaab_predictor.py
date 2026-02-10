@@ -872,7 +872,9 @@ class NCAABPredictor:
 
 async def get_todays_ncaab_odds(sportsbook: str = "fanduel") -> Dict[str, Any]:
     """Fetch today's NCAAB odds via sbrscrape or Odds API."""
-    today = date.today()
+    # Use "Sports Date" (UTC - 6 hours) so late games count as "today"
+    from datetime import timedelta
+    today = (datetime.utcnow() - timedelta(hours=6)).date()
     try:
         from sbrscrape import Scoreboard
         sb = Scoreboard(sport="NCAAB", date=today)

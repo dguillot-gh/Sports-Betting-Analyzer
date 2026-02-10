@@ -1,0 +1,472 @@
+@page "/component-showcase"
+@rendermode InteractiveServer
+
+<PageTitle>Component Showcase - Tailwind UI</PageTitle>
+
+<div class="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
+    <TwContainer MaxWidth="6xl">
+        <!-- Header -->
+        <header class="mb-12">
+            <div class="flex items-center gap-4 mb-4">
+                <div class="bg-gradient-to-br from-blue-500 to-purple-600 p-3 rounded-2xl shadow-lg shadow-purple-900/30">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-4xl font-bold tracking-tight bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                        Tailwind Component Library
+                    </h1>
+                    <p class="text-slate-400 text-lg">Explore all available UI components for your pages</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- Buttons Section -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                <span class="text-blue-400">01.</span> Buttons
+            </h2>
+            <TwCard Title="TwButton Variants" Color="blue">
+                <div class="space-y-6">
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider">Variants</h4>
+                        <div class="flex flex-wrap gap-3">
+                            <TwButton Variant="primary">Primary</TwButton>
+                            <TwButton Variant="secondary">Secondary</TwButton>
+                            <TwButton Variant="outline">Outline</TwButton>
+                            <TwButton Variant="danger">Danger</TwButton>
+                            <TwButton Variant="ghost">Ghost</TwButton>
+                            <TwButton Variant="success">Success</TwButton>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider">Sizes</h4>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <TwButton Size="sm">Small</TwButton>
+                            <TwButton Size="md">Medium</TwButton>
+                            <TwButton Size="lg">Large</TwButton>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider">States</h4>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <TwButton IsLoading="true">Loading...</TwButton>
+                            <TwButton Disabled="true">Disabled</TwButton>
+                            <TwButton FullWidth="true" Class="max-w-xs">Full Width</TwButton>
+                        </div>
+                    </div>
+                </div>
+            </TwCard>
+        </section>
+
+        <!-- Chips Section -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                <span class="text-blue-400">02.</span> Chips / Badges
+            </h2>
+            <TwCard Title="TwChip Variants" Color="purple">
+                <div class="space-y-6">
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider">Colors (Filled)</h4>
+                        <div class="flex flex-wrap gap-2">
+                            <TwChip Color="slate">Default</TwChip>
+                            <TwChip Color="blue">Blue</TwChip>
+                            <TwChip Color="emerald">Emerald</TwChip>
+                            <TwChip Color="amber">Amber</TwChip>
+                            <TwChip Color="red">Red</TwChip>
+                            <TwChip Color="purple">Purple</TwChip>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider">Colors (Outline)</h4>
+                        <div class="flex flex-wrap gap-2">
+                            <TwChip Color="slate" Variant="outline">Default</TwChip>
+                            <TwChip Color="blue" Variant="outline">Blue</TwChip>
+                            <TwChip Color="emerald" Variant="outline">Emerald</TwChip>
+                            <TwChip Color="amber" Variant="outline">Amber</TwChip>
+                            <TwChip Color="red" Variant="outline">Red</TwChip>
+                            <TwChip Color="purple" Variant="outline">Purple</TwChip>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider">With Dot & Sizes</h4>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <TwChip Color="emerald" ShowDot="true" Pulse="true">Live</TwChip>
+                            <TwChip Size="sm" Color="blue">SMALL</TwChip>
+                            <TwChip Size="md" Color="blue">Medium</TwChip>
+                            <TwChip Size="lg" Color="blue">Large</TwChip>
+                        </div>
+                    </div>
+                </div>
+            </TwCard>
+        </section>
+
+        <!-- Alerts Section -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                <span class="text-blue-400">03.</span> Alerts
+            </h2>
+            <div class="space-y-4">
+                <TwAlert Severity="info" Title="Information">
+                    This is an informational alert with helpful details.
+                </TwAlert>
+                <TwAlert Severity="success" Title="Success!">
+                    Your action was completed successfully.
+                </TwAlert>
+                <TwAlert Severity="warning" Title="Warning">
+                    Please review this information before proceeding.
+                </TwAlert>
+                <TwAlert Severity="error" Title="Error">
+                    Something went wrong. Please try again.
+                </TwAlert>
+                <TwAlert Severity="info" Dismissible="true">
+                    This alert can be dismissed by clicking the X button.
+                </TwAlert>
+            </div>
+        </section>
+
+        <!-- Progress Bars Section -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                <span class="text-blue-400">04.</span> Progress Bars
+            </h2>
+            <TwCard Title="TwProgressBar" Color="emerald">
+                <div class="space-y-6">
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider">Determinate (Values)</h4>
+                        <div class="space-y-3">
+                            <div>
+                                <span class="text-xs text-slate-500 mb-1 block">25%</span>
+                                <TwProgressBar Value="25" Color="blue" />
+                            </div>
+                            <div>
+                                <span class="text-xs text-slate-500 mb-1 block">50%</span>
+                                <TwProgressBar Value="50" Color="emerald" />
+                            </div>
+                            <div>
+                                <span class="text-xs text-slate-500 mb-1 block">75%</span>
+                                <TwProgressBar Value="75" Color="amber" />
+                            </div>
+                            <div>
+                                <span class="text-xs text-slate-500 mb-1 block">100%</span>
+                                <TwProgressBar Value="100" Color="purple" />
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider">Indeterminate (Loading)</h4>
+                        <TwProgressBar Indeterminate="true" Color="blue" />
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider">Sizes</h4>
+                        <div class="space-y-3">
+                            <div>
+                                <span class="text-xs text-slate-500 mb-1 block">Small</span>
+                                <TwProgressBar Value="60" Size="sm" Color="blue" />
+                            </div>
+                            <div>
+                                <span class="text-xs text-slate-500 mb-1 block">Medium</span>
+                                <TwProgressBar Value="60" Size="md" Color="blue" />
+                            </div>
+                            <div>
+                                <span class="text-xs text-slate-500 mb-1 block">Large</span>
+                                <TwProgressBar Value="60" Size="lg" Color="blue" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </TwCard>
+        </section>
+
+        <!-- Cards Section -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                <span class="text-blue-400">05.</span> Cards
+            </h2>
+            <TwGrid Cols="1" ColsMd="2" ColsLg="3" Gap="6">
+                <TwCard Title="Blue Card" Color="blue">
+                    <p class="text-slate-400">A card with blue accent glow on hover. Great for primary content.</p>
+                </TwCard>
+                <TwCard Title="Emerald Card" Color="emerald">
+                    <p class="text-slate-400">A card with emerald accent. Perfect for success states.</p>
+                </TwCard>
+                <TwCard Title="Amber Card" Color="amber">
+                    <p class="text-slate-400">A card with amber accent. Ideal for warnings or highlights.</p>
+                </TwCard>
+                <TwCard Color="purple">
+                    <HeaderContent>
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-3 bg-purple-500 rounded-full"></span>
+                            <span class="font-bold text-purple-300">Custom Header</span>
+                        </div>
+                    </HeaderContent>
+                    <StatusContent>
+                        <TwChip Color="purple" ShowDot="true" Pulse="true">Active</TwChip>
+                    </StatusContent>
+                    <ChildContent>
+                        <p class="text-slate-400">Cards can have custom header and status content.</p>
+                    </ChildContent>
+                </TwCard>
+                <TwCard Title="With Footer" Color="blue">
+                    <ChildContent>
+                        <p class="text-slate-400">This card has a footer section for actions.</p>
+                    </ChildContent>
+                    <FooterContent>
+                        <div class="flex gap-2 pt-4">
+                            <TwButton Size="sm" Variant="primary">Action</TwButton>
+                            <TwButton Size="sm" Variant="ghost">Cancel</TwButton>
+                        </div>
+                    </FooterContent>
+                </TwCard>
+                <TwCard Hoverable="false" Color="slate">
+                    <p class="text-slate-400">This card has hover effects disabled. Useful for static content.</p>
+                </TwCard>
+            </TwGrid>
+        </section>
+
+        <!-- Select Section -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                <span class="text-blue-400">06.</span> Select / Dropdowns
+            </h2>
+            <TwCard Title="TwSelect" Color="amber">
+                <div class="space-y-6">
+                    <div class="flex flex-wrap gap-4 items-end">
+                        <div>
+                            <label class="block text-sm text-slate-400 mb-2">Season</label>
+                            <TwSelect TValue="int?" @bind-Value="_selectedSeason" Placeholder="Select Season">
+                                <option value="2025">2025</option>
+                                <option value="2024">2024</option>
+                                <option value="2023">2023</option>
+                            </TwSelect>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-slate-400 mb-2">Week</label>
+                            <TwSelect TValue="int?" @bind-Value="_selectedWeek" Placeholder="All Weeks">
+                                @for (int i = 1; i <= 18; i++)
+                                {
+                                    <option value="@i">Week @i</option>
+                                }
+                            </TwSelect>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-slate-400 mb-2">Full Width Select</label>
+                            <TwSelect TValue="string?" @bind-Value="_selectedTeam" Placeholder="Select Team" FullWidth="true">
+                                <option value="KC">Chiefs</option>
+                                <option value="PHI">Eagles</option>
+                                <option value="SF">49ers</option>
+                            </TwSelect>
+                        </div>
+                    </div>
+                    <div class="text-sm text-slate-500">
+                        Selected: Season=@_selectedSeason, Week=@_selectedWeek, Team=@_selectedTeam
+                    </div>
+                </div>
+            </TwCard>
+        </section>
+
+        <!-- Table Section -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                <span class="text-blue-400">07.</span> Tables
+            </h2>
+            <TwCard Title="TwTable" Color="blue" Class="overflow-hidden">
+                <TwTable TItem="object" Class="rounded-xl border border-slate-800 overflow-hidden">
+                    <HeaderContent>
+                        <TwTh>Player</TwTh>
+                        <TwTh>Team</TwTh>
+                        <TwTh>Points</TwTh>
+                        <TwTh>Status</TwTh>
+                    </HeaderContent>
+                    <ChildContent>
+                        <TwTr>
+                            <TwTd Class="font-medium text-white">Patrick Mahomes</TwTd>
+                            <TwTd>Kansas City Chiefs</TwTd>
+                            <TwTd>328</TwTd>
+                            <TwTd><TwChip Color="emerald" Size="sm" ShowDot="true">Active</TwChip></TwTd>
+                        </TwTr>
+                        <TwTr>
+                            <TwTd Class="font-medium text-white">Josh Allen</TwTd>
+                            <TwTd>Buffalo Bills</TwTd>
+                            <TwTd>312</TwTd>
+                            <TwTd><TwChip Color="emerald" Size="sm" ShowDot="true">Active</TwChip></TwTd>
+                        </TwTr>
+                        <TwTr>
+                            <TwTd Class="font-medium text-white">Lamar Jackson</TwTd>
+                            <TwTd>Baltimore Ravens</TwTd>
+                            <TwTd>298</TwTd>
+                            <TwTd><TwChip Color="amber" Size="sm">Questionable</TwChip></TwTd>
+                        </TwTr>
+                        <TwTr>
+                            <TwTd Class="font-medium text-white">Jalen Hurts</TwTd>
+                            <TwTd>Philadelphia Eagles</TwTd>
+                            <TwTd>276</TwTd>
+                            <TwTd><TwChip Color="red" Size="sm">Injured</TwChip></TwTd>
+                        </TwTr>
+                    </ChildContent>
+                </TwTable>
+            </TwCard>
+        </section>
+
+        <!-- Dialog Section -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                <span class="text-blue-400">08.</span> Dialogs / Modals
+            </h2>
+            <TwCard Title="TwDialog" Color="purple">
+                <div class="space-y-4">
+                    <p class="text-slate-400">Click the button below to open a modal dialog.</p>
+                    <TwButton Variant="primary" OnClick="() => _showDialog = true">
+                        Open Dialog
+                    </TwButton>
+                </div>
+            </TwCard>
+        </section>
+
+        <!-- Grid Section -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                <span class="text-blue-400">09.</span> Grid Layout
+            </h2>
+            <TwCard Title="TwGrid - Responsive" Color="emerald">
+                <TwGrid Cols="1" ColsSm="2" ColsMd="3" ColsLg="4" Gap="4">
+                    @for (int i = 1; i <= 8; i++)
+                    {
+                        <div class="bg-slate-800 rounded-xl p-4 text-center border border-slate-700">
+                            <span class="text-2xl font-bold text-slate-400">@i</span>
+                        </div>
+                    }
+                </TwGrid>
+                <p class="text-sm text-slate-500 mt-4">
+                    Resize your browser to see the grid adjust: 1 col → 2 cols → 3 cols → 4 cols
+                </p>
+            </TwCard>
+        </section>
+
+        <!-- Input Section -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                <span class="text-blue-400">10.</span> Inputs
+            </h2>
+            <TwCard Title="TwInput" Color="blue">
+                <div class="space-y-6">
+                    <div class="flex flex-wrap gap-4 items-end">
+                        <TwInput Label="Player Search" Placeholder="Type name..." ShowSearchIcon="true" @bind-Value="_searchText" />
+                        <TwInput Label="Basic Input" Placeholder="Enter text..." @bind-Value="_basicText" />
+                        <TwInput Label="Disabled" Placeholder="Can't edit" Disabled="true" />
+                    </div>
+                    <div class="text-sm text-slate-500">
+                        Search: @_searchText | Basic: @_basicText
+                    </div>
+                </div>
+            </TwCard>
+        </section>
+
+        <!-- Stat Cards Section -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                <span class="text-blue-400">11.</span> Stat Cards
+            </h2>
+            <TwCard Title="TwStatCard" Color="emerald">
+                <div class="flex flex-wrap gap-4">
+                    <TwStatCard Value="4,235" Label="Pass Yards" Color="blue" />
+                    <TwStatCard Value="1,089" Label="Rush Yards" Color="emerald" />
+                    <TwStatCard Value="42" Label="Touchdowns" Color="amber" />
+                    <TwStatCard Value="85.6%" Label="Hit Rate" Color="purple" />
+                </div>
+            </TwCard>
+        </section>
+
+        <!-- Avatar Section -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                <span class="text-blue-400">12.</span> Avatars
+            </h2>
+            <TwCard Title="TwAvatar" Color="purple">
+                <div class="space-y-6">
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider">Sizes</h4>
+                        <div class="flex items-center gap-4">
+                            <TwAvatar Size="sm" Alt="Patrick Mahomes" />
+                            <TwAvatar Size="md" Alt="Josh Allen" />
+                            <TwAvatar Size="lg" Alt="Lamar Jackson" />
+                            <TwAvatar Size="xl" Alt="Jalen Hurts" />
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider">Colors</h4>
+                        <div class="flex items-center gap-4">
+                            <TwAvatar Size="lg" Alt="Blue" Color="blue" />
+                            <TwAvatar Size="lg" Alt="Emerald" Color="emerald" />
+                            <TwAvatar Size="lg" Alt="Amber" Color="amber" />
+                            <TwAvatar Size="lg" Alt="Purple" Color="purple" />
+                            <TwAvatar Size="lg" Alt="Red" Color="red" />
+                        </div>
+                    </div>
+                </div>
+            </TwCard>
+        </section>
+
+        <!-- Link Section -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                <span class="text-blue-400">13.</span> Links
+            </h2>
+            <TwCard Title="TwLink" Color="amber">
+                <div class="flex flex-wrap gap-6">
+                    <TwLink Href="/nfl-results">Default Link</TwLink>
+                    <TwLink Href="/nfl-results" Color="purple">Purple Link</TwLink>
+                    <TwLink Href="/nfl-results" Color="emerald">Emerald Link</TwLink>
+                    <TwLink Href="/nfl-results" Color="amber">Amber Link</TwLink>
+                </div>
+            </TwCard>
+        </section>
+
+        <!-- Container Section -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                <span class="text-blue-400">14.</span> Container
+            </h2>
+            <TwAlert Severity="info">
+                The <code class="bg-slate-800 px-2 py-0.5 rounded">TwContainer</code> component wraps this entire page. 
+                It provides consistent max-width and padding. Available sizes: sm, md, lg, xl, 2xl, 3xl, 4xl, 5xl, 6xl, 7xl, full.
+            </TwAlert>
+        </section>
+
+    </TwContainer>
+</div>
+
+<!-- Demo Dialog -->
+<TwDialog @bind-IsOpen="_showDialog" Title="Example Dialog" MaxWidth="lg">
+    <ChildContent>
+        <div class="space-y-4">
+            <p class="text-slate-300">
+                This is an example modal dialog. It supports:
+            </p>
+            <ul class="list-disc list-inside text-slate-400 space-y-1">
+                <li>Backdrop blur and click-to-close</li>
+                <li>Escape key to close</li>
+                <li>Custom title content</li>
+                <li>Action button slots</li>
+                <li>Configurable max width</li>
+            </ul>
+            <TwAlert Severity="info">
+                Dialogs are great for confirmations, forms, and detailed views.
+            </TwAlert>
+        </div>
+    </ChildContent>
+    <ActionsContent>
+        <TwButton Variant="ghost" OnClick="() => _showDialog = false">Cancel</TwButton>
+        <TwButton Variant="primary" OnClick="() => _showDialog = false">Confirm</TwButton>
+    </ActionsContent>
+</TwDialog>
+
+@code {
+    private int? _selectedSeason = 2025;
+    private int? _selectedWeek;
+    private string? _selectedTeam;
+    private bool _showDialog = false;
+    private string? _searchText;
+    private string? _basicText;
+}

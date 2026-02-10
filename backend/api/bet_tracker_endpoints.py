@@ -17,6 +17,8 @@ import io
 import csv
 
 import os
+import asyncpg
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +58,8 @@ class CreateBetRequest(BaseModel):
     player_name: Optional[str] = None
     game_date: Optional[str] = None
     clv_percent: Optional[float] = None
+    is_mock: bool = Field(False, description="True if this is a paper trade")
+    bet_metadata: Optional[dict] = Field(None, description="Metadata for auto-resolution (e.g. {'type': 'spread', 'value': -3.5, 'team': 'Chiefs'})")
 
 
 class UpdateOutcomeRequest(BaseModel):
@@ -92,6 +96,11 @@ class BetResponse(BaseModel):
     player_name: Optional[str] = None
     game_date: Optional[str] = None
     clv_percent: Optional[float] = None
+    is_mock: bool = False
+    closing_odds: Optional[int] = None
+    closing_odds_source: Optional[str] = None
+    bet_metadata: Optional[dict] = None
+    closing_odds_captured_at: Optional[str] = None
 
 
 # ==================== SQL ====================
@@ -119,10 +128,13 @@ CREATE TABLE IF NOT EXISTS bets (
     recommendation VARCHAR(50),
     confidence_score DECIMAL(5,2),
     team1 VARCHAR(200),
-    team2 VARCHAR(200),
-    player_name VARCHAR(200),
     game_date TIMESTAMPTZ,
-    clv_percent DECIMAL(5,2)
+    clv_percent DECIMAL(5,2),
+    -- Paper Trading & CLV Fields
+    is_mock BOOLEAN DEFAULT FALSE,
+    closing_odds INT,
+    closing_odds_source VARCHAR(100),
+    closing_odds_captured_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS bet_legs (
@@ -134,9 +146,21 @@ CREATE TABLE IF NOT EXISTS bet_legs (
     outcome VARCHAR(10) DEFAULT 'pending'
 );
 
-CREATE INDEX IF NOT EXISTS idx_bets_sport ON bets(sport);
-CREATE INDEX IF NOT EXISTS idx_bets_outcome ON bets(outcome);
-CREATE INDEX IF NOT EXISTS idx_bets_created ON bets(created_at);
+CREATE TABLE IF NOT EXISTS expert_picks (
+    id SERIAL PRIMARY KEY,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    sport VARCHAR(20),
+    game_date DATE,
+    away_team VARCHAR(100),
+    home_team VARCHAR(100),
+    expert_name VARCHAR(100),
+    spread_pick_team VARCHAR(100),
+    spread_value DECIMAL(10,2),
+    total_pick VARCHAR(10),
+    total_value DECIMAL(10,2),
+    source_url TEXT,
+    UNIQUE(sport, game_date, away_team, home_team, expert_name)
+);
 """
 
 _tables_initialized = False
@@ -205,13 +229,24 @@ async def ensure_tables():
         return
     
     try:
-        import asyncpg
         logger.info(f"Connecting to database: {DATABASE_URL[:50]}...")
         conn = await asyncpg.connect(DATABASE_URL)
         await conn.execute(CREATE_TABLES_SQL)
         
         # Check and add new columns if they don't exist (migrations)
         try:
+            # Check for sport (core column that might be missing in very old schemas)
+            val = await conn.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='bets' AND column_name='sport'")
+            if not val:
+                logger.info("Adding sport column to bets table")
+                await conn.execute("ALTER TABLE bets ADD COLUMN sport VARCHAR(20)")
+
+            # Check for bet_type
+            val = await conn.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='bets' AND column_name='bet_type'")
+            if not val:
+                logger.info("Adding bet_type column to bets table")
+                await conn.execute("ALTER TABLE bets ADD COLUMN bet_type VARCHAR(20) DEFAULT 'single'")
+
             # Check for game_name
             val = await conn.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='bets' AND column_name='game_name'")
             if not val:
@@ -241,6 +276,76 @@ async def ensure_tables():
             if not val:
                 logger.info("Adding clv_percent column to bets table")
                 await conn.execute("ALTER TABLE bets ADD COLUMN clv_percent DECIMAL(5,2)")
+
+            # Check for Paper Trading columns
+            val = await conn.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='bets' AND column_name='is_mock'")
+            if not val:
+                logger.info("Adding Paper Trading columns to bets table")
+                await conn.execute("ALTER TABLE bets ADD COLUMN is_mock BOOLEAN DEFAULT FALSE")
+                await conn.execute("ALTER TABLE bets ADD COLUMN closing_odds INT")
+                await conn.execute("ALTER TABLE bets ADD COLUMN closing_odds_source VARCHAR(100)")
+                await conn.execute("ALTER TABLE bets ADD COLUMN closing_odds_captured_at TIMESTAMPTZ")
+
+            # Check for legacy core columns that might be missing
+            val = await conn.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='bets' AND column_name='profit'")
+            if not val:
+                logger.info("Adding profit column to bets table")
+                await conn.execute("ALTER TABLE bets ADD COLUMN profit DECIMAL(10,2)")
+            
+            val = await conn.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='bets' AND column_name='potential_payout'")
+            if not val:
+                logger.info("Adding potential_payout column to bets table")
+                await conn.execute("ALTER TABLE bets ADD COLUMN potential_payout DECIMAL(10,2)")
+
+            val = await conn.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='bets' AND column_name='cashout_amount'")
+            if not val:
+                logger.info("Adding cashout_amount column to bets table")
+                await conn.execute("ALTER TABLE bets ADD COLUMN cashout_amount DECIMAL(10,2)")
+
+            # IMPORTANT: created_at must exist before indexing
+            val = await conn.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='bets' AND column_name='created_at'")
+            if not val:
+                logger.info("Adding created_at column to bets table")
+                await conn.execute("ALTER TABLE bets ADD COLUMN created_at TIMESTAMPTZ DEFAULT NOW()")
+
+            # Add game_id and bet_metadata for paper trading resolution
+            val = await conn.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='bets' AND column_name='game_id'")
+            if not val:
+                logger.info("Adding game_id column to bets table")
+                await conn.execute("ALTER TABLE bets ADD COLUMN game_id VARCHAR(100)")
+
+            val = await conn.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='bets' AND column_name='bet_metadata'")
+            if not val:
+                logger.info("Adding bet_metadata column to bets table")
+                await conn.execute("ALTER TABLE bets ADD COLUMN bet_metadata JSONB")
+
+            # Finalize indexes after column migrations
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_bets_sport ON bets(sport)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_bets_outcome ON bets(outcome)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_bets_created ON bets(created_at)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_bets_is_mock ON bets(is_mock)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_bets_game_id ON bets(game_id)")
+            
+            # Ensure expert_picks table (redundant but follows pattern for other tables)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS expert_picks (
+                    id SERIAL PRIMARY KEY,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    sport VARCHAR(20),
+                    game_date DATE,
+                    away_team VARCHAR(100),
+                    home_team VARCHAR(100),
+                    expert_name VARCHAR(100),
+                    spread_pick_team VARCHAR(100),
+                    spread_value DECIMAL(10,2),
+                    total_pick VARCHAR(10),
+                    total_value DECIMAL(10,2),
+                    source_url TEXT,
+                    UNIQUE(sport, game_date, away_team, home_team, expert_name)
+                )
+            """)
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_expert_picks_game_date ON expert_picks(game_date)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_expert_picks_sport ON expert_picks(sport)")
         except Exception as e:
             logger.error(f"Schema migration error: {e}")
             
@@ -248,8 +353,12 @@ async def ensure_tables():
         _tables_initialized = True
         logger.info("Bet tracker tables initialized successfully")
     except Exception as e:
-        logger.error(f"Failed to initialize bet tables: {e}")
-        raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
+        logger.error(f"Failed to initialize bet tables (database connection: {DATABASE_URL[:30]}...): {e}")
+        # Re-raise to ensure the endpoint returns a 500 with context
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Bet analysis database connection failed. Ensure PostgreSQL is running. Error: {str(e)}"
+        )
 
 
 # ==================== Endpoints ====================
@@ -259,6 +368,39 @@ async def init_bet_tables():
     """Initialize bet tracker tables."""
     await ensure_tables()
     return {"status": "ok", "message": "Bet tracker tables ready"}
+
+
+@router.post("/resolve-pending")
+async def resolve_pending_bets():
+    """
+    Manually trigger resolution of pending mock bets.
+    Fetches game results and updates bet outcomes.
+    """
+    try:
+        # Import the resolution logic
+        from scripts.resolve_bets import resolve_all_pending_bets
+        
+        results = await resolve_all_pending_bets()
+        
+        return {
+            "status": "ok",
+            "message": f"Resolved {results['resolved']} of {results['total']} pending bets",
+            "summary": {
+                "total": results['total'],
+                "resolved": results['resolved'],
+                "wins": results['wins'],
+                "losses": results['losses'],
+                "pushes": results['pushes'],
+                "skipped": results['skipped'],
+                "errors": results['errors']
+            }
+        }
+    except ImportError as e:
+        logger.error(f"Could not import resolve_bets: {e}")
+        return {"status": "error", "message": f"Resolution script not available: {str(e)}"}
+    except Exception as e:
+        logger.error(f"Error resolving bets: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Resolution failed: {str(e)}")
 
 
 @router.get("/health")
@@ -309,11 +451,10 @@ async def create_bet(request: CreateBetRequest):
     
     conn = await asyncpg.connect(DATABASE_URL)
     try:
-        # Insert bet
         row = await conn.fetchrow("""
             INSERT INTO bets (sport, bet_type, sportsbook, stake, odds, potential_payout, game_id, game_name, description, source, notes,
-                             expected_value, recommendation, confidence_score, team1, team2, player_name, game_date, clv_percent)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+                             expected_value, recommendation, confidence_score, team1, team2, player_name, game_date, clv_percent, is_mock, bet_metadata)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
             RETURNING *
         """, request.sport, request.bet_type, request.sportsbook, 
             request.stake, combined_odds, potential_payout, 
@@ -321,7 +462,8 @@ async def create_bet(request: CreateBetRequest):
             request.expected_value, request.recommendation, request.confidence_score,
             request.team1, request.team2, request.player_name, 
             datetime.fromisoformat(request.game_date.replace("Z", "+00:00")) if request.game_date else None,
-            request.clv_percent)
+            request.clv_percent, request.is_mock,
+            json.dumps(request.bet_metadata) if request.bet_metadata else None)
         
         bet_id = row["id"]
         
@@ -360,7 +502,12 @@ async def create_bet(request: CreateBetRequest):
             team2=row["team2"],
             player_name=row["player_name"],
             game_date=row["game_date"].isoformat() if row["game_date"] else None,
-            clv_percent=to_float(row["clv_percent"]) if row["clv_percent"] is not None else None
+            clv_percent=to_float(row["clv_percent"]) if row["clv_percent"] is not None else None,
+            is_mock=row["is_mock"],
+            closing_odds=row["closing_odds"],
+            closing_odds_source=row["closing_odds_source"],
+            closing_odds_captured_at=row["closing_odds_captured_at"].isoformat() if row["closing_odds_captured_at"] else None,
+            bet_metadata=json.loads(row["bet_metadata"]) if row["bet_metadata"] else None
         )
     finally:
         await conn.close()
@@ -370,15 +517,18 @@ async def create_bet(request: CreateBetRequest):
 async def list_bets(
     sport: Optional[str] = Query(None, description="Filter by sport"),
     outcome: Optional[str] = Query(None, description="Filter by outcome"),
+    is_mock: Optional[bool] = Query(None, description="Filter by paper trading status"),
     limit: int = Query(50, le=200, description="Max results"),
     offset: int = Query(0, ge=0, description="Offset for pagination")
 ):
     """List bets with optional filters."""
-    import asyncpg
-    
-    await ensure_tables()
-    
-    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        await ensure_tables()
+        conn = await asyncpg.connect(DATABASE_URL)
+    except Exception as e:
+        logger.error(f"Database connection error in list_bets: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
+        
     try:
         # Build query
         conditions = []
@@ -393,6 +543,11 @@ async def list_bets(
         if outcome:
             conditions.append(f"outcome = ${param_idx}")
             params.append(outcome)
+            param_idx += 1
+
+        if is_mock is not None:
+            conditions.append(f"is_mock = ${param_idx}")
+            params.append(is_mock)
             param_idx += 1
         
         where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
@@ -445,10 +600,18 @@ async def list_bets(
                 "team2": row["team2"],
                 "player_name": row["player_name"],
                 "game_date": row["game_date"].isoformat() if row["game_date"] else None,
-                "clv_percent": to_float(row["clv_percent"]) if row["clv_percent"] is not None else None
+                "clv_percent": to_float(row["clv_percent"]) if row["clv_percent"] is not None else None,
+                "is_mock": row["is_mock"],
+                "closing_odds": row["closing_odds"],
+                "closing_odds_source": row["closing_odds_source"],
+                "closing_odds_captured_at": row["closing_odds_captured_at"].isoformat() if row["closing_odds_captured_at"] else None,
+                "bet_metadata": json.loads(row["bet_metadata"]) if row["bet_metadata"] else None
             })
         
         return {"bets": bets, "count": len(bets)}
+    except Exception as e:
+        logger.error(f"Query error in list_bets: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
     finally:
         await conn.close()
 
@@ -456,8 +619,6 @@ async def list_bets(
 @router.get("/{bet_id}")
 async def get_bet(bet_id: int):
     """Get a single bet by ID."""
-    import asyncpg
-    
     await ensure_tables()
     
     conn = await asyncpg.connect(DATABASE_URL)
@@ -491,7 +652,11 @@ async def get_bet(bet_id: int):
             "game_id": row["game_id"],
             "description": row["description"],
             "notes": row["notes"],
-            "legs": legs_data
+            "legs": legs_data,
+            "is_mock": row["is_mock"],
+            "closing_odds": row["closing_odds"],
+            "closing_odds_source": row["closing_odds_source"],
+            "closing_odds_captured_at": row["closing_odds_captured_at"].isoformat() if row["closing_odds_captured_at"] else None
         }
     finally:
         await conn.close()
@@ -500,8 +665,6 @@ async def get_bet(bet_id: int):
 @router.patch("/{bet_id}/outcome")
 async def update_bet_outcome(bet_id: int, request: UpdateOutcomeRequest):
     """Update bet outcome (win/loss/cashout/pending)."""
-    import asyncpg
-    
     if request.outcome not in ["win", "loss", "cashout", "pending"]:
         raise HTTPException(status_code=400, detail="Invalid outcome. Use: win, loss, cashout, pending")
     
@@ -552,8 +715,6 @@ class UpdateBetRequest(BaseModel):
 @router.put("/{bet_id}")
 async def update_bet(bet_id: int, request: UpdateBetRequest):
     """Update bet details (stake, odds, description, etc.)."""
-    import asyncpg
-    
     await ensure_tables()
     
     conn = await asyncpg.connect(DATABASE_URL)
@@ -623,7 +784,6 @@ async def update_bet(bet_id: int, request: UpdateBetRequest):
 @router.delete("/all")
 async def clear_all_bets():
     """Wipe all bet data."""
-    import asyncpg
     conn = await asyncpg.connect(DATABASE_URL)
     try:
         await conn.execute("TRUNCATE TABLE bet_legs RESTART IDENTITY CASCADE;")
@@ -636,8 +796,6 @@ async def clear_all_bets():
 @router.delete("/{bet_id}")
 async def delete_bet(bet_id: int):
     """Delete a bet."""
-    import asyncpg
-    
     await ensure_tables()
     
     conn = await asyncpg.connect(DATABASE_URL)
@@ -653,14 +811,17 @@ async def delete_bet(bet_id: int):
 @router.get("/stats/summary")
 async def get_bet_stats(
     sport: Optional[str] = Query(None, description="Filter by sport"),
+    is_mock: Optional[bool] = Query(False, description="Stats for real vs mock bets"),
     days: int = Query(30, description="Stats for last N days")
 ):
     """Get betting statistics summary."""
-    import asyncpg
-    
-    await ensure_tables()
-    
-    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        await ensure_tables()
+        conn = await asyncpg.connect(DATABASE_URL)
+    except Exception as e:
+        logger.error(f"Database connection error in /stats/summary: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
+        
     try:
         if days > 0:
             conditions = ["created_at > NOW() - INTERVAL '%s days'" % days]
@@ -672,6 +833,10 @@ async def get_bet_stats(
         if sport:
             conditions.append("sport = $1")
             params.append(sport)
+        
+        if is_mock is not None:
+            conditions.append(f"is_mock = ${len(params) + 1}")
+            params.append(is_mock)
         
         where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
         
@@ -685,7 +850,8 @@ async def get_bet_stats(
                 COALESCE(SUM(stake), 0) as total_staked,
                 COALESCE(SUM(profit), 0) as net_profit,
                 COALESCE(SUM(profit) FILTER (WHERE outcome = 'win'), 0) as win_profit,
-                COALESCE(SUM(stake) FILTER (WHERE outcome = 'loss'), 0) as loss_amount
+                COALESCE(SUM(stake) FILTER (WHERE outcome = 'loss'), 0) as loss_amount,
+                AVG(clv_percent) FILTER (WHERE clv_percent IS NOT NULL) as avg_clv
             FROM bets
             {where_clause}
         """
@@ -709,8 +875,12 @@ async def get_bet_stats(
             "win_percentage": round(win_pct, 1),
             "total_staked": total_staked,
             "net_profit": net_profit,
-            "roi": round(net_profit / total_staked * 100, 1) if total_staked else 0
+            "roi": round(net_profit / total_staked * 100, 1) if total_staked else 0,
+            "avg_clv_percent": round(to_float(row["avg_clv"]), 2) if row["avg_clv"] is not None else None
         }
+    except Exception as e:
+        logger.error(f"Query error in /stats/summary: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
     finally:
         await conn.close()
 
@@ -724,12 +894,13 @@ async def get_chart_data(
     Get time-series data for betting analytics charts.
     Returns: daily profits, cumulative ROI trend, outcome distribution.
     """
-    import asyncpg
-    from datetime import datetime, timedelta
-    
-    await ensure_tables()
-    
-    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        await ensure_tables()
+        conn = await asyncpg.connect(DATABASE_URL)
+    except Exception as e:
+        logger.error(f"Database connection error in get_chart_data: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
+        
     try:
         if days > 0:
             date_filter = f"WHERE created_at > NOW() - INTERVAL '{days} days'"
@@ -745,7 +916,8 @@ async def get_chart_data(
                 COUNT(*) as bet_count,
                 SUM(CASE WHEN outcome = 'win' THEN 1 ELSE 0 END) as wins,
                 SUM(CASE WHEN outcome = 'loss' THEN 1 ELSE 0 END) as losses,
-                SUM(CASE WHEN outcome = 'cashout' THEN 1 ELSE 0 END) as cashouts
+                SUM(CASE WHEN outcome = 'cashout' THEN 1 ELSE 0 END) as cashouts,
+                AVG(clv_percent) FILTER (WHERE clv_percent IS NOT NULL) as avg_clv
             FROM bets
             {date_filter}
                 AND outcome != 'pending'
@@ -781,7 +953,8 @@ async def get_chart_data(
                 "losses": row["losses"],
                 "cashouts": row["cashouts"],
                 "cumulative_profit": cumulative_profit,
-                "cumulative_roi": round(cumulative_roi, 2)
+                "cumulative_roi": round(cumulative_roi, 2),
+                "avg_clv": round(to_float(row["avg_clv"]), 2) if row["avg_clv"] is not None else None
             })
         
         # Outcome totals for pie chart
@@ -832,6 +1005,9 @@ async def get_chart_data(
                 "total_bets": sum(d["bets"] for d in daily_data)
             }
         }
+    except Exception as e:
+        logger.error(f"Query error in get_chart_data: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
     finally:
         await conn.close()
 
@@ -1048,9 +1224,6 @@ async def preview_import(file: UploadFile = File(...)):
 @router.post("/confirm-import")
 async def confirm_import(bets: List[dict]):
     """Save finalized bets to database."""
-    import asyncpg
-    from datetime import datetime
-    
     await ensure_tables()
     conn = await asyncpg.connect(DATABASE_URL)
     

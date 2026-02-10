@@ -1,0 +1,92 @@
+@using System.Timers
+@implements IDisposable
+@inject PythonMLServiceClient MLServiceClient
+@inject OddsService OddsService
+@inject BallDontLieService BDLService
+
+<div class="flex flex-wrap gap-2 items-center">
+    @if (_geminiQuota != null)
+    {
+        <div title="Gemini AI Daily Quota (Free Tier)">
+            <TwChip Size="sm" 
+                    Color="@(_geminiQuota.Remaining > 100 ? "emerald" : _geminiQuota.Remaining > 20 ? "amber" : "red")"
+                    Variant="filled">
+                <div class="flex items-center gap-1">
+                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+                    AI: @_geminiQuota.Remaining / @_geminiQuota.Limit
+                </div>
+            </TwChip>
+        </div>
+    }
+
+    @if (OddsService.LastQuotaUsage.RequestsRemaining > 0 || OddsService.LastQuotaUsage.RequestsUsed > 0)
+    {
+        <div title="The Odds API Monthly Quota">
+             <TwChip Size="sm"
+                    Color="@(OddsService.LastQuotaUsage.RequestsRemaining > 100 ? "blue" : "amber")"
+                    Variant="filled">
+                <div class="flex items-center gap-1">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Odds: @OddsService.LastQuotaUsage.RequestsRemaining
+                </div>
+            </TwChip>
+        </div>
+    }
+
+    @if (BDLService.LastQuotaUsage.RequestsRemaining > 0 || BDLService.LastQuotaUsage.RequestsLast > 0)
+    {
+        <div title="Ball Don't Lie API Rate Limit">
+            <TwChip Size="sm"
+                    Color="@(BDLService.LastQuotaUsage.RequestsRemaining > 10 ? "slate" : "red")"
+                    Variant="outlined">
+                <div class="flex items-center gap-1">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                    BDL: @BDLService.LastQuotaUsage.RequestsRemaining / @BDLService.LastQuotaUsage.RequestsLast
+                </div>
+            </TwChip>
+        </div>
+    }
+</div>
+
+@code {
+    private AiQuota? _geminiQuota;
+    private Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshQuota();
+        
+        // Setup timer for periodic refresh (every 15 seconds)
+        _timer = new Timer(15000);
+        _timer.Elapsed += async (sender, e) => await InvokeAsync(async () => {
+            await RefreshQuota();
+            StateHasChanged();
+        });
+        _timer.AutoReset = true;
+        _timer.Enabled = true;
+    }
+
+    private async Task RefreshQuota()
+    {
+        try
+        {
+            if (MLServiceClient != null)
+            {
+                _geminiQuota = await MLServiceClient.GetAiQuotaAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error fetching AI quota: {ex.Message}");
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_timer != null)
+        {
+            _timer.Stop();
+            _timer.Dispose();
+        }
+    }
+}

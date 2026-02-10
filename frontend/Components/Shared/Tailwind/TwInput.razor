@@ -1,0 +1,56 @@
+@* TwInput.razor - Tailwind CSS Input Component *@
+
+<div class="relative @(FullWidth ? "w-full" : "")">
+    @if (!string.IsNullOrEmpty(Label))
+    {
+        <label class="block text-xs text-slate-500 mb-1 font-medium">@Label</label>
+    }
+    <div class="relative">
+        @if (ShowSearchIcon)
+        {
+            <div class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+            </div>
+        }
+        <input type="@Type"
+               value="@Value"
+               @oninput="OnInput"
+               placeholder="@Placeholder"
+               disabled="@Disabled"
+               class="@GetInputClasses()"
+               @attributes="AdditionalAttributes" />
+    </div>
+</div>
+
+@code {
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string? Placeholder { get; set; }
+    [Parameter] public string Type { get; set; } = "text";
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public bool FullWidth { get; set; }
+    [Parameter] public bool ShowSearchIcon { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private async Task OnInput(ChangeEventArgs e)
+    {
+        Value = e.Value?.ToString();
+        await ValueChanged.InvokeAsync(Value);
+    }
+
+    private string GetInputClasses()
+    {
+        var classes = "appearance-none bg-slate-800 text-sm text-slate-100 border border-slate-700 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all placeholder-slate-500";
+        
+        if (ShowSearchIcon) classes += " pl-10";
+        if (Disabled) classes += " opacity-50 cursor-not-allowed";
+        if (FullWidth) classes += " w-full";
+        if (!string.IsNullOrEmpty(Class)) classes += $" {Class}";
+        
+        return classes;
+    }
+}

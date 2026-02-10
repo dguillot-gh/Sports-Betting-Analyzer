@@ -1,0 +1,36 @@
+@namespace SportsBettingAnalyzer.Components.Shared.Tailwind
+
+<div class="space-y-1">
+    <button type="button" 
+            class="group flex w-full items-center rounded-md px-3 py-2 text-left text-sm font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white focus:outline-none"
+            @onclick="ToggleExpanded">
+        @if (!string.IsNullOrEmpty(Icon))
+        {
+             <TwIcon Icon="@Icon" Class="mr-3 h-5 w-5 flex-shrink-0 opacity-75 group-hover:text-white" />
+        }
+        <span class="flex-1">@Title</span>
+        <svg class="@(Expanded ? "text-slate-400 rotate-90" : "text-slate-500") ml-3 h-5 w-5 flex-shrink-0 transition-transform duration-150 ease-in-out group-hover:text-slate-400" 
+             viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+        </svg>
+    </button>
+    
+    @if (Expanded)
+    {
+        <div class="space-y-1 pl-4 border-l border-slate-800 ml-3">
+            @ChildContent
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public bool Expanded { get; set; } = false;
+
+    private void ToggleExpanded()
+    {
+        Expanded = !Expanded;
+    }
+}

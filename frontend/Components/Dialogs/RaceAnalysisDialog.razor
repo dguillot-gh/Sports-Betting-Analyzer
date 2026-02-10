@@ -1,21 +1,19 @@
 @using MudBlazor
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
 
 <MudDialog>
-    <TitleContent>
-        <MudStack Row="true" AlignItems="AlignItems.Center">
-            <MudIcon Icon="@Icons.Material.Filled.AutoGraph" Color="Color.Primary" />
-            <MudText Typo="Typo.h5">AI Betting Report</MudText>
-        </MudStack>
-    </TitleContent>
     <DialogContent>
-        <div style="max-height: 70vh; overflow-y: auto; padding: 10px;">
-            <MudText Typo="Typo.body1" Style="white-space: pre-wrap; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6;">
+        <div class="p-2">
+            <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">AI Race Report</h3>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 text-sm text-slate-300 leading-relaxed font-mono whitespace-pre-wrap max-h-[60vh] overflow-y-auto custom-scrollbar">
                 @AnalysisText
-            </MudText>
+            </div>
         </div>
     </DialogContent>
     <DialogActions>
-        <MudButton Color="Color.Primary" OnClick="Close" Variant="Variant.Filled">Close Report</MudButton>
+        <div class="px-6 pb-6">
+            <TwButton Variant="primary" OnClick="Close">Dismiss Report</TwButton>
+        </div>
     </DialogActions>
 </MudDialog>
 
@@ -23,5 +21,5 @@
     [CascadingParameter] IMudDialogInstance? MudDialog { get; set; }
     [Parameter] public string AnalysisText { get; set; } = "";
 
-    private void Close() => MudDialog?.Close();
+    private void Close() => MudDialog?.Cancel();
 }

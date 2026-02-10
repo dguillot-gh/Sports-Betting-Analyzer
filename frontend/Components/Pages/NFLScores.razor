@@ -1,0 +1,270 @@
+@page "/nfl/scores"
+@rendermode InteractiveServer
+@inject HttpClient Http
+@using System.Net.Http.Json
+
+<PageTitle>NFL Game Results</PageTitle>
+
+<div class="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
+    <TwContainer MaxWidth="7xl">
+        
+        <!-- Header Section -->
+        <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+            <div class="flex items-center gap-3">
+                <div class="bg-blue-600 p-3 rounded-xl shadow-lg shadow-blue-900/20">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-bold tracking-tight">NFL Game Results</h1>
+                    <p class="text-slate-400 text-sm">View scores and matchups by season and week</p>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="flex flex-wrap items-center gap-3 bg-slate-900/50 p-3 rounded-2xl border border-slate-800 backdrop-blur-sm">
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1">Season</label>
+                    <TwSelect TValue="int?" @bind-Value="_selectedSeason">
+                        @foreach (var season in _availableSeasons)
+                        {
+                            <option value="@season">@season</option>
+                        }
+                    </TwSelect>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1">Week</label>
+                    <TwSelect TValue="int?" @bind-Value="_selectedWeek" Placeholder="All Weeks">
+                        @for (int i = 1; i <= 18; i++)
+                        {
+                            <option value="@i">Week @i</option>
+                        }
+                    </TwSelect>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1">Team</label>
+                    <TwSelect TValue="string?" @bind-Value="_selectedTeam" Placeholder="All Teams">
+                        @foreach (var team in _nflTeams.OrderBy(t => t.Value))
+                        {
+                            <option value="@team.Key">@team.Value</option>
+                        }
+                    </TwSelect>
+                </div>
+
+                <div class="self-end">
+                    <TwButton Variant="primary" OnClick="LoadResults" IsLoading="_isLoading" Disabled="_isLoading">
+                        Search
+                    </TwButton>
+                </div>
+            </div>
+        </header>
+
+        <!-- Loading State -->
+        @if (_isLoading)
+        {
+            <div class="mb-8">
+                <TwProgressBar Indeterminate="true" Color="blue" Size="md" />
+            </div>
+        }
+
+        <!-- Results Grid -->
+        @if (_games.Any())
+        {
+            <TwGrid Cols="1" ColsSm="2" ColsLg="3" Gap="6">
+                @foreach (var game in _games)
+                {
+                    <TwCard Color="blue">
+                        <HeaderContent>
+                            <TwChip Size="sm" Color="slate">Week @game.Week • @game.GameDate</TwChip>
+                        </HeaderContent>
+                        <StatusContent>
+                            @if (game.IsCompleted)
+                            {
+                                <TwChip Size="sm" Color="emerald" ShowDot="true" Pulse="true">Final</TwChip>
+                            }
+                        </StatusContent>
+                        <ChildContent>
+                            <div class="space-y-4">
+                                <!-- Away Team -->
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center border border-slate-700">
+                                            <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                                            </svg>
+                                        </div>
+                                        <span class="font-semibold @(game.AwayScore > game.HomeScore ? "text-white" : "text-slate-400")">
+                                            @game.AwayTeam
+                                        </span>
+                                    </div>
+                                    <span class="text-2xl font-black @(game.AwayScore > game.HomeScore ? "text-emerald-400" : "text-slate-600")">
+                                        @game.AwayScore
+                                    </span>
+                                </div>
+
+                                <div class="h-px bg-slate-800"></div>
+
+                                <!-- Home Team -->
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center border border-slate-700">
+                                            <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                                            </svg>
+                                        </div>
+                                        <span class="font-semibold @(game.HomeScore > game.AwayScore ? "text-white" : "text-slate-400")">
+                                            @game.HomeTeam
+                                        </span>
+                                    </div>
+                                    <span class="text-2xl font-black @(game.HomeScore > game.AwayScore ? "text-emerald-400" : "text-slate-600")">
+                                        @game.HomeScore
+                                    </span>
+                                </div>
+
+                                @if (!string.IsNullOrEmpty(game.TopPerformer))
+                                {
+                                    <div class="pt-2 border-t border-slate-800">
+                                        <span class="text-xs text-slate-500">⭐ @game.TopPerformer</span>
+                                    </div>
+                                }
+                            </div>
+                        </ChildContent>
+                    </TwCard>
+                }
+            </TwGrid>
+            
+            <div class="mt-6 text-center">
+                <TwChip Color="slate" Size="lg">Showing @_games.Count games</TwChip>
+            </div>
+        }
+        else if (!_isLoading && _hasSearched)
+        {
+            <TwAlert Severity="info">
+                No games found. Try adjusting your filters.
+            </TwAlert>
+        }
+    </TwContainer>
+</div>
+
+@code {
+    private int? _selectedSeason;
+    private int? _selectedWeek;
+    private string? _selectedTeam;
+    private bool _isLoading = false;
+    private bool _hasSearched = false;
+    
+    private List<int> _availableSeasons = new();
+    private List<NFLGame> _games = new();
+    
+    private readonly Dictionary<string, string> _nflTeams = new()
+    {
+        { "ARI", "Cardinals" }, { "ATL", "Falcons" }, { "BAL", "Ravens" }, { "BUF", "Bills" },
+        { "CAR", "Panthers" }, { "CHI", "Bears" }, { "CIN", "Bengals" }, { "CLE", "Browns" },
+        { "DAL", "Cowboys" }, { "DEN", "Broncos" }, { "DET", "Lions" }, { "GB", "Packers" },
+        { "HOU", "Texans" }, { "IND", "Colts" }, { "JAX", "Jaguars" }, { "KC", "Chiefs" },
+        { "LV", "Raiders" }, { "LAC", "Chargers" }, { "LAR", "Rams" }, { "MIA", "Dolphins" },
+        { "MIN", "Vikings" }, { "NE", "Patriots" }, { "NO", "Saints" }, { "NYG", "Giants" },
+        { "NYJ", "Jets" }, { "PHI", "Eagles" }, { "PIT", "Steelers" }, { "SF", "49ers" },
+        { "SEA", "Seahawks" }, { "TB", "Buccaneers" }, { "TEN", "Titans" }, { "WAS", "Commanders" }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _availableSeasons = Enumerable.Range(2020, 6).Reverse().ToList();
+        _selectedSeason = _availableSeasons.FirstOrDefault();
+        await LoadResults();
+    }
+
+    private async Task LoadResults()
+    {
+        _isLoading = true;
+        _hasSearched = true;
+        StateHasChanged();
+        
+        try
+        {
+            var url = $"http://backend:8000/db/games/nfl/schedule?limit=50";
+            
+            if (_selectedSeason.HasValue)
+                url += $"&season={_selectedSeason.Value}";
+            if (_selectedWeek.HasValue)
+                url += $"&week={_selectedWeek.Value}";
+            if (!string.IsNullOrEmpty(_selectedTeam))
+                url += $"&team={Uri.EscapeDataString(_selectedTeam)}";
+            
+            var response = await Http.GetFromJsonAsync<NFLScheduleResponse>(url);
+            
+            _games = (response?.Games ?? new())
+                .Select(g => new NFLGame
+                {
+                    Week = g.Week ?? 0,
+                    GameDate = g.GameDate ?? "TBD",
+                    HomeTeam = g.HomeTeam ?? "Home",
+                    AwayTeam = g.AwayTeam ?? "Away",
+                    HomeScore = g.HomeScore ?? 0,
+                    AwayScore = g.AwayScore ?? 0,
+                    IsCompleted = g.IsCompleted ?? (g.HomeScore > 0 || g.AwayScore > 0),
+                    TopPerformer = g.TopPerformer
+                })
+                .OrderByDescending(g => g.Week)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading games: {ex.Message}");
+            _games = new();
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private class NFLScheduleResponse
+    {
+        public List<NFLGameItem> Games { get; set; } = new();
+    }
+
+    private class NFLGameItem
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("week")]
+        public int? Week { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("game_date")]
+        public string? GameDate { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("home_team")]
+        public string? HomeTeam { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("away_team")]
+        public string? AwayTeam { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("home_score")]
+        public int? HomeScore { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("away_score")]
+        public int? AwayScore { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("is_completed")]
+        public bool? IsCompleted { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("top_performer")]
+        public string? TopPerformer { get; set; }
+    }
+
+    private class NFLGame
+    {
+        public int Week { get; set; }
+        public string GameDate { get; set; } = "";
+        public string HomeTeam { get; set; } = "";
+        public string AwayTeam { get; set; } = "";
+        public int HomeScore { get; set; }
+        public int AwayScore { get; set; }
+        public bool IsCompleted { get; set; }
+        public string? TopPerformer { get; set; }
+    }
+}

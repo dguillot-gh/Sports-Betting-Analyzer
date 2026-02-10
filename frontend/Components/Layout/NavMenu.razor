@@ -1,58 +1,68 @@
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
 @using MudBlazor
 
+<TwNavMenu>
+    <TwNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">Home</TwNavLink>
+    <TwNavLink Href="/betting-101" Icon="@Icons.Material.Filled.School">Betting 101</TwNavLink>
+    <TwNavLink Href="/all-sports" Icon="@Icons.Material.Filled.Sports">All Sports Analysis</TwNavLink>
+    <TwNavLink Href="/bet-tracker" Icon="@Icons.Material.Filled.Receipt">Bet Tracker</TwNavLink>
+    <TwNavLink Href="/paper-trading" Icon="@Icons.Material.Filled.AccountBalanceWallet">Paper Trading</TwNavLink>
+    <TwNavLink Href="/clv-dashboard" Icon="@Icons.Material.Filled.Insights">CLV Analytics</TwNavLink>
+    <TwNavLink Href="/history" Icon="@Icons.Material.Filled.History">Bet History</TwNavLink>
+    <TwNavLink Href="/live-nba-odds" Icon="@Icons.Material.Filled.SportsBasketball">Live NBA Odds</TwNavLink>
+    <TwNavLink Href="/nfl-live-odds" Icon="@Icons.Material.Filled.SportsFootball">Live NFL Odds</TwNavLink>
+    <TwNavLink Href="/ncaab-live-odds" Icon="@Icons.Material.Filled.School">NCAAB Live Odds</TwNavLink>
+    <TwNavLink Href="/cfb-live-odds" Icon="@Icons.Material.Filled.SportsFootball">CFB Live Odds</TwNavLink>
+    <TwNavLink Href="/college-baseball-live-odds" Icon="@Icons.Material.Filled.SportsBaseball">College Baseball Live Odds</TwNavLink>
+    <TwNavLink Href="/nascar-odds" Icon="@Icons.Material.Filled.Flag">NASCAR Live Odds</TwNavLink>
+    <TwNavLink Href="/nhl-live-odds" Icon="@Icons.Material.Filled.IceSkating">Live NHL Odds</TwNavLink>
+    
+    <TwNavGroup Title="ML & Data" Icon="@Icons.Material.Filled.Psychology" Expanded="true">
+        <TwNavLink Href="/model-studio" Icon="@Icons.Material.Filled.Science">Model Studio</TwNavLink>
+        <TwNavLink Href="/model-metrics" Icon="@Icons.Material.Filled.Analytics">Model Metrics</TwNavLink>
+        <TwNavLink Href="/feature-engineering" Icon="@Icons.Material.Filled.Build">Feature Engineering</TwNavLink>
+        <TwNavLink Href="/model-insights" Icon="@Icons.Material.Filled.Insights">Model Insights</TwNavLink>
+        <TwNavLink Href="/nascar" Icon="@Icons.Material.Filled.Flag">NASCAR Dashboard</TwNavLink>
+        <TwNavLink Href="/data-management" Icon="@Icons.Material.Filled.Storage">Data Management</TwNavLink>
+        <TwNavLink Href="/imports" Icon="@Icons.Material.Filled.Autorenew">Auto Imports</TwNavLink>
+    </TwNavGroup>
+    
+    <TwNavLink Href="/simulations" Icon="@Icons.Material.Filled.Casino">Simulations</TwNavLink>
+    <TwNavLink Href="/player-stats" Icon="@Icons.Material.Filled.QueryStats">Player Stats</TwNavLink>
+    
+    <TwNavGroup Title="Profiles" Icon="@Icons.Material.Filled.Person" Expanded="true">
+        <TwNavLink Href="/nascar-dashboard" Icon="@Icons.Material.Filled.Speed">Live Race Dashboard</TwNavLink>
+        <TwNavLink Href="/driver-profiles" Icon="@Icons.Material.Filled.SportsMotorsports">Driver Profiles (NASCAR)</TwNavLink>
+        <TwNavLink Href="/nascar/results" Icon="@Icons.Material.Filled.EmojiEvents">Race Results</TwNavLink>
+        <TwNavLink Href="/nfl-player-profiles" Icon="@Icons.Material.Filled.SportsFootball">NFL Player Profiles</TwNavLink>
+        <TwNavLink Href="/nfl/player-stats" Icon="@Icons.Material.Filled.SportsFootball">NFL Stats</TwNavLink>
+        <TwNavLink Href="/nfl/scores" Icon="@Icons.Material.Filled.SportsFootball">NFL Games</TwNavLink>
+        <TwNavLink Href="/nfl-stats" Icon="@Icons.Material.Filled.Analytics">NFL Stat Board</TwNavLink>
+        <TwNavLink Href="/nba-player-profiles" Icon="@Icons.Material.Filled.SportsBasketball">NBA Player Profiles</TwNavLink>
+        <TwNavLink Href="/nba/player-stats" Icon="@Icons.Material.Filled.SportsBasketball">NBA Stats</TwNavLink>
+        <TwNavLink Href="/nba/scores" Icon="@Icons.Material.Filled.SportsBasketball">NBA Games</TwNavLink>
+        <TwNavLink Href="/nfl-hit-rates" Icon="@Icons.Material.Filled.TrendingUp">NFL Hit Rates</TwNavLink>
+        <TwNavLink Href="/nba-hit-rates" Icon="@Icons.Material.Filled.TrendingUp">NBA Hit Rates</TwNavLink>
+        <TwNavLink Href="/player-trends" Icon="@Icons.Material.Filled.ShowChart">Player Trends</TwNavLink>
+        <TwNavLink Href="/ncaa-baseball/stats" Icon="@Icons.Material.Filled.SportsBaseball">College Baseball</TwNavLink>
+        <TwNavLink Href="/cfb-stats" Icon="@Icons.Material.Filled.SportsFootball">College Football</TwNavLink>
+        <TwNavLink Href="/nhl-stats" Icon="@Icons.Material.Filled.Analytics">NHL Stats</TwNavLink>
+    </TwNavGroup>
+    
+    <div class="my-3 border-t border-slate-800"></div>
 
-<MudNavMenu>
-    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">Home</MudNavLink>
-    <MudNavLink Href="/betting-101" Icon="@Icons.Material.Filled.School">Betting 101</MudNavLink>
-    <MudNavLink Href="/all-sports" Icon="@Icons.Material.Filled.Sports" Style="background: rgba(var(--mud-palette-secondary-rgb), 0.1); font-weight: bold;">All Sports Analysis</MudNavLink>
-    <MudNavLink Href="/bet-tracker" Icon="@Icons.Material.Filled.Receipt">Bet Tracker</MudNavLink>
-    <MudNavLink Href="/history" Icon="@Icons.Material.Filled.History">Bet History</MudNavLink>
-    <MudNavLink Href="/live-nba-odds" Icon="@Icons.Material.Filled.SportsBasketball">Live NBA Odds</MudNavLink>
-    <MudNavLink Href="/live-nfl-odds" Icon="@Icons.Material.Filled.SportsFootball">Live NFL Odds</MudNavLink>
-    <MudNavLink Href="/ncaab-live-odds" Icon="@Icons.Material.Filled.School">NCAAB Live Odds</MudNavLink>
-    <MudNavLink Href="/cfb-live-odds" Icon="@Icons.Material.Filled.SportsFootball">CFB Live Odds</MudNavLink>
-    <MudNavLink Href="/college-baseball-live-odds" Icon="@Icons.Material.Filled.SportsBaseball">College Baseball Live Odds</MudNavLink>
-    <MudNavLink Href="/nascar-odds" Icon="@Icons.Material.Filled.Flag">NASCAR Live Odds</MudNavLink>
+    <TwNavLink Href="/data-health" Icon="@Icons.Material.Filled.HealthAndSafety">Data Health</TwNavLink>
+    <TwNavLink Href="/project-tracker" Icon="@Icons.Material.Filled.RocketLaunch">Project Tracker</TwNavLink>
+    <TwNavLink Href="/logs" Icon="@Icons.Material.Filled.Terminal">System Logs</TwNavLink>
+    <TwNavLink Href="/about" Icon="@Icons.Material.Filled.Info">About</TwNavLink>
     
-    <MudNavGroup Title="ML & Data" Icon="@Icons.Material.Filled.Psychology" Expanded="true">
-        <MudNavLink Href="/ml-training" Icon="@Icons.Material.Filled.School">ML Training</MudNavLink>
-        <MudNavLink Href="/model-playground" Icon="@Icons.Material.Filled.Science">Model Playground</MudNavLink>
-        <MudNavLink Href="/feature-engineering" Icon="@Icons.Material.Filled.Build">Feature Engineering</MudNavLink>
-        <MudNavLink Href="/model-insights" Icon="@Icons.Material.Filled.Insights">Model Insights</MudNavLink>
-        <MudNavLink Href="/model-lab" Icon="@Icons.Material.Filled.Science">Model Lab</MudNavLink>
-        <MudNavLink Href="/model-lab-nba" Icon="@Icons.Material.Filled.SportsBasketball">Model Lab NBA</MudNavLink>
-        <MudNavLink Href="/model-lab-nfl" Icon="@Icons.Material.Filled.SportsFootball">Model Lab NFL</MudNavLink>
-        <MudNavLink Href="/nascar" Icon="@Icons.Material.Filled.Flag">NASCAR Dashboard</MudNavLink>
-        <MudNavLink Href="/data-management" Icon="@Icons.Material.Filled.Storage">Data Management</MudNavLink>
-        <MudNavLink Href="/imports" Icon="@Icons.Material.Filled.Autorenew">Auto Imports</MudNavLink>
-    </MudNavGroup>
-    
-    <MudNavLink Href="/simulations" Icon="@Icons.Material.Filled.Casino">Simulations</MudNavLink>
-    <MudNavLink Href="/player-stats" Icon="@Icons.Material.Filled.QueryStats">Player Stats</MudNavLink>
-    
-    
-    <MudNavGroup Title="Profiles" Icon="@Icons.Material.Filled.Person" Expanded="true">
-        <MudNavLink Href="/nascar-data" Icon="@Icons.Material.Filled.Speed">NASCAR Data Explorer</MudNavLink>
-        <MudNavLink Href="/nascar-dashboard" Icon="@Icons.Material.Filled.Speed">Live Race Dashboard</MudNavLink>
-        <MudNavLink Href="/driver-profiles" Icon="@Icons.Material.Filled.SportsMotorsports">Driver Profiles (NASCAR)</MudNavLink>
-        <MudNavLink Href="/race-results" Icon="@Icons.Material.Filled.EmojiEvents">Race Results</MudNavLink>
-        <MudNavLink Href="/nfl-player-profiles" Icon="@Icons.Material.Filled.SportsFootball">NFL Player Profiles</MudNavLink>
-        <MudNavLink Href="/nfl-results" Icon="@Icons.Material.Filled.SportsFootball">NFL Stats</MudNavLink>
-        <MudNavLink Href="/nfl-game-results" Icon="@Icons.Material.Filled.SportsFootball">NFL Games</MudNavLink>
-        <MudNavLink Href="/nfl-stats" Icon="@Icons.Material.Filled.Analytics">NFL Stat Board</MudNavLink>
-        <MudNavLink Href="/nba-player-profiles" Icon="@Icons.Material.Filled.SportsBasketball">NBA Player Profiles</MudNavLink>
-        <MudNavLink Href="/nba-results" Icon="@Icons.Material.Filled.SportsBasketball">NBA Stats</MudNavLink>
-        <MudNavLink Href="/nba-game-results" Icon="@Icons.Material.Filled.SportsBasketball">NBA Games</MudNavLink>
-        <MudNavLink Href="/nfl-hit-rates" Icon="@Icons.Material.Filled.TrendingUp">NFL Hit Rates</MudNavLink>
-        <MudNavLink Href="/nba-hit-rates" Icon="@Icons.Material.Filled.TrendingUp">NBA Hit Rates</MudNavLink>
-        <MudNavLink Href="/player-trends" Icon="@Icons.Material.Filled.ShowChart">Player Trends</MudNavLink>
-        <MudNavLink Href="/baseball-stats" Icon="@Icons.Material.Filled.SportsBaseball">College Baseball</MudNavLink>
-        <MudNavLink Href="/college-football" Icon="@Icons.Material.Filled.SportsFootball">College Football</MudNavLink>
-    </MudNavGroup>
-    
-    <MudDivider Class="my-2" />
-    <MudNavLink Href="/data-health" Icon="@Icons.Material.Filled.HealthAndSafety">Data Health</MudNavLink>
-    <MudNavLink Href="/project-tracker" Icon="@Icons.Material.Filled.RocketLaunch">Project Tracker</MudNavLink>
-    <MudNavLink Href="/logs" Icon="@Icons.Material.Filled.Terminal">System Logs</MudNavLink>
-    <MudNavLink Href="/about" Icon="@Icons.Material.Filled.Info">About</MudNavLink>
-</MudNavMenu>
+    <div class="my-3 border-t border-slate-800"></div>
+    <div class="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+        Developer Tools
+    </div>
+    <TwNavLink Href="/component-showcase" Icon="@Icons.Material.Filled.Palette" Class="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 font-bold hover:text-white">🎨 Tailwind Components</TwNavLink>
+</TwNavMenu>
+
+@code {
+    // Icons are resolved via MudBlazor namespace which contains SVG path strings
+}

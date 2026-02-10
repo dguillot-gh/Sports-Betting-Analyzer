@@ -1,58 +1,98 @@
 ﻿@inherits LayoutComponentBase
 @using MudBlazor
 
+@* Keep providers for legacy support *@
 <MudThemeProvider @rendermode="InteractiveServer" Theme="_darkTheme" IsDarkMode="true" />
 <MudDialogProvider @rendermode="InteractiveServer" />
 <MudSnackbarProvider @rendermode="InteractiveServer" />
 <MudPopoverProvider @rendermode="InteractiveServer" />
 
-<MudLayout>
-    <MudAppBar Elevation="1" Style="background-color: #424242;">
-        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@ToggleDrawer" />
-        <MudText Typo="Typo.h6">Sports Betting Analyzer</MudText>
-        <MudSpacer />
-        <MudIconButton Icon="@Icons.Material.Filled.Info" Color="Color.Inherit" Href="/about" Title="About & Architecture" />
-    </MudAppBar>
-    <MudDrawer @bind-Open="_drawerOpen" Elevation="2" 
-               Variant="DrawerVariant.Responsive"
-               Breakpoint="Breakpoint.Md">
-        <NavMenu />
-    </MudDrawer>
-    <MudMainContent>
-        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
-            @Body
-        </MudContainer>
-    </MudMainContent>
-</MudLayout>
+<div class="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    
+    @* Mobile Header *@
+    <header class="md:hidden bg-slate-900 border-b border-slate-800 p-4 flex items-center justify-between sticky top-0 z-50">
+        <div class="flex items-center gap-3">
+             <button @onclick="ToggleDrawer" class="text-slate-400 hover:text-white">
+                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+            </button>
+            <span class="font-bold text-lg tracking-tight">Sports Betting Analyzer</span>
+        </div>
+    </header>
 
-<div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
+    <div class="flex flex-1 relative">
+        @* Sidebar (Desktop: Toggleable, Mobile: Overlay) *@
+        <aside class="@(_drawerOpen ? "translate-x-0 w-64" : "-translate-x-full md:translate-x-0 md:w-0") fixed md:sticky inset-y-0 left-0 z-40 bg-slate-900 border-r border-slate-800 transition-all duration-300 ease-in-out md:h-screen top-0 overflow-y-auto overflow-x-hidden @(!_drawerOpen ? "md:border-none" : "")">
+            <div class="p-6 border-b border-slate-800 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                     <div class="bg-blue-600 rounded-lg p-1.5 shadow-lg shadow-blue-900/20">
+                        <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                    </div>
+                    <div class="overflow-hidden whitespace-nowrap transition-all duration-300">
+                         <h1 class="font-bold text-lg leading-none">SBA <span class="text-blue-500">Pro</span></h1>
+                         <span class="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Intelligence</span>
+                    </div>
+                </div>
+                <button @onclick="ToggleDrawer" class="hidden md:flex text-slate-500 hover:text-white transition-colors" title="Collapse Sidebar">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"></path></svg>
+                </button>
+            </div>
+            
+            <NavMenu />
+        </aside>
+
+        @* Mobile Backdrop *@
+        @if (_drawerOpen)
+        {
+            <div class="fixed inset-0 bg-black/50 z-30 md:hidden backdrop-blur-sm" @onclick="ToggleDrawer"></div>
+        }
+
+        @* Main Content *@
+        <main class="flex-1 min-w-0 overflow-hidden">
+             @* Desktop Header / Toolbar *@
+            <header class="hidden md:flex h-16 items-center justify-between px-8 border-b border-slate-800 bg-slate-950/50 backdrop-blur-md sticky top-0 z-20">
+                <div class="flex items-center text-slate-400 text-sm">
+                    <button @onclick="ToggleDrawer" class="mr-4 flex items-center justify-center h-10 w-10 text-slate-400 hover:text-white transition-all bg-slate-900/50 hover:bg-slate-900 border border-slate-800 rounded-xl hover:scale-105 active:scale-95 shadow-lg" title="Toggle Sidebar">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            @if (_drawerOpen) {
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                            } else {
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path>
+                            }
+                        </svg>
+                    </button>
+                    <span class="mr-2">Console</span> / <span class="ml-2 text-white font-medium">Dashboard</span>
+                </div>
+                
+                <div class="flex items-center gap-4">
+                    <a href="/about" class="text-slate-400 hover:text-white transition-colors" title="About">
+                         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </a>
+                </div>
+            </header>
+
+            <div class="p-4 md:p-8 max-w-7xl mx-auto">
+                @Body
+            </div>
+        </main>
+    </div>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet class="hidden fixed bottom-4 right-4 bg-red-900 border border-red-700 text-white px-4 py-3 rounded-lg shadow-xl z-[100]">
+    <div class="flex items-center gap-3">
+        <svg class="h-5 w-5 text-red-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+        <span>An unhandled error has occurred.</span>
+        <a href="." class="reload underline hover:text-red-200 font-bold ml-2">Reload</a>
+        <span class="dismiss cursor-pointer ml-2 hover:text-red-200">🗙</span>
+    </div>
 </div>
 
 @code {
-    bool _drawerOpen = true;
+    bool _drawerOpen = true; // Default open on desktop
 
     private MudTheme _darkTheme = new MudTheme
     {
-        PaletteLight = new PaletteLight
-        {
-            Primary = "#00bcd4",
-            Secondary = "#64ffda",
-            AppbarBackground = "#424242"
-        },
-        PaletteDark = new PaletteDark
-        {
-            Primary = "#00bcd4",
-            Secondary = "#64ffda",
-            Background = "#1e1e1e",
-            Surface = "#2d2d2d",
-            AppbarBackground = "#424242",
-            DrawerBackground = "#252525",
-            TextPrimary = "#ffffff",
-            TextSecondary = "#b0b0b0"
-        }
+        PaletteLight = new PaletteLight { Primary = "#00bcd4", Secondary = "#64ffda", AppbarBackground = "#424242" },
+        PaletteDark = new PaletteDark { Primary = "#00bcd4", Secondary = "#64ffda", Background = "#1e1e1e", Surface = "#2d2d2d", AppbarBackground = "#424242", DrawerBackground = "#252525", TextPrimary = "#ffffff", TextSecondary = "#b0b0b0" }
     };
 
     void ToggleDrawer()

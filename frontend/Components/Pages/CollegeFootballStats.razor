@@ -1,189 +1,291 @@
-@page "/college-football"
-@using MudBlazor
-@using System.Net.Http.Json
+@page "/cfb-stats"
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject IConfiguration Configuration
 @using System.Text.Json.Serialization
 @rendermode InteractiveServer
 
-<PageTitle>College Football - Sports Betting Analyzer</PageTitle>
+<PageTitle>College Football Analytics</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
-    <MudStack Spacing="4">
-        @* Header *@
-        <MudPaper Class="pa-4" Elevation="3" Style="background: linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%); border-left: 4px solid #ffc107;">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                <div>
-                    <MudText Typo="Typo.h4" Style="color: white;">
-                        <MudIcon Icon="@Icons.Material.Filled.SportsFootball" Class="mr-2" />
-                        College Football Stats
-                    </MudText>
-                    <MudText Typo="Typo.subtitle1" Style="color: #94a3b8;">@_currentSeason Season • Powered by CollegeFootballData.com</MudText>
+<TwContainer MaxWidth="extraLarge" Class="mt-8">
+    <!-- Header -->
+    <div class="p-6 mb-8 rounded-xl shadow-lg bg-gradient-to-br from-[#1e3a5f] to-[#0d1b2a] text-white relative overflow-hidden border-l-4 border-amber-500">
+        <div class="absolute inset-0 bg-white/5 bg-[radial-gradient(#ffffff15_1px,transparent_1px)] [background-size:16px_16px]"></div>
+        <div class="relative z-10 flex flex-col md:flex-row justify-between items-center gap-6">
+            <div class="flex items-center gap-4">
+                <div class="p-3 bg-white/10 rounded-lg backdrop-blur-sm border border-white/20">
+                    <TwIcon Icon="M12 21a9 9 0 100-18 9 9 0 000 18z M12 3v18 M3 12h18 M16.5 16.5l-9-9 M16.5 7.5l-9 9" Class="w-8 h-8 text-white" />
                 </div>
-                <MudStack Row="true" Spacing="2">
-                    <MudSelect T="int" Value="@_selectedYear" ValueChanged="OnYearChanged" Label="Season" Variant="Variant.Outlined" Dense="true" Style="width: 120px; background: rgba(255,255,255,0.1);">
+                <div>
+                    <h1 class="text-3xl font-bold tracking-tight text-white">College Football Stats</h1>
+                    <p class="text-slate-400 mt-1">@_currentSeason Season • Powered by CollegeFootballData.com</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="w-32">
+                    <TwSelect TValue="int" Value="@_selectedYear" ValueChanged="OnYearChanged" Label="Season" FullWidth="true">
                         @foreach (var y in _availableYears)
                         {
-                            <MudSelectItem Value="@y">@y</MudSelectItem>
+                            <option value="@y">@y</option>
                         }
-                    </MudSelect>
-                    <MudButton Variant="Variant.Filled" Color="Color.Warning" StartIcon="@Icons.Material.Filled.Refresh" OnClick="ImportData" Disabled="@_isLoading">
-                        @(_isLoading ? "Importing..." : "Import Data")
-                    </MudButton>
-                </MudStack>
-            </MudStack>
-        </MudPaper>
+                    </TwSelect>
+                </div>
+                <TwButton Variant="secondary" 
+                           OnClick="ImportData" 
+                           IsLoading="@_isLoading" 
+                           Disabled="@_isLoading"
+                           StartIcon="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                           Class="bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/30 text-amber-500 font-bold">
+                    @(_isLoading ? "Importing..." : "Import Data")
+                </TwButton>
+            </div>
+        </div>
+    </div>
 
-        @* Status Alert *@
-        @if (!_apiAvailable)
-        {
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Filled">
-                <strong>CFB API Key Required:</strong> Add CFBD_API_KEY to your .env file. 
-                <MudLink Href="https://collegefootballdata.com/key" Target="_blank" Style="color: white;">Get a free key here</MudLink>
-            </MudAlert>
-        }
+    <!-- Status Alert -->
+    @if (!_apiAvailable)
+    {
+        <TwAlert Severity="warning" Class="mb-8">
+            <div class="flex items-center gap-2">
+                <span class="font-bold">CFB API Key Required:</span> 
+                <span>Add CFBD_API_KEY to your .env file.</span>
+                <a href="https://collegefootballdata.com/key" target="_blank" class="underline hover:text-amber-400 transition-colors">Get a free key here</a>
+            </div>
+        </TwAlert>
+    }
 
-        @* Stats Summary Cards *@
-        <MudGrid>
-            <MudItem xs="12" sm="4">
-                <MudPaper Class="pa-4" Elevation="2" Style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-                    <MudStack AlignItems="AlignItems.Center">
-                        <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Large" />
-                        <MudText Typo="Typo.h4">@_teams.Count</MudText>
-                        <MudText Typo="Typo.subtitle2">Teams Loaded</MudText>
-                    </MudStack>
-                </MudPaper>
-            </MudItem>
-            <MudItem xs="12" sm="4">
-                <MudPaper Class="pa-4" Elevation="2" Style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white;">
-                    <MudStack AlignItems="AlignItems.Center">
-                        <MudIcon Icon="@Icons.Material.Filled.Event" Size="Size.Large" />
-                        <MudText Typo="Typo.h4">@_games.Count</MudText>
-                        <MudText Typo="Typo.subtitle2">Games</MudText>
-                    </MudStack>
-                </MudPaper>
-            </MudItem>
-            <MudItem xs="12" sm="4">
-                <MudPaper Class="pa-4" Elevation="2" Style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
-                    <MudStack AlignItems="AlignItems.Center">
-                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" />
-                        <MudText Typo="Typo.h4">@_players.Count</MudText>
-                        <MudText Typo="Typo.subtitle2">Player Stats</MudText>
-                    </MudStack>
-                </MudPaper>
-            </MudItem>
-        </MudGrid>
+    <!-- Stats Summary Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
+        <TwCard Class="p-6 bg-gradient-to-br from-[#667eea] to-[#764ba2] border-none shadow-xl">
+            <div class="flex flex-col items-center text-center text-white">
+                <div class="p-3 bg-white/10 rounded-full mb-4">
+                    <TwIcon Icon="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" Class="w-8 h-8" />
+                </div>
+                <div class="text-4xl font-black mb-1">@_teams.Count</div>
+                <div class="text-sm font-bold uppercase tracking-wider opacity-80">Teams Loaded</div>
+            </div>
+        </TwCard>
+        
+        <TwCard Class="p-6 bg-gradient-to-br from-[#11998e] to-[#38ef7d] border-none shadow-xl">
+            <div class="flex flex-col items-center text-center text-white">
+                <div class="p-3 bg-white/10 rounded-full mb-4">
+                    <TwIcon Icon="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" Class="w-8 h-8" />
+                </div>
+                <div class="text-4xl font-black mb-1">@_games.Count</div>
+                <div class="text-sm font-bold uppercase tracking-wider opacity-80">Games</div>
+            </div>
+        </TwCard>
+        
+        <TwCard Class="p-6 bg-gradient-to-br from-[#f093fb] to-[#f5576c] border-none shadow-xl">
+            <div class="flex flex-col items-center text-center text-white">
+                <div class="p-3 bg-white/10 rounded-full mb-4">
+                    <TwIcon Icon="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" Class="w-8 h-8" />
+                </div>
+                <div class="text-4xl font-black mb-1">@_players.Count</div>
+                <div class="text-sm font-bold uppercase tracking-wider opacity-80">Player Stats</div>
+            </div>
+        </TwCard>
+    </div>
 
-        @* Main Content Tabs *@
-        <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4" Color="Color.Primary">
-            @* Teams Tab *@
-            <MudTabPanel Text="Teams" Icon="@Icons.Material.Filled.Groups">
-                <MudStack Spacing="2">
-                    <MudStack Row="true" Spacing="2">
-                        <MudTextField @bind-Value="_teamSearch" Label="Search Teams" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Clearable="true" Immediate="true" />
-                        <MudSelect T="string" @bind-Value="_conferenceFilter" Label="Conference" Variant="Variant.Outlined" Clearable="true" Style="min-width: 200px;">
+    <TwTabs>
+        @* Teams Tab *@
+        <TwTabPanel Title="Teams" TabIcon="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z">
+            <div class="space-y-6 mt-6">
+                <!-- Filters -->
+                <div class="flex flex-wrap gap-4 items-end bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
+                    <div class="flex-1 min-w-[200px]">
+                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Search Teams</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <TwIcon Icon="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" Class="h-4 w-4 text-slate-500" />
+                            </div>
+                            <input type="text" @bind-value="_teamSearch" @bind-value:event="oninput"
+                                   class="block w-full pl-10 pr-3 py-2 border border-slate-700 rounded-lg bg-slate-900 text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all sm:text-sm" 
+                                   placeholder="Type team name..." />
+                        </div>
+                    </div>
+                    <div class="w-full sm:w-64">
+                        <TwSelect TValue="string" @bind-Value="_conferenceFilter" Label="Conference" FullWidth="true">
+                            <option value="">All Conferences</option>
                             @foreach (var conf in _conferences)
                             {
-                                <MudSelectItem Value="@conf">@conf</MudSelectItem>
+                                <option value="@conf">@conf</option>
                             }
-                        </MudSelect>
-                    </MudStack>
-                    
-                    <MudDataGrid T="TeamInfo" Items="@FilteredTeams" Filterable="false" SortMode="SortMode.Multiple" Hover="true" Dense="true">
-                        <Columns>
-                            <PropertyColumn Property="x => x.School" Title="Team" />
-                            <PropertyColumn Property="x => x.Conference" Title="Conference" />
-                            <PropertyColumn Property="x => x.Division" Title="Division" />
-                            <PropertyColumn Property="x => x.Mascot" Title="Mascot" />
-                            <TemplateColumn Title="Colors">
-                                <CellTemplate>
-                                    <MudStack Row="true" Spacing="1">
-                                        <div style="width: 20px; height: 20px; border-radius: 4px; background: @(context.Item.Color ?? "#333");"></div>
-                                        <div style="width: 20px; height: 20px; border-radius: 4px; background: @(context.Item.AltColor ?? "#666");"></div>
-                                    </MudStack>
-                                </CellTemplate>
-                            </TemplateColumn>
-                        </Columns>
-                        <NoRecordsContent>
-                            <MudText>No teams found. Click "Import Data" to fetch teams.</MudText>
-                        </NoRecordsContent>
-                    </MudDataGrid>
-                </MudStack>
-            </MudTabPanel>
+                        </TwSelect>
+                    </div>
+                </div>
+                
+                <TwTable Items="@FilteredTeams" IsLoading="@_isLoading" Class="bg-slate-900/50">
+                    <HeaderContent>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Team</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Conference</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Division</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider text-center">Colors</th>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <td class="px-4 py-3 whitespace-nowrap text-slate-300">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs shadow-sm"
+                                     style="background: @(context.Color ?? "#334155")">
+                                    @(context.School?[0])
+                                </div>
+                                <div class="flex flex-col">
+                                    <span class="text-sm font-bold text-slate-200">@context.School</span>
+                                    <span class="text-[10px] text-slate-500 uppercase tracking-tighter">@context.Mascot</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3 whitespace-nowrap">
+                            <TwChip Color="blue" Variant="solid" Size="sm">@context.Conference</TwChip>
+                        </td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-400">@context.Division</td>
+                        <td class="px-4 py-3 whitespace-nowrap">
+                            <div class="flex justify-center gap-2">
+                                <div class="w-6 h-6 rounded border border-white/10 shadow-sm" style="background: @(context.Color ?? "#333");"></div>
+                                <div class="w-6 h-6 rounded border border-white/10 shadow-sm" style="background: @(context.AltColor ?? "#666");"></div>
+                            </div>
+                        </td>
+                    </RowTemplate>
+                </TwTable>
+            </div>
+        </TwTabPanel>
 
-            @* Games Tab *@
-            <MudTabPanel Text="Schedule" Icon="@Icons.Material.Filled.EventNote">
-                <MudStack Spacing="2">
-                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                        <MudSelect T="int?" @bind-Value="_weekFilter" Label="Week" Variant="Variant.Outlined" Clearable="true" Style="min-width: 120px;">
+        <!-- Schedule Tab -->
+        <TwTabPanel Title="Schedule" TabIcon="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z">
+            <div class="space-y-6 mt-6">
+                <!-- Filters -->
+                <div class="flex flex-wrap gap-4 items-end bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
+                    <div class="w-full sm:w-32">
+                        <TwSelect TValue="int?" @bind-Value="_weekFilter" Label="Week" FullWidth="true">
+                            <option value="">All Weeks</option>
                             @for (int w = 1; w <= 15; w++)
                             {
-                                <MudSelectItem Value="@((int?)w)">Week @w</MudSelectItem>
+                                <option value="@((int?)w)">Week @w</option>
                             }
-                        </MudSelect>
-                        <MudTextField @bind-Value="_gameTeamSearch" Label="Search Team" Variant="Variant.Outlined" Clearable="true" Immediate="true" />
-                    </MudStack>
-                    
-                    <MudDataGrid T="GameInfo" Items="@FilteredGames" Filterable="false" SortMode="SortMode.Multiple" Hover="true" Dense="true">
-                        <Columns>
-                            <PropertyColumn Property="x => x.Week" Title="Week" />
-                            <PropertyColumn Property="x => x.HomeTeam" Title="Home" />
-                            <PropertyColumn Property="x => x.AwayTeam" Title="Away" />
-                            <TemplateColumn Title="Score">
-                                <CellTemplate>
-                                    @if (context.Item.HomePoints.HasValue)
-                                    {
-                                        <MudText>@context.Item.HomePoints - @context.Item.AwayPoints</MudText>
-                                    }
-                                    else
-                                    {
-                                        <MudChip T="string" Size="Size.Small" Color="Color.Info">Upcoming</MudChip>
-                                    }
-                                </CellTemplate>
-                            </TemplateColumn>
-                            <PropertyColumn Property="x => x.Venue" Title="Venue" />
-                        </Columns>
-                        <NoRecordsContent>
-                            <MudText>No games found for selected filters.</MudText>
-                        </NoRecordsContent>
-                    </MudDataGrid>
-                </MudStack>
-            </MudTabPanel>
+                        </TwSelect>
+                    </div>
+                    <div class="flex-1 min-w-[200px]">
+                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Search Team</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <TwIcon Icon="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" Class="h-4 w-4 text-slate-500" />
+                            </div>
+                            <input type="text" @bind-value="_gameTeamSearch" @bind-value:event="oninput"
+                                   class="block w-full pl-10 pr-3 py-2 border border-slate-700 rounded-lg bg-slate-900 text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all sm:text-sm" 
+                                   placeholder="Team name..." />
+                        </div>
+                    </div>
+                </div>
 
-            @* Player Stats Tab *@
-            <MudTabPanel Text="Player Stats" Icon="@Icons.Material.Filled.Person">
-                <MudStack Spacing="2">
-                    <MudStack Row="true" Spacing="2">
-                        <MudTextField @bind-Value="_playerSearch" Label="Search Player" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Clearable="true" Immediate="true" />
-                        <MudSelect T="string" @bind-Value="_positionFilter" Label="Position" Variant="Variant.Outlined" Clearable="true" Style="min-width: 150px;">
-                            <MudSelectItem Value="@("QB")">Quarterback</MudSelectItem>
-                            <MudSelectItem Value="@("RB")">Running Back</MudSelectItem>
-                            <MudSelectItem Value="@("WR")">Wide Receiver</MudSelectItem>
-                            <MudSelectItem Value="@("TE")">Tight End</MudSelectItem>
-                            <MudSelectItem Value="@("LB")">Linebacker</MudSelectItem>
-                            <MudSelectItem Value="@("DB")">Defensive Back</MudSelectItem>
-                        </MudSelect>
-                    </MudStack>
-                    
-                    <MudDataGrid T="PlayerStat" Items="@FilteredPlayers" Filterable="false" SortMode="SortMode.Multiple" Hover="true" Dense="true">
-                        <Columns>
-                            <PropertyColumn Property="x => x.Player" Title="Player" />
-                            <PropertyColumn Property="x => x.Team" Title="Team" />
-                            <PropertyColumn Property="x => x.Position" Title="Pos" />
-                            <PropertyColumn Property="x => x.Category" Title="Category" />
-                            <PropertyColumn Property="x => x.StatType" Title="Stat" />
-                            <PropertyColumn Property="x => x.Stat" Title="Value" />
-                        </Columns>
-                        <NoRecordsContent>
-                            <MudText>No player stats found. Click "Import Data" to fetch stats.</MudText>
-                        </NoRecordsContent>
-                    </MudDataGrid>
-                </MudStack>
-            </MudTabPanel>
-        </MudTabs>
-    </MudStack>
-</MudContainer>
+                <TwTable Items="@FilteredGames" IsLoading="@_isLoading" Class="bg-slate-900/50">
+                    <HeaderContent>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Week</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Game</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Score</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Venue</th>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-400">@context.Week</td>
+                        <td class="px-4 py-3 whitespace-nowrap">
+                            <div class="flex flex-col gap-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-slate-500 text-[10px] font-bold w-6">HOME</span>
+                                    <span class="text-sm font-semibold text-slate-200">@context.HomeTeam</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-slate-500 text-[10px] font-bold w-6">AWAY</span>
+                                    <span class="text-sm font-semibold text-slate-200">@context.AwayTeam</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3 whitespace-nowrap">
+                            @if (context.HomePoints.HasValue)
+                            {
+                                <div class="flex flex-col gap-1 font-mono text-sm leading-none">
+                                    <div class="@(context.HomePoints > context.AwayPoints ? "text-emerald-400 font-bold" : "text-slate-400")">
+                                        @context.HomePoints
+                                    </div>
+                                    <div class="@(context.AwayPoints > context.HomePoints ? "text-emerald-400 font-bold" : "text-slate-400")">
+                                        @context.AwayPoints
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <TwChip Color="blue" Variant="solid" Size="sm">UPCOMING</TwChip>
+                            }
+                        </td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-500 italic truncate max-w-[200px]">
+                            @context.Venue
+                        </td>
+                    </RowTemplate>
+                </TwTable>
+            </div>
+        </TwTabPanel>
+
+        <!-- Player Stats Tab -->
+        <TwTabPanel Title="Player Stats" TabIcon="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z">
+            <div class="space-y-6 mt-6">
+                <!-- Filters -->
+                <div class="flex flex-wrap gap-4 items-end bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
+                    <div class="flex-1 min-w-[200px]">
+                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Search Player</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <TwIcon Icon="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" Class="h-4 w-4 text-slate-500" />
+                            </div>
+                            <input type="text" @bind-value="_playerSearch" @bind-value:event="oninput"
+                                   class="block w-full pl-10 pr-3 py-2 border border-slate-700 rounded-lg bg-slate-900 text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all sm:text-sm" 
+                                   placeholder="Player name..." />
+                        </div>
+                    </div>
+                    <div class="w-full sm:w-48">
+                        <TwSelect TValue="string" @bind-Value="_positionFilter" Label="Position" FullWidth="true">
+                            <option value="">All Positions</option>
+                            <option value="QB">Quarterback</option>
+                            <option value="RB">Running Back</option>
+                            <option value="WR">Wide Receiver</option>
+                            <option value="TE">Tight End</option>
+                            <option value="LB">Linebacker</option>
+                            <option value="DB">Defensive Back</option>
+                        </TwSelect>
+                    </div>
+                </div>
+
+                <TwTable Items="@FilteredPlayers" IsLoading="@_isLoading" Class="bg-slate-900/50">
+                    <HeaderContent>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Player</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Team</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider text-center">Pos</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Stat</th>
+                        <th class="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Value</th>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <td class="px-4 py-3 whitespace-nowrap">
+                            <div class="text-sm font-bold text-slate-200">@context.Player</div>
+                        </td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-400">@context.Team</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-center">
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                                @context.Position
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 whitespace-nowrap">
+                            <div class="flex flex-col">
+                                <span class="text-xs font-semibold text-slate-300">@context.StatType</span>
+                                <span class="text-[10px] text-slate-500 uppercase">@context.Category</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3 whitespace-nowrap text-right font-mono text-blue-400 font-bold">
+                            @context.Stat
+                        </td>
+                    </RowTemplate>
+                </TwTable>
+            </div>
+        </TwTabPanel>
+    </TwTabs>
+</TwContainer>
 
 @code {
     private string _apiBaseUrl = "http://backend:8000";

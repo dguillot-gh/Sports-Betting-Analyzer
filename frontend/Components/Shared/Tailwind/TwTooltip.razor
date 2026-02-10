@@ -1,0 +1,14 @@
+@namespace SportsBettingAnalyzer.Components.Shared.Tailwind
+
+<div class="group relative inline-block">
+    @ChildContent
+    <div class="invisible group-hover:visible absolute z-10 px-3 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg shadow-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300 dark:bg-gray-700 -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap">
+        @Text
+        <div class="w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-gray-900 absolute left-1/2 -translate-x-1/2 top-full"></div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Text { get; set; } = "";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

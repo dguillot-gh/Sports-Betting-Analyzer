@@ -39,7 +39,10 @@ async def get_todays_nba_odds(sportsbook: str = "fanduel") -> Dict[str, Any]:
         return {"error": "sbrscrape not installed", "games": []}
     
     try:
-        today = date.today()
+        from datetime import timedelta
+        # Use "Sports Date" (UTC - 6 hours) so late games count as "today"
+        # This prevents games from disappearing when UTC passes midnight (which is only 7 PM ET)
+        today = (datetime.utcnow() - timedelta(hours=6)).date()
         sb = Scoreboard(sport="NBA", date=today)
         
         if not hasattr(sb, "games") or not sb.games:
@@ -170,8 +173,15 @@ async def get_all_sportsbook_odds() -> Dict[str, Any]:
     except ImportError:
         return {"error": "sbrscrape not installed"}
     
-    today = date.today()
-    sb = Scoreboard(sport="NBA", date=today)
+    try:
+        from datetime import timedelta
+        # Use "Sports Date" (UTC - 6 hours) so late games count as "today"
+        # This prevents games from disappearing when UTC passes midnight (which is only 7 PM ET)
+        today = (datetime.utcnow() - timedelta(hours=6)).date()
+        sb = Scoreboard(sport="NBA", date=today)
+    except Exception as e:
+        logger.error(f"Error initializing Scoreboard: {e}")
+        return {"error": str(e), "games": []}
     
     if not hasattr(sb, "games") or not sb.games:
         return {"date": str(today), "games": []}

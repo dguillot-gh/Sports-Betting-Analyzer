@@ -121,7 +121,9 @@ async def get_todays_cfb_odds(sportsbook: str = "fanduel") -> Dict[str, Any]:
     import os
     from datetime import date
     
-    today = date.today()
+    from datetime import timedelta
+    # Use "Sports Date" (UTC - 6 hours) so late games count as "today"
+    today = (datetime.utcnow() - timedelta(hours=6)).date()
     
     # Map sportsbook names to Odds API format
     SPORTSBOOK_MAP = {
@@ -212,7 +214,9 @@ async def get_todays_cfb_odds(sportsbook: str = "fanduel") -> Dict[str, Any]:
                          "error": f"The Odds API returned status {response.status_code}",
                          "details": response.text,
                          "games": []
-                    }
+                     }
+        except Exception as e:
+            logger.warning(f"The Odds API request failed: {e}")
                     
     # Fallback to sbrscrape
     try:

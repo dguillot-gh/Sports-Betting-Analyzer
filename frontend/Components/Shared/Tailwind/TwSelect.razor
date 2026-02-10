@@ -1,0 +1,52 @@
+@namespace SportsBettingAnalyzer.Components.Shared.Tailwind
+@typeparam TValue
+
+<div class="relative @(FullWidth ? "w-full" : "min-w-[140px]") @Class">
+    @if (!string.IsNullOrEmpty(Label))
+    {
+        <label class="block text-xs text-slate-500 mb-1 font-medium">@Label</label>
+    }
+    <div class="relative">
+        <select @bind="Value" 
+                @bind:after="OnValueChanged"
+                disabled="@Disabled"
+                class="w-full appearance-none bg-slate-800 text-sm border border-slate-700 rounded-xl px-4 py-2.5 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed @(Disabled ? "" : "hover:border-slate-600")"
+                @attributes="AdditionalAttributes">
+            @if (!string.IsNullOrEmpty(Placeholder))
+            {
+                <option value="">@Placeholder</option>
+            }
+            @if (Items != null)
+            {
+                @foreach (var item in Items)
+                {
+                    <option value="@item.Value">@item.Key</option>
+                }
+            }
+            @ChildContent
+        </select>
+        <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+            </svg>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public TValue? Value { get; set; }
+    [Parameter] public EventCallback<TValue?> ValueChanged { get; set; }
+    [Parameter] public IEnumerable<KeyValuePair<string, TValue>>? Items { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "";
+    [Parameter] public bool Disabled { get; set; } = false;
+    [Parameter] public bool FullWidth { get; set; } = false;
+    [Parameter] public string Class { get; set; } = "";
+
+    private async Task OnValueChanged()
+    {
+        await ValueChanged.InvokeAsync(Value);
+    }
+}

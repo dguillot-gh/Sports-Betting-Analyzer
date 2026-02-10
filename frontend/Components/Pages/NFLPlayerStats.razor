@@ -1,0 +1,414 @@
+@page "/nfl/player-stats"
+@rendermode InteractiveServer
+
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+<PageTitle>NFL Player Stats</PageTitle>
+
+<div class="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
+    <TwContainer MaxWidth="7xl">
+        
+        <!-- Header Section -->
+        <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+            <div class="flex items-center gap-3">
+                <div class="bg-blue-600 p-3 rounded-xl shadow-lg shadow-blue-900/20">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-bold tracking-tight">NFL Player Stats</h1>
+                    <p class="text-slate-400 text-sm">Season statistics and player performance data</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- Filters Card -->
+        <TwCard Color="blue" Class="mb-6">
+            <div class="flex flex-wrap items-end gap-4">
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1">Season</label>
+                    <TwSelect TValue="int?" @bind-Value="_selectedSeason">
+                        @foreach (var season in _availableSeasons)
+                        {
+                            <option value="@season">@season</option>
+                        }
+                    </TwSelect>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1">Team</label>
+                    <TwSelect TValue="string?" @bind-Value="_selectedTeam" Placeholder="All Teams">
+                        @foreach (var team in _nflTeams.OrderBy(t => t.Value))
+                        {
+                            <option value="@team.Key">@team.Value</option>
+                        }
+                    </TwSelect>
+                </div>
+
+                <div class="min-w-[200px]">
+                    <TwInput Label="Player" @bind-Value="_selectedPlayer"
+                             Placeholder="Filter by player..."
+                             ShowSearchIcon="true" />
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1">Position</label>
+                    <TwSelect TValue="string?" @bind-Value="_selectedPosition" Placeholder="All Positions">
+                        <option value="QB">Quarterback</option>
+                        <option value="RB">Running Back</option>
+                        <option value="WR">Wide Receiver</option>
+                        <option value="TE">Tight End</option>
+                    </TwSelect>
+                </div>
+
+                <TwButton Variant="primary" OnClick="LoadResults" IsLoading="_isLoading" Disabled="_isLoading">
+                    Search
+                </TwButton>
+            </div>
+        </TwCard>
+
+        <!-- Loading State -->
+        @if (_isLoading)
+        {
+            <div class="mb-6">
+                <TwProgressBar Indeterminate="true" Color="blue" Size="md" />
+            </div>
+        }
+
+        <!-- Results Table -->
+        @if (_results.Any())
+        {
+            <TwCard Color="slate" Class="overflow-hidden">
+                <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+                    <TwTable TItem="object">
+                        <HeaderContent>
+                            <TwTh>Season</TwTh>
+                            <TwTh>Player</TwTh>
+                            <TwTh>Pos</TwTh>
+                            <TwTh>Team</TwTh>
+                            <TwTh Class="text-right">Games</TwTh>
+                            <TwTh Class="text-right">Pass Yds</TwTh>
+                            <TwTh Class="text-right">Pass TD</TwTh>
+                            <TwTh Class="text-right">Rush Yds</TwTh>
+                            <TwTh Class="text-right">Rush TD</TwTh>
+                            <TwTh Class="text-right">Rec</TwTh>
+                            <TwTh Class="text-right">Rec Yds</TwTh>
+                            <TwTh Class="text-right">Rec TD</TwTh>
+                        </HeaderContent>
+                        <ChildContent>
+                            @foreach (var result in _results)
+                            {
+                                <TwTr>
+                                    <TwTd>@result.Season</TwTd>
+                                    <TwTd>
+                                        <TwLink Href="@($"/nfl-player-profiles?player={Uri.EscapeDataString(result.PlayerName ?? "")}")">
+                                            @result.PlayerName
+                                        </TwLink>
+                                    </TwTd>
+                                    <TwTd>
+                                        <TwChip Size="sm" Color="@GetPositionColor(result.Position)">@result.Position</TwChip>
+                                    </TwTd>
+                                    <TwTd>@result.Team</TwTd>
+                                    <TwTd Class="text-right">@(result.Games ?? 0)</TwTd>
+                                    <TwTd Class="text-right">
+                                        @if (result.PassYds > 0)
+                                        {
+                                            <strong class="text-white">@result.PassYds.ToString("N0")</strong>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-slate-600">-</span>
+                                        }
+                                    </TwTd>
+                                    <TwTd Class="text-right">
+                                        @if (result.PassTd > 0)
+                                        {
+                                            <TwChip Size="sm" Color="emerald">@result.PassTd</TwChip>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-slate-600">-</span>
+                                        }
+                                    </TwTd>
+                                    <TwTd Class="text-right">
+                                        @if (result.RushYds > 0)
+                                        {
+                                            <strong class="text-white">@result.RushYds.ToString("N0")</strong>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-slate-600">-</span>
+                                        }
+                                    </TwTd>
+                                    <TwTd Class="text-right">
+                                        @if (result.RushTd > 0)
+                                        {
+                                            <TwChip Size="sm" Color="emerald">@result.RushTd</TwChip>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-slate-600">-</span>
+                                        }
+                                    </TwTd>
+                                    <TwTd Class="text-right">@(result.Rec ?? 0)</TwTd>
+                                    <TwTd Class="text-right">
+                                        @if (result.RecYds > 0)
+                                        {
+                                            <strong class="text-white">@result.RecYds.ToString("N0")</strong>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-slate-600">-</span>
+                                        }
+                                    </TwTd>
+                                    <TwTd Class="text-right">
+                                        @if (result.RecTd > 0)
+                                        {
+                                            <TwChip Size="sm" Color="emerald">@result.RecTd</TwChip>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-slate-600">-</span>
+                                        }
+                                    </TwTd>
+                                </TwTr>
+                            }
+                        </ChildContent>
+                    </TwTable>
+                </div>
+            </TwCard>
+            
+            <div class="mt-4 text-center">
+                <TwChip Color="slate" Size="lg">Showing @_results.Count of @_totalResults results</TwChip>
+            </div>
+        }
+        else if (!_isLoading && _hasSearched)
+        {
+            <TwAlert Severity="info">
+                No results found. Try adjusting your filters.
+            </TwAlert>
+        }
+    </TwContainer>
+</div>
+
+@code {
+    private int? _selectedSeason;
+    private string? _selectedPlayer;
+    private string? _selectedPosition;
+    private string? _selectedTeam;
+    private bool _isLoading = false;
+    private bool _hasSearched = false;
+    
+    private List<int> _availableSeasons = new();
+    private List<NFLPlayerResult> _results = new();
+    private int _totalResults = 0;
+    
+    private readonly Dictionary<string, string> _nflTeams = new()
+    {
+        { "ARI", "Arizona Cardinals" },
+        { "ATL", "Atlanta Falcons" },
+        { "BAL", "Baltimore Ravens" },
+        { "BUF", "Buffalo Bills" },
+        { "CAR", "Carolina Panthers" },
+        { "CHI", "Chicago Bears" },
+        { "CIN", "Cincinnati Bengals" },
+        { "CLE", "Cleveland Browns" },
+        { "DAL", "Dallas Cowboys" },
+        { "DEN", "Denver Broncos" },
+        { "DET", "Detroit Lions" },
+        { "GB", "Green Bay Packers" },
+        { "HOU", "Houston Texans" },
+        { "IND", "Indianapolis Colts" },
+        { "JAX", "Jacksonville Jaguars" },
+        { "KC", "Kansas City Chiefs" },
+        { "LV", "Las Vegas Raiders" },
+        { "LAC", "Los Angeles Chargers" },
+        { "LA", "Los Angeles Rams" },
+        { "LAR", "Los Angeles Rams" },
+        { "MIA", "Miami Dolphins" },
+        { "MIN", "Minnesota Vikings" },
+        { "NE", "New England Patriots" },
+        { "NO", "New Orleans Saints" },
+        { "NYG", "New York Giants" },
+        { "NYJ", "New York Jets" },
+        { "OAK", "Las Vegas Raiders" },
+        { "PHI", "Philadelphia Eagles" },
+        { "PIT", "Pittsburgh Steelers" },
+        { "SF", "San Francisco 49ers" },
+        { "SEA", "Seattle Seahawks" },
+        { "TB", "Tampa Bay Buccaneers" },
+        { "TEN", "Tennessee Titans" },
+        { "WAS", "Washington Commanders" },
+        { "WSH", "Washington Commanders" }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSeasons();
+        await LoadResults();
+    }
+
+    private async Task LoadSeasons()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<SeasonsResponse>(
+                $"http://backend:8000/db/stats/nfl/seasons");
+            _availableSeasons = response?.Seasons ?? new List<int>();
+            
+            if (_availableSeasons.Any() && !_selectedSeason.HasValue)
+            {
+                _selectedSeason = _availableSeasons.First();
+            }
+        }
+        catch
+        {
+            _availableSeasons = Enumerable.Range(2020, 6).Reverse().ToList();
+        }
+    }
+
+    private async Task LoadResults()
+    {
+        _isLoading = true;
+        _hasSearched = true;
+        StateHasChanged();
+        
+        try
+        {
+            var url = $"http://backend:8000/db/stats/nfl/list?limit=500";
+            
+            if (_selectedSeason.HasValue)
+                url += $"&season={_selectedSeason.Value}";
+            if (!string.IsNullOrEmpty(_selectedTeam))
+                url += $"&team={Uri.EscapeDataString(_selectedTeam)}";
+            if (!string.IsNullOrEmpty(_selectedPlayer))
+                url += $"&player={Uri.EscapeDataString(_selectedPlayer)}";
+            if (!string.IsNullOrEmpty(_selectedPosition))
+                url += $"&position={Uri.EscapeDataString(_selectedPosition)}";
+            
+            var response = await Http.GetFromJsonAsync<NFLResultsResponse>(url);
+            
+            _results = (response?.Results ?? new())
+                .Select(r => new NFLPlayerResult
+                {
+                    Season = r.Season,
+                    PlayerName = r.PlayerName,
+                    Position = r.Position,
+                    Team = r.Team,
+                    Games = r.Games,
+                    PassYds = r.PassYds ?? 0,
+                    PassTd = r.PassTd ?? 0,
+                    RushYds = r.RushYds ?? 0,
+                    RushTd = r.RushTd ?? 0,
+                    Rec = r.Rec,
+                    RecYds = r.RecYds ?? 0,
+                    RecTd = r.RecTd ?? 0
+                })
+                .Where(r => string.IsNullOrEmpty(_selectedPosition) || r.Position == _selectedPosition)
+                .Where(r => string.IsNullOrEmpty(_selectedTeam) || r.Team == _selectedTeam)
+                .OrderByDescending(r => r.Season)
+                .ThenByDescending(r => r.PassYds + r.RushYds + r.RecYds)
+                .ToList();
+            
+            _totalResults = response?.Count ?? _results.Count;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading results: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetPositionColor(string? position) => position switch
+    {
+        "QB" => "blue",
+        "RB" => "emerald",
+        "WR" => "amber",
+        "TE" => "purple",
+        _ => "slate"
+    };
+
+    // Response Models
+    private class SeasonsResponse
+    {
+        public List<int> Seasons { get; set; } = new();
+    }
+
+    private class ProfileListResponse
+    {
+        public List<EntityInfo> Entities { get; set; } = new();
+    }
+
+    private class EntityInfo
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+    }
+
+    private class NFLResultsResponse
+    {
+        public List<NFLResultItem> Results { get; set; } = new();
+        public int Count { get; set; }
+    }
+
+    private class NFLResultItem
+    {
+        public int Id { get; set; }
+        public int Season { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("player_name")]
+        public string? PlayerName { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("position")]
+        public string? Position { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("team")]
+        public string? Team { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("games")]
+        public int? Games { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("pass_yds")]
+        public int? PassYds { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("pass_td")]
+        public int? PassTd { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rush_yds")]
+        public int? RushYds { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rush_td")]
+        public int? RushTd { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rec")]
+        public int? Rec { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rec_yds")]
+        public int? RecYds { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rec_td")]
+        public int? RecTd { get; set; }
+    }
+
+    private class NFLPlayerResult
+    {
+        public int Season { get; set; }
+        public string? PlayerName { get; set; }
+        public string? Position { get; set; }
+        public string? Team { get; set; }
+        public int? Games { get; set; }
+        public int PassYds { get; set; }
+        public int PassTd { get; set; }
+        public int RushYds { get; set; }
+        public int RushTd { get; set; }
+        public int? Rec { get; set; }
+        public int RecYds { get; set; }
+        public int RecTd { get; set; }
+    }
+}

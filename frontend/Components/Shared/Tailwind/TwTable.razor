@@ -1,0 +1,64 @@
+@typeparam TItem
+@namespace SportsBettingAnalyzer.Components.Shared.Tailwind
+
+<div class="overflow-x-auto @Class">
+    <table class="w-full text-left">
+        @if (HeaderContent != null)
+        {
+            <thead class="bg-slate-800/50 border-b border-slate-700">
+                <tr>
+                    @HeaderContent
+                </tr>
+            </thead>
+        }
+        <tbody class="divide-y divide-slate-800">
+            @if (IsLoading)
+            {
+                <tr>
+                    <td colspan="100" class="py-12 text-center text-slate-500 font-medium">
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="w-8 h-8 border-2 border-slate-700 border-t-blue-500 rounded-full animate-spin"></div>
+                            <span>Loading data...</span>
+                        </div>
+                    </td>
+                </tr>
+            }
+            else if (Items == null || !Items.Any())
+            {
+                <tr>
+                    <td colspan="100" class="py-12 text-center text-slate-500 font-medium italic">
+                        @EmptyMessage
+                    </td>
+                </tr>
+            }
+            else if (RowTemplate != null)
+            {
+                var filteredItems = Filter != null ? Items?.Where(Filter) : Items;
+                @if (filteredItems != null)
+                {
+                    @foreach (var item in filteredItems)
+                    {
+                        <tr>
+                            @RowTemplate(item)
+                        </tr>
+                    }
+                }
+            }
+            else
+            {
+                @ChildContent
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [Parameter] public RenderFragment? HeaderContent { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment<TItem>? RowTemplate { get; set; }
+    [Parameter] public IEnumerable<TItem>? Items { get; set; }
+    [Parameter] public Func<TItem, bool>? Filter { get; set; }
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public string EmptyMessage { get; set; } = "No items found.";
+    [Parameter] public string Class { get; set; } = "";
+}

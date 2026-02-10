@@ -1,0 +1,9 @@
+@namespace SportsBettingAnalyzer.Components.Shared.Tailwind
+
+<nav class="space-y-1 py-4 px-3">
+    @ChildContent
+</nav>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

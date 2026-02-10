@@ -1,0 +1,22 @@
+@namespace SportsBettingAnalyzer.Components.Shared.Tailwind
+@using Microsoft.AspNetCore.Components.Routing
+
+<NavLink href="@Href" Match="@Match" class="@ComputedClass">
+    @if (!string.IsNullOrEmpty(Icon))
+    {
+        <TwIcon Icon="@Icon" Class="mr-3 h-5 w-5 flex-shrink-0 opacity-75" />
+    }
+    <span class="flex-1 truncate">@ChildContent</span>
+</NavLink>
+
+@code {
+    [Parameter] public string Href { get; set; } = "";
+    [Parameter] public NavLinkMatch Match { get; set; } = NavLinkMatch.Prefix;
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? ValidStyle { get; set; } // For custom styles passed from parent
+
+    private string ComputedClass => $"group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-slate-800 hover:text-white {Class} " + 
+                                   "text-slate-400 [&.active]:bg-slate-800 [&.active]:text-white [&.active]:shadow-sm border-l-2 border-transparent [&.active]:border-blue-500";
+}

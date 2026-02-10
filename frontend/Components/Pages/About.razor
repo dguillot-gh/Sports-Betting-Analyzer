@@ -1,356 +1,217 @@
 @page "/about"
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
 @rendermode InteractiveServer
 
 <PageTitle>About - Sports Betting Analyzer</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <MudStack Spacing="4">
+<TwContainer MaxWidth="large" Class="mt-8">
+    <div class="space-y-8 pb-12">
         <!-- Header -->
-        <MudPaper Class="pa-6" Elevation="2">
-            <div class="d-flex align-center mb-4">
-                <MudIcon Icon="@Icons.Material.Filled.Analytics" Size="Size.Large" Color="Color.Primary" Class="mr-3" />
+        <TwCard Class="p-8 bg-slate-900 border-slate-800 shadow-2xl">
+            <div class="flex items-center gap-6 mb-6">
+                <div class="bg-blue-600/20 p-4 rounded-2xl">
+                    <TwIcon Icon="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" Class="w-12 h-12 text-blue-400" />
+                </div>
                 <div>
-                    <MudText Typo="Typo.h4">Sports Betting Analyzer</MudText>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        Machine Learning-Powered Sports Prediction Platform
-                    </MudText>
+                    <h1 class="text-4xl font-extrabold text-white tracking-tight">Sports Betting Analyzer</h1>
+                    <p class="text-slate-400 text-lg mt-1">Machine Learning-Powered Sports Prediction Platform</p>
                 </div>
             </div>
-            <MudText Typo="Typo.body1">
+            <p class="text-slate-300 text-lg leading-relaxed max-w-3xl">
                 A full-stack application that uses machine learning to analyze sports data and generate predictions 
                 for NASCAR, NFL, and NBA. Built with Blazor, Python, and modern ML frameworks.
-            </MudText>
-        </MudPaper>
+            </p>
+        </TwCard>
 
         <!-- Architecture Overview -->
-        <MudPaper Class="pa-4" Elevation="2">
-            <MudText Typo="Typo.h5" Class="mb-3">
-                <MudIcon Icon="@Icons.Material.Filled.Architecture" Class="mr-2" />
-                System Architecture
-            </MudText>
-            <MudGrid>
-                <MudItem xs="12" md="4">
-                    <MudCard Outlined="true" Class="pa-3">
-                        <MudText Typo="Typo.h6" Color="Color.Primary">Frontend</MudText>
-                        <MudText Typo="Typo.body2" Class="mb-2">Blazor Server (.NET 9)</MudText>
-                        <MudList T="string" Dense="true">
-                            <MudListItem Icon="@Icons.Material.Filled.Dashboard">MudBlazor UI Components</MudListItem>
-                            <MudListItem Icon="@Icons.Material.Filled.Http">HttpClient for API calls</MudListItem>
-                            <MudListItem Icon="@Icons.Material.Filled.Storage">State Management Services</MudListItem>
-                        </MudList>
-                    </MudCard>
-                </MudItem>
-                <MudItem xs="12" md="4">
-                    <MudCard Outlined="true" Class="pa-3">
-                        <MudText Typo="Typo.h6" Color="Color.Secondary">Backend API</MudText>
-                        <MudText Typo="Typo.body2" Class="mb-2">Python FastAPI</MudText>
-                        <MudList T="string" Dense="true">
-                            <MudListItem Icon="@Icons.Material.Filled.Api">RESTful Endpoints</MudListItem>
-                            <MudListItem Icon="@Icons.Material.Filled.Psychology">scikit-learn / XGBoost</MudListItem>
-                            <MudListItem Icon="@Icons.Material.Filled.TableChart">Pandas Data Processing</MudListItem>
-                        </MudList>
-                    </MudCard>
-                </MudItem>
-                <MudItem xs="12" md="4">
-                    <MudCard Outlined="true" Class="pa-3">
-                        <MudText Typo="Typo.h6" Color="Color.Tertiary">Data Sources</MudText>
-                        <MudText Typo="Typo.body2" Class="mb-2">Official Data Integrations</MudText>
-                        <MudList T="string" Dense="true">
-                            <MudListItem Icon="@Icons.Material.Filled.SportsFootball">nflverse (NFL player stats, schedules, betting lines)</MudListItem>
-                            <MudListItem Icon="@Icons.Material.Filled.SportsBasketball">hoopR (NBA box scores, advanced stats)</MudListItem>
-                            <MudListItem Icon="@Icons.Material.Filled.AttachMoney">The Odds API (Live DraftKings/FanDuel odds)</MudListItem>
-                            <MudListItem Icon="@Icons.Material.Filled.SportsBaseball">baseballr (NCAA D1 team stats)</MudListItem>
-                        </MudList>
-                    </MudCard>
-                </MudItem>
-            </MudGrid>
-
-            <!-- Data Flow Diagram -->
-            <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2">Data Flow</MudText>
-            <MudPaper Class="pa-3" Outlined="true">
-                <div class="d-flex justify-center align-center flex-wrap" style="gap: 8px;">
-                    <MudChip T="string" Color="Color.Primary">Raw Data (CSV/JSON)</MudChip>
-                    <MudIcon Icon="@Icons.Material.Filled.ArrowForward" />
-                    <MudChip T="string" Color="Color.Secondary">Feature Engineering</MudChip>
-                    <MudIcon Icon="@Icons.Material.Filled.ArrowForward" />
-                    <MudChip T="string" Color="Color.Tertiary">ML Training</MudChip>
-                    <MudIcon Icon="@Icons.Material.Filled.ArrowForward" />
-                    <MudChip T="string" Color="Color.Success">Predictions</MudChip>
+        <TwCard Class="p-8 bg-slate-900 border-slate-800">
+            <div class="flex items-center gap-3 mb-8">
+                <TwIcon Icon="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" Class="w-6 h-6 text-blue-400" />
+                <h2 class="text-2xl font-bold text-white">System Architecture</h2>
+            </div>
+            
+            <TwGrid Columns="1" ColumnsMd="3" Gap="6">
+                <div class="p-6 rounded-xl border border-slate-800 bg-slate-950/50">
+                    <h3 class="text-xl font-bold text-blue-400 mb-2">Frontend</h3>
+                    <p class="text-slate-500 text-sm mb-4">Blazor Server (.NET 9)</p>
+                    <ul class="space-y-3 text-slate-300">
+                        <li class="flex items-center gap-3 group">
+                            <TwIcon Icon="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" Class="w-5 h-5 text-blue-500/50 group-hover:text-blue-400 transition-colors" />
+                            <span>Tailwind UI Components</span>
+                        </li>
+                        <li class="flex items-center gap-3 group">
+                            <TwIcon Icon="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9-9c1.657 0 3 4.03 3 9s-1.343 9-3 9m0-18c-1.657 0-3 4.03-3 9s1.343 9 3 9" Class="w-5 h-5 text-blue-500/50 group-hover:text-blue-400 transition-colors" />
+                            <span>HttpClient API Services</span>
+                        </li>
+                        <li class="flex items-center gap-3 group">
+                            <TwIcon Icon="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" Class="w-5 h-5 text-blue-500/50 group-hover:text-blue-400 transition-colors" />
+                            <span>State Management</span>
+                        </li>
+                    </ul>
                 </div>
-            </MudPaper>
-        </MudPaper>
+
+                <div class="p-6 rounded-xl border border-slate-800 bg-slate-950/50">
+                    <h3 class="text-xl font-bold text-purple-400 mb-2">Backend API</h3>
+                    <p class="text-slate-500 text-sm mb-4">Python FastAPI</p>
+                    <ul class="space-y-3 text-slate-300">
+                        <li class="flex items-center gap-3 group">
+                            <TwIcon Icon="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" Class="w-5 h-5 text-purple-500/50 group-hover:text-purple-400 transition-colors" />
+                            <span>RESTful Endpoints</span>
+                        </li>
+                        <li class="flex items-center gap-3 group">
+                            <TwIcon Icon="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" Class="w-5 h-5 text-purple-500/50 group-hover:text-purple-400 transition-colors" />
+                            <span>scikit-learn / XGBoost</span>
+                        </li>
+                        <li class="flex items-center gap-3 group">
+                            <TwIcon Icon="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" Class="w-5 h-5 text-purple-500/50 group-hover:text-purple-400 transition-colors" />
+                            <span>Pandas Data Processing</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="p-6 rounded-xl border border-slate-800 bg-slate-950/50">
+                    <h3 class="text-xl font-bold text-amber-400 mb-2">Data Sources</h3>
+                    <p class="text-slate-500 text-sm mb-4">Official Data Integrations</p>
+                    <ul class="space-y-3 text-slate-300">
+                        <li class="flex items-center gap-3 group">
+                            <TwIcon Icon="M13 10V3L4 14h7v7l9-11h-7z" Class="w-5 h-5 text-amber-500/50 group-hover:text-amber-400 transition-colors" />
+                            <span>nflverse (NFL Stats)</span>
+                        </li>
+                        <li class="flex items-center gap-3 group">
+                            <TwIcon Icon="M13 10V3L4 14h7v7l9-11h-7z" Class="w-5 h-5 text-amber-500/50 group-hover:text-amber-400 transition-colors" />
+                            <span>hoopR (NBA Advanced)</span>
+                        </li>
+                        <li class="flex items-center gap-3 group">
+                            <TwIcon Icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.407 2.651 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.407-2.651-1M12 16H3m9 0h9" Class="w-5 h-5 text-amber-500/50 group-hover:text-amber-400 transition-colors" />
+                            <span>The Odds API (Live Lines)</span>
+                        </li>
+                    </ul>
+                </div>
+            </TwGrid>
+
+            <!-- Data Flow -->
+            <div class="mt-12">
+                <p class="text-sm font-semibold text-slate-500 uppercase tracking-widest mb-6 text-center">Data Pipeline Flow</p>
+                <div class="flex flex-wrap justify-center items-center gap-4 bg-slate-950/30 p-6 rounded-2xl border border-slate-800">
+                    <TwChip Color="blue" Variant="outline">Raw Data (CSV/JSON)</TwChip>
+                    <TwIcon Icon="M17 8l4 4m0 0l-4 4m4-4H3" Class="w-5 h-5 text-slate-600 hidden sm:block" />
+                    <TwChip Color="purple" Variant="outline">Feature Engineering</TwChip>
+                    <TwIcon Icon="M17 8l4 4m0 0l-4 4m4-4H3" Class="w-5 h-5 text-slate-600 hidden sm:block" />
+                    <TwChip Color="amber" Variant="outline">ML Training</TwChip>
+                    <TwIcon Icon="M17 8l4 4m0 0l-4 4m4-4H3" Class="w-5 h-5 text-slate-600 hidden sm:block" />
+                    <TwChip Color="emerald" Variant="outline">Predictions</TwChip>
+                </div>
+            </div>
+        </TwCard>
 
         <!-- ML Models -->
-        <MudPaper Class="pa-4" Elevation="2">
-            <MudText Typo="Typo.h5" Class="mb-3">
-                <MudIcon Icon="@Icons.Material.Filled.Psychology" Class="mr-2" />
-                Machine Learning Models
-            </MudText>
-            <MudGrid>
-                <MudItem xs="12" md="6">
-                    <MudCard Outlined="true" Class="pa-3">
-                        <div class="d-flex align-center mb-2">
-                            <MudIcon Icon="@Icons.Material.Filled.Forest" Color="Color.Success" Class="mr-2" />
-                            <MudText Typo="Typo.h6">Random Forest</MudText>
-                        </div>
-                        <MudText Typo="Typo.body2" Class="mb-2">
-                            An ensemble of decision trees that votes on predictions. Great for interpretability.
-                        </MudText>
-                        <MudDivider Class="my-2" />
-                        <MudSimpleTable Dense="true" Hover="true">
-                            <tbody>
-                                <tr><td><strong>Type</strong></td><td>Ensemble (Bagging)</td></tr>
-                                <tr><td><strong>Best For</strong></td><td>Balanced datasets, feature importance</td></tr>
-                                <tr><td><strong>Speed</strong></td><td>Fast training & inference</td></tr>
-                                <tr><td><strong>Overfitting</strong></td><td>Resistant due to averaging</td></tr>
-                            </tbody>
-                        </MudSimpleTable>
-                    </MudCard>
-                </MudItem>
-                <MudItem xs="12" md="6">
-                    <MudCard Outlined="true" Class="pa-3">
-                        <div class="d-flex align-center mb-2">
-                            <MudIcon Icon="@Icons.Material.Filled.Bolt" Color="Color.Warning" Class="mr-2" />
-                            <MudText Typo="Typo.h6">XGBoost</MudText>
-                        </div>
-                        <MudText Typo="Typo.body2" Class="mb-2">
-                            Gradient boosting that sequentially corrects errors. Often achieves best accuracy.
-                        </MudText>
-                        <MudDivider Class="my-2" />
-                        <MudSimpleTable Dense="true" Hover="true">
-                            <tbody>
-                                <tr><td><strong>Type</strong></td><td>Ensemble (Boosting)</td></tr>
-                                <tr><td><strong>Best For</strong></td><td>Imbalanced data, high accuracy</td></tr>
-                                <tr><td><strong>Speed</strong></td><td>Slower training, fast inference</td></tr>
-                                <tr><td><strong>Overfitting</strong></td><td>Requires tuning to prevent</td></tr>
-                            </tbody>
-                        </MudSimpleTable>
-                    </MudCard>
-                </MudItem>
-            </MudGrid>
+        <TwGrid Columns="1" ColumnsMd="2" Gap="8">
+            <TwCard Class="p-8 bg-slate-900 border-slate-800">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="p-2 bg-emerald-500/10 rounded-lg">
+                        <TwIcon Icon="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5s3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" Class="w-6 h-6 text-emerald-400" />
+                    </div>
+                    <h2 class="text-2xl font-bold text-white">Random Forest</h2>
+                </div>
+                <p class="text-slate-400 mb-6 leading-relaxed">
+                    An ensemble of decision trees that votes on predictions. Great for interpretability and identifying key drivers in the data.
+                </p>
+                <div class="rounded-xl overflow-hidden border border-slate-800">
+                    <TwTable TItem="object">
+                        <TwTr><TwTd Class="font-semibold text-slate-400">Type</TwTd><TwTd>Ensemble (Bagging)</TwTd></TwTr>
+                        <TwTr><TwTd Class="font-semibold text-slate-400">Best For</TwTd><TwTd>Balanced datasets</TwTd></TwTr>
+                        <TwTr><TwTd Class="font-semibold text-slate-400">Speed</TwTd><TwTd>Fast inference</TwTd></TwTr>
+                    </TwTable>
+                </div>
+            </TwCard>
 
-            <!-- Task Types -->
-            <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2">Prediction Tasks</MudText>
-            <MudGrid>
-                <MudItem xs="12" md="6">
-                    <MudAlert Severity="Severity.Info" Dense="true">
-                        <strong>Classification</strong>: Predicts categories (Win/Loss, Top 5/Not Top 5)
-                        <br/><em>Metrics: Accuracy, Precision, Recall, ROC-AUC</em>
-                    </MudAlert>
-                </MudItem>
-                <MudItem xs="12" md="6">
-                    <MudAlert Severity="Severity.Success" Dense="true">
-                        <strong>Regression</strong>: Predicts numeric values (Finish Position, Points)
-                        <br/><em>Metrics: MAE, RMSE, R² Score</em>
-                    </MudAlert>
-                </MudItem>
-            </MudGrid>
-        </MudPaper>
-
-        <!-- Supported Sports -->
-        <MudPaper Class="pa-4" Elevation="2">
-            <MudText Typo="Typo.h5" Class="mb-3">
-                <MudIcon Icon="@Icons.Material.Filled.SportsScore" Class="mr-2" />
-                Supported Sports
-            </MudText>
-            <MudGrid>
-                <MudItem xs="12" md="4">
-                    <MudCard Outlined="true" Class="pa-3 text-center">
-                        <MudIcon Icon="@Icons.Material.Filled.DirectionsCar" Size="Size.Large" Color="Color.Error" />
-                        <MudText Typo="Typo.h6" Class="mt-2">NASCAR</MudText>
-                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">30K+ races</MudChip>
-                        <MudText Typo="Typo.body2" Class="mt-2">
-                            Race wins, Top 5/10 finishes, finishing position predictions
-                        </MudText>
-                    </MudCard>
-                </MudItem>
-                <MudItem xs="12" md="4">
-                    <MudCard Outlined="true" Class="pa-3 text-center">
-                        <MudIcon Icon="@Icons.Material.Filled.SportsFootball" Size="Size.Large" Color="Color.Warning" />
-                        <MudText Typo="Typo.h6" Class="mt-2">NFL</MudText>
-                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">13K+ games</MudChip>
-                        <MudText Typo="Typo.body2" Class="mt-2">
-                            Home team wins, point spreads, over/under analysis
-                        </MudText>
-                    </MudCard>
-                </MudItem>
-                <MudItem xs="12" md="4">
-                    <MudCard Outlined="true" Class="pa-3 text-center">
-                        <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Size="Size.Large" Color="Color.Tertiary" />
-                        <MudText Typo="Typo.h6" Class="mt-2">NBA</MudText>
-                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">33K+ games</MudChip>
-                        <MudText Typo="Typo.body2" Class="mt-2">
-                            Game outcomes, team performance, live odds integration
-                        </MudText>
-                    </MudCard>
-                </MudItem>
-            </MudGrid>
-        </MudPaper>
-
-        <!-- Key Features -->
-        <MudPaper Class="pa-4" Elevation="2">
-            <MudText Typo="Typo.h5" Class="mb-3">
-                <MudIcon Icon="@Icons.Material.Filled.Star" Class="mr-2" />
-                Key Features
-            </MudText>
-            <MudGrid>
-                <MudItem xs="12" md="6" lg="4">
-                    <MudList T="string" Dense="true">
-                        <MudListItem Icon="@Icons.Material.Filled.TrendingUp">
-                            <MudText Typo="Typo.body2"><strong>ML Training</strong> - XGBoost with TimeSeriesSplit CV</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.ShowChart">
-                            <MudText Typo="Typo.body2"><strong>Monte Carlo</strong> - Race simulations</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.AttachMoney">
-                            <MudText Typo="Typo.body2"><strong>Live Odds</strong> - DraftKings/FanDuel integration</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.Speed">
-                            <MudText Typo="Typo.body2"><strong>Value Bet Detection</strong> - Model vs sportsbook odds</MudText>
-                        </MudListItem>
-                    </MudList>
-                </MudItem>
-                <MudItem xs="12" md="6" lg="4">
-                    <MudList T="string" Dense="true">
-                        <MudListItem Icon="@Icons.Material.Filled.Calculate">
-                            <MudText Typo="Typo.body2"><strong>Kelly Calculator</strong> - Optimal bet sizing</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.Analytics">
-                            <MudText Typo="Typo.body2"><strong>ROI Tracking</strong> - Win/Loss record, yield %</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.History">
-                            <MudText Typo="Typo.body2"><strong>Analysis History</strong> - Persisted daily picks</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.Insights">
-                            <MudText Typo="Typo.body2"><strong>Model Insights</strong> - Feature importance</MudText>
-                        </MudListItem>
-                    </MudList>
-                </MudItem>
-                <MudItem xs="12" md="6" lg="4">
-                    <MudList T="string" Dense="true">
-                        <MudListItem Icon="@Icons.Material.Filled.Storage">
-                            <MudText Typo="Typo.body2"><strong>Data Management</strong> - Last import tracking</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.Person">
-                            <MudText Typo="Typo.body2"><strong>Player Profiles</strong> - NBA/NFL player stats</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.Build">
-                            <MudText Typo="Typo.body2"><strong>Feature Engineering</strong> - Custom features</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.TrendingUp">
-                            <MudText Typo="Typo.body2"><strong>Hit Rates</strong> - Prop bet analysis (L5/L10)</MudText>
-                        </MudListItem>
-                    </MudList>
-                </MudItem>
-                <MudItem xs="12" md="6" lg="4">
-                    <MudList T="string" Dense="true">
-                        <MudListItem Icon="@Icons.Material.Filled.Casino">
-                            <MudText Typo="Typo.body2"><strong>Simulations</strong> - NASCAR & NFL predictions</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.SportsMma">
-                            <MudText Typo="Typo.body2"><strong>Game Results</strong> - NFL/NBA box scores</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.HealthAndSafety">
-                            <MudText Typo="Typo.body2"><strong>Data Health</strong> - Quality scoring</MudText>
-                        </MudListItem>
-                    </MudList>
-                </MudItem>
-            </MudGrid>
-            
-            <!-- Recent Updates -->
-            <MudDivider Class="my-3" />
-            <MudText Typo="Typo.subtitle1" Class="mb-2">
-                <MudIcon Icon="@Icons.Material.Filled.NewReleases" Size="Size.Small" Class="mr-1" />
-                Recent Updates (v2.0)
-            </MudText>
-            <MudChipSet T="string" ReadOnly="true">
-                <MudChip T="string" Color="Color.Success" Size="Size.Small">TimeSeriesSplit CV</MudChip>
-                <MudChip T="string" Color="Color.Success" Size="Size.Small">ROI Tracking</MudChip>
-                <MudChip T="string" Color="Color.Success" Size="Size.Small">History Persistence</MudChip>
-                <MudChip T="string" Color="Color.Success" Size="Size.Small">Data Import Timestamps</MudChip>
-                <MudChip T="string" Color="Color.Info" Size="Size.Small">Consolidated Simulations</MudChip>
-            </MudChipSet>
-        </MudPaper>
+            <TwCard Class="p-8 bg-slate-900 border-slate-800">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="p-2 bg-amber-500/10 rounded-lg">
+                        <TwIcon Icon="M13 10V3L4 14h7v7l9-11h-7z" Class="w-6 h-6 text-amber-400" />
+                    </div>
+                    <h2 class="text-2xl font-bold text-white">XGBoost</h2>
+                </div>
+                <p class="text-slate-400 mb-6 leading-relaxed">
+                    Gradient boosting that sequentially corrects errors. Optimized for high accuracy and performance on complex tabular data.
+                </p>
+                <div class="rounded-xl overflow-hidden border border-slate-800">
+                    <TwTable TItem="object">
+                        <TwTr><TwTd Class="font-semibold text-slate-400">Type</TwTd><TwTd>Ensemble (Boosting)</TwTd></TwTr>
+                        <TwTr><TwTd Class="font-semibold text-slate-400">Best For</TwTd><TwTd>High precision tasks</TwTd></TwTr>
+                        <TwTr><TwTd Class="font-semibold text-slate-400">Speed</TwTd><TwTd>Advanced optimization</TwTd></TwTr>
+                    </TwTable>
+                </div>
+            </TwCard>
+        </TwGrid>
 
         <!-- Tech Stack -->
-        <MudPaper Class="pa-4" Elevation="2">
-            <MudText Typo="Typo.h5" Class="mb-3">
-                <MudIcon Icon="@Icons.Material.Filled.Code" Class="mr-2" />
-                Technology Stack
-            </MudText>
-            <div class="d-flex flex-wrap justify-center" style="gap: 8px;">
-                <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">.NET 9 / Blazor</MudChip>
-                <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">Python 3.11</MudChip>
-                <MudChip T="string" Color="Color.Tertiary" Variant="Variant.Outlined">FastAPI</MudChip>
-                <MudChip T="string" Color="Color.Success" Variant="Variant.Outlined">scikit-learn</MudChip>
-                <MudChip T="string" Color="Color.Warning" Variant="Variant.Outlined">XGBoost</MudChip>
-                <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined">Pandas</MudChip>
-                <MudChip T="string" Color="Color.Dark" Variant="Variant.Outlined">MudBlazor</MudChip>
+        <TwCard Class="p-8 bg-slate-900 border-slate-800 text-center">
+            <h2 class="text-2xl font-bold text-white mb-6">Technology Stack</h2>
+            <div class="flex flex-wrap justify-center gap-3">
+                <TwChip Color="blue" Variant="outline">.NET 9 / Blazor</TwChip>
+                <TwChip Color="purple" Variant="outline">Python 3.11</TwChip>
+                <TwChip Color="emerald" Variant="outline">FastAPI</TwChip>
+                <TwChip Color="amber" Variant="outline">XGBoost</TwChip>
+                <TwChip Color="blue" Variant="outline">Pandas</TwChip>
+                <TwChip Color="slate" Variant="outline">Tailwind CSS</TwChip>
             </div>
-        </MudPaper>
+        </TwCard>
 
-        <!-- Open Source Credits -->
-        <MudPaper Class="pa-4" Elevation="2">
-            <MudText Typo="Typo.h5" Class="mb-3">
-                <MudIcon Icon="@Icons.Material.Filled.Favorite" Class="mr-2" Color="Color.Error" />
-                Open Source Credits
-            </MudText>
-            <MudText Typo="Typo.body2" Class="mb-3">
-                This project integrates and builds upon excellent open source work from the community:
-            </MudText>
-            <MudGrid>
-                <MudItem xs="12" md="6">
-                    <MudCard Outlined="true" Class="pa-3">
-                        <div class="d-flex align-center mb-2">
-                            <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Color="Color.Tertiary" Class="mr-2" />
-                            <MudText Typo="Typo.h6">NBA_AI</MudText>
+        <!-- Credits -->
+        <TwCard Class="p-8 bg-slate-900 border-slate-800">
+            <div class="flex items-center gap-3 mb-8">
+                <TwIcon Icon="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" Class="w-6 h-6 text-red-500" />
+                <h2 class="text-2xl font-bold text-white">Open Source Credits</h2>
+            </div>
+            
+            <TwGrid Columns="1" ColumnsMd="2" Gap="8">
+                <div class="flex flex-col h-full border border-slate-800 rounded-2xl overflow-hidden bg-slate-950/30">
+                    <div class="bg-slate-800/30 p-6">
+                        <div class="flex items-center gap-3 mb-2">
+                             <TwIcon Icon="M13 10V3L4 14h7v7l9-11h-7z" Class="w-6 h-6 text-blue-400" />
+                             <h3 class="text-xl font-bold text-white">NBA_AI</h3>
                         </div>
-                        <MudText Typo="Typo.body2" Class="mb-2">
-                            AI-powered NBA game predictions using Baseline, Linear (Ridge), Tree (XGBoost), MLP (PyTorch), and Ensemble models.
-                        </MudText>
-                        <MudDivider Class="my-2" />
-                        <MudList T="string" Dense="true">
-                            <MudListItem Icon="@Icons.Material.Filled.Psychology">5 prediction engines</MudListItem>
-                            <MudListItem Icon="@Icons.Material.Filled.TrendingUp">43 rolling average features</MudListItem>
-                            <MudListItem Icon="@Icons.Material.Filled.Update">In-game live prediction updates</MudListItem>
-                        </MudList>
-                        <MudLink Href="https://github.com/NBA-Betting/NBA_AI" Target="_blank">
-                            <MudChip T="string" Color="Color.Primary" Size="Size.Small" Class="mt-2">
-                                <MudIcon Icon="@Icons.Custom.Brands.GitHub" Size="Size.Small" Class="mr-1" />
-                                NBA-Betting/NBA_AI
-                            </MudChip>
-                        </MudLink>
-                    </MudCard>
-                </MudItem>
-                <MudItem xs="12" md="6">
-                    <MudCard Outlined="true" Class="pa-3">
-                        <div class="d-flex align-center mb-2">
-                            <MudIcon Icon="@Icons.Material.Filled.SportsBasketball" Color="Color.Warning" Class="mr-2" />
-                            <MudText Typo="Typo.h6">kyleskom NBA-ML</MudText>
+                        <p class="text-slate-400 text-sm">AI-powered NBA game predictions using Ensemble models.</p>
+                    </div>
+                    <div class="p-6 flex-grow flex flex-col">
+                        <ul class="space-y-2 text-slate-400 text-sm mb-6">
+                            <li>• 5 prediction engines</li>
+                            <li>• 43 rolling average features</li>
+                        </ul>
+                        <div class="mt-auto">
+                            <TwLink Href="https://github.com/NBA-Betting/NBA_AI" target="_blank" Class="inline-flex">
+                                <TwChip Color="blue" Size="sm">GitHub: NBA_AI</TwChip>
+                            </TwLink>
                         </div>
-                        <MudText Typo="Typo.body2" Class="mb-2">
-                            XGBoost-based NBA prediction model with 68.9% accuracy on moneyline and over/under predictions.
-                        </MudText>
-                        <MudDivider Class="my-2" />
-                        <MudList T="string" Dense="true">
-                            <MudListItem Icon="@Icons.Material.Filled.CheckCircle">68.9% ML accuracy</MudListItem>
-                            <MudListItem Icon="@Icons.Material.Filled.AttachMoney">Expected Value calculations</MudListItem>
-                            <MudListItem Icon="@Icons.Material.Filled.Calculate">Kelly Criterion sizing</MudListItem>
-                        </MudList>
-                        <MudLink Href="https://github.com/kyleskom/NBA-Machine-Learning-Sports-Betting" Target="_blank">
-                            <MudChip T="string" Color="Color.Primary" Size="Size.Small" Class="mt-2">
-                                <MudIcon Icon="@Icons.Custom.Brands.GitHub" Size="Size.Small" Class="mr-1" />
-                                kyleskom/NBA-ML
-                            </MudChip>
-                        </MudLink>
-                    </MudCard>
-                </MudItem>
-            </MudGrid>
-        </MudPaper>
+                    </div>
+                </div>
 
-        <!-- Footer -->
-        <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary" Class="mt-4">
+                <div class="flex flex-col h-full border border-slate-800 rounded-2xl overflow-hidden bg-slate-950/30">
+                    <div class="bg-slate-800/30 p-6">
+                        <div class="flex items-center gap-3 mb-2">
+                             <TwIcon Icon="M13 10V3L4 14h7v7l9-11h-7z" Class="w-6 h-6 text-amber-400" />
+                             <h3 class="text-xl font-bold text-white">kyleskom NBA-ML</h3>
+                        </div>
+                        <p class="text-slate-400 text-sm">XGBoost-based NBA prediction model with 68.9% accuracy.</p>
+                    </div>
+                    <div class="p-6 flex-grow flex flex-col">
+                        <ul class="space-y-2 text-slate-400 text-sm mb-6">
+                            <li>• Expected Value calculations</li>
+                            <li>• Kelly Criterion sizing</li>
+                        </ul>
+                        <div class="mt-auto">
+                            <TwLink Href="https://github.com/kyleskom/NBA-Machine-Learning-Sports-Betting" target="_blank" Class="inline-flex">
+                                <TwChip Color="blue" Size="sm">GitHub: kyleskom/NBA-ML</TwChip>
+                            </TwLink>
+                        </div>
+                    </div>
+                </div>
+            </TwGrid>
+        </TwCard>
+
+        <footer class="text-center pt-8 text-slate-500 text-sm">
             Built for educational purposes. Always gamble responsibly.
-        </MudText>
-    </MudStack>
-</MudContainer>
+        </footer>
+    </div>
+</TwContainer>

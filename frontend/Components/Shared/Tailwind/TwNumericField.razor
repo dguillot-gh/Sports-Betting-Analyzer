@@ -1,0 +1,42 @@
+@namespace SportsBettingAnalyzer.Components.Shared.Tailwind
+
+<div class="relative @(FullWidth ? "w-full" : "")">
+    @if (!string.IsNullOrEmpty(Label))
+    {
+        <label class="block text-xs text-slate-500 mb-1 font-medium">@Label</label>
+    }
+    <input type="number"
+           step="@Step"
+           value="@Value"
+           @oninput="HandleInput"
+           disabled="@Disabled"
+           class="@GetInputClasses()" />
+</div>
+
+@code {
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public double Value { get; set; }
+    [Parameter] public EventCallback<double> ValueChanged { get; set; }
+    [Parameter] public double Step { get; set; } = 1.0;
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public bool FullWidth { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private async Task HandleInput(ChangeEventArgs e)
+    {
+        if (double.TryParse(e.Value?.ToString(), out var result))
+        {
+            Value = result;
+            await ValueChanged.InvokeAsync(Value);
+        }
+    }
+
+    private string GetInputClasses()
+    {
+        var classes = "appearance-none bg-slate-800 text-sm text-slate-100 border border-slate-700 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all placeholder-slate-500";
+        if (Disabled) classes += " opacity-50 cursor-not-allowed";
+        if (FullWidth) classes += " w-full";
+        if (!string.IsNullOrEmpty(Class)) classes += $" {Class}";
+        return classes;
+    }
+}
