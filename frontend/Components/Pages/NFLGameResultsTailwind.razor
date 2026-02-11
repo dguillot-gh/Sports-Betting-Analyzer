@@ -166,7 +166,7 @@
             if (_selectedWeek.HasValue) url += $"&week={_selectedWeek}";
             if (!string.IsNullOrEmpty(_selectedTeam)) url += $"&team={Uri.EscapeDataString(_selectedTeam)}";
 
-            var response = await Http.GetFromJsonAsync<NFLScheduleResponse>(url);
+            var response = await Http.GetFromJsonAsync<NFLTailwindScheduleResponse>(url);
             _games = (response?.Games ?? new())
                 .Select(g => new NFLGame {
                     Week = g.Week ?? 0,
@@ -200,8 +200,8 @@
         };
     }
 
-    public class NFLScheduleResponse { public List<NFLGameItem> Games { get; set; } = new(); }
-    public class NFLGameItem {
+    public class NFLTailwindScheduleResponse { public List<NFLTailwindGameItem> Games { get; set; } = new(); }
+    public class NFLTailwindGameItem {
         [System.Text.Json.Serialization.JsonPropertyName("game_id")]
         public string? GameId { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("week")]
