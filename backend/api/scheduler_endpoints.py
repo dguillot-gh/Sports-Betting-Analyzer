@@ -47,3 +47,31 @@ async def get_import_logs(limit: int = 50):
         return [dict(row) for row in rows]
     finally:
         await conn.close()
+
+@router.post("/run-cbb-backfill")
+async def trigger_cbb_backfill(background_tasks: BackgroundTasks, years: str = "2024,2025"):
+    """
+    Trigger backfill of College Baseball game results.
+    """
+    import subprocess
+    import sys
+    import os
+    
+    # Run in background to avoid blocking
+    def run_script(year_list: List[str]):
+        script_path = os.path.join("scripts", "backfill_college_baseball.py")
+        if not os.path.exists(script_path):
+             # Try absolute path from backend root
+             script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts", "backfill_college_baseball.py"))
+             
+        cmd = [sys.executable, script_path] + year_list
+        try:
+            # We don't want to capture output here, just let it log to file/stdout
+            subprocess.run(cmd, check=True)
+            print("CBB Backfill completed successfully")
+        except Exception as e:
+            print(f"CBB Backfill failed: {e}")
+            
+    year_list = [y.strip() for y in years.split(",")]
+    background_tasks.add_task(run_script, year_list)
+    return {"status": "started", "message": f"Backfill queued for years {years}"}

@@ -1,0 +1,355 @@
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+    <!-- Search & Selection -->
+    <div class="md:col-span-1">
+        <TwCard Title="Find Player" Class="mb-6" Color="slate">
+            <div class="space-y-4">
+                <TwInput Label="Player Name" @bind-Value="_selectedPlayer" 
+                         Placeholder="Search..." ShowSearchIcon="true" />
+                
+                <div class="max-h-60 overflow-y-auto border border-slate-700 rounded-lg bg-slate-900/50 p-2 text-sm">
+                    @if (_playerList.Any() && !string.IsNullOrEmpty(_selectedPlayer))
+                    {
+                        var filtered = _playerList.Where(p => p.Contains(_selectedPlayer, StringComparison.OrdinalIgnoreCase)).Take(10);
+                        if (filtered.Any())
+                        {
+                            @foreach (var player in filtered)
+                            {
+                                <button class="w-full text-left px-3 py-2 rounded hover:bg-slate-800 transition-colors text-slate-300 hover:text-white"
+                                        @onclick="() => SelectPlayer(player)">
+                                    @player
+                                </button>
+                            }
+                        }
+                        else
+                        {
+                            <div class="text-slate-500 px-3 py-2 italic">No matches found</div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="text-slate-500 px-3 py-2 italic">Type to search players...</div>
+                    }
+                </div>
+
+                <TwButton Variant="primary" OnClick="LoadProfile" IsLoading="_isLoading" 
+                          Disabled="@(string.IsNullOrEmpty(_selectedPlayer) || _isLoading)"
+                          Class="w-full">
+                    Load Profile
+                </TwButton>
+            </div>
+        </TwCard>
+    </div>
+
+    <!-- Profile Display -->
+    <div class="md:col-span-2">
+        @if (_profile != null)
+        {
+            <TwCard Class="mb-6 overflow-hidden relative" Color="slate">
+                <div class="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-@(_sport == "nfl" ? "blue-600" : "orange-600")/20 to-transparent rounded-bl-full pointer-events-none"></div>
+                
+                <div class="flex items-center gap-6 relative z-10">
+                    <TwAvatar Size="xl" Color="@(_sport == "nfl" ? "blue" : "amber")" Class="ring-4 ring-slate-800 shadow-xl">
+                        @(string.IsNullOrEmpty(_profile.Name) ? "?" : _profile.Name[0].ToString())
+                    </TwAvatar>
+                    
+                    <div>
+                        <h2 class="text-3xl font-bold text-white mb-2">@_profile.Name</h2>
+                        <div class="flex items-center gap-3 text-slate-300">
+                            <span class="font-medium">
+                                @(_profile.Metadata?.GetValueOrDefault("team")?.ToString() ?? "Free Agent")
+                            </span>
+                            <span class="w-1.5 h-1.5 bg-slate-500 rounded-full"></span>
+                            <span>
+                                @(_profile.Metadata?.GetValueOrDefault("position")?.ToString() ?? _sport.ToUpper())
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </TwCard>
+            
+            <div class="mb-6 px-6">
+                <TwTabs HeaderClass="px-0" Items="@(new[] { "Overview", "Season Stats" })" @bind-ActiveTab="_activeTab" />
+            </div>
+
+            @if (_activeTab == 0)
+            {
+                <!-- Overview Tab -->
+                @if (_profile.RecentGames != null && _profile.RecentGames.Any())
+                {
+                    <TwCard Title="Recent Games" Class="mb-6" Color="slate">
+                        <ChildContent>
+                            <div class="overflow-x-auto">
+                                <TwTable TItem="object">
+                                    <HeaderContent>
+                                        <TwTh>Date/Wk</TwTh>
+                                        <TwTh>Opp</TwTh>
+                                        @if (_sport == "nfl")
+                                        {
+                                            <TwTh Class="text-right">Pass Yds</TwTh>
+                                            <TwTh Class="text-right">Rush Yds</TwTh>
+                                            <TwTh Class="text-right">Rec Yds</TwTh>
+                                            <TwTh Class="text-right">TDs</TwTh>
+                                        }
+                                        else
+                                        {
+                                            <TwTh Class="text-right">PTS</TwTh>
+                                            <TwTh Class="text-right">REB</TwTh>
+                                            <TwTh Class="text-right">AST</TwTh>
+                                            <TwTh Class="text-right">3PM</TwTh>
+                                        }
+                                    </HeaderContent>
+                                    <ChildContent>
+                                        @foreach (var game in _profile.RecentGames.Take(5))
+                                        {
+                                            <TwTr>
+                                                <TwTd>
+                                                    @if (_sport == "nfl") { 
+                                                        @("Wk " + (game.GetValueOrDefault("week")?.ToString() ?? "-"))
+                                                    } else {
+                                                        @(game.GetValueOrDefault("date")?.ToString() ?? "-")
+                                                    }
+                                                </TwTd>
+                                                <TwTd>@(game.GetValueOrDefault("opponent")?.ToString() ?? "-")</TwTd>
+                                                
+                                                @if (_sport == "nfl")
+                                                {
+                                                    <TwTd Class="text-right">@FormatNumber(GetIntValue(game, "pass_yds"))</TwTd>
+                                                    <TwTd Class="text-right">@FormatNumber(GetIntValue(game, "rush_yds"))</TwTd>
+                                                    <TwTd Class="text-right">@FormatNumber(GetIntValue(game, "rec_yds"))</TwTd>
+                                                    <TwTd Class="text-right font-bold text-white">@(GetIntValue(game, "pass_td") + GetIntValue(game, "rush_td") + GetIntValue(game, "rec_td"))</TwTd>
+                                                }
+                                                else
+                                                {
+                                                    <TwTd Class="text-right font-bold text-white">@FormatNumber(GetIntValue(game, "pts"))</TwTd>
+                                                    <TwTd Class="text-right">@FormatNumber(GetIntValue(game, "reb"))</TwTd>
+                                                    <TwTd Class="text-right">@FormatNumber(GetIntValue(game, "ast"))</TwTd>
+                                                    <TwTd Class="text-right">@FormatNumber(GetIntValue(game, "fg3"))</TwTd>
+                                                }
+                                            </TwTr>
+                                        }
+                                    </ChildContent>
+                                </TwTable>
+                            </div>
+                        </ChildContent>
+                    </TwCard>
+                }
+            }
+            else
+            {
+                <!-- Stats Tab -->
+                @if (_profile.Stats != null && _profile.Stats.Any())
+                {
+                    <div class="space-y-6 max-h-[600px] overflow-y-auto pr-2">
+                        @foreach (var seasonStats in _profile.Stats.OrderByDescending(s => s.Key))
+                        {
+                            <div>
+                                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-3 pl-1">
+                                    @seasonStats.Key Season
+                                </h3>
+                                <TwGrid Cols="2" ColsMd="3" ColsLg="4" Gap="4">
+                                    @foreach (var stat in seasonStats.Value.Where(s => ShouldShowStat(s.Key)).Take(16))
+                                    {
+                                        <div class="bg-slate-800/50 rounded-lg p-4 text-center border border-slate-700 hover:border-slate-600 transition-colors">
+                                            <div class="text-lg font-bold text-orange-400 mb-1">
+                                                @stat.Value
+                                            </div>
+                                            <div class="text-xs text-slate-500 font-medium uppercase tracking-wide">
+                                                @FormatStatName(stat.Key)
+                                            </div>
+                                        </div>
+                                    }
+                                </TwGrid>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <TwAlert Severity="info">No detailed stats available for this player.</TwAlert>
+                }
+            }
+        }
+        else if (_isLoading)
+        {
+            <div class="flex flex-col items-center justify-center py-24 bg-slate-900/30 rounded-2xl border border-slate-800/50">
+                <TwProgressBar IsIndeterminate="true" Color="@(_sport == "nfl" ? "blue" : "orange")" Class="w-1/3 mb-4" />
+                <p class="text-slate-400 animate-pulse">Loading profile data...</p>
+            </div>
+        }
+        else if (_notFound)
+        {
+            <TwAlert Severity="warning"> Player "@_selectedPlayer" not found. </TwAlert>
+        }
+        else
+        {
+            <div class="flex flex-col items-center justify-center py-24 bg-slate-900/30 rounded-2xl border border-slate-800/50 text-center">
+                <div class="bg-slate-800 rounded-full p-6 mb-4">
+                    <svg class="w-12 h-12 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                </div>
+                <h3 class="text-xl font-medium text-white mb-2">Select a Player</h3>
+                <p class="text-slate-500 max-w-sm">
+                    Search for a player on the left to view their complete profile, stats, and game history.
+                </p>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Sport { get; set; } = "nfl";
+    [Parameter] public string? InitialPlayer { get; set; }
+
+    private string _sport = "nfl";
+    private string _selectedPlayer = "";
+    private bool _isLoading = false;
+    private bool _notFound = false;
+    private int _activeTab = 0;
+    
+    private List<string> _playerList = new();
+    private PlayerProfile? _profile;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_sport != Sport)
+        {
+            _sport = Sport;
+            _playerList.Clear();
+            _profile = null;
+            _selectedPlayer = "";
+            await LoadPlayerList();
+        }
+
+        if (!string.IsNullOrEmpty(InitialPlayer) && InitialPlayer != _selectedPlayer)
+        {
+            _selectedPlayer = InitialPlayer;
+            await LoadProfile();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPlayerList();
+        
+        if (!string.IsNullOrEmpty(InitialPlayer))
+        {
+            _selectedPlayer = InitialPlayer;
+            await LoadProfile();
+        }
+    }
+
+    private async Task LoadPlayerList()
+    {
+        try
+        {
+            var url = $"http://backend:8000/db/profiles/{_sport}/list?entity_type=player&limit=5000";
+            var response = await Http.GetFromJsonAsync<ProfileListResponse>(url);
+            if (response?.Entities != null)
+            {
+                _playerList = response.Entities.Select(e => e.Name).Distinct().OrderBy(n => n).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"LoadPlayerList error: {ex}");
+        }
+    }
+
+    private void SelectPlayer(string player)
+    {
+        _selectedPlayer = player;
+    }
+
+    private async Task LoadProfile()
+    {
+        if (string.IsNullOrEmpty(_selectedPlayer)) return;
+        
+        _isLoading = true;
+        _notFound = false;
+        _profile = null;
+        StateHasChanged();
+        
+        try
+        {
+            var url = $"http://backend:8000/db/profiles/{_sport}/{Uri.EscapeDataString(_selectedPlayer)}";
+            _profile = await Http.GetFromJsonAsync<PlayerProfile>(url);
+            
+            if (_profile?.NotFound == true)
+            {
+                _notFound = true;
+                _profile = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            _notFound = true;
+            _profile = null;
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private bool ShouldShowStat(string key)
+    {
+        var skipKeys = new[] { "player_id", "player_name", "position", "team", "season", "slug", "source", "week", "game_date" };
+        return !skipKeys.Contains(key.ToLower());
+    }
+
+    private string FormatStatName(string key) => key.ToLower() switch
+    {
+        "pts" or "points" => "Points",
+        "reb" or "rebounds" => "Rebounds",
+        "ast" or "assists" => "Assists",
+        "pass_yds" => "Pass Yds",
+        "rush_yds" => "Rush Yds",
+        "rec_yds" => "Rec Yds",
+        "tgt" => "Targets",
+        "rec_td" => "Rec TDs",
+        "rush_td" => "Rush TDs",
+        "pass_td" => "Pass TDs",
+        _ => key.Replace("_", " ").ToUpperInvariant()
+    };
+
+    private int GetIntValue(Dictionary<string, object>? dict, string key)
+    {
+        if (dict == null) return 0;
+        if (dict.TryGetValue(key, out var value))
+        {
+            if (value == null) return 0;
+            if (value is int i) return i;
+            if (value is long l) return (int)l;
+            if (value is System.Text.Json.JsonElement je)
+            {
+                if (je.ValueKind == System.Text.Json.JsonValueKind.Number)
+                    return je.TryGetInt32(out var num) ? num : 0;
+            }
+            if (int.TryParse(value.ToString(), out var parsed)) return parsed;
+        }
+        return 0;
+    }
+
+    private string FormatNumber(int value) => value > 0 ? value.ToString("N0") : "-";
+
+    private class ProfileListResponse { public List<EntityInfo> Entities { get; set; } = new(); }
+    private class EntityInfo { public int Id { get; set; } public string Name { get; set; } = ""; }
+    private class PlayerProfile
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Type { get; set; } = "";
+        public Dictionary<string, object>? Metadata { get; set; }
+        public Dictionary<string, Dictionary<string, object>>? Stats { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("recent_games")]
+        public List<Dictionary<string, object>>? RecentGames { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("not_found")]
+        public bool? NotFound { get; set; }
+    }
+}

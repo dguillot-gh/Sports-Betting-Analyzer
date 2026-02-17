@@ -51,7 +51,7 @@
                                 @if (_isPicksLoading)
                                 {
                                     <div class="flex flex-col items-center justify-center py-12">
-                                        <TwProgressBar Indeterminate="true" Color="blue" Class="w-48 mb-4" />
+                                        <TwProgressBar IsIndeterminate="true" Color="blue" Class="w-48 mb-4" />
                                         <p class="text-slate-400">Scanning markets for EV+ opportunities...</p>
                                     </div>
                                 }
@@ -191,7 +191,7 @@
                     
                     @if (_isModelsLoading)
                     {
-                        <TwProgressBar Indeterminate="true" Color="slate" Class="my-4" />
+                        <TwProgressBar IsIndeterminate="true" Color="slate" Class="my-4" />
                     }
                     else if (_modelSummary.Any())
                     {
@@ -257,7 +257,7 @@
                     @if (_isProcessing)
                     {
                         <div class="flex flex-col items-center justify-center py-4">
-                            <TwProgressBar Indeterminate="true" Color="white" Class="w-32 mb-2" />
+                            <TwProgressBar IsIndeterminate="true" Color="white" Class="w-32 mb-2" />
                             <p class="text-xs text-blue-200">Extracting data via OCR...</p>
                         </div>
                     }

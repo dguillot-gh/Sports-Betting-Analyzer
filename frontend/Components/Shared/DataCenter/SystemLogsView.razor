@@ -1,0 +1,333 @@
+@using System.Text.Json
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject ILogger<SystemLogsView> Logger
+
+<div class="space-y-6">
+    <!-- Controls -->
+    <TwCard Class="p-4 bg-slate-900 border-slate-800">
+        <div class="flex flex-wrap items-end gap-4">
+            <div class="w-40">
+                <TwSelect TValue="string" @bind-Value="_selectedSource" Label="Source" FullWidth="true">
+                    <option value="all">All Sources</option>
+                    <option value="backend">Python Backend</option>
+                    <option value="frontend">Blazor Frontend</option>
+                </TwSelect>
+            </div>
+            <div class="w-36">
+                <TwSelect TValue="string" @bind-Value="_selectedLevel" Label="Level" FullWidth="true">
+                    <option value="all">All Levels</option>
+                    <option value="error">Errors</option>
+                    <option value="warning">Warnings</option>
+                    <option value="info">Info</option>
+                    <option value="debug">Debug</option>
+                </TwSelect>
+            </div>
+            <div class="flex-grow min-w-[200px]">
+                <TwInput TValue="string" @bind-Value="_searchText" Label="Search" Placeholder="Filter logs..." FullWidth="true" ShowSearchIcon="true" />
+            </div>
+            <div class="flex items-center gap-3 h-11">
+                <TwButton Variant="primary" OnClick="RefreshLogs" IsLoading="@_isLoading" Disabled="@_isLoading">
+                        Refresh
+                </TwButton>
+                
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" @bind="_autoRefresh" class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    <span class="ml-3 text-sm font-medium text-slate-300">Auto</span>
+                </label>
+
+                <TwButton Variant="outline" OnClick="ClearLogs" Class="text-red-400 hover:text-red-300 border-red-900/50 hover:bg-red-900/20">
+                    Clear
+                </TwButton>
+            </div>
+        </div>
+    </TwCard>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Backend Status -->
+        <TwCard Class="p-4 bg-slate-900 border-slate-800">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="@(_backendHealthy ? "bg-emerald-500/20" : "bg-red-500/20") p-2 rounded-lg">
+                        <TwIcon Icon="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" 
+                                Class="@($"w-5 h-5 {(_backendHealthy ? "text-emerald-400" : "text-red-400")}")" />
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-white">Python Backend</h3>
+                        <p class="text-[10px] text-slate-500 truncate max-w-[200px]">@_backendUrl</p>
+                    </div>
+                </div>
+                <TwChip Color="@(_backendHealthy ? "emerald" : "red")" Size="sm">
+                    @(_backendHealthy ? "CONNECTED" : "DISCONNECTED")
+                </TwChip>
+            </div>
+        </TwCard>
+
+        <!-- Frontend Status -->
+        <TwCard Class="p-4 bg-slate-900 border-slate-800">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="bg-emerald-500/20 p-2 rounded-lg">
+                        <TwIcon Icon="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9-9c1.657 0 3 4.03 3 9s-1.343 9-3 9m0-18c-1.657 0-3 4.03-3 9s1.343 9 3 9" 
+                                Class="w-5 h-5 text-emerald-400" />
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-white">Blazor Frontend</h3>
+                        <p class="text-[10px] text-slate-500">In-memory log capture</p>
+                    </div>
+                </div>
+                <TwChip Color="emerald" Size="sm">RUNNING</TwChip>
+            </div>
+        </TwCard>
+    </div>
+
+    <!-- Logs Display -->
+    <TwCard NoPadding="true" Class="bg-slate-950 border-slate-800 overflow-hidden shadow-2xl">
+        @if (_isLoading)
+        {
+            <div class="h-1 bg-slate-800 overflow-hidden">
+                <div class="h-full bg-blue-500 animate-progress origin-left-right"></div>
+            </div>
+        }
+        
+        <div class="p-1 max-h-[70vh] overflow-y-auto font-mono text-[11px] leading-relaxed custom-scrollbar" id="logContainer">
+            @if (!FilteredLogs.Any())
+            {
+                <div class="p-12 text-center">
+                    <p class="text-slate-600">No logs to display. Click Refresh to load logs.</p>
+                </div>
+            }
+            else
+            {
+                <TwTable Dense="true" Hover="true" TItem="LogEntry">
+                    <HeaderContent>
+                        <TwTh Class="w-40">Timestamp</TwTh>
+                        <TwTh Class="w-24">Source</TwTh>
+                        <TwTh Class="w-20">Level</TwTh>
+                        <TwTh>Message</TwTh>
+                    </HeaderContent>
+                    <ChildContent>
+                        @foreach (var log in FilteredLogs)
+                        {
+                            <TwTr>
+                                <TwTd Class="px-3 py-1 text-slate-600 whitespace-nowrap">@log.Timestamp.ToString("HH:mm:ss.fff")</TwTd>
+                                <TwTd Class="px-3 py-1">
+                                        <span class="@($"px-1.5 py-0.5 rounded text-[9px] font-bold {(log.Source == "backend" ? "bg-blue-500/10 text-blue-400" : "bg-amber-500/10 text-amber-400")}")">
+                                        @log.Source.ToUpper()
+                                    </span>
+                                </TwTd>
+                                <TwTd Class="px-3 py-1">
+                                    <span class="@($"px-1.5 py-0.5 rounded text-[9px] font-bold {GetLevelClasses(log.Level)}")">
+                                        @log.Level.ToUpper()
+                                    </span>
+                                </TwTd>
+                                <TwTd Class="@($"px-3 py-1 break-words font-mono {GetLevelTextClasses(log.Level)}")">
+                                    @log.Message
+                                </TwTd>
+                            </TwTr>
+                        }
+                    </ChildContent>
+                </TwTable>
+            }
+        </div>
+    </TwCard>
+
+    <!-- Stats -->
+    <div class="flex flex-wrap justify-center gap-4 py-4">
+        <TwChip Color="red" Size="sm" Variant="outline">
+            @(_logs.Count(l => l.Level == "error")) Errors
+        </TwChip>
+        <TwChip Color="orange" Size="sm" Variant="outline">
+            @(_logs.Count(l => l.Level == "warning")) Warnings  
+        </TwChip>
+        <TwChip Color="blue" Size="sm" Variant="outline">
+            @(_logs.Count(l => l.Level == "info")) Info
+        </TwChip>
+        <div class="px-3 py-1.5 rounded-full bg-slate-900 text-slate-500 text-xs border border-slate-800">
+            @_logs.Count Total Entries
+        </div>
+    </div>
+</div>
+
+<style>
+    @@keyframes progress {
+        0% { transform: scaleX(0); }
+        50% { transform: scaleX(0.5); }
+        100% { transform: scaleX(1); }
+    }
+    .animate-progress {
+        animation: progress 2s infinite ease-in-out;
+    }
+</style>
+
+@code {
+    private List<LogEntry> _logs = new();
+    private string _selectedSource = "all";
+    private string _selectedLevel = "all";
+    private string _searchText = "";
+    private bool _isLoading = false;
+    private bool _autoRefresh = false;
+    private bool _backendHealthy = false;
+    private string _backendUrl = "";
+    private Timer? _refreshTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _backendUrl = Http.BaseAddress?.ToString() ?? "http://backend:8000";
+        try 
+        {
+            await CheckBackendHealth();
+            await RefreshLogs();
+            
+            _refreshTimer = new Timer(async _ => 
+            {
+                if (_autoRefresh)
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        await RefreshLogs();
+                        StateHasChanged();
+                    });
+                }
+            }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initializing Logs page");
+        }
+    }
+
+    private IEnumerable<LogEntry> FilteredLogs => _logs
+        .Where(l => _selectedSource == "all" || l.Source == _selectedSource)
+        .Where(l => _selectedLevel == "all" || l.Level == _selectedLevel)
+        .Where(l => string.IsNullOrEmpty(_searchText) || 
+                    l.Message.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
+        .OrderByDescending(l => l.Timestamp)
+        .Take(500);
+
+    private async Task CheckBackendHealth()
+    {
+        try
+        {
+            var uri = Http.BaseAddress == null ? "http://backend:8000/health" : "health";
+            var response = await Http.GetAsync(uri);
+            _backendHealthy = response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            _backendHealthy = false;
+        }
+    }
+
+    private async Task RefreshLogs()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            await CheckBackendHealth();
+
+            if (_backendHealthy)
+            {
+                try
+                {
+                    var uri = Http.BaseAddress == null ? "http://backend:8000/logs" : "logs";
+                    var backendLogs = await Http.GetFromJsonAsync<BackendLogsResponse>(uri);
+                    if (backendLogs?.Logs != null)
+                    {
+                        foreach (var log in backendLogs.Logs)
+                        {
+                            if (!_logs.Any(l => l.Source == "backend" && l.Message == log.Message && 
+                                               Math.Abs((l.Timestamp - log.Timestamp).TotalSeconds) < 1))
+                            {
+                                _logs.Add(new LogEntry
+                                {
+                                    Timestamp = log.Timestamp.ToLocalTime(),
+                                    Source = "backend",
+                                    Level = log.Level?.ToLower() ?? "info",
+                                    Message = log.Message ?? ""
+                                });
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AddFrontendLog("warning", $"Backend /logs endpoint not available: {ex.Message}");
+                }
+            }
+
+            AddFrontendLog("info", "Logs refreshed at " + DateTime.Now.ToString("HH:mm:ss"));
+        }
+        catch (Exception ex)
+        {
+            AddFrontendLog("error", $"Error refreshing logs: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void AddFrontendLog(string level, string message)
+    {
+        _logs.Add(new LogEntry
+        {
+            Timestamp = DateTime.Now,
+            Source = "frontend",
+            Level = level,
+            Message = message
+        });
+    }
+
+    private void ClearLogs()
+    {
+        _logs.Clear();
+        Snackbar.Add("Logs cleared", Severity.Info);
+    }
+
+    private string GetLevelClasses(string level) => level switch
+    {
+        "error" => "bg-red-500/20 text-red-500",
+        "warning" => "bg-amber-500/20 text-amber-500",
+        "info" => "bg-blue-500/20 text-blue-500",
+        _ => "bg-slate-500/20 text-slate-500"
+    };
+
+    private string GetLevelTextClasses(string level) => level switch
+    {
+        "error" => "text-red-400",
+        "warning" => "text-amber-300",
+        "info" => "text-blue-200",
+        "debug" => "text-slate-500",
+        _ => "text-slate-300"
+    };
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+    }
+
+    private class LogEntry
+    {
+        public DateTime Timestamp { get; set; }
+        public string Source { get; set; } = "";
+        public string Level { get; set; } = "info";
+        public string Message { get; set; } = "";
+    }
+
+    private class BackendLogsResponse
+    {
+        public List<BackendLogEntry>? Logs { get; set; }
+    }
+
+    private class BackendLogEntry
+    {
+        public DateTime Timestamp { get; set; }
+        public string? Level { get; set; }
+        public string? Message { get; set; }
+    }
+}

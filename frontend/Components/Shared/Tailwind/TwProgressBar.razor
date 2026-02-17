@@ -1,7 +1,7 @@
 @namespace SportsBettingAnalyzer.Components.Shared.Tailwind
 
 <div class="w-full bg-slate-800 rounded-full overflow-hidden @HeightClass @Class">
-    @if (Indeterminate)
+    @if (IsIndeterminate)
     {
         <div class="@ColorClass h-full animate-progress-indeterminate"></div>
     }
@@ -24,7 +24,7 @@
 
 @code {
     [Parameter] public int Value { get; set; } = 0; // 0-100
-    [Parameter] public bool Indeterminate { get; set; } = false;
+    [Parameter] public bool IsIndeterminate { get; set; } = false;
     [Parameter] public string Color { get; set; } = "blue"; // blue, emerald, amber, red, purple
     [Parameter] public string Size { get; set; } = "md"; // sm, md, lg
     [Parameter] public string Class { get; set; } = "";

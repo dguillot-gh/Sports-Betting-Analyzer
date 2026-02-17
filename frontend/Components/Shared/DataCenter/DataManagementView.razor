@@ -1,0 +1,1037 @@
+@using SportsBettingAnalyzer.Services
+@inject PythonMLServiceClient MLClient
+@inject IHttpClientFactory HttpClientFactory
+@inject ISnackbar Snackbar
+@inject ILogger<DataManagementView> Logger
+
+<TwContainer MaxWidth="extraLarge" Class="mt-0 px-4">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+        <div>
+            <h2 class="text-2xl font-bold text-white">Data Management</h2>
+            <p class="text-slate-400 mt-1">Manage data sources, check for updates, and retrain models.</p>
+        </div>
+        <TwButton Variant="primary" OnClick="LoadStatus" IsLoading="_isLoading" Disabled="_isLoading">
+            <PrefixContent><TwIcon Icon="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" Class="w-4 h-4" /></PrefixContent>
+            Refresh Status
+        </TwButton>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="mb-6">
+            <TwProgressBar Value="100" IsIndeterminate="true" Color="blue" />
+        </div>
+    }
+
+    <TwGrid Columns="1" md="2" lg="3" Gap="6" Class="mb-8">
+        <!-- NASCAR Card -->
+        <TwCard Class="p-5 flex flex-col h-full bg-slate-900 border-slate-800">
+            <div class="flex items-center gap-4 mb-6">
+                <div class="bg-red-500/20 p-3 rounded-xl">
+                    <TwIcon Icon="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" Class="w-6 h-6 text-red-400" />
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">NASCAR</h3>
+                    <p class="text-xs text-slate-500">nascaR.data (GitHub)</p>
+                </div>
+            </div>
+
+            <div class="flex-grow">
+                @if (_dataStatus?.Nascar != null)
+                {
+                    <div class="space-y-4">
+                        <div class="flex items-center gap-2 text-sm text-slate-300">
+                            <TwIcon Icon="M4 7v10c0 1.1.9 2 2 2h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2z" Class="w-4 h-4 text-slate-500" />
+                            Files: <span class="font-semibold ml-auto text-white">@GetFileCount(_dataStatus.Nascar.Files)</span>
+                        </div>
+                        @if (!string.IsNullOrEmpty(_dataStatus.Nascar.LastCommit))
+                        {
+                            <div class="flex items-center gap-2 text-sm text-slate-300">
+                                <TwIcon Icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-4 h-4 text-slate-500" />
+                                Last Commit: <span class="font-semibold ml-auto text-white">@FormatDate(_dataStatus.Nascar.LastCommit)</span>
+                            </div>
+                        }
+                        
+                        <div class="border-t border-slate-800 my-4"></div>
+                        
+                        <div class="flex items-center gap-2 text-sm text-slate-300">
+                            <TwIcon Icon="M9.663 17h4.674a1 1 0 00.908-.588l3.333-6.666A1 1 0 0017.671 8h-4.674a1 1 0 00-.908.588l-3.333 6.666A1 1 0 009.663 17z" Class="w-4 h-4 text-slate-500" />
+                            Models: <span class="font-semibold text-white ml-auto">@_dataStatus.Nascar.Models</span>
+                            @if (_dataStatus.Nascar.ModelAccuracy.HasValue)
+                            {
+                                <TwChip Color="emerald" Size="sm" Class="ml-2">
+                                    @((_dataStatus.Nascar.ModelAccuracy.Value * 100).ToString("F1"))% acc
+                                </TwChip>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 mt-6">
+                <TwButton Variant="primary" Size="sm" OnClick="@(() => UpdateData("nascar"))" Disabled="@_isUpdating">
+                    <PrefixContent><TwIcon Icon="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" Class="w-4 h-4" /></PrefixContent>
+                    Update
+                </TwButton>
+                <TwButton Variant="secondary" Size="sm" OnClick="@(() => EnhanceData("nascar"))" Disabled="@_isUpdating">
+                    <PrefixContent><TwIcon Icon="M13 10V3L4 14h7v7l9-11h-7z" Class="w-4 h-4" /></PrefixContent>
+                    Enhance
+                </TwButton>
+                <TwButton Variant="outline" Size="sm" OnClick="@(() => RetrainModel("nascar"))" Disabled="@_isUpdating">
+                    <PrefixContent><TwIcon Icon="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0-4V4" Class="w-4 h-4" /></PrefixContent>
+                    Train
+                </TwButton>
+                <TwButton Variant="outline" Size="sm" OnClick="@OpenRdaImportDialog" Disabled="@(_isUpdating || _isRdaImporting)" Color="amber">
+                    <PrefixContent><TwIcon Icon="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z" Class="w-4 h-4" /></PrefixContent>
+                    Import RDA
+                </TwButton>
+            </div>
+        </TwCard>
+
+        <!-- NFL Card -->
+        <TwCard Class="p-5 flex flex-col h-full bg-slate-900 border-slate-800">
+            <div class="flex items-center gap-4 mb-6">
+                <div class="bg-emerald-500/20 p-3 rounded-xl">
+                    <TwIcon Icon="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" Class="w-6 h-6 text-emerald-400" />
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">NFL</h3>
+                    <p class="text-xs text-slate-500">NFLverse Data</p>
+                </div>
+            </div>
+
+            <div class="flex-grow">
+                @if (_dataStatus?.Nfl != null)
+                {
+                    <div class="space-y-4">
+                        <div class="flex items-center gap-2 text-sm text-slate-300">
+                            <TwIcon Icon="M4 7v10c0 1.1.9 2 2 2h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2z" Class="w-4 h-4 text-slate-500" />
+                            Files: <span class="font-semibold ml-auto text-white">@GetFileCount(_dataStatus.Nfl.Files)</span>
+                        </div>
+                        <div class="flex items-center gap-2 text-sm text-slate-300">
+                            <TwIcon Icon="M9.663 17h4.674a1 1 0 00.908-.588l3.333-6.666A1 1 0 0017.671 8h-4.674a1 1 0 00-.908.588l-3.333 6.666A1 1 0 009.663 17z" Class="w-4 h-4 text-slate-500" />
+                            Models: <span class="font-semibold text-white ml-auto">@_dataStatus.Nfl.Models</span>
+                        </div>
+                        <p class="text-[10px] text-slate-500 italic mt-4">
+                            Source: nflverse-data (play-by-play, Next Gen Stats, contracts, injuries)
+                        </p>
+                    </div>
+                }
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 mt-6">
+                <TwButton Variant="primary" Size="sm" OnClick="@(() => OpenSportImportDialog("nfl"))" Disabled="@(_isUpdating || _isSportImporting)">
+                    <PrefixContent><TwIcon Icon="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" Class="w-4 h-4" /></PrefixContent>
+                    Import Data
+                </TwButton>
+                <TwButton Variant="outline" Size="sm" OnClick="@(() => RetrainModel("nfl"))" Disabled="@_isUpdating">
+                    <PrefixContent><TwIcon Icon="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0-4V4" Class="w-4 h-4" /></PrefixContent>
+                    Train Model
+                </TwButton>
+            </div>
+        </TwCard>
+        
+        <!-- NBA Card -->
+        <TwCard Class="p-5 flex flex-col h-full bg-slate-900 border-slate-800">
+            <div class="flex items-center gap-4 mb-6">
+                <div class="bg-amber-500/20 p-3 rounded-xl">
+                    <TwIcon Icon="M12 2a10 10 0 1010 10A10 10 0 0012 2zm0 18a8 8 0 118-8 8 8 0 01-8 8z" Class="w-6 h-6 text-amber-400" />
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">NBA</h3>
+                    <p class="text-xs text-slate-500">NBA Stats API</p>
+                </div>
+            </div>
+
+            <div class="flex-grow">
+                @if (_dataStatus?.Nba != null)
+                {
+                    <div class="space-y-4">
+                        <div class="flex items-center gap-2 text-sm text-slate-300">
+                            <TwIcon Icon="M4 7v10c0 1.1.9 2 2 2h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2z" Class="w-4 h-4 text-slate-500" />
+                            Files: <span class="font-semibold ml-auto text-white">@GetFileCount(_dataStatus.Nba.Files)</span>
+                        </div>
+                        <div class="flex items-center gap-2 text-sm text-slate-300">
+                            <TwIcon Icon="M9.663 17h4.674a1 1 0 00.908-.588l3.333-6.666A1 1 0 0017.671 8h-4.674a1 1 0 00-.908.588l-3.333 6.666A1 1 0 009.663 17z" Class="w-4 h-4 text-slate-500" />
+                            Models: <span class="font-semibold text-white ml-auto">@_dataStatus.Nba.Models</span>
+                        </div>
+                        <p class="text-[10px] text-slate-500 italic mt-4">
+                            Source: stats.nba.com + hoopR (live game data)
+                        </p>
+                    </div>
+                }
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 mt-6">
+                <TwButton Variant="primary" Size="sm" OnClick="@(() => OpenSportImportDialog("nba"))" Disabled="@(_isUpdating || _isSportImporting)" Color="amber">
+                    <PrefixContent><TwIcon Icon="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" Class="w-4 h-4" /></PrefixContent>
+                    Import Data
+                </TwButton>
+                <TwButton Variant="outline" Size="sm" OnClick="@(() => RetrainModel("nba"))" Disabled="@_isUpdating">
+                    <PrefixContent><TwIcon Icon="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0-4V4" Class="w-4 h-4" /></PrefixContent>
+                    Train Model
+                </TwButton>
+            </div>
+        </TwCard>
+        
+        <!-- College Baseball Card -->
+        <TwCard Class="p-5 flex flex-col h-full bg-slate-900 border-slate-800">
+            <div class="flex items-center gap-4 mb-6">
+                <div class="bg-blue-500/20 p-3 rounded-xl">
+                    <TwIcon Icon="M12 2a10 10 0 1010 10A10 10 0 0012 2zm0 18a8 8 0 118-8 8 8 0 01-8 8z" Class="w-6 h-6 text-blue-400" />
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">College Baseball</h3>
+                    <p class="text-xs text-slate-500">Python + R Hybrid</p>
+                </div>
+            </div>
+
+            <div class="flex-grow">
+                <div class="space-y-3">
+                    @if (_baseballSummary != null)
+                    {
+                        <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
+                            <p class="text-[11px] text-emerald-400 font-bold uppercase tracking-wider mb-1">Last Import</p>
+                            <p class="text-sm text-white">@FormatDate(_baseballSummary.GeneratedAt)</p>
+                            <p class="text-xs text-slate-400 mt-1">D@(_baseballSummary.Division) - @_baseballSummary.ImportedTeams teams</p>
+                        </div>
+                    }
+                    
+                    <div class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
+                        <div class="flex gap-2">
+                            <TwIcon Icon="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-5 h-5 text-blue-400 shrink-0" />
+                            <p class="text-xs text-blue-200">Fetches all divisions (D1, D2, D3) and current season rosters/stats.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 mt-6">
+                <TwButton Variant="primary" Size="sm" OnClick="@OpenBaseballImportDialog" Disabled="@(_isUpdating || _isBaseballImporting)">
+                    <PrefixContent><TwIcon Icon="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" Class="w-4 h-4" /></PrefixContent>
+                    Full Import
+                </TwButton>
+                <TwButton Variant="outline" Size="sm" OnClick="@ViewBaseballTeams" Disabled="@(_baseballSummary == null)">
+                    <PrefixContent><TwIcon Icon="M4 6h16M4 10h16M4 14h16M4 18h16" Class="w-4 h-4" /></PrefixContent>
+                    View Teams
+                </TwButton>
+            </div>
+        </TwCard>
+        <!-- NCAAB Card -->
+        <TwCard Class="p-5 flex flex-col h-full bg-slate-900 border-slate-800">
+            <div class="flex items-center gap-4 mb-6">
+                <div class="bg-indigo-500/20 p-3 rounded-xl">
+                    <TwIcon Icon="M12 2a10 10 0 1010 10A10 10 0 0012 2zm0 18a8 8 0 118-8 8 8 0 01-8 8z" Class="w-6 h-6 text-indigo-400" />
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">NCAA Basketball</h3>
+                    <p class="text-xs text-slate-500">sportsdataverse (mbb)</p>
+                </div>
+            </div>
+
+            <div class="flex-grow">
+                <div class="space-y-4">
+                    <div class="flex items-center gap-2 text-sm text-slate-300">
+                        <TwIcon Icon="M4 7v10c0 1.1.9 2 2 2h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2z" Class="w-4 h-4 text-slate-500" />
+                        <p>Fetches historical schedules and boxscores.</p>
+                    </div>
+                    <p class="text-[10px] text-slate-500 italic mt-4">
+                        Source: Used for O/U and Moneyline modeling.
+                    </p>
+                </div>
+            </div>
+
+            <div class="mt-6">
+                <TwButton Variant="primary" Size="sm" OnClick="@OpenNcaabImportDialog" Disabled="@_isSportImporting" Class="w-full">
+                    <PrefixContent><TwIcon Icon="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" Class="w-4 h-4" /></PrefixContent>
+                    Import History
+                </TwButton>
+            </div>
+        </TwCard>
+    </TwGrid>
+
+    <!-- Import History Section -->
+    <TwCard NoPadding="true" Class="bg-slate-900 border-slate-800 overflow-hidden shadow-xl">
+        <div class="p-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
+            <h2 class="text-lg font-bold text-white flex items-center gap-3">
+                <TwIcon Icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-5 h-5 text-blue-400" />
+                Import History
+            </h2>
+            <TwButton Variant="ghost" Size="sm" OnClick="LoadHistory">
+                <PrefixContent><TwIcon Icon="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" Class="w-4 h-4" /></PrefixContent>
+            </TwButton>
+        </div>
+        
+        <div class="overflow-x-auto">
+            @if (_history.Any())
+            {
+                <TwTable TItem="object">
+                    <thead>
+                        <tr class="text-slate-500 text-xs uppercase tracking-wider">
+                            <TwTh>Date</TwTh>
+                            <TwTh>Sport</TwTh>
+                            <TwTh>Details</TwTh>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var context in _history.Take(10))
+                        {
+                            <tr class="border-b border-slate-800/50 hover:bg-slate-800/30">
+                                <TwTd class="text-slate-400">@FormatDate(context["date"]?.ToString())</TwTd>
+                                <TwTd>
+                                    <TwChip Color="blue" Size="sm">@context["topic"]</TwChip>
+                                </TwTd>
+                                <TwTd>
+                                    <code class="text-[10px] text-slate-500 font-mono block max-w-md truncate" title="@System.Text.Json.JsonSerializer.Serialize(context["details"])">
+                                        @System.Text.Json.JsonSerializer.Serialize(context["details"])
+                                    </code>
+                                </TwTd>
+                            </tr>
+                        }
+                    </tbody>
+                </TwTable>
+            }
+            else
+            {
+                <div class="p-12 text-center">
+                    <TwIcon Icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-12 h-12 text-slate-700 mx-auto mb-4" />
+                    <p class="text-slate-500">No import history yet. Import data to see history here.</p>
+                </div>
+            }
+        </div>
+    </TwCard>
+</TwContainer>
+
+<!-- RDA Import Progress Dialog -->
+<TwDialog @bind-IsOpen="_showRdaDialog" Title="NASCAR RDA Import" MaxWidth="md">
+    <ChildContent>
+        @if (!_isRdaImporting)
+        {
+            <!-- Import Options -->
+            <div class="space-y-6">
+                <div class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 flex gap-3">
+                    <TwIcon Icon="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-5 h-5 text-blue-400 shrink-0" />
+                    <p class="text-sm text-blue-200">Import directly from .rda files with pre-computed season stats.</p>
+                </div>
+
+                <div class="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
+                    <div class="flex items-start gap-3">
+                        <TwIcon Icon="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" Class="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                        <div>
+                            <p class="text-sm font-semibold text-amber-200">Sync Data First</p>
+                            <p class="text-xs text-amber-200/70 mt-1">Import reads <strong>local files</strong>. Click below to pull the latest .rda files from GitHub before importing.</p>
+                            <TwButton Variant="outline" Size="sm" Class="mt-3" OnClick="@(() => UpdateData("nascar"))" Disabled="@_isUpdating">
+                                <PrefixContent><TwIcon Icon="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" Class="w-4 h-4" /></PrefixContent>
+                                @(_isUpdating ? "Syncing..." : "Sync from GitHub")
+                            </TwButton>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="space-y-4">
+                    <label class="block text-sm font-medium text-slate-400">Series</label>
+                    <TwSelect @bind-Value="_rdaSeries" Class="w-full">
+                        <option value="all">All Series</option>
+                        <option value="cup">Cup Series</option>
+                        <option value="xfinity">Xfinity Series</option>
+                        <option value="trucks">Trucks Series</option>
+                    </TwSelect>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-1">
+                            <label class="block text-sm font-medium text-slate-400">Year Start</label>
+                            <TwNumericField @bind-Value="_rdaYearStart" min="2000" max="2030" />
+                        </div>
+                        <div class="space-y-1">
+                            <label class="block text-sm font-medium text-slate-400">Year End</label>
+                            <TwNumericField @bind-Value="_rdaYearEnd" min="2000" max="2030" />
+                        </div>
+                    </div>
+                    
+                    <label class="flex items-center gap-3 p-3 rounded-lg border border-slate-800 hover:bg-slate-800/50 transition-colors cursor-pointer">
+                        <input type="checkbox" @bind="_rdaClearExisting" class="w-4 h-4 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-amber-500/20" />
+                        <span class="text-sm text-slate-300">Clear existing NASCAR data before import</span>
+                    </label>
+                </div>
+            </div>
+        }
+        else
+        {
+            <!-- Progress Display -->
+            <div class="space-y-6">
+                <TwProgressBar Value="100" IsIndeterminate="@(_rdaStatus?.Status == "running")" Color="blue" />
+                
+                <div class="flex items-center justify-between">
+                    <span class="text-sm text-slate-400">Status</span>
+                    <TwChip Color="@(_rdaStatus?.Status == "completed" ? "emerald" : _rdaStatus?.Status == "failed" ? "red" : "blue")" Size="sm">
+                        @(_rdaStatus?.Status ?? "unknown")
+                    </TwChip>
+                </div>
+                
+                @if (_rdaStatus?.StartedAt != null)
+                {
+                    <p class="text-xs text-slate-500">Started: @FormatDate(_rdaStatus.StartedAt)</p>
+                }
+                
+                <div class="bg-slate-950 border border-slate-800 rounded-lg p-3 h-48 overflow-y-auto font-mono text-[11px] space-y-1">
+                    @if (_rdaStatus?.Progress != null)
+                    {
+                        @foreach (var line in _rdaStatus.Progress)
+                        {
+                            <p class="text-emerald-400/80">@line</p>
+                        }
+                    }
+                </div>
+                
+                @if (_rdaStatus?.Error != null)
+                {
+                    <div class="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-sm text-red-400">
+                        @_rdaStatus.Error
+                    </div>
+                }
+            </div>
+        }
+    </ChildContent>
+    <ActionsContent>
+        @if (!_isRdaImporting)
+        {
+            <TwButton Variant="ghost" OnClick="@CloseRdaDialog">Cancel</TwButton>
+            <TwButton Variant="primary" OnClick="@StartRdaImport">Start Import</TwButton>
+        }
+        else if (_rdaStatus?.Status == "completed" || _rdaStatus?.Status == "failed")
+        {
+            <TwButton Variant="primary" OnClick="@CloseRdaDialog">Close</TwButton>
+        }
+    </ActionsContent>
+</TwDialog>
+
+<!-- NFL/NBA Import Dialog -->
+<TwDialog @bind-IsOpen="_showSportImportDialog" Title="@($"Import {_sportImportTarget?.ToUpper()} Data")" MaxWidth="md">
+    <ChildContent>
+        @if (!_isSportImporting)
+        {
+            <div class="space-y-6">
+                <div class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+                    <p class="text-sm text-blue-200 mb-3">This will download and import @(_sportImportTarget) data from:</p>
+                    <ul class="space-y-2">
+                        @if (_sportImportTarget == "nfl")
+                        {
+                            <li class="flex items-center gap-2 text-sm text-slate-300">
+                                <TwIcon Icon="M17.22 8.98L12 3.75 6.78 8.98l1.06 1.06L11 6.81V15h2V6.81l3.16 3.24 1.06-1.07z" Class="w-4 h-4 text-emerald-400" />
+                                nflverse-data (GitHub releases)
+                            </li>
+                        }
+                        else
+                        {
+                            <li class="flex items-center gap-2 text-sm text-slate-300">
+                                <TwIcon Icon="M17.22 8.98L12 3.75 6.78 8.98l1.06 1.06L11 6.81V15h2V6.81l3.16 3.24 1.06-1.07z" Class="w-4 h-4 text-amber-400" />
+                                hoopR + stats.nba.com
+                            </li>
+                        }
+                    </ul>
+                </div>
+                
+                <label class="flex items-center gap-3 p-3 rounded-lg border border-slate-800 hover:bg-slate-800/50 transition-colors cursor-pointer">
+                    <input type="checkbox" @bind="_sportClearExisting" class="w-4 h-4 rounded border-slate-700 bg-slate-900 text-blue-500 focus:ring-blue-500/20" />
+                    <span class="text-sm text-slate-300">Clear existing @(_sportImportTarget?.ToUpper()) data before import</span>
+                </label>
+            </div>
+        }
+        else
+        {
+            <div class="space-y-6">
+                <TwProgressBar Value="100" IsIndeterminate="@(_sportStatus?.Status == "running")" Color="blue" />
+                
+                <div class="flex items-center justify-between">
+                    <span class="text-sm text-slate-400">Status</span>
+                    <TwChip Color="@(_sportStatus?.Status == "completed" ? "emerald" : _sportStatus?.Status == "failed" ? "red" : "blue")" Size="sm">
+                        @(_sportStatus?.Status ?? "starting...")
+                    </TwChip>
+                </div>
+                
+                <div class="bg-slate-950 border border-slate-800 rounded-lg p-3 h-48 overflow-y-auto font-mono text-[11px] space-y-1">
+                    @if (_sportStatus?.Progress != null)
+                    {
+                        @foreach (var line in _sportStatus.Progress)
+                        {
+                            <p class="text-emerald-400/80">@line</p>
+                        }
+                    }
+                </div>
+                
+                @if (_sportStatus?.Error != null)
+                {
+                    <div class="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-sm text-red-400">
+                        @_sportStatus.Error
+                    </div>
+                }
+            </div>
+        }
+    </ChildContent>
+    <ActionsContent>
+        @if (!_isSportImporting)
+        {
+            <TwButton Variant="ghost" OnClick="@CloseSportImportDialog">Cancel</TwButton>
+            <TwButton Variant="primary" OnClick="@StartSportImport">Start Import</TwButton>
+        }
+        else if (_sportStatus?.Status == "completed" || _sportStatus?.Status == "failed")
+        {
+            <TwButton Variant="primary" OnClick="@CloseSportImportDialog">Close</TwButton>
+        }
+    </ActionsContent>
+</TwDialog>
+
+<!-- College Baseball Import Dialog -->
+<TwDialog @bind-IsOpen="_showBaseballImportDialog" Title="@($"Import NCAA Baseball - {(_baseballDivision == "0" ? "All Divisions" : $"Division {_baseballDivision}")}")" MaxWidth="md">
+    <ChildContent>
+        @if (!_isBaseballImporting)
+        {
+            <div class="space-y-6">
+                <div class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+                    <p class="text-sm text-blue-200 mb-4">This will download NCAA @(_baseballDivision == "0" ? "All Divisions" : $"Division {_baseballDivision}") baseball data for @_baseballYear:</p>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="flex items-center gap-2 text-sm text-slate-300">
+                            <TwIcon Icon="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" Class="w-4 h-4 text-blue-400" />
+                            Team rosters
+                        </div>
+                        <div class="flex items-center gap-2 text-sm text-slate-300">
+                            <TwIcon Icon="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6" Class="w-4 h-4 text-blue-400" />
+                            Batting statistics
+                        </div>
+                        <div class="flex items-center gap-2 text-sm text-slate-300">
+                            <TwIcon Icon="M13 10V3L4 14h7v7l9-11h-7z" Class="w-4 h-4 text-blue-400" />
+                            Pitching statistics
+                        </div>
+                        <div class="flex items-center gap-2 text-sm text-slate-300">
+                            <TwIcon Icon="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" Class="w-4 h-4 text-blue-400" />
+                            Schedules & results
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-blue-500/5 border border-blue-500/10 rounded-lg p-3">
+                    <p class="text-[11px] text-blue-400 italic">This performs a full bulk import of all teams and players for the selected division and year.</p>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="space-y-6">
+                <TwProgressBar Value="100" IsIndeterminate="@(_baseballStatus?.Status == "running")" Color="blue" />
+                
+                <div class="flex items-center justify-between">
+                    <span class="text-sm text-slate-400">Status</span>
+                    <TwChip Color="@(_baseballStatus?.Status == "completed" ? "emerald" : (_baseballStatus?.Status == "error" || _baseballStatus?.Status == "failed") ? "red" : "blue")" Size="sm">
+                        @(_baseballStatus?.Status ?? "starting...")
+                    </TwChip>
+                </div>
+                
+                @if (_baseballStatus?.Progress?.Any() == true)
+                {
+                    <div class="bg-slate-950 border border-slate-800 rounded-lg p-3 h-48 overflow-y-auto font-mono text-[11px] space-y-1">
+                        @foreach (var msg in _baseballStatus.Progress.TakeLast(20))
+                        {
+                            <p class="text-blue-400/80">@msg</p>
+                        }
+                    </div>
+                }
+                
+                @if (_baseballStatus?.Status == "completed")
+                {
+                    <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-sm text-emerald-400">
+                        Import completed successfully!
+                    </div>
+                }
+                @if (_baseballStatus?.Status == "error" || _baseballStatus?.Status == "failed")
+                {
+                    <div class="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-sm text-red-400">
+                        @(_baseballStatus?.Error ?? _baseballStatus?.Message ?? "Import failed")
+                    </div>
+                }
+            </div>
+        }
+    </ChildContent>
+    <ActionsContent>
+        @if (!_isBaseballImporting)
+        {
+            <TwButton Variant="ghost" OnClick="@CloseBaseballImportDialog">Cancel</TwButton>
+            <TwButton Variant="primary" OnClick="@StartBaseballImport">Start Import</TwButton>
+        }
+        else if (_baseballStatus?.Status == "completed" || _baseballStatus?.Status == "error" || _baseballStatus?.Status == "failed")
+        {
+            <TwButton Variant="primary" OnClick="@CloseBaseballImportDialog">Close</TwButton>
+        }
+    </ActionsContent>
+</TwDialog>
+
+<!-- NCAAB Import Dialog -->
+<TwDialog @bind-IsOpen="_showNcaabImportDialog" Title="Import NCAA Basketball (MBB)" MaxWidth="md">
+   <ChildContent>
+       <div class="space-y-6">
+           @if (!_isSportImporting) {
+               <div class="bg-indigo-500/10 border border-indigo-500/20 rounded-lg p-4">
+                   <p class="text-sm text-indigo-200 mb-2">Configure NCAAB import settings:</p>
+                   <TwInput TValue="string" @bind-Value="_ncaabYear" Label="Year (e.g., 2024)" Placeholder="Required" />
+                   
+                   <label class="flex items-center gap-3 p-3 mt-4 rounded-lg border border-slate-800 hover:bg-slate-800/50 transition-colors cursor-pointer">
+                       <input type="checkbox" @bind="_ncaabClearExisting" class="w-4 h-4 rounded border-slate-700 bg-slate-900 text-indigo-500 focus:ring-indigo-500/20" />
+                       <span class="text-sm text-slate-300">Clear existing data first</span>
+                   </label>
+               </div>
+           } else {
+               <div class="space-y-4">
+                    <TwProgressBar Value="100" IsIndeterminate="true" Color="indigo" />
+                    <p class="text-center text-indigo-400 animate-pulse">Importing NCAAB data...</p>
+               </div>
+           }
+       </div>
+   </ChildContent>
+   <ActionsContent>
+       @if (!_isSportImporting) {
+           <TwButton Variant="ghost" OnClick="@(() => _showNcaabImportDialog = false)">Cancel</TwButton>
+           <TwButton Variant="primary" OnClick="StartNcaabImport">Start Import</TwButton>
+       } else {
+           <TwButton Variant="primary" Disabled="true">Running...</TwButton>
+       }
+   </ActionsContent>
+</TwDialog>
+
+@code {
+    private DataStatusResponse? _dataStatus;
+    private bool _isLoading = true;
+    private bool _isUpdating = false;
+    
+    // History
+    private List<Dictionary<string, object>> _history = new();
+    
+    // RDA Import Dialog
+    private bool _showRdaDialog = false;
+    private bool _isRdaImporting = false;
+    private string _rdaSeries = "all";
+    private double _rdaYearStart = 2012;
+    private double _rdaYearEnd = DateTime.Now.Year;
+    private bool _rdaClearExisting = false;
+    private RdaImportStatus? _rdaStatus;
+    private System.Threading.Timer? _rdaPollTimer;
+    
+    // NFL/NBA Import Dialog
+    private bool _showSportImportDialog = false;
+    private bool _isSportImporting = false;
+    private string? _sportImportTarget;
+    private bool _sportClearExisting = false;
+    private SportImportStatus? _sportStatus;
+    private System.Threading.Timer? _sportPollTimer;
+    
+    // College Baseball Import
+    private bool _showBaseballImportDialog = false;
+    private bool _isBaseballImporting = false;
+    private string _baseballDivision = "1";
+    private double _baseballYear = DateTime.Now.Year;
+    private string _baseballSource = "auto";
+    private BaseballImportStatus? _baseballStatus;
+    private BaseballImportSummary? _baseballSummary;
+    private System.Threading.Timer? _baseballPollTimer;
+
+    // NCAAB Import
+    private bool _showNcaabImportDialog = false;
+    private string _ncaabYear = DateTime.Now.Year.ToString();
+    private bool _ncaabClearExisting = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStatus();
+        await LoadHistory();
+        await LoadBaseballSummary();
+    }
+
+    private async Task LoadStatus()
+    {
+        try
+        {
+            _isLoading = true;
+            _dataStatus = await MLClient.GetDataStatusAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading status");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+    
+    private async Task LoadHistory()
+    {
+        var allHistory = new List<Dictionary<string, object>>();
+        foreach(var sport in new[]{"nascar", "nba", "nfl"})
+        {
+            var h = await MLClient.GetHistoryAsync(sport);
+            allHistory.AddRange(h);
+        }
+        _history = allHistory.OrderByDescending(x => x.ContainsKey("date") ? x["date"].ToString() : "").ToList();
+    }
+
+    private async Task UpdateData(string sport, string? dataset = null)
+    {
+        try
+        {
+            _isUpdating = true;
+            Snackbar.Add($"Updating {sport}{(dataset!=null ? " - "+dataset : "")}...", Severity.Info);
+            
+            var result = await MLClient.UpdateDataAsync(sport, dataset);
+            
+            if (result.Success)
+            {
+                Snackbar.Add("Update successful!", Severity.Success);
+                await LoadStatus();
+                await LoadHistory();
+            }
+            else
+            {
+                Snackbar.Add("Update failed.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isUpdating = false;
+        }
+    }
+
+    private int GetFileCount(System.Text.Json.JsonElement? files)
+    {
+        if (files == null || !files.HasValue) return 0;
+        var elem = files.Value;
+        if (elem.ValueKind == System.Text.Json.JsonValueKind.Array) return elem.GetArrayLength();
+        if (elem.ValueKind == System.Text.Json.JsonValueKind.Object) return elem.EnumerateObject().Count();
+        return 0;
+    }
+
+    private async Task RetrainModel(string sport)
+    {
+        try
+        {
+            _isUpdating = true;
+            Snackbar.Add($"Starting Training for {sport}...", Severity.Info);
+            var result = await MLClient.RetrainModelAsync(sport);
+            if (result.Success)
+            {
+                Snackbar.Add("Training Complete!", Severity.Success);
+                await LoadStatus();
+            }
+            else
+            {
+                Snackbar.Add("Training Failed.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isUpdating = false;
+        }
+    }
+    
+    private async Task EnhanceData(string sport)
+    {
+        try
+        {
+            _isUpdating = true;
+            Snackbar.Add($"Enhancing {sport}...", Severity.Info);
+            var result = await MLClient.EnhanceDataAsync(sport);
+            if (result.Success)
+            {
+                Snackbar.Add("Enhanced successfully!", Severity.Success);
+                await LoadStatus();
+            }
+            else
+            {
+                Snackbar.Add("Enhance Failed.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isUpdating = false;
+        }
+    }
+
+    private string FormatDate(string? isoDate)
+    {
+        if (string.IsNullOrEmpty(isoDate)) return "";
+        if (DateTime.TryParse(isoDate, out var date))
+            return date.ToLocalTime().ToString("MMM d, HH:mm");
+        return isoDate;
+    }
+    
+    // ===== RDA Import Methods =====
+    
+    private void OpenRdaImportDialog()
+    {
+        _isRdaImporting = false;
+        _rdaStatus = null;
+        _showRdaDialog = true;
+    }
+    
+    private void CloseRdaDialog()
+    {
+        _showRdaDialog = false;
+        _rdaPollTimer?.Dispose();
+        _rdaPollTimer = null;
+        _isRdaImporting = false;
+    }
+    
+    private async Task PollRdaStatus()
+    {
+        try
+        {
+            using var http = new HttpClient();
+            var url = $"http://backend:8000/db/import/nascar/status";
+            var response = await http.GetFromJsonAsync<RdaImportStatus>(url);
+            if (response != null)
+            {
+                 await InvokeAsync(() =>
+                {
+                    _rdaStatus = response;
+                    if (_rdaStatus.Status == "completed" || _rdaStatus.Status == "failed")
+                    {
+                        _rdaPollTimer?.Dispose();
+                        _rdaPollTimer = null;
+                        if (_rdaStatus.Status == "completed") {
+                            Snackbar.Add("Import completed!", Severity.Success);
+                             _ = LoadStatus();
+                             _ = LoadHistory();
+                        }
+                    }
+                    StateHasChanged();
+                });
+            }
+        }
+        catch { }
+    }
+
+    private async Task StartRdaImport()
+    {
+        _isRdaImporting = true;
+        _rdaStatus = new RdaImportStatus { Status = "starting", Progress = new List<string>() };
+        StateHasChanged();
+        
+        try
+        {
+            using var http = new HttpClient();
+            http.Timeout = TimeSpan.FromMinutes(30);
+            
+            var url = $"http://backend:8000/db/import/nascar/rda?series={_rdaSeries}&year_start={_rdaYearStart}&year_end={_rdaYearEnd}&clear_existing={_rdaClearExisting.ToString().ToLower()}";
+            var response = await http.PostAsync(url, null);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                _rdaPollTimer = new System.Threading.Timer(async _ => await PollRdaStatus(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2));
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                _rdaStatus = new RdaImportStatus { Status = "failed", Error = error };
+            }
+        }
+        catch (HttpRequestException)
+        {
+            try
+            {
+                using var http2 = new HttpClient();
+                http2.Timeout = TimeSpan.FromMinutes(30);
+                var url = $"http://localhost:8000/db/import/nascar/rda?series={_rdaSeries}&year_start={_rdaYearStart}&year_end={_rdaYearEnd}&clear_existing={_rdaClearExisting.ToString().ToLower()}";
+                var response = await http2.PostAsync(url, null);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    _rdaPollTimer = new System.Threading.Timer(async _ => await PollRdaStatus(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2));
+                }
+            }
+            catch (Exception ex)
+            {
+                _rdaStatus = new RdaImportStatus { Status = "failed", Error = ex.Message };
+            }
+        }
+        catch (Exception ex)
+        {
+             _rdaStatus = new RdaImportStatus { Status = "failed", Error = ex.Message };
+        }
+    }
+    
+    // ===== Sport Import =====
+
+    private void OpenSportImportDialog(string sport)
+    {
+        _sportImportTarget = sport;
+        _isSportImporting = false;
+        _sportStatus = null;
+        _showSportImportDialog = true;
+    }
+
+    private void CloseSportImportDialog()
+    {
+        _showSportImportDialog = false;
+        _sportPollTimer?.Dispose();
+        _sportPollTimer = null;
+        _isSportImporting = false;
+    }
+
+    private async Task PollSportStatus()
+    {
+         try
+        {
+            var status = await MLClient.GetImportStatusAsync(_sportImportTarget);
+            await InvokeAsync(() =>
+            {
+                _sportStatus = status;
+                if (_sportStatus.Status == "completed" || _sportStatus.Status == "failed")
+                {
+                    _sportPollTimer?.Dispose();
+                    _sportPollTimer = null;
+                    if (_sportStatus.Status == "completed") {
+                        Snackbar.Add($"{_sportImportTarget?.ToUpper()} Import Completed!", Severity.Success);
+                         _ = LoadStatus();
+                         _ = LoadHistory();
+                    }
+                }
+                StateHasChanged();
+            });
+        }
+        catch { }
+    }
+
+    private async Task StartSportImport()
+    {
+        if (string.IsNullOrEmpty(_sportImportTarget)) return;
+
+        _isSportImporting = true;
+        _sportStatus = new SportImportStatus { Status = "starting", Progress = new List<string>() { "Requesting import..." } };
+        StateHasChanged();
+
+        try
+        {
+            var result = await MLClient.ImportSportDataAsync(_sportImportTarget, _sportClearExisting);
+            if (result.Success)
+            {
+                 _sportPollTimer = new System.Threading.Timer(async _ => await PollSportStatus(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2));
+            }
+            else
+            {
+                 _sportStatus = new SportImportStatus { Status = "failed", Error = "Failed to start import job." };
+            }
+        }
+        catch (Exception ex)
+        {
+             _sportStatus = new SportImportStatus { Status = "failed", Error = ex.Message };
+        }
+    }
+
+    // ===== Baseball Import =====
+
+    private async Task LoadBaseballSummary()
+    {
+        try 
+        {
+            _baseballSummary = await MLClient.GetBaseballImportSummaryAsync();
+        }
+        catch {}
+    }
+
+    private void ViewBaseballTeams()
+    {
+        // NavigationManager.NavigateTo("/baseball/teams"); // Not implemented yet
+        Snackbar.Add("Team viewer coming soon!", Severity.Info);
+    }
+    
+    private void OpenBaseballImportDialog()
+    {
+        _isBaseballImporting = false;
+        _baseballStatus = null;
+        _showBaseballImportDialog = true;
+    }
+    
+    private void CloseBaseballImportDialog()
+    {
+        _showBaseballImportDialog = false;
+        _baseballPollTimer?.Dispose();
+        _baseballPollTimer = null;
+        _isBaseballImporting = false;
+    }
+    
+    private async Task PollBaseballStatus()
+    {
+         try
+        {
+            var status = await MLClient.GetBaseballImportStatusAsync();
+            await InvokeAsync(() =>
+            {
+                _baseballStatus = status;
+                if (_baseballStatus.Status == "completed" || _baseballStatus.Status == "error" || _baseballStatus.Status == "failed")
+                {
+                    _baseballPollTimer?.Dispose();
+                    _baseballPollTimer = null;
+                    if (_baseballStatus.Status == "completed") {
+                        Snackbar.Add("Baseball Import Completed!", Severity.Success);
+                        _ = LoadBaseballSummary();
+                        _ = LoadStatus();
+                    }
+                }
+                StateHasChanged();
+            });
+        }
+        catch { }
+    }
+
+    private async Task StartBaseballImport()
+    {
+        _isBaseballImporting = true;
+        _baseballStatus = new BaseballImportStatus { Status = "starting", Message = "Initializing...", Progress = new List<string>() };
+        StateHasChanged();
+
+        try
+        {
+            var result = await MLClient.ImportBaseballDataAsync(_baseballYear, _baseballDivision, _baseballSource);
+             if (result.Success)
+            {
+                 _baseballPollTimer = new System.Threading.Timer(async _ => await PollBaseballStatus(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2));
+            }
+            else
+            {
+                 _baseballStatus = new BaseballImportStatus { Status = "failed", Error = "Failed to trigger import." };
+            }
+        }
+        catch (Exception ex)
+        {
+             _baseballStatus = new BaseballImportStatus { Status = "failed", Error = ex.Message };
+        }
+    }
+
+    // ===== NCAAB Import =====
+    private void OpenNcaabImportDialog() {
+        _showNcaabImportDialog = true;
+    }
+
+    private async Task StartNcaabImport() {
+        _isSportImporting = true;
+        StateHasChanged();
+        try {
+            await MLClient.ImportNcaabDataAsync(int.Parse(_ncaabYear), _ncaabClearExisting);
+            Snackbar.Add("NCAAB Import Started", Severity.Success);
+            _showNcaabImportDialog = false;
+        } catch (Exception ex) {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        } finally {
+            _isSportImporting = false;
+        }
+    }
+}

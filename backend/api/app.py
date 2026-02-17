@@ -35,6 +35,7 @@ from api.cfb_endpoints import router as cfb_router
 from api.nascar_live_endpoints import router as nascar_live_router
 from api.nhl_endpoints import router as nhl_router
 from api.expert_picks_endpoints import router as expert_picks_router
+from api.baseball_endpoints import router as baseball_router
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 # import pandas as pd  <-- Moved to local function scope
@@ -85,6 +86,7 @@ app.include_router(cfb_router)  # College Football Data
 app.include_router(nascar_live_router)  # NASCAR Live Dashboard Logic
 app.include_router(nhl_router)  # NHL Data and Predictions
 app.include_router(expert_picks_router)  # CBS Expert Picks scraper data
+app.include_router(baseball_router)  # College Baseball Data
 
 # Dev CORS. Tighten for production.
 app.add_middleware(

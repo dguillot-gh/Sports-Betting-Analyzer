@@ -1,0 +1,64 @@
+@page "/data-center"
+@using SportsBettingAnalyzer.Components.Shared.DataCenter
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
+
+<PageTitle>Data Center | Sports Betting Analyzer</PageTitle>
+
+<TwContainer MaxWidth="extraLarge" Class="mt-8 pb-12">
+    <div class="mb-8 px-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-black text-white tracking-tight flex items-center gap-3">
+                <div class="bg-gradient-to-br from-blue-600 to-indigo-600 p-2 rounded-xl shadow-lg shadow-blue-900/20">
+                    <TwIcon Icon="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" Class="w-8 h-8 text-white" />
+                </div>
+                Data Center
+            </h1>
+            <p class="text-slate-400 font-medium ml-1 mt-1">
+                Central command for data ingestion, quality monitoring, and system health.
+            </p>
+        </div>
+        
+        <div class="text-right hidden md:block">
+            <div class="text-xs text-slate-500 font-mono uppercase tracking-widest mb-1">System Status</div>
+            <div class="flex items-center gap-2 justify-end">
+                <span class="relative flex h-3 w-3">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                </span>
+                <span class="text-emerald-400 font-bold text-sm">Online</span>
+            </div>
+        </div>
+    </div>
+
+    <TwTabs HeaderClass="px-4">
+        <TwTabPanel Title="Data Management" TabIcon="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4">
+             <div class="py-6">
+                <DataManagementView />
+             </div>
+        </TwTabPanel>
+        
+        <TwTabPanel Title="Import Status" TabIcon="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4">
+             <div class="py-6">
+                <ImportStatusView />
+             </div>
+        </TwTabPanel>
+        
+        <TwTabPanel Title="Data Quality" TabIcon="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z">
+             <div class="py-6">
+                <DataQualityView />
+             </div>
+        </TwTabPanel>
+        
+        <TwTabPanel Title="System Logs" TabIcon="M4 6h16M4 12h16M4 18h7">
+             <div class="py-6">
+                <SystemLogsView />
+             </div>
+        </TwTabPanel>
+        
+        <TwTabPanel Title="Project Tracker" TabIcon="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2">
+             <div class="py-6">
+                <ProjectTrackerView />
+             </div>
+        </TwTabPanel>
+    </TwTabs>
+</TwContainer>

@@ -1,0 +1,396 @@
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
+@inject HttpClient Http
+
+<div class="space-y-6">
+    <!-- Filters -->
+    <TwCard Color="@(_sport == "nfl" ? "blue" : "orange")">
+        <div class="flex flex-col md:flex-row gap-4 items-end">
+            <div class="w-full md:w-1/6">
+                <TwSelect TValue="int?" Label="Season" @bind-Value="_selectedSeason" 
+                          Items="_availableSeasons.Select(s => new KeyValuePair<string, int?>(s.ToString(), s))" />
+            </div>
+            
+            <div class="w-full md:w-1/4">
+                <TwSelect TValue="string" Label="Team" @bind-Value="_selectedTeam" 
+                          Items="_teamOptions" />
+            </div>
+
+            <div class="w-full md:w-1/4">
+                <TwInput Label="Player Name" @bind-Value="_selectedPlayer" 
+                         Placeholder="Filter by name..." ShowSearchIcon="true" />
+            </div>
+            
+            <div class="w-full md:w-1/6">
+                <TwSelect TValue="string" Label="Position" @bind-Value="_selectedPosition" 
+                          Items="_positionOptions" />
+            </div>
+
+            <div class="w-full md:w-auto">
+                <TwButton Variant="primary" OnClick="LoadResults" IsLoading="_isLoading" Disabled="_isLoading">
+                    Search Stats
+                </TwButton>
+            </div>
+        </div>
+    </TwCard>
+
+    <!-- Results Table -->
+    @if (_isLoading)
+    {
+        <div class="flex flex-col items-center justify-center py-12">
+            <TwProgressBar IsIndeterminate="true" Color="@(_sport == "nfl" ? "blue" : "orange")" Class="w-1/2 mb-4" />
+            <p class="text-slate-400 animate-pulse">Loading @_sport.ToUpper() stats...</p>
+        </div>
+    }
+    else if (_results.Any())
+    {
+        <TwCard Color="slate" Class="overflow-hidden">
+            <div class="overflow-x-auto max-h-[700px]">
+                <TwTable TItem="object">
+                    <HeaderContent>
+                        <TwTh>Season</TwTh>
+                        <TwTh>Player</TwTh>
+                        <TwTh>Pos</TwTh>
+                        <TwTh>Team</TwTh>
+                        <TwTh Class="text-right">GP</TwTh>
+                        @if (_sport == "nfl")
+                        {
+                            <TwTh Class="text-right">Pass Yds</TwTh>
+                            <TwTh Class="text-right">Pass TD</TwTh>
+                            <TwTh Class="text-right">Rush Yds</TwTh>
+                            <TwTh Class="text-right">Rush TD</TwTh>
+                            <TwTh Class="text-right">Rec</TwTh>
+                            <TwTh Class="text-right">Rec Yds</TwTh>
+                            <TwTh Class="text-right">Rec TD</TwTh>
+                        }
+                        else
+                        {
+                            <TwTh Class="text-right">PTS</TwTh>
+                            <TwTh Class="text-right">REB</TwTh>
+                            <TwTh Class="text-right">AST</TwTh>
+                            <TwTh Class="text-right">STL</TwTh>
+                            <TwTh Class="text-right">BLK</TwTh>
+                            <TwTh Class="text-right">FG%</TwTh>
+                            <TwTh Class="text-right">3P%</TwTh>
+                        }
+                    </HeaderContent>
+                    <ChildContent>
+                        @foreach (var player in _results)
+                        {
+                            <TwTr>
+                                <TwTd>@player.Season</TwTd>
+                                <TwTd>
+                                    <button class="hover:text-white transition-colors text-left"
+                                            @onclick="() => OnPlayerSelected.InvokeAsync(player.PlayerName)">
+                                        @player.PlayerName
+                                    </button>
+                                </TwTd>
+                                <TwTd>
+                                    <TwChip Size="sm" Color="@GetPositionColor(player.Position)">@player.Position</TwChip>
+                                </TwTd>
+                                <TwTd>@player.Team</TwTd>
+                                <TwTd Class="text-right">@(player.Games ?? 0)</TwTd>
+                                
+                                @if (_sport == "nfl")
+                                {
+                                    <TwTd Class="text-right font-bold text-white">@FormatNumber(player.PassYds)</TwTd>
+                                    <TwTd Class="text-right">@FormatNumber(player.PassTd)</TwTd>
+                                    <TwTd Class="text-right font-bold text-white">@FormatNumber(player.RushYds)</TwTd>
+                                    <TwTd Class="text-right">@FormatNumber(player.RushTd)</TwTd>
+                                    <TwTd Class="text-right">@FormatNumber(player.Rec)</TwTd>
+                                    <TwTd Class="text-right font-bold text-white">@FormatNumber(player.RecYds)</TwTd>
+                                    <TwTd Class="text-right">@FormatNumber(player.RecTd)</TwTd>
+                                }
+                                else
+                                {
+                                    <TwTd Class="text-right font-bold text-white">@FormatDecimal(player.Points)</TwTd>
+                                    <TwTd Class="text-right">@FormatDecimal(player.Rebounds)</TwTd>
+                                    <TwTd Class="text-right">@FormatDecimal(player.Assists)</TwTd>
+                                    <TwTd Class="text-right">@FormatDecimal(player.Steals)</TwTd>
+                                    <TwTd Class="text-right">@FormatDecimal(player.Blocks)</TwTd>
+                                    <TwTd Class="text-right">@FormatPercent(player.FgPct)</TwTd>
+                                    <TwTd Class="text-right">@FormatPercent(player.Fg3Pct)</TwTd>
+                                }
+                            </TwTr>
+                        }
+                    </ChildContent>
+                </TwTable>
+            </div>
+            <div class="mt-4 text-center text-sm text-slate-500 pb-2">
+                Showing @_results.Count results
+            </div>
+        </TwCard>
+    }
+    else if (!_isLoading && _hasSearched)
+    {
+        <TwAlert Severity="info" Class="max-w-md mx-auto">
+            No results found. Try adjusting your filters.
+        </TwAlert>
+    }
+</div>
+
+@code {
+    [Parameter] public string Sport { get; set; } = "nfl";
+    [Parameter] public EventCallback<string> OnPlayerSelected { get; set; }
+
+    private string _sport = "nfl";
+    private int? _selectedSeason;
+    private string? _selectedPlayer;
+    private string? _selectedPosition;
+    private string? _selectedTeam;
+    private bool _isLoading = false;
+    private bool _hasSearched = false;
+    
+    private List<int> _availableSeasons = new();
+    private List<UnifiedPlayerResult> _results = new();
+    
+    private List<KeyValuePair<string, string?>> _teamOptions = new();
+    private List<KeyValuePair<string, string?>> _positionOptions = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_sport != Sport)
+        {
+            _sport = Sport;
+            _results.Clear();
+            _hasSearched = false;
+            _selectedTeam = null;
+            _selectedPosition = null;
+            await InitializeOptions();
+            await LoadSeasons();
+        }
+    }
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await InitializeOptions();
+        await LoadSeasons();
+    }
+
+    private async Task InitializeOptions()
+    {
+        _teamOptions = new() { new("All Teams", null) };
+        _positionOptions = new() { new("All Positions", null) };
+
+        if (_sport == "nfl")
+        {
+            var teams = new Dictionary<string, string>
+            {
+                { "ARI", "Arizona Cardinals" }, { "ATL", "Atlanta Falcons" }, { "BAL", "Baltimore Ravens" }, { "BUF", "Buffalo Bills" },
+                { "CAR", "Carolina Panthers" }, { "CHI", "Chicago Bears" }, { "CIN", "Cincinnati Bengals" }, { "CLE", "Cleveland Browns" },
+                { "DAL", "Dallas Cowboys" }, { "DEN", "Denver Broncos" }, { "DET", "Detroit Lions" }, { "GB", "Green Bay Packers" },
+                { "HOU", "Houston Texans" }, { "IND", "Indianapolis Colts" }, { "JAX", "Jacksonville Jaguars" }, { "KC", "Kansas City Chiefs" },
+                { "LV", "Las Vegas Raiders" }, { "LAC", "Los Angeles Chargers" }, { "LAR", "Los Angeles Rams" }, { "MIA", "Miami Dolphins" },
+                { "MIN", "Minnesota Vikings" }, { "NE", "New England Patriots" }, { "NO", "New Orleans Saints" }, { "NYG", "New York Giants" },
+                { "NYJ", "New York Jets" }, { "PHI", "Philadelphia Eagles" }, { "PIT", "Pittsburgh Steelers" }, { "SF", "San Francisco 49ers" },
+                { "SEA", "Seattle Seahawks" }, { "TB", "Tampa Bay Buccaneers" }, { "TEN", "Tennessee Titans" }, { "WAS", "Washington Commanders" }
+            };
+            foreach (var t in teams.OrderBy(x => x.Value)) _teamOptions.Add(new(t.Value, t.Key));
+            
+            _positionOptions.AddRange(new [] {
+                new KeyValuePair<string, string?>("Quarterback", "QB"),
+                new KeyValuePair<string, string?>("Running Back", "RB"),
+                new KeyValuePair<string, string?>("Wide Receiver", "WR"),
+                new KeyValuePair<string, string?>("Tight End", "TE")
+            });
+        }
+        else // NBA
+        {
+            var teams = new Dictionary<string, string>
+            {
+                { "ATL", "Atlanta Hawks" }, { "BOS", "Boston Celtics" }, { "BKN", "Brooklyn Nets" }, { "CHA", "Charlotte Hornets" },
+                { "CHI", "Chicago Bulls" }, { "CLE", "Cleveland Cavaliers" }, { "DAL", "Dallas Mavericks" }, { "DEN", "Denver Nuggets" },
+                { "DET", "Detroit Pistons" }, { "GSW", "Golden State Warriors" }, { "HOU", "Houston Rockets" }, { "IND", "Indiana Pacers" },
+                { "LAC", "Los Angeles Clippers" }, { "LAL", "Los Angeles Lakers" }, { "MEM", "Memphis Grizzlies" }, { "MIA", "Miami Heat" },
+                { "MIL", "Milwaukee Bucks" }, { "MIN", "Minnesota Timberwolves" }, { "NOP", "New Orleans Pelicans" }, { "NYK", "New York Knicks" },
+                { "OKC", "Oklahoma City Thunder" }, { "ORL", "Orlando Magic" }, { "PHI", "Philadelphia 76ers" }, { "PHX", "Phoenix Suns" },
+                { "POR", "Portland Trail Blazers" }, { "SAC", "Sacramento Kings" }, { "SAS", "San Antonio Spurs" }, { "TOR", "Toronto Raptors" },
+                { "UTA", "Utah Jazz" }, { "WAS", "Washington Wizards" }
+            };
+            foreach (var t in teams.OrderBy(x => x.Value)) _teamOptions.Add(new(t.Value, t.Key));
+
+            _positionOptions.AddRange(new [] {
+                new KeyValuePair<string, string?>("Point Guard", "PG"),
+                new KeyValuePair<string, string?>("Shooting Guard", "SG"),
+                new KeyValuePair<string, string?>("Small Forward", "SF"),
+                new KeyValuePair<string, string?>("Power Forward", "PF"),
+                new KeyValuePair<string, string?>("Center", "C")
+            });
+        }
+    }
+
+    private async Task LoadSeasons()
+    {
+        try
+        {
+            var series = _sport == "nfl" ? "nfl_weekly" : "nba_game_log";
+            // Check if backend supports generic seasons endpoint or specific
+            // Using logic from existing pages:
+            var url = _sport == "nfl" 
+                ? "http://backend:8000/db/stats/nfl/seasons" 
+                : "http://backend:8000/db/games/nba/seasons";
+
+            var response = await Http.GetFromJsonAsync<SeasonsResponse>(url);
+            _availableSeasons = response?.Seasons ?? new List<int>();
+            
+            if (_availableSeasons.Any() && !_selectedSeason.HasValue)
+            {
+                _selectedSeason = _availableSeasons.First();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading seasons: {ex.Message}");
+            _availableSeasons = Enumerable.Range(2020, 6).Reverse().ToList();
+        }
+    }
+
+    private async Task LoadResults()
+    {
+        _isLoading = true;
+        _hasSearched = true;
+        StateHasChanged();
+        
+        try
+        {
+            string url;
+            if (_sport == "nfl")
+            {
+                url = $"http://backend:8000/db/stats/nfl/list?limit=500";
+            }
+            else
+            {
+                url = $"http://backend:8000/db/games/nba/list?limit=500";
+            }
+
+            if (_selectedSeason.HasValue)
+                url += $"&season={_selectedSeason.Value}";
+            if (!string.IsNullOrEmpty(_selectedTeam))
+                url += $"&team={Uri.EscapeDataString(_selectedTeam)}";
+            if (!string.IsNullOrEmpty(_selectedPlayer))
+                url += $"&player={Uri.EscapeDataString(_selectedPlayer)}";
+            if (!string.IsNullOrEmpty(_selectedPosition))
+                url += $"&position={Uri.EscapeDataString(_selectedPosition)}";
+            
+            // We need separate deserialization logic because the backend returns different shapes
+            if (_sport == "nfl")
+            {
+                var response = await Http.GetFromJsonAsync<NFLResultsResponse>(url);
+                _results = response?.Results.Select(r => new UnifiedPlayerResult {
+                    Season = r.Season,
+                    PlayerName = r.PlayerName,
+                    Position = r.Position,
+                    Team = r.Team,
+                    Games = r.Games,
+                    PassYds = r.PassYds,
+                    PassTd = r.PassTd,
+                    RushYds = r.RushYds,
+                    RushTd = r.RushTd,
+                    Rec = r.Rec,
+                    RecYds = r.RecYds,
+                    RecTd = r.RecTd
+                }).ToList() ?? new();
+            }
+            else
+            {
+                var response = await Http.GetFromJsonAsync<NBAResultsResponse>(url);
+                _results = response?.Results.Select(r => new UnifiedPlayerResult {
+                    Season = r.Season,
+                    PlayerName = r.PlayerName,
+                    Position = r.Position,
+                    Team = r.Team,
+                    Games = r.Games,
+                    Points = r.Points ?? 0,
+                    Rebounds = r.Rebounds ?? 0,
+                    Assists = r.Assists ?? 0,
+                    Steals = r.Steals ?? 0,
+                    Blocks = r.Blocks ?? 0,
+                    FgPct = r.FgPct ?? 0,
+                    Fg3Pct = r.Fg3Pct ?? 0
+                }).ToList() ?? new();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading results: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private string GetPositionColor(string? position) => position switch
+    {
+        "QB" or "PG" => "blue",
+        "RB" or "SG" => "emerald",
+        "WR" or "SF" => "amber",
+        "TE" or "PF" or "C" => "purple",
+        _ => "slate"
+    };
+
+    private string FormatNumber(int? value) => value.HasValue && value > 0 ? value.Value.ToString("N0") : "-";
+    private string FormatDecimal(decimal? value) => value.HasValue && value > 0 ? value.Value.ToString("0.0") : "-";
+    private string FormatPercent(decimal? value) => value.HasValue && value > 0 ? value.Value.ToString("0.0") + "%" : "-";
+
+    // Unified Model
+    private class UnifiedPlayerResult
+    {
+        public int Season { get; set; }
+        public string? PlayerName { get; set; }
+        public string? Position { get; set; }
+        public string? Team { get; set; }
+        public int? Games { get; set; }
+        
+        // NFL
+        public int? PassYds { get; set; }
+        public int? PassTd { get; set; }
+        public int? RushYds { get; set; }
+        public int? RushTd { get; set; }
+        public int? Rec { get; set; }
+        public int? RecYds { get; set; }
+        public int? RecTd { get; set; }
+
+        // NBA
+        public decimal? Points { get; set; }
+        public decimal? Rebounds { get; set; }
+        public decimal? Assists { get; set; }
+        public decimal? Steals { get; set; }
+        public decimal? Blocks { get; set; }
+        public decimal? FgPct { get; set; }
+        public decimal? Fg3Pct { get; set; }
+    }
+
+    private class SeasonsResponse { public List<int> Seasons { get; set; } = new(); }
+
+    private class NFLResultsResponse { public List<NFLResultItem> Results { get; set; } = new(); }
+    private class NFLResultItem { 
+        public int Season { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("player_name")] public string? PlayerName { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("position")] public string? Position { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("team")] public string? Team { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("games")] public int? Games { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("pass_yds")] public int? PassYds { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("pass_td")] public int? PassTd { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("rush_yds")] public int? RushYds { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("rush_td")] public int? RushTd { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("rec")] public int? Rec { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("rec_yds")] public int? RecYds { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("rec_td")] public int? RecTd { get; set; }
+    }
+
+    private class NBAResultsResponse { public List<NBAResultItem> Results { get; set; } = new(); }
+    private class NBAResultItem {
+        public int Season { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("player_name")] public string? PlayerName { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("position")] public string? Position { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("team")] public string? Team { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("games")] public int? Games { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("pts")] public decimal? Points { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("reb")] public decimal? Rebounds { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("ast")] public decimal? Assists { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("stl")] public decimal? Steals { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("blk")] public decimal? Blocks { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("fg_pct")] public decimal? FgPct { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("fg3_pct")] public decimal? Fg3Pct { get; set; }
+    }
+}

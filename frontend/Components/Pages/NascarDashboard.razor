@@ -1,5 +1,4 @@
 @page "/nascar-dashboard"
-@using MudBlazor
 @using System.Net.Http.Json
 @using System.Timers
 @inject HttpClient Http
@@ -10,107 +9,129 @@
 
 <PageTitle>NASCAR Live Dashboard</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
-    <MudStack Spacing="3">
-        @* Header *@
-        <MudPaper Class="pa-4" Elevation="3" Style="background: linear-gradient(to right, #2c3e50, #000000); color: white;">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                <MudStack Row="true" AlignItems="AlignItems.Center">
-                    <MudIcon Icon="@Icons.Material.Filled.Speed" Size="Size.Large" Color="Color.Error" />
-                    <div>
-                        <MudText Typo="Typo.h4" Style="font-weight: bold;">LIVE RACE DASHBOARD</MudText>
-                        <MudText Typo="Typo.caption" Style="color: #bbb;">Real-time telemetry & timing</MudText>
+<div class="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
+    <TwContainer MaxWidth="extraLarge">
+        <div class="flex flex-col gap-6">
+            <!-- Header -->
+            <TwCard Class="bg-gradient-to-r from-slate-900 to-black border-slate-800">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div class="flex items-center gap-4">
+                        <div class="p-3 bg-red-500/10 rounded-2xl backdrop-blur-sm border border-red-500/20">
+                            <TwIcon Icon="speed" Class="w-10 h-10 text-red-500" />
+                        </div>
+                        <div>
+                            <h1 class="text-3xl font-black text-white tracking-tight">LIVE RACE DASHBOARD</h1>
+                            <p class="text-slate-400 font-medium">Real-time telemetry & timing</p>
+                        </div>
                     </div>
-                </MudStack>
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
-                    <MudChip T="string" Color="@(_isConnected ? Color.Success : Color.Error)" Size="Size.Small" Icon="@(_isConnected ? Icons.Material.Filled.Wifi : Icons.Material.Filled.WifiOff)">
-                        @(_isConnected ? "LIVE" : "OFFLINE")
-                    </MudChip>
-                    <MudSwitch @bind-Value="_autoRefresh" Color="Color.Success" Label="Auto-Refresh (2s)" />
-                </MudStack>
-            </MudStack>
-        </MudPaper>
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-2 px-3 py-1.5 rounded-full border @(_isConnected ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" : "bg-red-500/10 border-red-500/20 text-red-400")">
+                            <TwIcon Icon="@(_isConnected ? "wifi" : "wifi_off")" Class="w-4 h-4" />
+                            <span class="text-xs font-bold uppercase tracking-wider">@(_isConnected ? "LIVE" : "OFFLINE")</span>
+                        </div>
+                        
+                        <div class="flex items-center gap-3 bg-slate-800/50 rounded-lg p-2 border border-slate-700/50">
+                            <span class="text-sm font-medium text-slate-400">Auto-Refresh</span>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" @bind="_autoRefresh" class="sr-only peer">
+                                <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-500/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </TwCard>
 
-        @* Race Info Banner *@
-        @if (_raceInfo != null && _raceInfo.Count > 0)
-        {
-            <MudPaper Class="pa-3" Elevation="2" Style="background-color: #1a1a1a;">
-                <MudGrid Spacing="1">
-                    @foreach (var item in _raceInfo)
-                    {
-                        <MudItem xs="6" sm="4" md="2">
-                            <MudText Typo="Typo.caption" Style="color: #888;">@FormatLabel(item.Key)</MudText>
-                            <MudText Typo="Typo.body2" Style="color: white; font-weight: bold;">@item.Value</MudText>
-                        </MudItem>
-                    }
-                </MudGrid>
-            </MudPaper>
-        }
+            <!-- Race Info Banner -->
+            @if (_raceInfo != null && _raceInfo.Count > 0)
+            {
+                <TwCard Class="bg-slate-900/50 border-slate-800">
+                    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                        @foreach (var item in _raceInfo)
+                        {
+                            <div class="flex flex-col">
+                                <span class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-1">@FormatLabel(item.Key)</span>
+                                <span class="text-lg font-bold text-white">@item.Value</span>
+                            </div>
+                        }
+                    </div>
+                </TwCard>
+            }
 
-        @* Leaderboard *@
-        <MudTable Items="@_vehicles" Dense="true" Hover="true" Striped="true" FixedHeader="true" Height="calc(100vh - 250px)" 
-                  SortLabel="Sort By" Filter="new Func<VehicleData,bool>(FilterFunc)">
-            <ToolBarContent>
-                <MudTextField @bind-Value="_searchString" Placeholder="Search Driver..." Adornment="Adornment.Start" 
-                              AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
-            </ToolBarContent>
-            <HeaderContent>
-                <MudTh><MudTableSortLabel SortBy="new Func<VehicleData, object>(x => x.Position)">Pos</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<VehicleData, object>(x => x.Number)">#</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<VehicleData, object>(x => x.Driver)">Driver</MudTableSortLabel></MudTh>
-                <MudTh>Mfr</MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<VehicleData, object>(x => x.Delta)">Delta</MudTableSortLabel></MudTh>
-                <MudTh>Last Lap</MudTh>
-                <MudTh>Best Lap</MudTh>
-                <MudTh>Avg Spd</MudTh>
-                <MudTh>Laps Led</MudTh>
-                <MudTh>Pit</MudTh>
-                <MudTh>Status</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Pos">
-                    <MudChip T="string" Size="Size.Small" Color="@GetPosColor(context.Position)" Variant="Variant.Filled">@context.Position</MudChip>
-                </MudTd>
-                <MudTd DataLabel="#">
-                    <MudText Typo="Typo.body2" Style="font-weight: bold;">@context.Number</MudText>
-                </MudTd>
-                <MudTd DataLabel="Driver">
-                    <MudStack Spacing="0">
-                        <MudText Typo="Typo.body2" Style="font-weight: bold;">@context.Driver</MudText>
-                        <MudText Typo="Typo.caption" Style="color: #666;">@context.Sponsor</MudText>
-                    </MudStack>
-                </MudTd>
-                <MudTd DataLabel="Mfr">@context.Manufacturer</MudTd>
-                <MudTd DataLabel="Delta" Style="font-family: monospace; color: #ff9800;">@context.Delta</MudTd>
-                <MudTd DataLabel="Last Lap" Style="font-family: monospace;">
-                    @context.LastLapTime
-                    <MudText Typo="Typo.caption" Class="d-block">@context.LastLapSpeed mph</MudText>
-                </MudTd>
-                <MudTd DataLabel="Best Lap" Style="font-family: monospace; color: #4caf50;">
-                    @context.BestLapTime
-                </MudTd>
-                <MudTd DataLabel="Avg Spd" Style="font-family: monospace;">@context.AverageSpeed</MudTd>
-                <MudTd DataLabel="Laps Led">
-                    @if(context.LapsLedCount > 0)
-                    {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text">@context.LapsLedCount</MudChip>
-                    }
-                    else
-                    {
-                        @("-")
-                    }
-                </MudTd>
-                <MudTd DataLabel="Pit">@context.PitStops</MudTd>
-                <MudTd DataLabel="Status">
-                     <MudText Color="@(context.Status == "Running" ? Color.Success : Color.Error)">@context.Status</MudText>
-                </MudTd>
-            </RowTemplate>
-            <PagerContent>
-                <MudTablePager />
-            </PagerContent>
-        </MudTable>
-    </MudStack>
-</MudContainer>
+            <!-- Leaderboard -->
+            <TwCard Class="overflow-hidden border-slate-800" NoPadding="true">
+                <div class="p-4 border-b border-slate-800 bg-slate-900/30">
+                     <TwInput @bind-Value="_searchString" 
+                              Placeholder="Search Driver, #, or Sponsor..." 
+                              Icon="search" 
+                              Class="w-full md:max-w-md" />
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-slate-300">
+                        <thead class="text-xs text-slate-400 uppercase bg-slate-900/50 border-b border-slate-800">
+                            <tr>
+                                <th class="px-6 py-3 cursor-pointer hover:text-white" @onclick="@(() => SortBy("Position"))">Pos</th>
+                                <th class="px-6 py-3 cursor-pointer hover:text-white" @onclick="@(() => SortBy("Number"))">#</th>
+                                <th class="px-6 py-3 cursor-pointer hover:text-white" @onclick="@(() => SortBy("Driver"))">Driver</th>
+                                <th class="px-6 py-3">Mfr</th>
+                                <th class="px-6 py-3 cursor-pointer hover:text-white" @onclick="@(() => SortBy("Delta"))">Delta</th>
+                                <th class="px-6 py-3">Last Lap</th>
+                                <th class="px-6 py-3">Best Lap</th>
+                                <th class="px-6 py-3">Avg Spd</th>
+                                <th class="px-6 py-3">Laps Led</th>
+                                <th class="px-6 py-3">Pit</th>
+                                <th class="px-6 py-3">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800">
+                            @foreach (var car in FilteredVehicles)
+                            {
+                                <tr class="hover:bg-slate-800/30 transition-colors">
+                                    <td class="px-6 py-4">
+                                        <div class="flex items-center justify-center w-8 h-8 rounded font-bold @GetPosColor(car.Position)">
+                                            @car.Position
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 font-bold text-white font-mono">@car.Number</td>
+                                    <td class="px-6 py-4">
+                                        <div class="flex flex-col">
+                                            <span class="font-bold text-white">@car.Driver</span>
+                                            <span class="text-xs text-slate-500">@car.Sponsor</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4">@car.Manufacturer</td>
+                                    <td class="px-6 py-4 font-mono text-amber-500">@car.Delta</td>
+                                    <td class="px-6 py-4 font-mono">
+                                        <div class="flex flex-col">
+                                            <span>@car.LastLapTime</span>
+                                            <span class="text-xs text-slate-500">@car.LastLapSpeed mph</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 font-mono text-emerald-400">@car.BestLapTime</td>
+                                    <td class="px-6 py-4 font-mono">@car.AverageSpeed</td>
+                                    <td class="px-6 py-4">
+                                        @if(car.LapsLedCount > 0)
+                                        {
+                                            <span class="px-2 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">@car.LapsLedCount</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-slate-600">-</span>
+                                        }
+                                    </td>
+                                    <td class="px-6 py-4">@car.PitStops</td>
+                                    <td class="px-6 py-4">
+                                         <span class="@(car.Status == "Running" ? "text-emerald-400" : "text-red-400") font-medium">@car.Status</span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </TwCard>
+        </div>
+    </TwContainer>
+</div>
 
 @code {
     private string _apiBaseUrl = "http://backend:8000";
@@ -120,6 +141,48 @@
     private Dictionary<string, object> _raceInfo = new();
     private List<VehicleData> _vehicles = new ();
     private string _searchString = "";
+    private string _sortBy = "Position";
+    private bool _sortAsc = true;
+
+    private IEnumerable<VehicleData> FilteredVehicles
+    {
+        get
+        {
+            var query = _vehicles.AsEnumerable();
+            
+            if (!string.IsNullOrWhiteSpace(_searchString))
+            {
+                query = query.Where(x => 
+                    (x.Driver?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (x.Number?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (x.Sponsor?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) ?? false));
+            }
+
+            return SortData(query);
+        }
+    }
+
+    private void SortBy(string column)
+    {
+        if (_sortBy == column)
+            _sortAsc = !_sortAsc;
+        else
+        {
+            _sortBy = column;
+            _sortAsc = true;
+        }
+    }
+
+    private IEnumerable<VehicleData> SortData(IEnumerable<VehicleData> data)
+    {
+        return _sortBy switch
+        {
+            "Driver" => _sortAsc ? data.OrderBy(x => x.Driver) : data.OrderByDescending(x => x.Driver),
+            "Number" => _sortAsc ? data.OrderBy(x => int.TryParse(x.Number, out int n) ? n : 999) : data.OrderByDescending(x => int.TryParse(x.Number, out int n) ? n : 999),
+            "Delta" => _sortAsc ? data.OrderBy(x => x.Delta) : data.OrderByDescending(x => x.Delta),
+            _ => _sortAsc ? data.OrderBy(x => x.Position) : data.OrderByDescending(x => x.Position)
+        };
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -156,18 +219,12 @@
         }
     }
 
-    private bool FilterFunc(VehicleData element) =>
-        string.IsNullOrWhiteSpace(_searchString) ||
-        element.Driver?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true ||
-        element.Number?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true ||
-        element.Sponsor?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true;
-
-    private Color GetPosColor(int pos)
+    private string GetPosColor(int pos)
     {
-        if (pos == 1) return Color.Warning; // Gold
-        if (pos <= 5) return Color.Success; // Green
-        if (pos <= 10) return Color.Info;   // Blue
-        return Color.Default;
+        if (pos == 1) return "bg-amber-500/20 text-amber-500 border border-amber-500/30"; 
+        if (pos <= 5) return "bg-emerald-500/20 text-emerald-500 border border-emerald-500/30";
+        if (pos <= 10) return "bg-blue-500/20 text-blue-500 border border-blue-500/30";
+        return "bg-slate-800 text-slate-400";
     }
 
     private string FormatLabel(string key)
@@ -224,3 +281,5 @@
         public string? Status { get; set; }
     }
 }
+
+

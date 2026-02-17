@@ -719,31 +719,43 @@
     
     private class TeamInfo
     {
-        [System.Text.Json.Serialization.JsonPropertyName("TeamId")]
+        [System.Text.Json.Serialization.JsonPropertyName("team_id")]
         public string TeamId { get; set; } = "";
         
-        [System.Text.Json.Serialization.JsonPropertyName("TeamName")]
+        [System.Text.Json.Serialization.JsonPropertyName("ncaa_name")]
         public string TeamName { get; set; } = "";
         
-        [System.Text.Json.Serialization.JsonPropertyName("Conference")]
+        [System.Text.Json.Serialization.JsonPropertyName("conference")]
         public string Conference { get; set; } = "";
         
-        [System.Text.Json.Serialization.JsonPropertyName("Division")]
+        [System.Text.Json.Serialization.JsonPropertyName("division")]
         public int Division { get; set; }
     }
     
     private class StatsResponse
     {
-        public int TeamId { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("team_id")]
+        public string TeamId { get; set; } = "";
+        
+        [System.Text.Json.Serialization.JsonPropertyName("stat_type")]
         public string StatType { get; set; } = "";
+        
+        [System.Text.Json.Serialization.JsonPropertyName("count")]
         public int Count { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("stats")]
         public List<Dictionary<string, object>> Stats { get; set; } = new();
     }
     
     private class ScheduleResponse
     {
-        public int TeamId { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("team_id")]
+        public string TeamId { get; set; } = "";
+        
+        [System.Text.Json.Serialization.JsonPropertyName("count")]
         public int Count { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("games")]
         public List<Dictionary<string, object>> Games { get; set; } = new();
     }
     

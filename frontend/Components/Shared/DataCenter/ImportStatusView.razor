@@ -1,0 +1,229 @@
+@using SportsBettingAnalyzer.Models
+@using SportsBettingAnalyzer.Services
+@inject PythonMLServiceClient MLClient
+@inject ISnackbar Snackbar
+
+<TwContainer MaxWidth="large" Class="mt-0 px-4 pb-12">
+    <!-- Loading Overlay for Import Operations -->
+    <TwLoadingOverlay 
+        IsVisible="@isImporting"
+        Title="Importing Data..."
+        Color="emerald"
+        CurrentStatusMessage="@_importStatusMessage"
+        ShowProgress="false"
+        OnCancel="@CancelImport" />
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+        <div>
+            <h2 class="text-2xl font-bold text-white">Import Status</h2>
+            <p class="text-slate-400 mt-1">View logs and configure automation settings.</p>
+        </div>
+        <TwButton Variant="secondary" OnClick="LoadLogs" IsLoading="@(logs == null)" Disabled="@(logs == null)">
+            <PrefixContent><TwIcon Icon="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" Class="w-4 h-4" /></PrefixContent>
+            Refresh Logs
+        </TwButton>
+    </div>
+
+    <TwGrid Columns="1" ColumnsMd="12" Gap="6" Class="mb-8">
+        <!-- Control Panel -->
+        <div class="md:col-span-4 h-full">
+            <TwCard Class="p-6 h-full flex flex-col bg-slate-900 border-slate-800">
+                <div class="flex items-center gap-2 mb-4">
+                    <div class="p-2 bg-blue-500/10 rounded-lg">
+                        <TwIcon Icon="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z M21 12a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-5 h-5 text-blue-400" />
+                    </div>
+                    <h3 class="text-lg font-bold text-white">Actions</h3>
+                </div>
+                
+                <p class="text-slate-400 text-sm mb-6">Trigger a full import sequence manually. This runs all active sports in order.</p>
+                
+                <div class="flex-grow">
+                    @if (isImporting)
+                    {
+                        <div class="flex flex-col items-center justify-center py-6 bg-slate-950/30 rounded-xl border border-dashed border-slate-800">
+                            <TwProgressBar Value="100" IsIndeterminate="true" Color="blue" Class="mb-3 w-3/4" />
+                            <span class="text-sm text-slate-400 font-medium">Importing sequences...</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <TwButton Variant="primary" Class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-900/20" OnClick="TriggerImport">
+                            <PrefixContent><TwIcon Icon="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" Class="w-5 h-5" /></PrefixContent>
+                            Run Manual Import
+                        </TwButton>
+                    }
+                </div>
+
+                <div class="mt-8 pt-6 border-t border-slate-800">
+                    <h4 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Service Status</h4>
+                    <div class="space-y-3">
+                        <div class="flex items-center gap-3 text-sm">
+                            <TwIcon Icon="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-4 h-4 text-emerald-500" />
+                            <span class="text-slate-300">Scheduler Service: <span class="text-emerald-400 font-bold">Active</span></span>
+                        </div>
+                        <div class="flex items-center gap-3 text-sm">
+                            <TwIcon Icon="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" Class="w-4 h-4 text-slate-500" />
+                            <span class="text-slate-400 italic">Pushover: Checked via .env</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-auto pt-4 text-center">
+                    <span class="text-[10px] text-slate-500 font-mono">NEXT RUN: 03:00 AM EST</span>
+                </div>
+            </TwCard>
+        </div>
+        
+        <!-- Notifications Setup Guide -->
+        <div class="md:col-span-8 h-full">
+            <TwCard Class="p-6 h-full flex flex-col bg-slate-900 border-slate-800">
+                <div class="flex items-center gap-2 mb-6">
+                    <div class="p-2 bg-indigo-500/10 rounded-lg">
+                        <TwIcon Icon="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" Class="w-5 h-5 text-indigo-400" />
+                    </div>
+                    <h3 class="text-lg font-bold text-white">Setup Push Notifications</h3>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <p class="text-slate-400 text-sm mb-4">To receive alerts on your phone during auto-imports:</p>
+                        <ul class="space-y-3">
+                            <li class="flex items-start gap-3">
+                                <span class="flex-shrink-0 w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] text-blue-400 font-bold">1</span>
+                                <span class="text-sm text-slate-300">Create account at <a href="https://pushover.net" target="_blank" class="text-blue-400 hover:underline">Pushover.net</a></span>
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="flex-shrink-0 w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] text-blue-400 font-bold">2</span>
+                                <span class="text-sm text-slate-300">Get <span class="font-bold text-white">User Key</span> from dashboard</span>
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="flex-shrink-0 w-5 h-5 rounded-full bg-slate-800 border border-slate-800 flex items-center justify-center text-[10px] text-blue-400 font-bold">3</span>
+                                <span class="text-sm text-slate-300">Create Application for <span class="font-bold text-white">API Token</span></span>
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="flex-shrink-0 w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] text-blue-400 font-bold">4</span>
+                                <span class="text-sm text-slate-300">Add credentials to <code class="bg-slate-800 px-1 rounded text-pink-400">backend/.env</code></span>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="bg-slate-950/80 rounded-2xl p-5 border border-slate-800 font-mono text-xs shadow-inner">
+                        <div class="flex items-center gap-2 mb-3">
+                            <div class="w-2.5 h-2.5 rounded-full bg-red-500/50"></div>
+                            <div class="w-2.5 h-2.5 rounded-full bg-amber-500/50"></div>
+                            <div class="w-2.5 h-2.5 rounded-full bg-emerald-500/50"></div>
+                        </div>
+                        <p class="text-emerald-400/80 mb-1"># backend/.env</p>
+                        <p class="text-slate-300"><span class="text-blue-400">PUSHOVER_USER_KEY</span>=<span class="text-amber-300">"your_user_key"</span></p>
+                        <p class="text-slate-300"><span class="text-blue-400">PUSHOVER_API_TOKEN</span>=<span class="text-amber-300">"your_api_token"</span></p>
+                    </div>
+                </div>
+            </TwCard>
+        </div>
+
+        <!-- Logs Table -->
+        <div class="md:col-span-12">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+                <div class="px-6 py-4 border-b border-slate-800 bg-slate-800/20 flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-white">Import History</h3>
+                </div>
+                
+                <TwTable TItem="ImportLog" Items="@logs" IsLoading="@(logs == null)" EmptyMessage="No logs found.">
+                    <HeaderContent>
+                        <TwTh>Status</TwTh>
+                        <TwTh>Sport</TwTh>
+                        <TwTh>Time Started</TwTh>
+                        <TwTh>Duration</TwTh>
+                        <TwTh>Records</TwTh>
+                        <TwTh>Details</TwTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <TwTd>
+                            @if (context.Status == "SUCCESS") 
+                            { <TwChip Color="emerald" Size="sm" Class="font-bold">Success</TwChip> }
+                            else if (context.Status == "IN_PROGRESS") 
+                            { <TwChip Color="amber" Size="sm" Class="font-bold">Running</TwChip> }
+                            else 
+                            { <TwChip Color="red" Size="sm" Class="font-bold">Failed</TwChip> }
+                        </TwTd>
+                        <TwTd><span class="font-bold text-slate-300">@context.Sport.ToUpper()</span></TwTd>
+                        <TwTd><span class="text-slate-400">@context.StartTime.ToLocalTime().ToString("g")</span></TwTd>
+                        <TwTd><span class="font-mono text-slate-400">@(context.DurationSeconds.HasValue ? $"{context.DurationSeconds:F1}s" : "-")</span></TwTd>
+                        <TwTd><span class="text-slate-300">@context.RowsImported</span></TwTd>
+                        <TwTd>
+                            @if (!string.IsNullOrEmpty(context.ErrorMessage))
+                            {
+                                <span class="text-red-400 text-xs italic group relative cursor-help">
+                                    @(context.ErrorMessage.Length > 40 ? context.ErrorMessage.Substring(0, 40) + "..." : context.ErrorMessage)
+                                    <span class="absolute bottom-full left-0 mb-2 hidden group-hover:block w-64 p-2 bg-slate-950 border border-slate-700 rounded-lg text-white z-50 shadow-2xl">
+                                        @context.ErrorMessage
+                                    </span>
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="text-slate-600">-</span>
+                            }
+                        </TwTd>
+                    </RowTemplate>
+                </TwTable>
+            </div>
+        </div>
+    </TwGrid>
+</TwContainer>
+
+@code {
+    private List<ImportLog> logs;
+    private bool isImporting = false;
+    private string _importStatusMessage = "Connecting to data sources...";
+    private CancellationTokenSource? _importCts;
+    
+    private string[] _importMessages = new[] {
+        "📡 Connecting to data sources...",
+        "📥 Fetching latest records...",
+        "🔍 Parsing response data...",
+        "🧹 Cleaning and validating...",
+        "💾 Saving to database...",
+        "🔗 Linking relationships...",
+        "✅ Verifying data integrity...",
+        "🎉 Almost done..."
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLogs();
+    }
+
+    private async Task LoadLogs()
+    {
+        logs = await MLClient.GetImportLogsAsync();
+    }
+    
+    private void CancelImport()
+    {
+        _importCts?.Cancel();
+        isImporting = false;
+        Snackbar.Add("Import cancelled", Severity.Warning);
+    }
+
+    private async Task TriggerImport()
+    {
+        isImporting = true;
+        // Show immediate feedback
+        Snackbar.Add("Import request sent...", Severity.Info);
+        
+        bool success = await MLClient.RunImportsAsync();
+        
+        if (success)
+        {
+            await Task.Delay(1000); // Wait for DB write
+            await LoadLogs();
+            Snackbar.Add("Import process started in background", Severity.Success);
+        }
+        else 
+        {
+            Snackbar.Add("Failed to trigger import", Severity.Error);
+        }
+        
+        isImporting = false;
+    }
+}

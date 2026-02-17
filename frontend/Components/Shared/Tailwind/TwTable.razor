@@ -2,54 +2,56 @@
 @namespace SportsBettingAnalyzer.Components.Shared.Tailwind
 
 <div class="overflow-x-auto @Class">
-    <table class="w-full text-left">
-        @if (HeaderContent != null)
-        {
-            <thead class="bg-slate-800/50 border-b border-slate-700">
-                <tr>
-                    @HeaderContent
-                </tr>
-            </thead>
-        }
-        <tbody class="divide-y divide-slate-800">
-            @if (IsLoading)
+    <CascadingValue Value="Dense" Name="TwTable_Dense">
+        <table class="w-full text-left">
+            @if (HeaderContent != null)
             {
-                <tr>
-                    <td colspan="100" class="py-12 text-center text-slate-500 font-medium">
-                        <div class="flex flex-col items-center gap-2">
-                            <div class="w-8 h-8 border-2 border-slate-700 border-t-blue-500 rounded-full animate-spin"></div>
-                            <span>Loading data...</span>
-                        </div>
-                    </td>
-                </tr>
+                <thead class="bg-slate-800/50 border-b border-slate-700">
+                    <tr>
+                        @HeaderContent
+                    </tr>
+                </thead>
             }
-            else if (Items == null || !Items.Any())
-            {
-                <tr>
-                    <td colspan="100" class="py-12 text-center text-slate-500 font-medium italic">
-                        @EmptyMessage
-                    </td>
-                </tr>
-            }
-            else if (RowTemplate != null)
-            {
-                var filteredItems = Filter != null ? Items?.Where(Filter) : Items;
-                @if (filteredItems != null)
+            <tbody class="divide-y divide-slate-800">
+                @if (IsLoading)
                 {
-                    @foreach (var item in filteredItems)
+                    <tr>
+                        <td colspan="100" class="py-12 text-center text-slate-500 font-medium">
+                            <div class="flex flex-col items-center gap-2">
+                                <div class="w-8 h-8 border-2 border-slate-700 border-t-blue-500 rounded-full animate-spin"></div>
+                                <span>Loading data...</span>
+                            </div>
+                        </td>
+                    </tr>
+                }
+                else if (ChildContent != null && RowTemplate == null)
+                {
+                    @ChildContent
+                }
+                else if (Items == null || !Items.Any())
+                {
+                    <tr>
+                        <td colspan="100" class="py-12 text-center text-slate-500 font-medium italic">
+                            @EmptyMessage
+                        </td>
+                    </tr>
+                }
+                else if (RowTemplate != null)
+                {
+                    var filteredItems = Filter != null ? Items?.Where(Filter) : Items;
+                    @if (filteredItems != null)
                     {
-                        <tr>
-                            @RowTemplate(item)
-                        </tr>
+                        @foreach (var item in filteredItems)
+                        {
+                            <tr class="@(Hover ? "hover:bg-slate-700/30 transition-colors" : "")">
+                                @RowTemplate(item)
+                            </tr>
+                        }
                     }
                 }
-            }
-            else
-            {
-                @ChildContent
-            }
-        </tbody>
-    </table>
+            </tbody>
+        </table>
+    </CascadingValue>
 </div>
 
 @code {
@@ -61,4 +63,6 @@
     [Parameter] public bool IsLoading { get; set; }
     [Parameter] public string EmptyMessage { get; set; } = "No items found.";
     [Parameter] public string Class { get; set; } = "";
+    [Parameter] public bool Hover { get; set; }
+    [Parameter] public bool Dense { get; set; }
 }

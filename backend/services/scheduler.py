@@ -130,6 +130,10 @@ class SchedulerService:
             # --- 5. College Baseball ---
             res_baseball = await cls._run_job_wrapper("baseball", cls._import_baseball_task)
             results.append(res_baseball)
+
+            # --- 6. NHL ---
+            res_nhl = await cls._run_job_wrapper("nhl", cls._import_nhl_task)
+            results.append(res_nhl)
             
             # --- Send Notification ---
             await NotificationService.send_summary_report(results)
@@ -270,9 +274,29 @@ class SchedulerService:
 
     @staticmethod
     async def _import_nascar_task():
-        """Worker for NASCAR (RDA 2012-Current)."""
+        """Worker for NASCAR (RDA 2012-Current).
+        
+        Step 1: Sync .rda files from GitHub (kyleGrealis/nascaR.data)
+        Step 2: Import the synced .rda files into the database
+        """
+        from pathlib import Path
+        from src.data_sources import NASCARDataUpdater
+        
         current_year = datetime.now().year
-        # Fix: import_nascar_rda does not accept clear_existing
+        
+        # Step 1: Sync latest .rda files from GitHub
+        try:
+            nascar_data_dir = Path(__file__).resolve().parent.parent / 'data' / 'nascar' / 'raw'
+            updater = NASCARDataUpdater(nascar_data_dir)
+            sync_result = updater.update()
+            if sync_result.get("success"):
+                logger.info(f"NASCAR GitHub sync successful: {sync_result.get('files', [])}")
+            else:
+                logger.warning(f"NASCAR GitHub sync had errors: {sync_result.get('errors', [])}")
+        except Exception as e:
+            logger.warning(f"NASCAR GitHub sync failed (continuing with local files): {e}")
+        
+        # Step 2: Import from .rda files into database
         res = await import_nascar_rda(year_start=2012, year_end=current_year)
         
         # Calculate rows
@@ -294,6 +318,19 @@ class SchedulerService:
         if not res.get("success") and res.get("message") == "All import sources failed":
              raise Exception("College Baseball import failed: All sources failed")
              
+        return {"rows": rows}
+
+    @staticmethod
+    async def _import_nhl_task():
+        """Worker for NHL (MoneyPuck + NHL API)."""
+        from scripts.nhl_importer import import_all_nhl
+        res = await import_all_nhl(clear_existing=False)
+        
+        rows = res.get("games_imported", 0) + res.get("players_imported", 0)
+        
+        if res.get("status") == "failed":
+            raise Exception(f"NHL import failed: {res.get('errors')}")
+        
         return {"rows": rows}
 
     @staticmethod

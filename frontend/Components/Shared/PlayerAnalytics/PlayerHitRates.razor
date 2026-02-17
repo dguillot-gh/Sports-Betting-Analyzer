@@ -1,0 +1,523 @@
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
+@inject HttpClient Http
+
+<div class="space-y-6">
+    <!-- Filters -->
+    <TwCard Color="slate">
+        <div class="flex flex-col md:flex-row gap-4 items-end">
+            <div class="w-full md:w-1/6">
+                <TwSelect TValue="int" Label="Season" @bind-Value="_selectedSeason" 
+                          Items="_availableSeasons.Select(s => new KeyValuePair<string, int>(s.ToString(), s))" />
+            </div>
+            
+            <div class="w-full md:w-1/3">
+                <TwInput Label="Player Search" @bind-Value="_searchPlayer" 
+                         Placeholder="Filter by player..." 
+                         ShowSearchIcon="true" />
+            </div>
+            
+            <div class="w-full md:w-1/6">
+                <TwSelect TValue="string" Label="Stat Type" Value="_selectedStat" 
+                          Items="_statOptions" ValueChanged="@((string val) => OnStatChanged(val))" />
+            </div>
+            
+            <div class="w-full md:w-1/6">
+                <div class="flex flex-col gap-1">
+                    <label class="text-xs font-semibold uppercase tracking-wider text-slate-400 ml-1">Over Line</label>
+                    <input type="number" @bind="_threshold" min="0" max="500" 
+                           class="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all placeholder-slate-500 hover:border-slate-600" />
+                </div>
+            </div>
+
+            <div class="w-full md:w-auto">
+                <TwButton Variant="primary" OnClick="CalculateHitRates" IsLoading="_isLoading" Disabled="_isLoading">
+                    Calculate
+                </TwButton>
+            </div>
+        </div>
+        
+        @if (_sport == "nfl" && (_selectedStat.StartsWith("pass")))
+        {
+            <TwAlert Severity="info" Class="mt-4">
+                Filtering to Quarterbacks only for passing stats.
+            </TwAlert>
+        }
+    </TwCard>
+
+    @if (_isLoading)
+    {
+        <div class="flex flex-col items-center justify-center py-12">
+            <TwProgressBar IsIndeterminate="true" Color="@(_sport == "nfl" ? "blue" : "orange")" Class="w-1/2 mb-4" />
+            <p class="text-slate-400 animate-pulse">Calculating hit rates...</p>
+        </div>
+    }
+    else if (_hitRates.Any())
+    {
+        <!-- Summary Cards -->
+        <TwGrid Cols="1" ColsMd="3" Gap="6">
+            @foreach (var player in _hitRates.Take(3))
+            {
+                <TwCard Hoverable="true" Class="@($"h-full border-l-4 {GetBorderClass(player.SeasonRate)}")" Color="slate">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="font-bold text-lg text-white">@player.PlayerName</h3>
+                            <p class="text-sm text-slate-400">
+                                Over @_threshold @GetStatLabel(_selectedStat) (@_selectedSeason)
+                            </p>
+                        </div>
+                        <TwAvatar Size="lg" Color="@GetRateColorName(player.SeasonRate)">
+                            @player.SeasonRate.ToString("P0")
+                        </TwAvatar>
+                    </div>
+                    
+                    <div class="w-full h-px bg-slate-700 my-4"></div>
+                    
+                    <div class="grid grid-cols-3 gap-2">
+                        <div class="text-center">
+                            <div class="@($"text-xl font-bold {GetTextClass(player.Last5Rate)}")">
+                                @player.Last5Hits/@player.Last5Games
+                            </div>
+                            <div class="text-xs text-slate-500 uppercase tracking-wider mt-1">Last 5</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="@($"text-xl font-bold {GetTextClass(player.Last10Rate)}")">
+                                @player.Last10Hits/@player.Last10Games
+                            </div>
+                            <div class="text-xs text-slate-500 uppercase tracking-wider mt-1">Last 10</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="@($"text-xl font-bold {GetTextClass(player.SeasonRate)}")">
+                                @player.SeasonHits/@player.SeasonGames
+                            </div>
+                            <div class="text-xs text-slate-500 uppercase tracking-wider mt-1">Season</div>
+                        </div>
+                    </div>
+                </TwCard>
+            }
+        </TwGrid>
+        
+        <!-- Full Table -->
+        <TwCard Color="slate" Class="overflow-hidden">
+            <div class="overflow-x-auto max-h-[600px]">
+                <TwTable TItem="object">
+                    <HeaderContent>
+                        <TwTh>Player</TwTh>
+                        <TwTh>Team</TwTh>
+                        <TwTh Class="text-center">L5</TwTh>
+                        <TwTh Class="text-center">L10</TwTh>
+                        <TwTh Class="text-center">Season</TwTh>
+                        <TwTh Class="text-center">Avg</TwTh>
+                        <TwTh Class="text-center">Trend</TwTh>
+                    </HeaderContent>
+                    <ChildContent>
+                        @foreach (var player in _hitRates)
+                        {
+                            <TwTr>
+                                <TwTd>
+                                    <button class="hover:text-white transition-colors text-left font-medium"
+                                            @onclick="() => OnPlayerSelected.InvokeAsync(player.PlayerName)">
+                                        @player.PlayerName
+                                    </button>
+                                </TwTd>
+                                <TwTd>@player.Team</TwTd>
+                                <TwTd Class="text-center">
+                                    <TwChip Size="sm" Color="@GetRateColorName(player.Last5Rate)">
+                                        @player.Last5Hits/@player.Last5Games
+                                    </TwChip>
+                                </TwTd>
+                                <TwTd Class="text-center">
+                                    <TwChip Size="sm" Color="@GetRateColorName(player.Last10Rate)">
+                                        @player.Last10Hits/@player.Last10Games
+                                    </TwChip>
+                                </TwTd>
+                                <TwTd Class="text-center">
+                                    <TwChip Size="sm" Color="@GetRateColorName(player.SeasonRate)">
+                                        @player.SeasonRate.ToString("P0")
+                                    </TwChip>
+                                </TwTd>
+                                <TwTd Class="text-center font-bold text-white">
+                                    @player.SeasonAvg.ToString("F1")
+                                </TwTd>
+                                <TwTd Class="text-center">
+                                    @if (player.Last5Rate > player.SeasonRate)
+                                    {
+                                        <svg class="w-5 h-5 text-emerald-500 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                                        </svg>
+                                    }
+                                    else if (player.Last5Rate < player.SeasonRate)
+                                    {
+                                        <svg class="w-5 h-5 text-rose-500 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"></path>
+                                        </svg>
+                                    }
+                                    else
+                                    {
+                                        <svg class="w-5 h-5 text-slate-500 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14"></path>
+                                        </svg>
+                                    }
+                                </TwTd>
+                            </TwTr>
+                        }
+                    </ChildContent>
+                </TwTable>
+            </div>
+            
+            @if (_hitRates.Any())
+            {
+                <div class="mt-6 pt-6 border-t border-slate-700">
+                    <h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-4">Season Averages</h4>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        @foreach(var stat in _statOptions.Take(4)) 
+                        {
+                            <div class="bg-slate-800/50 rounded-lg p-3 text-center border border-slate-700">
+                                <div class="text-xl font-bold text-white">@GetOverallAvg(stat.Value).ToString("F1")</div>
+                                <div class="text-xs text-slate-500">Avg @stat.Key</div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </TwCard>
+    }
+    else if (!_isLoading && _searchCompleted)
+    {
+        <TwAlert Severity="info" Class="max-w-md mx-auto">
+            No hit rate data found. Try searching for a player or adjusting filters.
+        </TwAlert>
+    }
+</div>
+
+@code {
+    [Parameter] public string Sport { get; set; } = "nfl";
+    [Parameter] public EventCallback<string> OnPlayerSelected { get; set; }
+
+    private string _sport = "nfl";
+    private string _searchPlayer = "";
+    private string _selectedStat = "";
+    private int _threshold = 0;
+    private int _selectedSeason;
+    private bool _isLoading = false;
+    private bool _searchCompleted = false;
+    
+    private List<int> _availableSeasons = new();
+    private List<HitRateResult> _hitRates = new();
+    private List<UnifiedGameResult> _allGameResults = new();
+    
+    private List<KeyValuePair<string, string>> _statOptions = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_sport != Sport)
+        {
+            _sport = Sport;
+            _searchPlayer = "";
+            _hitRates.Clear();
+            _searchCompleted = false;
+            await InitializeOptions();
+            await LoadSeasons();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await InitializeOptions();
+        await LoadSeasons();
+    }
+
+    private async Task InitializeOptions()
+    {
+        if (_sport == "nfl")
+        {
+            _statOptions = new()
+            {
+                new("Pass Yards", "pass_yds"),
+                new("Rush Yards", "rush_yds"),
+                new("Rec Yards", "rec_yds"),
+                new("Receptions", "rec"),
+                new("Pass TDs", "pass_td"),
+                new("Rush TDs", "rush_td"),
+                new("Rec TDs", "rec_td")
+            };
+            _selectedStat = "pass_yds";
+            _threshold = 250;
+        }
+        else // NBA
+        {
+            _statOptions = new()
+            {
+                new("Points", "pts"),
+                new("Rebounds", "reb"),
+                new("Assists", "ast"),
+                new("3-Pointers Made", "fg3"),
+                new("Steals", "stl"),
+                new("Blocks", "blk")
+            };
+            _selectedStat = "pts";
+            _threshold = 20;
+        }
+    }
+
+    private async Task LoadSeasons()
+    {
+        try
+        {
+            var series = _sport == "nfl" ? "nfl_weekly" : "nba_game_log";
+            var url = _sport == "nfl" 
+                ? "http://backend:8000/db/stats/nfl/seasons" 
+                : "http://backend:8000/db/games/nba/seasons?series=nba_game_log";
+
+            var response = await Http.GetFromJsonAsync<SeasonsResponse>(url);
+            _availableSeasons = response?.Seasons ?? new List<int>();
+            
+            if (_availableSeasons.Any())
+            {
+                if (!_availableSeasons.Contains(_selectedSeason))
+                    _selectedSeason = _availableSeasons.First();
+            }
+            else
+            {
+                _availableSeasons = new List<int> { 2025, 2024, 2023 };
+                _selectedSeason = 2025;
+            }
+        }
+        catch 
+        { 
+             _availableSeasons = new List<int> { 2025, 2024, 2023 };
+             _selectedSeason = 2025;
+        }
+    }
+
+    private void OnStatChanged(string newStat)
+    {
+        _selectedStat = newStat;
+        // Defaults
+        if (_sport == "nfl")
+        {
+            _threshold = newStat switch {
+                "pass_yds" => 250, "rush_yds" => 60, "rec_yds" => 50, "rec" => 4,
+                "pass_td" => 2, _ => 1
+            };
+        }
+        else
+        {
+            _threshold = newStat switch {
+                "pts" => 20, "reb" => 8, "ast" => 6, "fg3" => 3, _ => 2
+            };
+        }
+    }
+
+    private async Task CalculateHitRates()
+    {
+        _isLoading = true;
+        _searchCompleted = false;
+        StateHasChanged();
+        
+        try
+        {
+            string url;
+             if (_sport == "nfl")
+                url = $"http://backend:8000/db/stats/nfl/list?limit=1000&season={_selectedSeason}";
+            else
+                url = $"http://backend:8000/db/games/nba/list?limit=1000&season={_selectedSeason}";
+
+            if (!string.IsNullOrEmpty(_searchPlayer))
+                url += $"&player={Uri.EscapeDataString(_searchPlayer)}";
+            
+            List<UnifiedGameResult> games = new();
+
+             if (_sport == "nfl")
+            {
+                var response = await Http.GetFromJsonAsync<NFLResultsResponse>(url);
+                games = response?.Results.Select(r => new UnifiedGameResult {
+                    Season = r.Season, 
+                    Week = ParseWeek(r.GameDate), 
+                    GameDate = r.GameDate?.ToString(), 
+                    PlayerName = r.PlayerName, Position = r.Position, Team = r.Team,
+                    PassYds = r.PassYds, PassTd = r.PassTd, RushYds = r.RushYds, 
+                    RushTd = r.RushTd, Rec = r.Rec, RecYds = r.RecYds, RecTd = r.RecTd
+                }).ToList() ?? new();
+                
+                 // Filter QBs for passing stats
+                if (_selectedStat.StartsWith("pass"))
+                     games = games.Where(g => g.Position == "QB").ToList();
+            }
+            else
+            {
+                var response = await Http.GetFromJsonAsync<NBAResultsResponse>(url);
+                games = response?.Results.Select(r => new UnifiedGameResult {
+                    Season = r.Season, GameDate = r.GameDate,
+                    PlayerName = r.PlayerName, Position = r.Position, Team = r.Team,
+                    Pts = (int?)r.Points, Reb = (int?)r.Rebounds, Ast = (int?)r.Assists,
+                    Stl = (int?)r.Steals, Blk = (int?)r.Blocks, Fg3 = (int?)r.Fg3
+                }).ToList() ?? new();
+            }
+
+            _allGameResults = games.Where(g => !string.IsNullOrEmpty(g.PlayerName)).ToList();
+            
+            var playerGames = _allGameResults.GroupBy(g => g.PlayerName).ToList();
+
+            _hitRates = playerGames.Select(pg => {
+                var allGames = pg.ToList(); // Determine sort order. NFL usually has week, NBA has Date.
+                // Simple sort logic:
+                allGames = allGames.OrderByDescending(g => g.GameDate).ToList();
+
+                var last5 = allGames.Take(5).ToList();
+                var last10 = allGames.Take(10).ToList();
+                
+                return new HitRateResult {
+                    PlayerName = pg.Key!,
+                    Team = pg.FirstOrDefault()?.Team ?? "",
+                    SeasonGames = allGames.Count,
+                    SeasonHits = allGames.Count(g => GetStatValue(g) >= _threshold),
+                    Last5Games = last5.Count,
+                    Last5Hits = last5.Count(g => GetStatValue(g) >= _threshold),
+                    Last10Games = last10.Count,
+                    Last10Hits = last10.Count(g => GetStatValue(g) >= _threshold),
+                    SeasonAvg = allGames.Any() ? allGames.Average(g => GetStatValue(g)) : 0
+                };
+            })
+            .Where(h => h.SeasonGames > 0)
+            .OrderByDescending(h => h.SeasonRate)
+            .Take(50)
+            .ToList();
+
+             _searchCompleted = true;
+
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+            _hitRates.Clear();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private int GetStatValue(UnifiedGameResult g) => _selectedStat switch
+    {
+        "pass_yds" => g.PassYds ?? 0, "rush_yds" => g.RushYds ?? 0, "rec_yds" => g.RecYds ?? 0, "rec" => g.Rec ?? 0,
+        "pass_td" => g.PassTd ?? 0, "rush_td" => g.RushTd ?? 0, "rec_td" => g.RecTd ?? 0,
+        "pts" => g.Pts ?? 0, "reb" => g.Reb ?? 0, "ast" => g.Ast ?? 0, "fg3" => g.Fg3 ?? 0,
+        "stl" => g.Stl ?? 0, "blk" => g.Blk ?? 0,
+        _ => 0
+    };
+
+    private double GetOverallAvg(string stat)
+    {
+         if (!_allGameResults.Any()) return 0;
+         var tempStat = _selectedStat; // Save current
+         _selectedStat = stat; // switch context to get value
+         var avg = _allGameResults.Select(g => GetStatValue(g)).Where(v => v > 0).DefaultIfEmpty(0).Average();
+         _selectedStat = tempStat; // restore
+         return avg;
+    }
+
+    private string GetRateColorName(double rate) => rate >= 0.8 ? "emerald" : rate >= 0.6 ? "amber" : "rose";
+    private string GetBorderClass(double rate) => rate >= 0.8 ? "border-emerald-500" : rate >= 0.6 ? "border-amber-500" : "border-rose-500";
+    private string GetTextClass(double rate) => rate >= 0.8 ? "text-emerald-400" : rate >= 0.6 ? "text-amber-400" : "text-rose-400";
+    private string GetStatLabel(string stat) => _statOptions.FirstOrDefault(x => x.Value == stat).Key ?? stat;
+
+    // Models
+    private class SeasonsResponse { public List<int> Seasons { get; set; } = new(); }
+    
+    // Unified Game Result for Hit Rate Calculation
+    private class UnifiedGameResult
+    {
+        public int Season { get; set; }
+        public string? GameDate { get; set; } // Flexible date string
+        public int? Week { get; set; } 
+        public string? PlayerName { get; set; }
+        public string? Position { get; set; }
+        public string? Team { get; set; }
+        
+        // NFL
+        public int? PassYds { get; set; }
+        public int? PassTd { get; set; }
+        public int? RushYds { get; set; }
+        public int? RushTd { get; set; }
+        public int? Rec { get; set; }
+        public int? RecYds { get; set; }
+        public int? RecTd { get; set; }
+
+        // NBA
+        public int? Pts { get; set; }
+        public int? Reb { get; set; }
+        public int? Ast { get; set; }
+        public int? Stl { get; set; }
+        public int? Blk { get; set; }
+        public int? Fg3 { get; set; }
+    }
+
+    private class HitRateResult
+    {
+        public string PlayerName { get; set; } = "";
+        public string Team { get; set; } = "";
+        public int SeasonGames { get; set; }
+        public int SeasonHits { get; set; }
+        public int Last5Games { get; set; }
+        public int Last5Hits { get; set; }
+        public int Last10Games { get; set; }
+        public int Last10Hits { get; set; }
+        public double SeasonAvg { get; set; }
+
+        public double SeasonRate => SeasonGames > 0 ? (double)SeasonHits / SeasonGames : 0;
+        public double Last5Rate => Last5Games > 0 ? (double)Last5Hits / Last5Games : 0;
+        public double Last10Rate => Last10Games > 0 ? (double)Last10Hits / Last10Games : 0;
+    }
+
+    // Backend Response Wrappers
+    private class NFLResultsResponse { public List<NFLResultItem> Results { get; set; } = new(); }
+    private class NFLResultItem { 
+        public int Season { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("game_date")] public object? GameDate { get; set; } // could be string or int week?
+        [System.Text.Json.Serialization.JsonPropertyName("player_name")] public string? PlayerName { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("position")] public string? Position { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("team")] public string? Team { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("pass_yds")] public int? PassYds { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("pass_td")] public int? PassTd { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("rush_yds")] public int? RushYds { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("rush_td")] public int? RushTd { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("rec")] public int? Rec { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("rec_yds")] public int? RecYds { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("rec_td")] public int? RecTd { get; set; }
+    }
+
+    private class NBAResultsResponse { public List<NBAResultItem> Results { get; set; } = new(); }
+    private class NBAResultItem {
+        public int Season { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("game_date")] public string? GameDate { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("player_name")] public string? PlayerName { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("position")] public string? Position { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("team")] public string? Team { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("pts")] public decimal? Points { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("reb")] public decimal? Rebounds { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("ast")] public decimal? Assists { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("stl")] public decimal? Steals { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("blk")] public decimal? Blocks { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("fg3")] public decimal? Fg3 { get; set; }
+    }
+
+    private int? ParseWeek(object? val)
+    {
+        if (val == null) return null;
+        if (val is int i) return i;
+        if (val is long l) return (int)l;
+        if (val is System.Text.Json.JsonElement je)
+        {
+            if (je.ValueKind == System.Text.Json.JsonValueKind.Number && je.TryGetInt32(out var n)) return n;
+            if (je.ValueKind == System.Text.Json.JsonValueKind.String && int.TryParse(je.GetString(), out var n2)) return n2;
+        }
+        if (includeSTR(val.ToString(), out var res)) return res;
+        return null;
+    }
+    
+    private bool includeSTR(string? s, out int res) 
+    {
+        res = 0;
+        return int.TryParse(s, out res);
+    }
+}
