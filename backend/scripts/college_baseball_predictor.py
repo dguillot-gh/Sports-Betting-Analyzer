@@ -7,7 +7,26 @@ import logging
 import os
 from datetime import datetime, date
 from typing import Dict, List, Any, Optional
+import logging
+import os
+import json
+from datetime import datetime, date
+from typing import Dict, List, Any, Optional
 import math
+import pandas as pd
+import numpy as np
+
+try:
+    import xgboost as xgb
+except ImportError:
+    xgb = None
+
+# Try to import feature engineering from trainer
+# If not available (e.g. running as script), define locally
+try:
+    from scripts.college_baseball_xgb_trainer import CollegeBaseballXGBTrainer
+except ImportError:
+    CollegeBaseballXGBTrainer = None
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +58,115 @@ class CollegeBaseballPredictor:
         self._team_stats_cache: Dict[str, Dict] = {}
         # Base runs per game average (lower than metal bat era, but still high)
         self.LEAGUE_AVG_RUNS = 6.5
-    
-    def get_team_stats(self, team_name: str) -> Dict[str, float]:
+        
+        # Load XGBoost models
+        self.model_ml = None
+        self.model_ou = None
+        self.use_xgb = False
+        
+        if xgb:
+            try:
+                models_dir = "models/college_baseball"
+                ml_path = os.path.join(models_dir, "cbb_xgb_classifier.json")
+                ou_path = os.path.join(models_dir, "cbb_xgb_regressor.json")
+                
+                if os.path.exists(ml_path) and os.path.exists(ou_path):
+                    self.model_ml = xgb.XGBClassifier()
+                    self.model_ml.load_model(ml_path)
+                    
+                    self.model_ou = xgb.XGBRegressor()
+                    self.model_ou.load_model(ou_path)
+                    
+                    self.use_xgb = True
+                    logger.info("Loaded College Baseball XGBoost models")
+            except Exception as e:
+                logger.warning(f"Failed to load XGBoost models: {e}")
+
+    async def _get_rolling_stats(self, team_name: str) -> Optional[Dict]:
+        """Fetch rolling stats from DB for a team."""
+        try:
+            # We need a DB connection
+            conn = self.db
+            should_close = False
+            
+            if not conn:
+                try:
+                    from src.config import DATABASE_URL as CFG_DB
+                    db_url = CFG_DB
+                except:
+                    db_url = os.environ.get("DATABASE_URL", "postgresql://user:password@localhost:5432/sports_betting")
+                
+                import asyncpg
+                conn = await asyncpg.connect(db_url)
+                should_close = True
+            
+            # Fetch recent results involving this team
+            # We need both home and away games
+            query = """
+                SELECT metadata 
+                FROM results 
+                WHERE series = 'college_baseball' 
+                  AND (metadata->>'homeTeam' = $1 OR metadata->>'awayTeam' = $1)
+                ORDER BY event_date DESC
+                LIMIT 20
+            """
+            rows = await conn.fetch(query, team_name)
+            
+            if should_close:
+                await conn.close()
+                
+            if not rows or len(rows) < 5:
+                return None
+                
+            # Process history
+            history = []
+            for row in rows:
+                meta = json.loads(row['metadata'])
+                is_home = meta.get('homeTeam') == team_name
+                
+                runs_for = float(meta.get('homeScore', 0) if is_home else meta.get('awayScore', 0))
+                runs_against = float(meta.get('awayScore', 0) if is_home else meta.get('homeScore', 0))
+                
+                history.append({
+                    'runs_scored': runs_for,
+                    'runs_allowed': runs_against,
+                    'won': 1 if runs_for > runs_against else 0
+                })
+            
+            # Calculate stats (history is newest first, so reverse for chronological calc if needed, 
+            # but simple averages don't care about order)
+            
+            # Last 5
+            l5 = history[:5]
+            runs_scored_l5 = sum(g['runs_scored'] for g in l5) / 5.0
+            runs_allowed_l5 = sum(g['runs_allowed'] for g in l5) / 5.0
+            
+            # Last 10
+            l10 = history[:10]
+            win_pct_l10 = sum(g['won'] for g in l10) / len(l10)
+            
+            # Streak
+            streak = 0
+            for g in history: # these are ordered newest to oldest
+                if g['won'] == 1:
+                    if streak >= 0: streak += 1
+                    else: break
+                else:
+                    if streak <= 0: streak -= 1
+                    else: break
+                    
+            return {
+                'runs_scored_avg_l5': runs_scored_l5,
+                'runs_allowed_avg_l5': runs_allowed_l5,
+                'win_pct_l10': win_pct_l10,
+                'streak': streak
+            }
+            
+        except Exception as e:
+            logger.warning(f"Error fetching rolling stats for {team_name}: {e}")
+            return None
+
+    async def get_team_stats(self, team_name: str) -> Dict[str, float]:
         """
         Get team statistics. Returns defaults if team not in cache.
         """
@@ -105,13 +231,49 @@ class CollegeBaseballPredictor:
         # We generally do not want to use hardcoded defaults for live predictions
         return None
     
-    def predict_game(self, home_team: str, away_team: str, 
+    async def predict_game(self, home_team: str, away_team: str, 
                      spread: float = None, over_under: float = None) -> Dict[str, Any]:
         """
-        Predict game outcome using team statistics.
+        Predict game outcome using team statistics (and XGBoost if available).
         """
-        home_stats = self.get_team_stats(home_team)
-        away_stats = self.get_team_stats(away_team)
+        # Try to get rolling stats for XGBoost
+        xgb_prediction = None
+        
+        if self.use_xgb:
+            home_rolling = await self._get_rolling_stats(home_team)
+            away_rolling = await self._get_rolling_stats(away_team)
+            
+            if home_rolling and away_rolling:
+                try:
+                    # Construct features vector matching trainer
+                    features = pd.DataFrame([{
+                        'home_runs_scored_avg_l5': home_rolling['runs_scored_avg_l5'],
+                        'home_runs_allowed_avg_l5': home_rolling['runs_allowed_avg_l5'],
+                        'home_win_pct_l10': home_rolling['win_pct_l10'],
+                        'home_streak': home_rolling['streak'],
+                        'away_runs_scored_avg_l5': away_rolling['runs_scored_avg_l5'],
+                        'away_runs_allowed_avg_l5': away_rolling['runs_allowed_avg_l5'],
+                        'away_win_pct_l10': away_rolling['win_pct_l10'],
+                        'away_streak': away_rolling['streak'],
+                        'is_neutral': 0 # Assumption for now
+                    }])
+                    
+                    # Predict Win Prob
+                    win_prob = self.model_ml.predict_proba(features)[0][1]
+                    
+                    # Predict Total Runs
+                    total_runs = self.model_ou.predict(features)[0]
+                    
+                    xgb_prediction = {
+                        'win_prob': float(win_prob),
+                        'total_runs': float(total_runs)
+                    }
+                except Exception as e:
+                    logger.error(f"XGBoost prediction failed: {e}")
+
+        # Fallback / Baseline: Pythagorean Expectation
+        home_stats = await self.get_team_stats(home_team)
+        away_stats = await self.get_team_stats(away_team)
         
         if not home_stats or not away_stats:
             logger.warning(f"Missing stats for {home_team} or {away_team}")
@@ -161,6 +323,33 @@ class CollegeBaseballPredictor:
             'confidence': round(confidence, 2),
             'confidence_level': 'high' if confidence >= 0.65 else 'medium' if confidence >= 0.55 else 'low'
         }
+
+        # Merge XGBoost results if available
+        if xgb_prediction:
+            # Weighted average of Pythagorean and XGBoost
+            # Giving more weight to XGBoost as it's trained on recent form
+            
+            pyth_prob = result['home_win_probability']
+            xgb_prob = xgb_prediction['win_prob']
+            
+            # 70% XGBoost, 30% Pythagorean
+            combined_prob = (xgb_prob * 0.7) + (pyth_prob * 0.3)
+            
+            # Combined Total
+            pyth_total = result['predicted_total']
+            xgb_total = xgb_prediction['total_runs']
+            combined_total = (xgb_total * 0.7) + (pyth_total * 0.3)
+            
+            result['home_win_probability'] = round(combined_prob, 3)
+            result['away_win_probability'] = round(1 - combined_prob, 3)
+            result['predicted_total'] = round(combined_total, 1)
+            result['predicted_winner'] = home_team if combined_prob > 0.5 else away_team
+            
+            # Recalculate margin/confidence loosely
+            result['predicted_margin'] = round((combined_prob - 0.5) * 10, 1) # Approximation
+            result['xgb_available'] = True
+            result['xgb_prob'] = round(xgb_prob, 3)
+            result['xgb_total'] = round(xgb_total, 1)
         
         # Compare to betting lines
         if spread is not None:
@@ -277,7 +466,21 @@ async def analyze_college_baseball_matchup(home_team: str, away_team: str,
                                  home_ml: int = None, away_ml: int = None) -> Dict[str, Any]:
     """Comprehensive College Baseball matchup analysis."""
     predictor = CollegeBaseballPredictor()
-    prediction = predictor.predict_game(home_team, away_team, spread, over_under)
+    prediction = await predictor.predict_game(home_team, away_team, spread, over_under)
+    
+    # If prediction failed (missing stats), return early with safe defaults
+    if prediction.get('error'):
+        prediction.setdefault('home_win_probability', 0.5)
+        prediction.setdefault('away_win_probability', 0.5)
+        prediction.setdefault('predicted_winner', home_team)
+        prediction.setdefault('predicted_margin', 0.0)
+        prediction.setdefault('predicted_total', 0.0)
+        prediction.setdefault('confidence', 0.0)
+        prediction.setdefault('confidence_level', 'low')
+        prediction['value_bets'] = []
+        prediction['has_value'] = False
+        prediction['model'] = 'none'
+        return prediction
     
     # Add moneyline analysis if provided
     if home_ml and away_ml:

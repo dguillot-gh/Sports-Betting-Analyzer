@@ -97,6 +97,9 @@ class TrainingOrchestrator:
                 else:
                     from scripts.nba_xgb_trainer import train_nba_model_wrapper
                     train_nba_model_wrapper(job)
+            elif job.sport.lower() == "college_baseball":
+                from scripts.college_baseball_xgb_trainer import train_cbb_model_wrapper
+                train_cbb_model_wrapper(job)
             else:
                 raise NotImplementedError(f"Training for {job.sport} not implemented yet")
                 

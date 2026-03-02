@@ -4,6 +4,7 @@
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
+@inject ILogger<NascarResults> Logger
 
 <PageTitle>NASCAR Race Results</PageTitle>
 
@@ -59,7 +60,7 @@
     @if (_isLoading)
     {
         <div class="mb-6">
-            <TwProgressBar Indeterminate="true" Color="blue" />
+            <TwProgressBar IsIndeterminate="true" Color="blue" />
         </div>
     }
     
@@ -191,7 +192,11 @@
             if (_finishFilter.HasValue)
                 url += $"&finish_max={_finishFilter.Value}";
             
+            Logger.LogInformation($"Loading results from: {url} [Series: {_selectedSeries}]");
+            
             var response = await Http.GetFromJsonAsync<RaceResultsResponse>(url);
+            Logger.LogInformation($"Received {response?.Results?.Count ?? 0} results.");
+            
             _results = response?.Results ?? new();
             _totalResults = response?.Total ?? 0;
         }

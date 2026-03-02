@@ -65,16 +65,25 @@ async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, pro
     """Import team game-by-game data from MoneyPuck."""
     logger.info("Starting MoneyPuck game-level import...")
     
-    # Download file
+    # Download file (always re-download to ensure fresh data)
     local_file = DATA_DIR / "all_teams_games.csv"
-    if not local_file.exists():
-        logger.info(f"Downloading MoneyPuck guest dataset: {MONEYPUCK_ALL_TEAMS_GAME_BY_GAME}")
-        response = requests.get(MONEYPUCK_ALL_TEAMS_GAME_BY_GAME, headers=HEADERS, stream=True)
+    logger.info(f"Downloading MoneyPuck dataset: {MONEYPUCK_ALL_TEAMS_GAME_BY_GAME}")
+    try:
+        response = requests.get(MONEYPUCK_ALL_TEAMS_GAME_BY_GAME, headers=HEADERS, stream=True, timeout=120)
         if response.status_code == 200:
             local_file.write_bytes(response.content)
-            logger.info("Download complete.")
+            logger.info(f"Download complete ({len(response.content)} bytes).")
         else:
-            logger.error(f"Failed to download MoneyPuck data: {response.status_code}")
+            if local_file.exists():
+                logger.warning(f"Failed to download fresh MoneyPuck data (HTTP {response.status_code}), using cached file")
+            else:
+                logger.error(f"Failed to download MoneyPuck data: {response.status_code}")
+                return
+    except Exception as e:
+        if local_file.exists():
+            logger.warning(f"MoneyPuck download failed ({e}), using cached file")
+        else:
+            logger.error(f"MoneyPuck download failed and no cached file: {e}")
             return
 
     # Process CSV in chunks to save memory
@@ -163,18 +172,24 @@ async def import_player_bios(conn, sport_id: int):
     logger.info("Importing player bios...")
     local_file = DATA_DIR / "player_bios.csv"
     
-    if not local_file.exists():
-        logger.info(f"Downloading MoneyPuck player bios: {MONEYPUCK_PLAYER_BIOS}")
-        try:
-            response = requests.get(MONEYPUCK_PLAYER_BIOS, headers=HEADERS, timeout=30)
-            if response.status_code == 200:
-                local_file.write_bytes(response.content)
-                logger.info("Player bios download complete.")
+    # Always re-download to ensure fresh data
+    logger.info(f"Downloading MoneyPuck player bios: {MONEYPUCK_PLAYER_BIOS}")
+    try:
+        response = requests.get(MONEYPUCK_PLAYER_BIOS, headers=HEADERS, timeout=30)
+        if response.status_code == 200:
+            local_file.write_bytes(response.content)
+            logger.info(f"Player bios download complete ({len(response.content)} bytes).")
+        else:
+            if local_file.exists():
+                logger.warning(f"Failed to download fresh player bios (HTTP {response.status_code}), using cached")
             else:
                 logger.error(f"Failed to download player bios: {response.status_code}")
                 return
-        except Exception as e:
-            logger.error(f"Error downloading player bios: {e}")
+    except Exception as e:
+        if local_file.exists():
+            logger.warning(f"Player bios download failed ({e}), using cached")
+        else:
+            logger.error(f"Player bios download failed and no cached file: {e}")
             return
     
     if not local_file.exists():
@@ -223,37 +238,82 @@ async def sync_live_standings(conn, sport_id: int):
     except Exception as e:
         logger.error(f"Failed to sync standings: {e}")
 
-async def main():
-    logger.info("--- NHL Importer Starting ---")
+async def import_all_nhl(clear_existing: bool = False, progress_callback=None) -> dict:
+    """
+    Standardized entry point for NHL import (used by scheduler).
+    Downloads fresh data from MoneyPuck + NHL API and imports to DB.
+    
+    Returns:
+        dict with import results
+    """
+    results = {
+        "status": "success",
+        "games_imported": 0,
+        "players_imported": 0,
+        "errors": []
+    }
+    
     conn = None
     try:
-        # Use DATABASE_URL from config if possible
-        try:
-            from src.config import DATABASE_URL as CFG_DB
-            url = CFG_DB
-        except:
-            url = DATABASE_URL
-            
-        conn = await asyncpg.connect(url)
+        conn = await asyncpg.connect(DATABASE_URL)
         
-        # 1. Setup
         await ensure_schema(conn)
         sport_id = await ensure_sport_exists(conn)
         
-        # 2. Historical Data (MoneyPuck)
-        await import_moneypuck_game_data(conn, sport_id, limit=20000)
+        if clear_existing:
+            if progress_callback:
+                progress_callback("Clearing existing NHL data...")
+            await conn.execute("DELETE FROM results WHERE sport_id = $1", sport_id)
+            await conn.execute(
+                "DELETE FROM entities WHERE sport_id = $1",
+                sport_id
+            )
+        
+        # 1. MoneyPuck game data (always fresh download)
+        if progress_callback:
+            progress_callback("Downloading MoneyPuck game data...")
+        await import_moneypuck_game_data(conn, sport_id, progress_callback=progress_callback)
+        
+        game_count = await conn.fetchval(
+            "SELECT COUNT(*) FROM results WHERE sport_id = $1", sport_id
+        )
+        results["games_imported"] = game_count or 0
+        
+        # 2. Player bios
+        if progress_callback:
+            progress_callback("Importing player bios...")
         await import_player_bios(conn, sport_id)
         
-        # 3. Live Data (NHL API)
+        player_count = await conn.fetchval(
+            "SELECT COUNT(*) FROM entities WHERE sport_id = $1 AND type = 'player'", sport_id
+        )
+        results["players_imported"] = player_count or 0
+        
+        # 3. Live standings
+        if progress_callback:
+            progress_callback("Syncing live standings...")
         await sync_live_standings(conn, sport_id)
         
-        logger.info("NHL Import Process Complete.")
+        if progress_callback:
+            progress_callback("NHL import complete!")
+        
+        logger.info(f"NHL import complete: {results['games_imported']} games, {results['players_imported']} players")
         
     except Exception as e:
-        logger.error(f"Critical error in importer: {e}", exc_info=True)
+        logger.error(f"NHL import failed: {e}", exc_info=True)
+        results["status"] = "failed"
+        results["errors"].append(str(e))
     finally:
         if conn:
             await conn.close()
+    
+    return results
+
+
+async def main():
+    """CLI entry point."""
+    result = await import_all_nhl()
+    logger.info(f"Result: {result}")
 
 if __name__ == "__main__":
     asyncio.run(main())

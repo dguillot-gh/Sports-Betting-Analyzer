@@ -415,6 +415,9 @@ public class SportDataStatus
 
     [JsonPropertyName("datasets")]
     public List<DatasetConfig>? Datasets { get; set; }
+
+    [JsonPropertyName("last_updated")]
+    public string? LastUpdated { get; set; }
 }
 
 public class DatasetConfig
@@ -460,6 +463,68 @@ public class RetrainResponse
 
     [JsonPropertyName("metrics")]
     public Dictionary<string, object>? Metrics { get; set; }
+}
+
+// ===== Missing Models =====
+
+public class RdaImportStatus
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "unknown";
+
+    [JsonPropertyName("started_at")]
+    public string? StartedAt { get; set; }
+
+    [JsonPropertyName("progress")]
+    public List<string> Progress { get; set; } = new();
+
+    [JsonPropertyName("error")]
+    public string? Error { get; set; }
+}
+
+public class SportImportStatus
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "unknown";
+
+    [JsonPropertyName("progress")]
+    public List<string> Progress { get; set; } = new();
+
+    [JsonPropertyName("error")]
+    public string? Error { get; set; }
+}
+
+public class BaseballImportStatus
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "unknown";
+
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = "";
+
+    [JsonPropertyName("progress")]
+    public List<string> Progress { get; set; } = new();
+
+    [JsonPropertyName("error")]
+    public string? Error { get; set; }
+}
+
+public class BaseballImportSummary
+{
+    [JsonPropertyName("teams_count")]
+    public int TeamsCount { get; set; }
+    
+    [JsonPropertyName("last_updated")]
+    public string? LastUpdated { get; set; }
+
+    [JsonPropertyName("generated_at")]
+    public string? GeneratedAt { get; set; }
+
+    [JsonPropertyName("division")]
+    public int Division { get; set; }
+
+    [JsonPropertyName("imported_teams")]
+    public int ImportedTeams { get; set; }
 }
 
 /// <summary>
@@ -525,16 +590,12 @@ public class PythonMLServiceClient
         return _isHealthy;
     }
 
-    /// <summary>
-    /// Get list of teams for a sport
-    /// </summary>
     public async Task<List<Dictionary<string, object>>> GetTeamsAsync(string sport)
     {
         try
         {
             if (!await IsHealthyAsync())
             {
-                // Return empty list instead of throwing to avoid crashing UI on offline service
                 _logger.LogWarning("Python ML Service unavailable, returning empty team list");
                 return new List<Dictionary<string, object>>();
             }
@@ -548,9 +609,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Get feature and target schema for a sport
-    /// </summary>
     public async Task<SchemaInfo> GetSchemaAsync(string sport)
     {
         try
@@ -569,9 +627,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Get available data for a sport
-    /// </summary>
     public async Task<DataSchema> GetDataAsync(string sport, int limit = 1000, int skip = 0, int? seasonMin = null, int? seasonMax = null, string? series = null, string? driver = null, string? trackType = null)
     {
         try
@@ -603,9 +658,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Train a new model
-    /// </summary>
     public async Task<TrainResponse> TrainAsync(string sport, string task, int? testStartSeason = null, int? trainStartSeason = null, Dictionary<string, object>? hyperparameters = null, string? series = null)
     {
         try
@@ -643,9 +695,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Trigger retraining of the NCAAB model
-    /// </summary>
     public async Task TrainNcaabModelAsync()
     {
         try
@@ -665,9 +714,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Run NCAAB Backtest
-    /// </summary>
     public async Task<BacktestReport?> BacktestNcaabAsync()
     {
         try
@@ -686,9 +732,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Make a prediction using a trained model
-    /// </summary>
     public async Task<PredictResponse> PredictAsync(string sport, string task, PredictRequest request, string? series = null)
     {
         try
@@ -715,9 +758,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Make batch predictions from a CSV file
-    /// </summary>
     public async Task<List<Dictionary<string, object>>> PredictBatchAsync(string sport, string task, Stream fileStream, string fileName, string? series = null)
     {
         try
@@ -771,37 +811,17 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Get list of available sports
-    /// </summary>
     public Task<List<string>> GetAvailableSportsAsync()
     {
         return Task.FromResult(new List<string> { "nascar", "nfl", "nhl" });
     }
 
-    /// <summary>
-    /// Get available series for NASCAR
-    /// </summary>
     public Task<List<string>> GetNASCARSeriesAsync()
     {
         var series = new List<string> { "cup", "truck", "xfinity" };
         return Task.FromResult(series);
     }
 
-    /// <summary>
-    /// Trigger data enhancement process
-    /// </summary>
-    /// <remarks>NOTE: There's also an overload with optional series parameter at the bottom of this file</remarks>
-    /* Replaced by EnhanceDataAsync with EnhanceResponse at line 932
-    public async Task<Dictionary<string, object>> EnhanceDataAsync(string sport)
-    {
-        // Old implementation - removed
-    }
-    */
-
-    /// <summary>
-    /// Get list of trained models and their metrics
-    /// </summary>
     public async Task<List<ModelInfo>> GetModelsAsync(string sport)
     {
         try
@@ -821,9 +841,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Delete a trained model
-    /// </summary>
     public async Task DeleteModelAsync(string sport, string series, string task)
     {
         try
@@ -843,9 +860,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Get unique values for categorical features
-    /// </summary>
     public async Task<Dictionary<string, List<object>>> GetFeatureValuesAsync(string sport, string? series = null)
     {
         try
@@ -869,9 +883,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Get list of available entities (drivers/teams)
-    /// </summary>
     public async Task<List<string>> GetEntitiesAsync(string sport, string? series = null)
     {
         try
@@ -893,30 +904,8 @@ public class PythonMLServiceClient
             _logger.LogError(ex, "Error getting entities for {Sport}", sport);
             throw;
         }
-        try
-        {
-            if (!await IsHealthyAsync())
-            {
-                throw new InvalidOperationException("Python ML Service is not available");
-            }
-
-            var url = $"/{sport}/entities";
-            if (!string.IsNullOrEmpty(series))
-                url += $"?series={series}";
-
-            var response = await _httpClient.GetFromJsonAsync<List<string>>(url);
-            return response ?? new List<string>();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting entities for {Sport}", sport);
-            throw;
-        }
     }
 
-    /// <summary>
-    /// Get list of available teams
-    /// </summary>
     public async Task<List<string>> GetTeamsAsync(string sport, string? series = null)
     {
         try
@@ -940,9 +929,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Get list of drivers, optionally filtered by team
-    /// </summary>
     public async Task<List<string>> GetDriversAsync(string sport, string? series = null, string? team = null)
     {
         try
@@ -973,9 +959,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Get driver roster for a specific series with metadata (team, manufacturer, race counts)
-    /// </summary>
     public async Task<List<DriverRoster>> GetRosterAsync(string sport, string series, int minRaces = 1, int? year = null)
     {
         try
@@ -1000,9 +983,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Get comprehensive stats for a specific entity
-    /// </summary>
     public async Task<ProfileData> GetEntityProfileAsync(string sport, string entityId, string? series = null, int? year = null)
     {
         try
@@ -1034,9 +1014,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Get upcoming race info
-    /// </summary>
     public async Task<UpcomingRaceInfo?> GetUpcomingRaceAsync(string sport)
     {
         try
@@ -1056,9 +1033,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Check for updates for all configured datasets
-    /// </summary>
     public async Task<Dictionary<string, Dictionary<string, object>>> CheckUpdatesAsync(string sport)
     {
         try
@@ -1075,9 +1049,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Get update history/changelog
-    /// </summary>
     public async Task<List<Dictionary<string, object>>> GetHistoryAsync(string sport)
     {
         try
@@ -1092,9 +1063,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Add a new dataset configuration
-    /// </summary>
     public async Task<bool> AddDatasetAsync(string sport, string datasetId, string type = "kaggle")
     {
         try
@@ -1110,26 +1078,10 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Remove a dataset configuration
-    /// </summary>
     public async Task<bool> RemoveDatasetAsync(string sport, string datasetId)
     {
         try
         {
-            // Encode datasetId because it contains slashes (e.g. owner/dataset)
-            // But FastAPI path param handles it if configured correctly, or we pass it safely.
-            // Using a simple slash encoding might be tricky if the API expects path param.
-            // The API is: DELETE /data/datasets/{sport}/{dataset_id:path}
-            // So we can just append it, but URI encoding helps safely transmit special chars.
-            // However, FastAPI ":path" expects the slashes to be part of the path structure potentially.
-            // Let's rely on standard URL rules. 
-            // In request, we usually do NOT encode the slash that separates path segments, 
-            // but here "owner/dataset" IS the ID.
-            // Is it treated as one segment or two? 
-            // FastAPI with `{dataset_id:path}` accepts arbitrary slashes.
-            // So `owner/dataset` works.
-            
             var response = await _httpClient.DeleteAsync($"/data/datasets/{sport}/{datasetId}");
             return response.IsSuccessStatusCode;
         }
@@ -1140,9 +1092,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Run Monte Carlo simulation
-    /// </summary>
     public async Task<SimulationResponse> SimulateRaceAsync(string sport, SimulationRequest request, string? series = null)
     {
         try
@@ -1159,8 +1108,22 @@ public class PythonMLServiceClient
             var response = await _httpClient.PostAsJsonAsync(url, request);
             response.EnsureSuccessStatusCode();
 
-            return await response.Content.ReadFromJsonAsync<SimulationResponse>()
+            var result = await response.Content.ReadFromJsonAsync<SimulationResponse>()
                 ?? new SimulationResponse();
+            
+            // Map Metadata if missing
+            if (result.Metadata == null)
+            {
+                result.Metadata = new SimulationMetadata
+                {
+                    Year = request.Year,
+                    TrackType = request.TrackType,
+                    Simulations = request.NumSimulations,
+                    DriverCount = result.Results?.Count ?? 0
+                };
+            }
+            
+            return result;
         }
         catch (Exception ex)
         {
@@ -1169,9 +1132,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Get data status for all sports
-    /// </summary>
     public async Task<DataStatusResponse?> GetDataStatusAsync()
     {
         try
@@ -1190,9 +1150,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Update data for a sport from external source
-    /// </summary>
     public async Task<DataUpdateResponse> UpdateDataAsync(string sport, string? dataset = null)
     {
         try
@@ -1221,9 +1178,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Retrain model for a sport
-    /// </summary>
     public async Task<RetrainResponse> RetrainModelAsync(string sport, string task = "classification", string? series = null)
     {
         try
@@ -1247,9 +1201,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Enhance data for a sport (adds computed features)
-    /// </summary>
     public async Task<EnhanceResponse> EnhanceDataAsync(string sport, string? series = null)
     {
         try
@@ -1278,9 +1229,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Get AI Analysis (Multi-Engine + LLM)
-    /// </summary>
     public async Task<AiAnalysisReport?> AnalyzeMatchupAsync(string sport, string homeTeam, string awayTeam, string homeStats = "{}", string awayStats = "{}")
     {
         try
@@ -1302,9 +1250,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Get ESPN Predictions (FPI/BPI)
-    /// </summary>
     public async Task<EspnResponse?> GetEspnPredictionsAsync(string sport)
     {
         try
@@ -1322,9 +1267,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Get NBA model comparison (Simple, Kyle, Apex)
-    /// </summary>
     public async Task<NbaComparisonResponse?> CompareNbaModelsAsync(string homeTeam, string awayTeam, double? totalLine = null, int? homeMl = null, int? awayMl = null)
     {
         try
@@ -1344,9 +1286,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Get NASCAR live race predictions and odds
-    /// </summary>
     public async Task<NascarRacePredictions?> GetRacePredictionsAsync(int raceId)
     {
         try
@@ -1361,9 +1300,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Trigger NASCAR Model Retraining
-    /// </summary>
     public async Task<bool> TrainNascarModelAsync()
     {
         try
@@ -1378,9 +1314,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Get NCAAB Team Hit Rates
-    /// </summary>
     public async Task<HitRateResult?> GetNcaabHitRatesAsync(string team, string metric, double line, int lastN = 10)
     {
         try
@@ -1395,9 +1328,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Get NCAAB model comparison (Simple, XGBoost v2, ESPN BPI)
-    /// </summary>
     public async Task<NcaabComparisonResponse?> CompareNcaabModelsAsync(string homeTeam, string awayTeam, double? totalLine = null, int? homeMl = null, int? awayMl = null)
     {
         try
@@ -1419,9 +1349,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Returns the current usage status of the Gemini API.
-    /// </summary>
     public async Task<AiQuota?> GetAiQuotaAsync()
     {
         try
@@ -1435,18 +1362,11 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Returns a unified analysis report including multi-engine metrics and LLM insights.
-    /// (Wrapper for AnalyzeMatchupAsync for backward compatibility)
-    /// <returns>A unified analysis report.</returns>
     public async Task<AiAnalysisReport?> GetAiAnalysisAsync(string sport, string homeTeam, string awayTeam, string homeStats = "{}", string awayStats = "{}")
     {
         return await AnalyzeMatchupAsync(sport, homeTeam, awayTeam, homeStats, awayStats);
     }
 
-    /// <summary>
-    /// Returns an aggregated summary of all trained models and their metrics.
-    /// </summary>
     public async Task<List<DashboardModelSummary>> GetModelSummaryAsync()
     {
         try
@@ -1460,9 +1380,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Triggers the backend to fetch fresh Torvik data (T-Rank ratings).
-    /// </summary>
     public async Task<bool> UpdateTorvikDataAsync()
     {
         try
@@ -1504,9 +1421,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Save a manual analysis result for the day.
-    /// </summary>
     public async Task<bool> SaveAnalysisAsync(string sport, string home, string away, object analysis)
     {
         try
@@ -1522,9 +1436,6 @@ public class PythonMLServiceClient
         }
     }
 
-    /// <summary>
-    /// Get all analysis results stored today.
-    /// </summary>
     public async Task<AnalysisCacheListResponse> GetTodaysAnalysesAsync()
     {
         try
@@ -1536,6 +1447,118 @@ public class PythonMLServiceClient
         {
             _logger.LogError(ex, "Error getting today's analyses from cache");
             return new AnalysisCacheListResponse();
+        }
+    }
+
+    // ===== Missing Methods Implementation =====
+
+    public async Task<BaseballImportStatus?> GetBaseballImportStatusAsync()
+    {
+        try
+        {
+            if (!await IsHealthyAsync()) return null;
+            return await _httpClient.GetFromJsonAsync<BaseballImportStatus>("/import/college-baseball/status");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting baseball import status");
+            return null;
+        }
+    }
+
+    public async Task<DataUpdateResponse> ImportBaseballDataAsync(double year, string division, string source)
+    {
+        try
+        {
+            if (!await IsHealthyAsync()) throw new InvalidOperationException("Service unavailable");
+            
+            // Using the db_endpoints route: POST /import/college-baseball
+            // Args: start_year, end_year, division, source
+            var url = $"/import/college-baseball?start_year={year}&end_year={year}&division={division}&source={source}";
+            var response = await _httpClient.PostAsync(url, null);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                return new DataUpdateResponse { Success = true, Message = "Import started" };
+            }
+            return new DataUpdateResponse { Success = false, Message = "Failed to start import" };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error triggering baseball import");
+            return new DataUpdateResponse { Success = false, Message = ex.Message };
+        }
+    }
+
+    public async Task<BaseballImportSummary?> GetBaseballImportSummaryAsync()
+    {
+         try
+        {
+            if (!await IsHealthyAsync()) return null;
+            return await _httpClient.GetFromJsonAsync<BaseballImportSummary>("/baseball/ncaa/summary");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting baseball summary");
+            return null;
+        }
+    }
+    
+    public async Task<SportImportStatus?> GetImportStatusAsync(string sport)
+    {
+         // There is no generic /import/{sport}/status endpoint yet.
+         // But DataManagementView calls this. 
+         // For now, we return a mock status or try to fetch from data status.
+         // Actually, let's just return a default valid object to prevent crashes, as frontend polls this.
+         // Or check /data/status which returns DataStatusResponse, and map it.
+         
+         var dataStatus = await GetDataStatusAsync();
+         if (dataStatus == null) return null;
+         
+         SportDataStatus? sInfo = sport.ToLower() switch {
+             "nfl" => dataStatus.Nfl,
+             "nba" => dataStatus.Nba,
+             "nascar" => dataStatus.Nascar,
+             _ => null
+         };
+         
+         if (sInfo == null) return new SportImportStatus { Status = "unknown" };
+         
+         // Basic mapping
+         return new SportImportStatus { 
+             Status = "completed", // We don't have real-time running status in the generic endpoint yet
+             Progress = new List<string> { $"Last Update: {sInfo.LastUpdated ?? "Unknown"}" }
+         };
+    }
+
+    public async Task<DataUpdateResponse> ImportSportDataAsync(string sport, bool clearExisting)
+    {
+        // Maps to UpdateDataAsync
+        return await UpdateDataAsync(sport);
+    }
+
+    public async Task<DataUpdateResponse> ImportNcaabDataAsync(int year, bool clearExisting)
+    {
+         try
+        {
+            if (!await IsHealthyAsync()) throw new InvalidOperationException("Service unavailable");
+            
+            // Assuming this maps to a generic sport import or a specific ncaab endpoint
+            // For now, mapping to the generic update/import for "ncaab"
+            // You might need to adjust the URL if there's a specific endpoint for year/clear
+            var url = $"/data/update/ncaab?year={year}&clear={clearExisting}";
+            var response = await _httpClient.PostAsync(url, null);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                return new DataUpdateResponse { Success = true, Message = "NCAAB Import started" };
+            }
+            return new DataUpdateResponse { Success = false, Message = "Failed to start import" };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error triggering NCAAB import");
+            return new DataUpdateResponse { Success = false, Message = ex.Message };
         }
     }
 }

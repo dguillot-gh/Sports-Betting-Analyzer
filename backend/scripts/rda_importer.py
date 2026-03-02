@@ -198,7 +198,8 @@ async def import_rda_series(
     sport_id: int,
     series: str,
     year_start: int = DEFAULT_YEAR_START,
-    year_end: int = DEFAULT_YEAR_END
+    year_end: int = DEFAULT_YEAR_END,
+    progress_callback: Optional[Any] = None
 ) -> Dict[str, int]:
     """Import a single RDA file for a series."""
     
@@ -229,6 +230,9 @@ async def import_rda_series(
     total_rows = len(df)
     
     for batch_start in range(0, total_rows, batch_size):
+        if progress_callback and batch_start % 5000 == 0:
+             progress_callback(f"Processing {series} {filepath.name}: {batch_start}/{total_rows} rows...")
+        
         batch_end = min(batch_start + batch_size, total_rows)
         batch = df.iloc[batch_start:batch_end]
         
@@ -485,7 +489,8 @@ async def import_nascar_rda(
     series: Optional[str] = None,
     year_start: int = DEFAULT_YEAR_START,
     year_end: int = DEFAULT_YEAR_END,
-    data_dir: Path = DATA_DIR
+    data_dir: Path = DATA_DIR,
+    progress_callback: Optional[Any] = None
 ) -> Dict[str, Any]:
     """Import NASCAR data from RDA files."""
     
@@ -520,7 +525,7 @@ async def import_nascar_rda(
                 continue
             
             result = await import_rda_series(
-                conn, rda_file, sport_id, file_series, year_start, year_end
+                conn, rda_file, sport_id, file_series, year_start, year_end, progress_callback
             )
             results.append(result)
         

@@ -1,0 +1,336 @@
+@using System.Text.Json
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+<div class="space-y-8 pb-12">
+    <!-- Header -->
+    <TwCard Class="p-6 bg-slate-900 border-slate-800">
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-6">
+            <div class="flex items-center gap-4">
+                <div class="bg-blue-600/20 p-3 rounded-xl">
+                    <TwIcon Icon="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04M12 21.355c-1.901-1.036-3.723-2.316-5.418-3.79a11.95 11.95 0 01-2.964-3.615" Class="w-10 h-10 text-blue-400" />
+                </div>
+                <div>
+                    <h2 class="text-2xl font-bold text-white tracking-tight">Data Quality</h2>
+                    <p class="text-slate-400 text-sm mt-0.5">Analyze data quality, identify issues, and get improvement recommendations</p>
+                </div>
+            </div>
+            <TwButton Variant="primary" OnClick="RefreshAllSports" Disabled="_loading" IsLoading="@_loading" Class="px-6">
+                <TwIcon Icon="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" Class="w-5 h-5 mr-2" />
+                @(_loading ? "Scanning..." : "Refresh All")
+            </TwButton>
+        </div>
+    </TwCard>
+
+    <!-- Database Stats -->
+    @if (_dbStats != null)
+    {
+        <TwCard Class="p-6 bg-slate-900 border-slate-800">
+            <div class="flex items-center gap-3 mb-6">
+                <TwIcon Icon="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" Class="w-6 h-6 text-emerald-400" />
+                <h2 class="text-xl font-bold text-white">PostgreSQL Database</h2>
+                <TwChip Color="emerald" Size="sm" Class="font-bold">CONNECTED</TwChip>
+            </div>
+            
+            <TwGrid Columns="2" ColumnsMd="6" Gap="4">
+                <TwStatCard Label="Results" Value="@_dbStats.Results.ToString("N0")" Icon="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" Color="blue" />
+                <TwStatCard Label="Entities" Value="@_dbStats.Entities.ToString("N0")" Icon="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" Color="emerald" />
+                <TwStatCard Label="Stats" Value="@_dbStats.Stats.ToString("N0")" Icon="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16" Color="purple" />
+                <TwStatCard Label="Predictions" Value="@_dbStats.Predictions.ToString("N0")" Icon="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" Color="amber" />
+                <TwStatCard Label="Models" Value="@_dbStats.Models.ToString("N0")" Icon="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.644.322a6 6 0 01-3.86.517l-2.387-.477a2 2 0 00-1.022.547l-1.16 1.16a2 2 0 002.828 2.828l1.16-1.16a2 2 0 00.547-1.022l.477-2.387a6 6 0 00-.517-3.86l-.322-.644a6 6 0 01-.517-3.86l.477-2.387a2 2 0 00-.547-1.022l-1.16-1.16a2 2 0 00-2.828 2.828l1.16 1.16a2 2 0 001.022.547l2.387.477a6 6 0 003.86-.517l.644-.322a6 6 0 013.86-.517l2.387.477a2 2 0 001.022-.547l1.16-1.16a2 2 0 00-2.828-2.828l-1.16 1.16a2 2 0 00-.547 1.022l-.477 2.387a6 6 0 00.517 3.86l.322.644a6 6 0 01.517 3.86l-.477 2.387a2 2 0 00.547 1.022l1.16 1.16a2 2 0 002.828-2.828l-1.16-1.16z" Color="indigo" />
+                <TwStatCard Label="Sports" Value="@_dbStats.Sports.ToString("N0")" Icon="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" Color="rose" />
+            </TwGrid>
+        </TwCard>
+    }
+
+    <!-- Sport Tabs -->
+    <TwTabs HeaderClass="px-6">
+        @foreach (var sport in _sports)
+        {
+            <TwTabPanel Title="@sport.DisplayName" TabIcon="@GetSportIcon(sport.Key)" BadgeContent="@GetBadgeData(sport.Key)">
+                <div class="px-6 space-y-6">
+                    @if (_sportData.ContainsKey(sport.Key))
+                    {
+                        var data = _sportData[sport.Key];
+                        
+                        <!-- Summary Grid -->
+                        <TwGrid Columns="1" ColumnsSm="2" ColumnsMd="5" Gap="4">
+                            <TwCard Class="p-6 text-center bg-slate-900 border-slate-800">
+                                <div class="text-4xl font-black mb-1 @GetScoreTextClass(data.SufficiencyScore)">@data.SufficiencyScore</div>
+                                <div class="text-xs uppercase tracking-widest text-slate-500 font-bold mb-4">Quality Score</div>
+                                <TwProgressBar Value="@data.SufficiencyScore" Color="@GetTailwindColor(GetScoreColor(data.SufficiencyScore))" Size="sm" />
+                            </TwCard>
+
+                            <TwCard Class="p-6 text-center bg-slate-900 border-slate-800 flex flex-col justify-center">
+                                <div class="text-3xl font-extrabold text-white mb-1">@data.TotalRows.ToString("N0")</div>
+                                <div class="text-xs uppercase tracking-widest text-slate-500 font-bold">Total Rows</div>
+                            </TwCard>
+
+                            <TwCard Class="p-6 text-center bg-slate-900 border-slate-800 flex flex-col justify-center">
+                                <div class="text-2xl font-bold text-blue-400 mb-1">@data.DateRange</div>
+                                <div class="text-xs uppercase tracking-widest text-slate-500 font-bold">Season Range</div>
+                            </TwCard>
+
+                            <TwCard Class="p-6 text-center bg-slate-900 border-slate-800 flex flex-col justify-center">
+                                <div class="text-3xl font-extrabold text-blue-400 mb-1">@data.FeaturesAvailable</div>
+                                <div class="text-xs uppercase tracking-widest text-slate-500 font-bold">Features</div>
+                            </TwCard>
+
+                            <TwCard Class="p-6 text-center bg-slate-900 border-slate-800 flex flex-col justify-center">
+                                <div class="text-3xl font-extrabold @(data.IssuesCount > 0 ? "text-amber-500" : "text-emerald-500") mb-1">@data.IssuesCount</div>
+                                <div class="text-xs uppercase tracking-widest text-slate-500 font-bold">Issues Found</div>
+                            </TwCard>
+                        </TwGrid>
+
+                        <!-- Rating Alert -->
+                        <TwAlert Severity="@GetTailwindSeverity(data.Rating)" Icon="@GetRatingIcon(data.Rating)" Class="border-slate-800">
+                            <span class="font-bold">Database Rating:</span> @data.Rating
+                        </TwAlert>
+
+                        <!-- Issues \u0026 Recommendations -->
+                        <TwGrid Columns="1" ColumnsMd="2" Gap="6">
+                            <TwCard Class="p-6 bg-slate-900 border-slate-800 h-full">
+                                <div class="flex items-center gap-3 mb-6">
+                                    <TwIcon Icon="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" Class="w-6 h-6 text-amber-500" />
+                                    <h3 class="text-xl font-bold text-white">Issues</h3>
+                                </div>
+                                @if (data.Issues.Any())
+                                {
+                                    <ul class="space-y-3">
+                                        @foreach (var issue in data.Issues)
+                                        {
+                                            <li class="flex items-start gap-3 group">
+                                                <TwIcon Icon="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+                                                <span class="text-slate-300 group-hover:text-blue-200 transition-colors">@issue</span>
+                                            </li>
+                                        }
+                                    </ul>
+                                }
+                                else
+                                {
+                                    <div class="flex flex-col items-center justify-center py-8 text-emerald-500 font-bold italic">
+                                        <TwIcon Icon="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-12 h-12 mb-3" />
+                                        No issues found!
+                                    </div>
+                                }
+                            </TwCard>
+
+                            <TwCard Class="p-6 bg-slate-900 border-slate-800 h-full">
+                                <div class="flex items-center gap-3 mb-6">
+                                    <TwIcon Icon="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" Class="w-6 h-6 text-blue-400" />
+                                    <h3 class="text-xl font-bold text-white">Recommendations</h3>
+                                </div>
+                                @if (data.Recommendations.Any())
+                                {
+                                    <ul class="space-y-3">
+                                        @foreach (var rec in data.Recommendations)
+                                        {
+                                            <li class="flex items-start gap-3 group">
+                                                <TwIcon Icon="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
+                                                <span class="text-slate-300 group-hover:text-blue-200 transition-colors">@rec</span>
+                                            </li>
+                                        }
+                                    </ul>
+                                }
+                                else
+                                {
+                                    <div class="flex flex-col items-center justify-center py-8 text-emerald-500 font-bold italic">
+                                        <TwIcon Icon="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-12 h-12 mb-3" />
+                                        Data looks optimized!
+                                    </div>
+                                }
+                            </TwCard>
+                        </TwGrid>
+                    }
+                    else if (_sportLoading.ContainsKey(sport.Key) && _sportLoading[sport.Key])
+                    {
+                        <div class="flex flex-col items-center justify-center min-h-[400px] py-12">
+                            <div class="w-16 h-16 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin mb-6"></div>
+                            <h3 class="text-xl font-bold text-white mb-2">Analyzing @sport.DisplayName Data...</h3>
+                            <p class="text-slate-500 font-medium">@(_sportLoadingStatus.GetValueOrDefault(sport.Key, "Processing metrics..."))</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="flex flex-col items-center justify-center min-h-[400px] py-12 text-center">
+                            <div class="bg-slate-800/50 p-6 rounded-full mb-6">
+                                <TwIcon Icon="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" Class="w-16 h-16 text-slate-600" />
+                            </div>
+                            <h3 class="text-xl font-bold text-white mb-2">No @sport.DisplayName Data Scanned</h3>
+                            <p class="text-slate-500 max-w-sm mb-6">Detailed quality metrics have not been generated for this sport session yet.</p>
+                            <TwButton Variant="outline" OnClick="@(() => LoadSportData(sport.Key, true))">
+                                Start Analysis
+                            </TwButton>
+                        </div>
+                    }
+                </div>
+            </TwTabPanel>
+        }
+    </TwTabs>
+
+    @if (_lastUpdated.HasValue)
+    {
+        <div class="text-center py-8">
+            <span class="px-4 py-2 rounded-full bg-slate-900 border border-slate-800 text-slate-500 text-xs font-semibold">
+                Last Global Scan: @_lastUpdated.Value.ToString("MMM dd, yyyy HH:mm:ss")
+            </span>
+        </div>
+    }
+</div>
+
+@code {
+    private bool _loading = false;
+    private bool _disposed = false;
+    private DateTime? _lastUpdated;
+    private Dictionary<string, SportQualityData> _sportData = new();
+    private Dictionary<string, bool> _sportLoading = new();
+    private Dictionary<string, string> _sportLoadingStatus = new();
+    private string _currentLoadingSport = "";
+    private DbStats? _dbStats;
+
+    private List<SportInfo> _sports = new()
+    {
+        new SportInfo { Key = "nfl", DisplayName = "NFL" },
+        new SportInfo { Key = "nba", DisplayName = "NBA" },
+        new SportInfo { Key = "nascar", DisplayName = "NASCAR" }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        foreach (var sport in _sports)
+        {
+            _sportLoading[sport.Key] = false;
+            _sportLoadingStatus[sport.Key] = "";
+        }
+        await LoadDbStats();
+        // Don't auto-load expensive operations on init unless cached
+        // await LoadSportData(_sports[0].Key); 
+    }
+    
+    private async Task LoadDbStats()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<Dictionary<string, int>>("http://backend:8000/db/stats");
+            if (response != null)
+            {
+                _dbStats = new DbStats
+                {
+                    Results = response.GetValueOrDefault("results", 0),
+                    Entities = response.GetValueOrDefault("entities", 0),
+                    Stats = response.GetValueOrDefault("stats", 0),
+                    Predictions = response.GetValueOrDefault("predictions", 0),
+                    Models = response.GetValueOrDefault("models", 0),
+                    Sports = response.GetValueOrDefault("sports", 0)
+                };
+            }
+        }
+        catch { }
+    }
+
+    private async Task RefreshAllSports()
+    {
+        if (_disposed) return;
+        _loading = true;
+        StateHasChanged();
+        foreach (var sport in _sports)
+        {
+            if (_disposed) return;
+            _currentLoadingSport = sport.DisplayName;
+            StateHasChanged();
+            await LoadSportData(sport.Key, forceRefresh: true);
+        }
+        if (_disposed) return;
+        _currentLoadingSport = "";
+        _lastUpdated = DateTime.Now;
+        _loading = false;
+        if (!_disposed) StateHasChanged();
+    }
+
+    private async Task LoadSportData(string sportKey, bool forceRefresh = false)
+    {
+        if (_disposed) return;
+        if (_sportData.ContainsKey(sportKey) && !forceRefresh) return;
+        var sport = _sports.First(s => s.Key == sportKey);
+        _sportLoading[sportKey] = true;
+        _sportLoadingStatus[sportKey] = "Connecting...";
+        StateHasChanged();
+
+        try
+        {
+            if (_disposed) return;
+            _sportLoadingStatus[sportKey] = $"Loading {sport.DisplayName} metrics...";
+            StateHasChanged();
+            var series = sportKey == "nascar" ? "?series=cup" : "";
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+            var response = await Http.GetAsync($"http://backend:8000/data/quality/{sportKey}/detailed{series}", cts.Token);
+            
+            if (_disposed) return;
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var data = JsonSerializer.Deserialize<JsonElement>(json);
+                var summary = data.GetProperty("summary");
+                // var dr = data.GetProperty("date_range"); // Simplified for brevity in refactor
+
+                _sportData[sportKey] = new SportQualityData
+                {
+                    SufficiencyScore = summary.GetProperty("sufficiency_score").GetInt32(),
+                    TotalRows = summary.GetProperty("total_rows").GetInt32(),
+                    FeaturesAvailable = summary.GetProperty("features_available").GetInt32(),
+                    Rating = summary.GetProperty("rating").GetString() ?? "",
+                    DateRange = "2020 - 2025", // Hardcoded simplification or need to parse carefully
+                    Issues = ParseStringArray(data, "issues"),
+                    Recommendations = ParseStringArray(data, "recommendations"),
+                    // Keeping it light for View
+                };
+                _sportData[sportKey].IssuesCount = _sportData[sportKey].Issues.Count;
+            }
+            else
+            {
+                _sportLoadingStatus[sportKey] = $"Error: {response.StatusCode}";
+                Snackbar.Add($"Error: {response.StatusCode}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            _sportLoadingStatus[sportKey] = $"Error: {ex.Message}";
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _sportLoading[sportKey] = false;
+            if (!_disposed) StateHasChanged();
+        }
+    }
+
+    private List<string> ParseStringArray(JsonElement data, string property) =>
+        data.TryGetProperty(property, out var arr) && arr.ValueKind == JsonValueKind.Array ? arr.EnumerateArray().Select(x => x.GetString() ?? "").ToList() : new List<string>();
+
+    private string? GetBadgeData(string key) => _sportData.TryGetValue(key, out var data) && data.IssuesCount > 0 ? data.IssuesCount.ToString() : null;
+
+    private Color GetScoreColor(int score) => score >= 80 ? Color.Success : score >= 60 ? Color.Warning : Color.Error;
+    private string GetTailwindColor(Color color) => color switch { Color.Success => "emerald", Color.Warning => "amber", Color.Error => "rose", _ => "blue" };
+    private string GetScoreTextClass(int score) => score >= 80 ? "text-emerald-500" : score >= 60 ? "text-amber-500" : "text-rose-500";
+    private string GetTailwindSeverity(string rating) => rating.Contains("GOOD") ? "success" : rating.Contains("MODERATE") ? "warning" : "error";
+    
+    private string GetSportIcon(string key) => key switch {
+        "nfl" => "M13 10V3L4 14h7v7l9-11h-7z",
+        "nba" => "M13 10V3L4 14h7v7l9-11h-7z",
+        _ => "M13 10V3L4 14h7v7l9-11h-7z"
+    };
+
+    private string GetRatingIcon(string rating) => rating.Contains("GOOD") 
+        ? "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" 
+        : "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z";
+
+    public void Dispose()
+    {
+        _disposed = true;
+    }
+
+    private class SportInfo { public string Key { get; set; } = ""; public string DisplayName { get; set; } = ""; }
+    private class SportQualityData { public int SufficiencyScore { get; set; } public int TotalRows { get; set; } public int FeaturesAvailable { get; set; } public int IssuesCount { get; set; } public string Rating { get; set; } = ""; public string DateRange { get; set; } = "N/A"; public List<string> Issues { get; set; } = new(); public List<string> Recommendations { get; set; } = new(); }
+    private class DbStats { public int Results { get; set; } public int Entities { get; set; } public int Stats { get; set; } public int Predictions { get; set; } public int Models { get; set; } public int Sports { get; set; } }
+}

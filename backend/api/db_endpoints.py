@@ -407,10 +407,18 @@ async def run_rda_import(series: str, year_start: int, year_end: int, clear_exis
         
         # 2. Run RDA import
         from scripts.rda_importer import import_nascar_rda
+        
+        def progress_cb(msg):
+            import_status["nascar_rda"]["progress"].append(msg)
+            # Keep log size manageable
+            if len(import_status["nascar_rda"]["progress"]) > 100:
+                 import_status["nascar_rda"]["progress"] = import_status["nascar_rda"]["progress"][-100:]
+
         result = await import_nascar_rda(
             series=series if series and series != 'all' else None,
             year_start=year_start,
-            year_end=year_end
+            year_end=year_end,
+            progress_callback=progress_cb
         )
         
         # 3. Comprehensive Row Count
