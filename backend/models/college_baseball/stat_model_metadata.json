@@ -1,0 +1,35 @@
+{
+  "feature_names": [
+    "home_rpg",
+    "home_rapg",
+    "home_avg",
+    "home_obp",
+    "home_slg",
+    "home_era",
+    "home_whip",
+    "home_k9",
+    "away_rpg",
+    "away_rapg",
+    "away_avg",
+    "away_obp",
+    "away_slg",
+    "away_era",
+    "away_whip",
+    "away_k9",
+    "is_home"
+  ],
+  "trained_at": "2026-03-04 09:42:07.571744",
+  "samples": 80708,
+  "teams_seasons": 486,
+  "years": [
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "classifier_train_acc": 0.6573893380416937,
+  "classifier_test_acc": 0.6437244455457812,
+  "regressor_train_mae": 0.21854972431074507,
+  "regressor_test_mae": 0.22022579083084914
+}

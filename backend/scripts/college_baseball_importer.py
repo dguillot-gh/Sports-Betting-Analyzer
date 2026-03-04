@@ -226,7 +226,7 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
                 
                 # Normalize columns for matching
                 df_all.columns = [c.lower().strip() for c in df_all.columns]
-                target_col = 'team' if 'team' in df_all.columns else ('team name' if 'team name' in df_all.columns else 'team_name')
+                target_col = 'team name' if 'team name' in df_all.columns else ('team_name' if 'team_name' in df_all.columns else 'team')
                 
                 # Match teams
                 match_count = 0
@@ -237,24 +237,57 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
                     # Normalization logic
                     def clean(s): return re.sub(r'[^a-z0-9]', '', str(s).lower())
                     
+                    # Abbreviation expansion for matching
+                    def expand_abbrevs(s):
+                        """Expand common NCAA abbreviations to full words."""
+                        s = re.sub(r'\bSt\.\s', 'State ', s)
+                        s = re.sub(r'\bSt\.\s*$', 'State', s)
+                        s = re.sub(r'\bKy\.\s', 'Kentucky ', s)
+                        s = re.sub(r'\bKy\.\s*$', 'Kentucky', s)
+                        s = re.sub(r'\bIll\.\s', 'Illinois ', s)
+                        s = re.sub(r'\bIll\.\s*$', 'Illinois', s)
+                        s = re.sub(r'\bMo\.\s', 'Missouri ', s)
+                        s = re.sub(r'\bMo\.\s*$', 'Missouri', s)
+                        s = re.sub(r'\bLa\.\s', 'Louisiana ', s)
+                        s = re.sub(r'\bLa\.\s*$', 'Louisiana', s)
+                        s = re.sub(r'\bFla\.\s', 'Florida ', s)
+                        s = re.sub(r'\bFla\.\s*$', 'Florida', s)
+                        s = re.sub(r'\bMiss\.\s', 'Mississippi ', s)
+                        s = re.sub(r'\bMiss\.\s*$', 'Mississippi', s)
+                        s = re.sub(r'\bArk\.\s', 'Arkansas ', s)
+                        s = re.sub(r'\bArk\.\s*$', 'Arkansas', s)
+                        s = re.sub(r'\bConn\.\s', 'Connecticut ', s)
+                        s = re.sub(r'\bConn\.\s*$', 'Connecticut', s)
+                        s = re.sub(r'\bSo\.\s', 'Southern ', s)
+                        s = re.sub(r'\bSo\.\s*$', 'Southern', s)
+                        return s
+                    
                     # Match candidates:
                     # 1. Direct mapping from source-of-truth CSV
                     # 2. Cleaning heuristics (Conference suffix removal)
-                    # 3. Robust normalized match
+                    # 3. Expanded abbreviations
+                    # 4. Robust normalized match
                     
                     mapped_name = TEAM_NAME_MAPPINGS.get(n_name, n_name)
                     cleaned_name = re.sub(r'\s*\(.*?\)', '', mapped_name).strip()
+                    expanded_name = expand_abbrevs(cleaned_name)
                     
                     m_norm = clean(mapped_name)
                     c_norm = clean(cleaned_name)
                     n_norm = clean(n_name)
+                    e_norm = clean(expanded_name)
                     
                     mask = (df_all[target_col].apply(clean) == m_norm) | \
                            (df_all[target_col].apply(clean) == c_norm) | \
-                           (df_all[target_col].apply(clean) == n_norm)
+                           (df_all[target_col].apply(clean) == n_norm) | \
+                           (df_all[target_col].apply(clean) == e_norm)
                     
                     if not any(mask):
-                        # Final straw: Substring match for short names
+                        # Substring match with expanded name
+                        mask = df_all[target_col].str.contains(expanded_name, case=False, na=False, regex=False)
+                    
+                    if not any(mask):
+                        # Final straw: Substring match with original cleaned name
                         mask = df_all[target_col].str.contains(cleaned_name, case=False, na=False, regex=False)
                     
                     team_df = df_all[mask]

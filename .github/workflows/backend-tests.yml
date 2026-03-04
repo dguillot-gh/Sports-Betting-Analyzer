@@ -1,0 +1,54 @@
+name: Backend Tests
+
+on:
+  push:
+    branches: [master, dev]
+    paths:
+      - 'backend/**'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'backend/**'
+  workflow_dispatch:
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run College Baseball predictor tests
+        working-directory: .
+        env:
+          PYTHONPATH: backend
+        run: |
+          python -m pytest backend/tests/test_college_baseball_predictor.py -v --tb=short
+
+      - name: Run College Baseball enhancement tests
+        working-directory: .
+        env:
+          PYTHONPATH: backend
+        run: |
+          python -m pytest backend/tests/test_college_baseball_enhancements.py -v --tb=short
+
+      - name: Run all backend tests
+        working-directory: .
+        env:
+          PYTHONPATH: backend
+        run: |
+          python -m pytest backend/tests/ -v --tb=short --ignore=backend/tests/integration/
