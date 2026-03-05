@@ -10,8 +10,8 @@ public class MauiServerConfigService : IServerConfigService
     public string GetBaseUrl()
     {
         // Default to the Android Emulator loopback IP (10.0.2.2) 
-        // to reach the host PC if running locally. Users can change this in the Settings UI.
-        return Preferences.Get(ServerUrlKey, "http://10.0.2.2:8000");
+        // using port 8003 (which matches your docker-compose.yml mapping for the backend).
+        return Preferences.Get(ServerUrlKey, "http://10.0.2.2:8003");
     }
 
     public void SetBaseUrl(string url)

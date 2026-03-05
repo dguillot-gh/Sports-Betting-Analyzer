@@ -1,6 +1,8 @@
 ﻿using Microsoft.Extensions.Logging;
 using SportsBettingAnalyzer.Shared.Services;
-using SportsBettingAnalyzer.Mobile.Services;namespace SportsBettingAnalyzer.Mobile;
+using SportsBettingAnalyzer.Mobile.Services;
+
+namespace SportsBettingAnalyzer.Mobile;
 
 public static class MauiProgram
 {
