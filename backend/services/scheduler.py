@@ -134,6 +134,14 @@ class SchedulerService:
             # --- 6. NHL ---
             res_nhl = await cls._run_job_wrapper("nhl", cls._import_nhl_task)
             results.append(res_nhl)
+
+            # --- 7. College Baseball Game Results (ESPN) ---
+            res_bb_results = await cls._run_job_wrapper("baseball_results", cls._scrape_baseball_results_task)
+            results.append(res_bb_results)
+
+            # --- 8. College Baseball Model Retraining ---
+            res_bb_train = await cls._run_job_wrapper("baseball_training", cls._retrain_baseball_models_task)
+            results.append(res_bb_train)
             
             # --- Send Notification ---
             await NotificationService.send_summary_report(results)
@@ -319,6 +327,27 @@ class SchedulerService:
              raise Exception("College Baseball import failed: All sources failed")
              
         return {"rows": rows}
+
+    @staticmethod
+    async def _scrape_baseball_results_task():
+        """Worker for College Baseball game results scraping (ESPN)."""
+        from scripts.college_baseball_results_scraper import fetch_college_baseball_scores, store_game_results
+        games = await fetch_college_baseball_scores(days_back=2)
+        inserted = await store_game_results(games)
+        return {
+            "rows": inserted,
+            "games_fetched": len(games),
+            "games_inserted": inserted,
+            "game_details": games[:20],  # Include up to 20 games for email report
+        }
+
+    @staticmethod
+    async def _retrain_baseball_models_task():
+        """Worker for retraining College Baseball XGBoost models."""
+        from scripts.college_baseball_xgb_trainer import CollegeBaseballXGBTrainer
+        trainer = CollegeBaseballXGBTrainer()
+        trainer.train_from_csvs()
+        return {"rows": 0, "detail": "Stat-based models retrained"}
 
     @staticmethod
     async def _import_nhl_task():
