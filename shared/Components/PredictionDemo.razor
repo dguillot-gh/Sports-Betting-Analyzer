@@ -1,0 +1,157 @@
+@page "/predict/nba"
+@inject HttpClient Http
+@using System.Net.Http.Json
+@using System.Text.Json
+
+<div class="max-w-md mx-auto p-4 sm:p-6 bg-gray-50 min-h-screen">
+    <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100">
+        
+        <!-- Header Section -->
+        <div class="bg-gradient-to-r from-blue-600 to-indigo-700 p-6 text-white text-center">
+            <h2 class="text-2xl font-extrabold tracking-tight">NBA AI Predictor</h2>
+            <p class="text-blue-100 mt-1 text-sm font-medium">Machine Learning Powered Analysis</p>
+        </div>
+
+        <div class="p-6">
+            <!-- Input Section -->
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Pick a Scenario to Simulate</label>
+                    <select class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 outline-none transition-colors">
+                        <option>Lakers vs Celtics</option>
+                        <option>Warriors vs Suns</option>
+                        <option>Heat vs Bucks</option>
+                    </select>
+                </div>
+
+                <button @onclick="FetchPrediction" disabled="@isFetching"
+                        class="w-full flex justify-center items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold py-3 px-4 rounded-xl shadow-md transition-all duration-200">
+                    
+                    @if (isFetching)
+                    {
+                        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Analyzing Stats...</span>
+                    }
+                    else
+                    {
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        <span>Generate Prediction</span>
+                    }
+                </button>
+            </div>
+
+            <!-- Error Message -->
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="mt-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-md">
+                    <div class="flex">
+                        <div class="ml-3">
+                            <p class="text-sm text-red-700 font-medium">@errorMessage</p>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <!-- Results Section -->
+            @if (predictionResult != null && !isFetching)
+            {
+                <div class="mt-8 transform transition-all animate-fade-in-up">
+                    <h3 class="text-xs uppercase tracking-wider font-bold text-gray-500 mb-3 ml-1">AI Recommendation</h3>
+                    
+                    <div class="bg-indigo-50 rounded-xl p-5 border border-indigo-100 shadow-inner">
+                        <div class="flex justify-between items-center mb-4">
+                            <span class="text-sm font-semibold text-gray-600">Model Used</span>
+                            <span class="px-2 py-1 bg-indigo-200 text-indigo-800 text-xs font-bold rounded">@predictionResult.GetProperty("model_info").GetProperty("type").GetString()</span>
+                        </div>
+                        
+                        <div class="flex flex-col items-center py-2 border-t border-b border-indigo-100 my-4">
+                            <span class="text-xs text-gray-500 uppercase tracking-wide font-semibold">Predicted Winner</span>
+                            <span class="text-3xl font-black text-indigo-700 mt-1">
+                                @predictionResult.GetProperty("predictions").GetProperty("driver").GetString()
+                            </span>
+                        </div>
+                        
+                        <div class="space-y-3 mt-4">
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm font-medium text-gray-600">Win Probability</span>
+                                <span class="text-sm font-bold text-gray-900">@predictionResult.GetProperty("predictions").GetProperty("win_probability").GetDouble()%</span>
+                            </div>
+                            
+                            <!-- Progress Bar -->
+                            <div class="w-full bg-gray-200 rounded-full h-2.5">
+                                <div class="bg-indigo-600 h-2.5 rounded-full" style="width: @(predictionResult.GetProperty("predictions").GetProperty("win_probability").GetDouble())%"></div>
+                            </div>
+                            
+                            <div class="flex justify-between items-center pt-2">
+                                <span class="text-sm font-medium text-gray-600">Confidence Level</span>
+                                <span class="px-3 py-1 bg-green-100 text-green-800 text-xs font-bold rounded-full border border-green-200 uppercase">
+                                    @predictionResult.GetProperty("predictions").GetProperty("confidence").GetString()
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+    .animate-fade-in-up {
+        animation: fadeInUp 0.5s ease-out;
+    }
+    @@keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+</style>
+
+@code {
+    private bool isFetching = false;
+    private JsonElement? predictionResult;
+    private string? errorMessage;
+
+    private async Task FetchPrediction()
+    {
+        isFetching = true;
+        errorMessage = null;
+        predictionResult = null;
+        StateHasChanged();
+
+        try
+        {
+            // Connect to Python Backend (Base Address is already set from Preferences using our ConfigService)
+            var requestBody = new { features = new { driver = "Lakers", start_pos = 2, track_type = "superspeedway" } };
+            
+            var response = await Http.PostAsJsonAsync("nba/predict/classification", requestBody);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                var doc = JsonDocument.Parse(content);
+                predictionResult = doc.RootElement;
+            }
+            else
+            {
+                errorMessage = $"Server error: {response.StatusCode}. Ensure your Python ML service is running at {Http.BaseAddress}";
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = $"Network Error: {ex.Message}. Could not connect to {Http.BaseAddress}";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "An unexpected error occurred: " + ex.Message;
+        }
+        finally
+        {
+            isFetching = false;
+        }
+    }
+}

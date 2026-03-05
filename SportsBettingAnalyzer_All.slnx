@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/frontend/">
+    <Project Path="frontend/SportsBettingAnalyzer.csproj" />
+  </Folder>
+  <Folder Name="/mobile/">
+    <Project Path="mobile/SportsBettingAnalyzer.Mobile.csproj" />
+  </Folder>
+  <Folder Name="/shared/">
+    <Project Path="shared/SportsBettingAnalyzer.Shared.csproj" />
+  </Folder>
+</Solution>
