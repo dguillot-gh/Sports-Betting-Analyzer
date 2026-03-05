@@ -66,31 +66,31 @@
                     <div class="bg-indigo-50 rounded-xl p-5 border border-indigo-100 shadow-inner">
                         <div class="flex justify-between items-center mb-4">
                             <span class="text-sm font-semibold text-gray-600">Model Used</span>
-                            <span class="px-2 py-1 bg-indigo-200 text-indigo-800 text-xs font-bold rounded">@predictionResult.GetProperty("model_info").GetProperty("type").GetString()</span>
+                            <span class="px-2 py-1 bg-indigo-200 text-indigo-800 text-xs font-bold rounded">@predictionResult.Value.GetProperty("model_info").GetProperty("type").GetString()</span>
                         </div>
                         
                         <div class="flex flex-col items-center py-2 border-t border-b border-indigo-100 my-4">
                             <span class="text-xs text-gray-500 uppercase tracking-wide font-semibold">Predicted Winner</span>
                             <span class="text-3xl font-black text-indigo-700 mt-1">
-                                @predictionResult.GetProperty("predictions").GetProperty("driver").GetString()
+                                @predictionResult.Value.GetProperty("predictions").GetProperty("driver").GetString()
                             </span>
                         </div>
                         
                         <div class="space-y-3 mt-4">
                             <div class="flex justify-between items-center">
                                 <span class="text-sm font-medium text-gray-600">Win Probability</span>
-                                <span class="text-sm font-bold text-gray-900">@predictionResult.GetProperty("predictions").GetProperty("win_probability").GetDouble()%</span>
+                                <span class="text-sm font-bold text-gray-900">@predictionResult.Value.GetProperty("predictions").GetProperty("win_probability").GetDouble()%</span>
                             </div>
                             
                             <!-- Progress Bar -->
                             <div class="w-full bg-gray-200 rounded-full h-2.5">
-                                <div class="bg-indigo-600 h-2.5 rounded-full" style="width: @(predictionResult.GetProperty("predictions").GetProperty("win_probability").GetDouble())%"></div>
+                                <div class="bg-indigo-600 h-2.5 rounded-full" style="width: @(predictionResult.Value.GetProperty("predictions").GetProperty("win_probability").GetDouble())%"></div>
                             </div>
                             
                             <div class="flex justify-between items-center pt-2">
                                 <span class="text-sm font-medium text-gray-600">Confidence Level</span>
                                 <span class="px-3 py-1 bg-green-100 text-green-800 text-xs font-bold rounded-full border border-green-200 uppercase">
-                                    @predictionResult.GetProperty("predictions").GetProperty("confidence").GetString()
+                                    @predictionResult.Value.GetProperty("predictions").GetProperty("confidence").GetString()
                                 </span>
                             </div>
                         </div>
