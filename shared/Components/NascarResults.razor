@@ -1,0 +1,305 @@
+@page "/nascar/results"
+@inject HttpClient Http
+@using System.Net.Http.Json
+
+<div class="app-card" style="margin-bottom: 24px;">
+    <div class="app-card-header" style="background: linear-gradient(135deg, #1e293b, #0f172a) !important;">
+        <h2>🏁 NASCAR Results</h2>
+        <p>Race results, points, and driver finishes</p>
+    </div>
+
+    <div class="app-card-body">
+        
+        <!-- Filters -->
+        <div class="filter-section">
+            <div class="filter-row">
+                <div class="filter-col">
+                    <label class="app-label">Series</label>
+                    <select class="app-select" @bind="_selectedSeries">
+                        <option value="cup">Cup Series</option>
+                        <option value="xfinity">Xfinity Series</option>
+                        <option value="trucks">Trucks Series</option>
+                    </select>
+                </div>
+                <div class="filter-col" style="flex: 0.6;">
+                    <label class="app-label">Season</label>
+                    <select class="app-select" @bind="_selectedSeason">
+                        <option value="">All</option>
+                        @foreach (var season in _availableSeasons)
+                        {
+                            <option value="@season">@season</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <div class="filter-row mt-2">
+                <div class="filter-col">
+                    <label class="app-label">Driver Match</label>
+                    <input class="app-input" type="text" placeholder="Driver name..." @bind="_selectedDriver" />
+                </div>
+            </div>
+
+            <div class="filter-row mt-2">
+                 <div class="filter-col">
+                    <label class="app-label">Finish Filter</label>
+                    <select class="app-select" @bind="_finishFilter">
+                        <option value="">All Finishes</option>
+                        <option value="1">Wins Only</option>
+                        <option value="5">Top 5</option>
+                        <option value="10">Top 10</option>
+                        <option value="20">Top 20</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="filter-row mt-3">
+                <button class="app-btn app-btn-primary" @onclick="LoadResults" disabled="@_isLoading">
+                    @if (_isLoading)
+                    {
+                        <span class="spinner"></span>
+                        <span>Searching...</span>
+                    }
+                    else
+                    {
+                        <span>🔍 Search Races</span>
+                    }
+                </button>
+            </div>
+        </div>
+
+        @if (_results.Any())
+        {
+            <div class="results-meta">
+                <span>Showing @_results.Count results</span>
+            </div>
+
+            <div class="scores-list">
+                @foreach (var result in _results)
+                {
+                    <div class="score-card">
+                        <div class="score-card-header">
+                            <span class="score-week">@result.Season &bull; @TruncateTrack(result.Track)</span>
+                            <span class="score-status @GetFinishClass(result.Finish)">
+                                P@(result.Finish)
+                            </span>
+                        </div>
+                        
+                        <div class="driver-matchup">
+                            <div class="driver-primary">
+                                <span class="driver-name">@result.Driver</span>
+                                <span class="driver-team">@TruncateTeam(result.Team)</span>
+                            </div>
+                        </div>
+
+                        <div class="race-stats">
+                            <div class="stat-box">
+                                <span class="stat-lbl">START</span>
+                                <span class="stat-val">@(result.Start?.ToString() ?? "-")</span>
+                            </div>
+                            <div class="stat-box">
+                                <span class="stat-lbl">LED</span>
+                                <span class="stat-val @(result.Led > 0 ? "stat-led" : "")">@result.Led</span>
+                            </div>
+                            <div class="stat-box">
+                                <span class="stat-lbl">PTS</span>
+                                <span class="stat-val">@(result.Pts?.ToString() ?? "-")</span>
+                            </div>
+                        </div>
+                        
+                        @if (result.Status != null && result.Status.ToLower() != "running")
+                        {
+                            <div class="score-performer" style="color:var(--danger)">
+                                <span>⚠️ @result.Status</span>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+        else if (!_isLoading && _hasSearched)
+        {
+            <div class="app-alert app-alert-error" style="margin-top: 16px;">
+                No results found. Try adjusting your filters.
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .filter-section { background: var(--surface-overlay); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 20px; }
+    .filter-row { display: flex; gap: 10px; }
+    .filter-col { flex: 1; }
+    .mt-2 { margin-top: 8px; }
+    .mt-3 { margin-top: 12px; }
+
+    .results-meta { text-align: center; font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 12px; letter-spacing: 1px; }
+
+    .scores-list { display: flex; flex-direction: column; gap: 12px; }
+    .score-card { background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; }
+    .score-card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-light); padding-bottom: 8px; margin-bottom: 12px; }
+    .score-week { font-size: 11px; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    
+    .score-status { font-size: 12px; font-weight: 800; padding: 2px 8px; border-radius: 4px; letter-spacing: 0.5px; }
+    .score-status.Win { background: var(--success-bg); color: var(--success); }
+    .score-status.Top5 { background: rgba(96,165,250,0.15); color: #60a5fa; }
+    .score-status.Top10 { background: rgba(148,163,184,0.1); color: #94a3b8; }
+    .score-status.Other { background: transparent; color: var(--text-muted); font-weight:600; }
+
+    .driver-matchup { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+    .driver-primary { display: flex; flex-direction: column; }
+    .driver-name { font-size: 16px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.2px;}
+    .driver-team { font-size: 11px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.5px; text-transform: uppercase; }
+
+    .race-stats { display: flex; align-items: center; background: var(--surface-overlay); border-radius: 6px; padding: 10px; }
+    .stat-box { flex: 1; text-align: center; border-right: 1px solid var(--border); }
+    .stat-box:last-child { border-right: none; }
+    .stat-lbl { display: block; font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+    .stat-val { font-weight: 800; font-size: 14px; color: var(--text-secondary); }
+    .stat-led { color: #f59e0b; } /* Amber for laps led */
+
+    .score-performer { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border-light); font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 4px; font-weight: 600;}
+</style>
+
+@code {
+    private string _selectedSeries = "cup";
+    private int? _selectedSeason;
+    private string? _selectedDriver;
+    private int? _finishFilter;
+    private bool _isLoading = false;
+    private bool _hasSearched = false;
+    
+    private List<int> _availableSeasons = new();
+    private List<RaceResultItem> _results = new();
+    private int _totalResults = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSeasons();
+        await LoadResults();
+    }
+
+    private async Task LoadSeasons()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<SeasonsResponse>(
+                $"http://backend:8000/db/races/nascar/seasons?series={_selectedSeries}");
+            _availableSeasons = response?.Seasons ?? new List<int>();
+        }
+        catch
+        {
+            _availableSeasons = Enumerable.Range(2012, DateTime.Now.Year - 2011).Reverse().ToList();
+        }
+    }
+
+    private async Task LoadResults()
+    {
+        _isLoading = true;
+        _hasSearched = true;
+        StateHasChanged();
+        
+        try
+        {
+            var url = $"http://backend:8000/db/races/nascar/list?series={_selectedSeries}&limit=50"; // Limit to 50 for mobile
+            
+            if (_selectedSeason.HasValue)
+                url += $"&season={_selectedSeason.Value}";
+            if (!string.IsNullOrEmpty(_selectedDriver))
+                url += $"&driver={Uri.EscapeDataString(_selectedDriver)}";
+            if (_finishFilter.HasValue)
+                url += $"&finish_max={_finishFilter.Value}";
+            
+            var response = await Http.GetFromJsonAsync<RaceResultsResponse>(url);
+            
+            _results = response?.Results ?? new();
+            _totalResults = response?.Total ?? 0;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading results: {ex.Message}");
+            _results = new();
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetFinishClass(int? finish) => finish switch
+    {
+        1 => "Win",
+        <= 5 => "Top5",
+        <= 10 => "Top10",
+        _ => "Other"
+    };
+
+    private string TruncateTrack(string? track) => 
+        track != null && track.Length > 22 ? track[..19] + "..." : track ?? "";
+
+    private string TruncateTeam(string? team) => 
+        team != null && team.Length > 20 ? team[..17] + "..." : team ?? "Independent";
+
+    private class SeasonsResponse
+    {
+        public List<int> Seasons { get; set; } = new();
+    }
+
+    private class RaceResultsResponse
+    {
+        public List<RaceResultItem> Results { get; set; } = new();
+        public int Total { get; set; }
+    }
+
+    private class RaceResultItem
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        public int Id { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("season")]
+        public int Season { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("series")]
+        public string? Series { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("track")]
+        public string? Track { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("race_num")]
+        public int? RaceNum { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("race_name")]
+        public string? RaceName { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("driver")]
+        public string? Driver { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("finish")]
+        public int? Finish { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("start")]
+        public int? Start { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("led")]
+        public int? Led { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("laps")]
+        public int? Laps { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("pts")]
+        public int? Pts { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("status")]
+        public string? Status { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("team")]
+        public string? Team { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("make")]
+        public string? Make { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rating")]
+        public double? Rating { get; set; }
+    }
+}

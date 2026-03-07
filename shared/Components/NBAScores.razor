@@ -1,0 +1,258 @@
+@page "/nba/scores"
+@inject HttpClient Http
+@using System.Net.Http.Json
+
+<div class="app-card">
+    <div class="app-card-header" style="background: linear-gradient(135deg, #c2410c, #ea580c) !important;">
+        <h2>🏀 NBA Game Results</h2>
+        <p>View scores, schedules, and top performers</p>
+    </div>
+
+    <div class="app-card-body">
+        
+        <!-- Filters -->
+        <div class="filter-section">
+            <div class="filter-row">
+                <div class="filter-col">
+                    <label class="app-label">Season</label>
+                    <select class="app-select" @bind="_selectedSeason">
+                        @foreach (var season in _availableSeasons)
+                        {
+                            <option value="@season">@season</option>
+                        }
+                    </select>
+                </div>
+                <div class="filter-col">
+                    <label class="app-label">Team</label>
+                    <select class="app-select" @bind="_selectedTeam">
+                        <option value="">All Teams</option>
+                        @foreach (var team in _nbaTeams.OrderBy(t => t.Value))
+                        {
+                            <option value="@team.Key">@team.Value</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <div class="filter-row mt-3">
+                <button class="app-btn app-btn-primary" @onclick="LoadResults" disabled="@_isLoading">
+                    @if (_isLoading)
+                    {
+                        <span class="spinner"></span>
+                        <span>Searching...</span>
+                    }
+                    else
+                    {
+                        <span>🔍 Search Games</span>
+                    }
+                </button>
+            </div>
+        </div>
+
+        @if (_games.Any())
+        {
+            <div class="results-meta">
+                <span>Showing @_games.Count games</span>
+            </div>
+
+            <div class="scores-list">
+                @foreach (var game in _games)
+                {
+                    <div class="score-card">
+                        <div class="score-card-header">
+                            <span class="score-week">@FormatDate(game.GameDate)</span>
+                            @if (game.IsCompleted)
+                            {
+                                <span class="score-status Final">FINAL</span>
+                            }
+                            else
+                            {
+                                <span class="score-status TBD">SCHEDULED</span>
+                            }
+                        </div>
+                        
+                        <div class="score-matchup">
+                            <div class="team-line">
+                                <span class="team-name @(game.AwayScore > game.HomeScore ? "winner" : "")">@game.AwayTeam</span>
+                                <span class="team-score @(game.AwayScore > game.HomeScore ? "winner" : "")">
+                                    @(game.AwayScore > 0 ? game.AwayScore.ToString() : "-")
+                                </span>
+                            </div>
+                            <div class="team-line">
+                                <span class="team-name @(game.HomeScore > game.AwayScore ? "winner" : "")">@game.HomeTeam</span>
+                                <span class="team-score @(game.HomeScore > game.AwayScore ? "winner" : "")">
+                                    @(game.HomeScore > 0 ? game.HomeScore.ToString() : "-")
+                                </span>
+                            </div>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(game.TopScorer) && game.TopScorerPoints > 0)
+                        {
+                            <div class="score-performer">
+                                <span>🔥 @game.TopScorer </span>
+                                <span style="margin-left:auto; font-weight:700;">@game.TopScorerPoints pts</span>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+        else if (!_isLoading && _hasSearched)
+        {
+            <div class="app-alert app-alert-error" style="margin-top: 16px;">
+                No games found. Try adjusting your filters.
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .filter-section { background: var(--surface-overlay); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 20px; }
+    .filter-row { display: flex; gap: 10px; }
+    .filter-col { flex: 1; }
+    .mt-3 { margin-top: 12px; }
+
+    .results-meta { text-align: center; font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 12px; letter-spacing: 1px; }
+
+    .scores-list { display: flex; flex-direction: column; gap: 12px; }
+    .score-card { background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; }
+    .score-card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-light); padding-bottom: 8px; margin-bottom: 8px; }
+    .score-week { font-size: 11px; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    
+    .score-status { font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.5px; }
+    .score-status.Final { background: var(--success-bg); color: var(--success); }
+    .score-status.TBD { background: rgba(255,165,0,0.1); color: #ffa500; }
+
+    .score-matchup { display: flex; flex-direction: column; gap: 6px; }
+    .team-line { display: flex; justify-content: space-between; align-items: center; }
+    .team-name { font-size: 15px; font-weight: 600; color: var(--text-secondary); }
+    .team-name.winner { color: var(--text-primary); font-weight: 800; }
+    .team-score { font-size: 18px; font-weight: 700; color: var(--text-secondary); font-family: 'SF Mono', Consolas, monospace; }
+    .team-score.winner { color: #f97316; font-weight: 900; } /* Orange score for NBA */
+
+    .score-performer { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border-light); font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 4px;}
+</style>
+
+@code {
+    private int? _selectedSeason;
+    private string? _selectedTeam;
+    private bool _isLoading = false;
+    private bool _hasSearched = false;
+    
+    private List<int> _availableSeasons = new();
+    private List<NBAGame> _games = new();
+    
+    private readonly Dictionary<string, string> _nbaTeams = new()
+    {
+        { "ATL", "Hawks" }, { "BOS", "Celtics" }, { "BKN", "Nets" }, { "CHA", "Hornets" },
+        { "CHI", "Bulls" }, { "CLE", "Cavaliers" }, { "DAL", "Mavericks" }, { "DEN", "Nuggets" },
+        { "DET", "Pistons" }, { "GSW", "Warriors" }, { "HOU", "Rockets" }, { "IND", "Pacers" },
+        { "LAC", "Clippers" }, { "LAL", "Lakers" }, { "MEM", "Grizzlies" }, { "MIA", "Heat" },
+        { "MIL", "Bucks" }, { "MIN", "Timberwolves" }, { "NOP", "Pelicans" }, { "NYK", "Knicks" },
+        { "OKC", "Thunder" }, { "ORL", "Magic" }, { "PHI", "76ers" }, { "PHX", "Suns" },
+        { "POR", "Trail Blazers" }, { "SAC", "Kings" }, { "SAS", "Spurs" }, { "TOR", "Raptors" },
+        { "UTA", "Jazz" }, { "WAS", "Wizards" }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _availableSeasons = Enumerable.Range(2020, 6).Reverse().ToList();
+        _selectedSeason = _availableSeasons.FirstOrDefault();
+        await LoadResults();
+    }
+    
+    private string FormatDate(string dateStr)
+    {
+        if (DateTime.TryParse(dateStr, out var date))
+            return date.ToString("MMM d, yyyy");
+        return dateStr;
+    }
+
+    private async Task LoadResults()
+    {
+        _isLoading = true;
+        _hasSearched = true;
+        StateHasChanged();
+        
+        try
+        {
+            var url = $"http://backend:8000/db/games/nba/schedule?limit=50";
+            
+            if (_selectedSeason.HasValue)
+                url += $"&season={_selectedSeason.Value}";
+            if (!string.IsNullOrEmpty(_selectedTeam))
+                url += $"&team={Uri.EscapeDataString(_selectedTeam)}";
+            
+            var response = await Http.GetFromJsonAsync<NBAScheduleResponse>(url);
+            
+            _games = (response?.Games ?? new())
+                .Select(g => new NBAGame
+                {
+                    GameDate = g.GameDate ?? "TBD",
+                    HomeTeam = g.HomeTeam ?? "Home",
+                    AwayTeam = g.AwayTeam ?? "Away",
+                    HomeScore = g.HomeScore ?? 0,
+                    AwayScore = g.AwayScore ?? 0,
+                    IsCompleted = g.IsCompleted ?? (g.HomeScore > 0 || g.AwayScore > 0),
+                    TopScorer = g.TopScorer,
+                    TopScorerPoints = g.TopScorerPoints ?? 0
+                })
+                .OrderByDescending(g => g.GameDate)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading games: {ex.Message}");
+            _games = new();
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private class NBAScheduleResponse
+    {
+        public List<NBAGameItem> Games { get; set; } = new();
+    }
+
+    private class NBAGameItem
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("game_date")]
+        public string? GameDate { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("home_team")]
+        public string? HomeTeam { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("away_team")]
+        public string? AwayTeam { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("home_score")]
+        public int? HomeScore { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("away_score")]
+        public int? AwayScore { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("is_completed")]
+        public bool? IsCompleted { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("top_scorer")]
+        public string? TopScorer { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("top_scorer_points")]
+        public int? TopScorerPoints { get; set; }
+    }
+
+    private class NBAGame
+    {
+        public string GameDate { get; set; } = "";
+        public string HomeTeam { get; set; } = "";
+        public string AwayTeam { get; set; } = "";
+        public int HomeScore { get; set; }
+        public int AwayScore { get; set; }
+        public bool IsCompleted { get; set; }
+        public string? TopScorer { get; set; }
+        public int TopScorerPoints { get; set; }
+    }
+}

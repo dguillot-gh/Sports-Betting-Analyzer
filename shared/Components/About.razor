@@ -1,0 +1,112 @@
+@page "/about"
+
+<div class="app-card">
+    <div class="app-card-header" style="background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;">
+        <h2>ℹ️ About</h2>
+        <p>Machine Learning-Powered Sports Prediction Platform</p>
+    </div>
+
+    <div class="app-card-body">
+        
+        <p style="font-size: 14px; line-height: 1.6; color: var(--text-secondary); margin-bottom: 20px;">
+            A full-stack mobile application that uses machine learning to analyze sports data and generate predictions 
+            for NASCAR, NFL, and NBA. Built with .NET MAUI, Blazor Hybrid, Python, and modern ML frameworks.
+        </p>
+
+        <div class="about-section">
+            <h3 class="about-heading">System Architecture</h3>
+            
+            <div class="arch-box">
+                <div class="arch-title" style="color: #60a5fa;">📱 Mobile Frontend</div>
+                <div class="arch-sub">.NET MAUI Blazor Hybrid (.NET 9)</div>
+                <ul class="arch-list">
+                    <li>&bull; Cross-platform Native UI</li>
+                    <li>&bull; Shared Razor Class Libraries</li>
+                    <li>&bull; Custom CSS Variable Theming</li>
+                </ul>
+            </div>
+
+            <div class="arch-box">
+                <div class="arch-title" style="color: #c084fc;">⚙️ Backend API</div>
+                <div class="arch-sub">Python FastAPI</div>
+                <ul class="arch-list">
+                    <li>&bull; Async RESTful Endpoints</li>
+                    <li>&bull; scikit-learn / XGBoost Integration</li>
+                    <li>&bull; Pandas Data Processing Pipelines</li>
+                </ul>
+            </div>
+
+            <div class="arch-box">
+                <div class="arch-title" style="color: #fbbf24;">📊 Data Sources</div>
+                <div class="arch-sub">Official Data Integrations</div>
+                <ul class="arch-list">
+                    <li>&bull; nflverse (NFL Stats)</li>
+                    <li>&bull; hoopR (NBA Advanced)</li>
+                    <li>&bull; The Odds API (Live Lines)</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="about-section">
+            <h3 class="about-heading">ML Models</h3>
+            
+            <div class="arch-box">
+                <div class="arch-title" style="color: #34d399;">🌲 Random Forest</div>
+                <p style="font-size: 13px; color: var(--text-muted); margin: 6px 0;">An ensemble of decision trees that votes on predictions. Great for interpretability and identifying key drivers in the data.</p>
+            </div>
+
+            <div class="arch-box">
+                <div class="arch-title" style="color: #fbbf24;">⚡ XGBoost</div>
+                <p style="font-size: 13px; color: var(--text-muted); margin: 6px 0;">Gradient boosting that sequentially corrects errors. Optimized for high accuracy and performance on complex tabular data.</p>
+            </div>
+        </div>
+
+        <div class="about-section">
+            <h3 class="about-heading">Open Source Credits & License</h3>
+            
+            <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">This software incorporates concepts and code from several open-source community projects.</p>
+            
+            <div class="arch-box">
+                <div class="arch-title" style="color: #60a5fa;">NBA_AI</div>
+                <p style="font-size: 13px; color: var(--text-muted); margin: 6px 0;">AI-powered NBA game predictions using Ensemble models featuring 5 prediction engines and 43 rolling average features.</p>
+                <a href="https://github.com/NBA-Betting/NBA_AI" target="_blank" class="about-link">GitHub: NBA_AI</a>
+            </div>
+
+            <div class="arch-box">
+                <div class="arch-title" style="color: #fbbf24;">kyleskom NBA-ML</div>
+                <p style="font-size: 13px; color: var(--text-muted); margin: 6px 0;">XGBoost-based NBA prediction model including Expected Value calculations and Kelly Criterion sizing.</p>
+                <a href="https://github.com/kyleskom/NBA-Machine-Learning-Sports-Betting" target="_blank" class="about-link">GitHub: kyleskom/NBA-ML</a>
+            </div>
+
+            <div class="arch-box license-box">
+                <div class="arch-title text-center">Software License</div>
+                <p style="font-size: 12px; color: var(--text-muted); margin: 10px 0; text-align: center;">
+                    This project is distributed under the <strong>GNU General Public License (GPL)</strong>. 
+                    You may copy, distribute and modify the software as long as you track changes/dates in source files. Any modifications to or software including (via compiler) GPL-licensed code must also be made available under the GPL along with build & install instructions.
+                </p>
+            </div>
+        </div>
+
+        <div class="footer-note">
+            Built for educational purposes. Always gamble responsibly.
+        </div>
+    </div>
+</div>
+
+<style>
+    .about-section { margin-bottom: 24px; }
+    .about-heading { font-size: 18px; font-weight: 800; color: var(--text-primary); margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 6px;}
+    
+    .arch-box { background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 12px; }
+    .arch-title { font-size: 16px; font-weight: 800; letter-spacing: -0.2px; }
+    .arch-sub { font-size: 12px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; margin-bottom: 10px; }
+    .arch-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+    .arch-list li { font-size: 13px; color: var(--text-secondary); }
+
+    .about-link { display: inline-block; background: rgba(59, 130, 246, 0.1); color: #60a5fa; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 700; text-decoration: none; margin-top: 8px; }
+    
+    .license-box { background: rgba(255,255,255,0.02); border: 1px dashed var(--border-light); }
+    .text-center { text-align: center; }
+
+    .footer-note { text-align: center; font-size: 12px; color: var(--text-muted); padding-top: 16px; border-top: 1px solid var(--border-light); margin-top: 24px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+</style>

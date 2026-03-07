@@ -145,8 +145,6 @@ body {
     cursor: pointer;
     z-index: 10;
     border: none;
-    background: transparent;
-    opacity: 0;
 }
 
 .nav-scrollable {
