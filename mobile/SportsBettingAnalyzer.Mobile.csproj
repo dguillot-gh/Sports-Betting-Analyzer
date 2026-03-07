@@ -17,7 +17,6 @@
         <UseMaui>true</UseMaui>
         <SingleProject>true</SingleProject>
         <ImplicitUsings>enable</ImplicitUsings>
-        <EnableDefaultCssItems>false</EnableDefaultCssItems>
         <Nullable>enable</Nullable>
         <!-- Fix for MSB4018 Error: DOTNET_HOST_PATH is not set in Visual Studio -->
         <DotNetHostPath Condition="'$(DotNetHostPath)' == ''">$(DOTNET_ROOT)\dotnet.exe</DotNetHostPath>
@@ -72,9 +71,5 @@
     <ItemGroup>
       <ProjectReference Include="..\shared\SportsBettingAnalyzer.Shared.csproj" />
     </ItemGroup>
-
-    <Target Name="TailwindCSS" BeforeTargets="Build">
-        <Exec Command="tailwindcss.exe -i app.css -o wwwroot/css/app.css --minify" />
-    </Target>
 
 </Project>

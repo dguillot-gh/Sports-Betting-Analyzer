@@ -1,0 +1,377 @@
+@page "/bet-tracker"
+@using System.Text.Json
+@using System.Net.Http.Json
+@using SportsBettingAnalyzer.Shared.Services
+@inject IServerConfigService ConfigService
+@inject HttpClient Http
+
+<div class="page custom-scrollbar">
+    <div class="top-row px-4">
+        <span>Bet Tracker</span>
+    </div>
+
+    <div class="content px-4">
+        <div class="home-hero">
+            <h1>Bet Tracker</h1>
+            <p>Log your plays and track your bankroll.</p>
+        </div>
+
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="app-alert app-alert-error mb-3">
+                @errorMessage
+            </div>
+        }
+
+        <!-- Actions Row -->
+        <div class="d-flex gap-2 mb-4 mt-3 flex-wrap">
+            <button class="app-btn app-btn-primary flex-fill" @onclick="ResolvePendingBets" disabled="@_isResolving" style="padding: 10px;">
+                @(_isResolving ? "Resolving..." : "Resolve Pending")
+            </button>
+            <button class="app-btn flex-fill" @onclick="ToggleManualEntry" style="padding: 10px; flex: 1;">
+                 @(_showManualEntry ? "Hide Manual Add" : "Add Bet")
+            </button>
+        </div>
+
+        <!-- Manual Entry Card -->
+        @if (_showManualEntry)
+        {
+            <div class="app-card mb-4" style="border: 1px solid var(--primary); animation: fadeIn 0.3s ease-out;">
+                 <div class="app-card-header" style="background: var(--surface-overlay); padding: 12px;">
+                    <h3 style="margin: 0; font-size: 16px;">Manual Entry</h3>
+                </div>
+                <div class="app-card-body">
+                    <div class="mb-3">
+                        <label class="app-label">Description</label>
+                        <input class="app-input" type="text" @bind="_manualDesc" placeholder="Ex: Chiefs ML" />
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label class="app-label">Odds</label>
+                            <input class="app-input" type="number" @bind="_manualOdds" />
+                        </div>
+                        <div class="col-6">
+                            <label class="app-label">Stake ($)</label>
+                            <input class="app-input" type="number" @bind="_manualStake" />
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="app-label">Sportsbook</label>
+                        <select class="app-select" @bind="_manualSportsbook">
+                            <option value="fanduel">FanDuel</option>
+                            <option value="draftkings">DraftKings</option>
+                            <option value="betmgm">BetMGM</option>
+                            <option value="bovada">Bovada</option>
+                        </select>
+                    </div>
+
+                    <button class="app-btn app-btn-primary" @onclick="PlaceManualBet" disabled="@(string.IsNullOrWhiteSpace(_manualDesc) || _manualStake <= 0)">
+                        Log Bet
+                    </button>
+                </div>
+            </div>
+        }
+
+        <!-- Stats Card -->
+        <div class="app-card mb-4">
+            <div class="app-card-body pb-2">
+                <div class="row text-center mb-3">
+                    <div class="col-6">
+                        <div class="result-label">Net Profit</div>
+                        <div class="result-winner-name @(_netProfit >= 0 ? "text-success" : "text-danger")" style="font-size: 24px;">
+                            @(_netProfit >= 0 ? "+" : "")$@_netProfit.ToString("F2")
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="result-label">Win/Loss</div>
+                        <div class="result-winner-name" style="font-size: 24px; color: var(--text-primary);">
+                           <span class="text-success">@_wins</span> - <span class="text-danger">@_losses</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- History Title -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 style="font-size: 18px; margin: 0; color: var(--text-primary);">Recent Bets</h2>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="LoadData" style="font-size: 12px; border-color: var(--border);">
+                Refresh
+            </button>
+        </div>
+
+        <!-- Bet History List -->
+        @if (_loading)
+        {
+            <div style="text-align: center; padding: 30px;">
+                <div class="spinner"></div>
+                <p style="margin-top: 10px; opacity: 0.7;">Loading bets...</p>
+            </div>
+        }
+        else if (_bets.Any())
+        {
+            <div class="d-flex flex-column gap-2 mb-4">
+                @foreach (var b in _bets)
+                {
+                    <div class="app-card">
+                        <div class="app-card-body" style="padding: 16px;">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div style="flex: 1; padding-right: 15px;">
+                                    <div style="font-weight: 600; font-size: 15px;">@b.Description</div>
+                                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                                        @if (b.Sportsbook?.ToLower() == "fanduel") { <span style="color: #00A6E0;">FanDuel</span> }
+                                        else if (b.Sportsbook?.ToLower() == "draftkings") { <span style="color: #53d337;">DraftKings</span> }
+                                        else if (b.Sportsbook?.ToLower() == "betmgm") { <span style="color: #bfa15f;">BetMGM</span> }
+                                        else { <span>@(b.Sportsbook ?? "Manual")</span> }
+                                        @if (!string.IsNullOrEmpty(b.GameName)) { <span> • @b.GameName</span> }
+                                    </div>
+                                </div>
+                                <div style="text-align: right; min-width: 80px;">
+                                    <div style="font-weight: 700; font-size: 15px; color: var(--text-primary);">
+                                        $@b.Stake.ToString("0")
+                                    </div>
+                                    <div style="font-size: 13px; color: var(--text-muted);">
+                                        @@ @FormatOdds(b.Odds)
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top" style="border-color: var(--border) !important;">
+                                <div class="d-flex gap-2">
+                                     @if (b.Outcome == "pending")
+                                     {
+                                        <button class="btn btn-sm" style="background: var(--surface-overlay); color: var(--text-secondary); border: 1px solid var(--border); font-size: 12px;" @onclick="@(()=>SetOutcome(b.Id, "win"))">W</button>
+                                        <button class="btn btn-sm" style="background: var(--surface-overlay); color: var(--text-secondary); border: 1px solid var(--border); font-size: 12px;" @onclick="@(()=>SetOutcome(b.Id, "loss"))">L</button>
+                                     }
+                                     else
+                                     {
+                                          <span class="badge @(b.Outcome == "win" ? "bg-success" : "bg-danger")" style="font-weight: 600;">@b.Outcome.ToUpper()</span>
+                                          <button class="btn btn-sm btn-link text-muted p-0" style="font-size: 11px; text-decoration: none;" @onclick="@(()=>SetOutcome(b.Id, "pending"))">undo</button>
+                                     }
+                                </div>
+                                
+                                <div style="font-weight: 800; font-size: 16px;" class="@(b.Profit > 0 ? "text-success" : (b.Profit < 0 ? "text-danger" : ""))">
+                                    @if (b.Outcome != "pending")
+                                    {
+                                        @((b.Profit > 0 ? "+" : "") + "$" + b.Profit.ToString("F2"))
+                                    }
+                                    else
+                                    {
+                                        <span style="color: var(--text-muted); font-weight: normal;">To win: $@CalcWin(b.Stake, b.Odds).ToString("F2")</span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="app-card">
+                <div class="app-card-body" style="text-align: center; padding: 40px 20px;">
+                    <span style="display: block; font-size: 32px; margin-bottom: 10px; opacity: 0.5;">📋</span>
+                    <p style="margin: 0; color: var(--text-muted);">No bets logged yet.</p>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private bool _loading = true;
+    private bool _isResolving = false;
+    private string errorMessage = "";
+    
+    private List<Bet> _bets = new();
+    
+    // Stats
+    private int _wins = 0;
+    private int _losses = 0;
+    private decimal _netProfit = 0;
+
+    // Manual Entry
+    private bool _showManualEntry = false;
+    private string _manualDesc = "";
+    private int _manualOdds = -110;
+    private decimal _manualStake = 10;
+    private string _manualSportsbook = "fanduel";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private void ToggleManualEntry()
+    {
+        _showManualEntry = !_showManualEntry;
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        errorMessage = "";
+        StateHasChanged();
+
+        await LoadBets();
+        await LoadStats();
+        
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadBets()
+    {
+        try
+        {
+            var baseUrl = ConfigService.GetBaseUrl();
+            if (string.IsNullOrEmpty(baseUrl)) return;
+            
+            // Only pull real bets in BetTracker
+            var content = await Http.GetStringAsync($"{baseUrl}/bets?limit=50&is_mock=false");
+            using var doc = JsonDocument.Parse(content);
+            if (doc.RootElement.TryGetProperty("bets", out var arr))
+            {
+                _bets.Clear();
+                foreach (var b in arr.EnumerateArray())
+                {
+                    _bets.Add(new Bet
+                    {
+                        Id = b.GetProperty("id").GetInt32(),
+                        Description = b.GetProperty("description").GetString() ?? "",
+                        Stake = b.GetProperty("stake").GetDecimal(),
+                        Odds = b.GetProperty("odds").GetInt32(),
+                        Outcome = b.GetProperty("outcome").GetString() ?? "pending",
+                        GameName = b.TryGetProperty("game_name", out var gn) && gn.ValueKind == JsonValueKind.String ? gn.GetString() : null,
+                        Sportsbook = b.TryGetProperty("sportsbook", out var sb) && sb.ValueKind == JsonValueKind.String ? sb.GetString() : "unknown",
+                        Profit = b.TryGetProperty("profit", out var p) && p.ValueKind == JsonValueKind.Number ? p.GetDecimal() : 0m
+                    });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Failed to load bet history.";
+            Console.WriteLine($"Error loading bets: {ex.Message}");
+        }
+    }
+
+    private async Task LoadStats()
+    {
+        try
+        {
+            var baseUrl = ConfigService.GetBaseUrl();
+            if (string.IsNullOrEmpty(baseUrl)) return;
+
+            var resp = await Http.GetFromJsonAsync<JsonElement>($"{baseUrl}/bets/stats/summary?is_mock=false");
+            _wins = resp.TryGetProperty("wins", out var w) ? w.GetInt32() : 0;
+            _losses = resp.TryGetProperty("losses", out var l) ? l.GetInt32() : 0;
+            _netProfit = resp.TryGetProperty("net_profit", out var p) && p.ValueKind == JsonValueKind.Number ? p.GetDecimal() : 0;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading stats: {ex.Message}");
+        }
+    }
+
+    private async Task PlaceManualBet()
+    {
+        errorMessage = "";
+        try
+        {
+            var baseUrl = ConfigService.GetBaseUrl();
+            if (string.IsNullOrEmpty(baseUrl)) return;
+
+            var req = new
+            {
+                sport = "other",
+                bet_type = "single",
+                sportsbook = _manualSportsbook,
+                stake = _manualStake,
+                odds = _manualOdds,
+                description = _manualDesc,
+                is_mock = false,
+                source = "manual"
+            };
+            
+            var resp = await Http.PostAsJsonAsync($"{baseUrl}/bets", req);
+            if (resp.IsSuccessStatusCode)
+            {
+                _manualDesc = "";
+                _showManualEntry = false;
+                await LoadData();
+            }
+            else
+            {
+                errorMessage = "Failed to log bet.";
+            }
+        }
+        catch (Exception ex)
+        {
+             errorMessage = "Failed to communicate with server.";
+             Console.WriteLine(ex.Message);
+        }
+    }
+
+    private async Task SetOutcome(int id, string outcome)
+    {
+        try
+        {
+            var baseUrl = ConfigService.GetBaseUrl();
+            if (string.IsNullOrEmpty(baseUrl)) return;
+
+            await Http.PatchAsJsonAsync($"{baseUrl}/bets/{id}/outcome", new { outcome });
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error updating bet: {ex.Message}";
+        }
+    }
+
+    private async Task ResolvePendingBets()
+    {
+        try
+        {
+            _isResolving = true;
+            StateHasChanged();
+
+            var baseUrl = ConfigService.GetBaseUrl();
+            if (string.IsNullOrEmpty(baseUrl)) return;
+            
+            await Http.PostAsync($"{baseUrl}/bets/resolve-pending", null);
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error resolving bets: {ex.Message}";
+        }
+        finally
+        {
+            _isResolving = false;
+            StateHasChanged();
+        }
+    }
+
+    private string FormatOdds(int odds) => odds > 0 ? $"+{odds}" : odds.ToString();
+    
+    private decimal CalcWin(decimal stake, int odds)
+    {
+        if (stake <= 0) return 0;
+        return odds > 0 ? stake * odds / 100 : stake * 100 / Math.Abs(odds);
+    }
+
+    public class Bet
+    {
+        public int Id { get; set; }
+        public string Description { get; set; } = "";
+        public decimal Stake { get; set; }
+        public int Odds { get; set; }
+        public string Outcome { get; set; } = "pending";
+        public string? GameName { get; set; }
+        public string? Sportsbook { get; set; }
+        public decimal Profit { get; set; }
+    }
+}

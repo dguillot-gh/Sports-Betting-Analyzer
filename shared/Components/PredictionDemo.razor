@@ -3,155 +3,207 @@
 @using System.Net.Http.Json
 @using System.Text.Json
 
-<div class="max-w-md mx-auto p-4 sm:p-6 bg-gray-50 min-h-screen">
-    <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100">
-        
-        <!-- Header Section -->
-        <div class="bg-gradient-to-r from-blue-600 to-indigo-700 p-6 text-white text-center">
-            <h2 class="text-2xl font-extrabold tracking-tight">NBA AI Predictor</h2>
-            <p class="text-blue-100 mt-1 text-sm font-medium">Machine Learning Powered Analysis</p>
+<div class="app-card">
+    <!-- Header -->
+    <div class="app-card-header">
+        <h2>NBA AI Predictor</h2>
+        <p>Machine Learning Powered Analysis</p>
+    </div>
+
+    <div class="app-card-body">
+        <!-- Team Selection -->
+        <div style="margin-bottom: 12px;">
+            <label class="app-label">Home Team</label>
+            <select class="app-select" @bind="homeTeam">
+                <option value="">Select home team...</option>
+                @foreach (var team in nbaTeams)
+                {
+                    <option value="@team">@team</option>
+                }
+            </select>
         </div>
 
-        <div class="p-6">
-            <!-- Input Section -->
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-1">Pick a Scenario to Simulate</label>
-                    <select class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 outline-none transition-colors">
-                        <option>Lakers vs Celtics</option>
-                        <option>Warriors vs Suns</option>
-                        <option>Heat vs Bucks</option>
-                    </select>
-                </div>
+        <div style="margin-bottom: 16px;">
+            <label class="app-label">Away Team</label>
+            <select class="app-select" @bind="awayTeam">
+                <option value="">Select away team...</option>
+                @foreach (var team in nbaTeams)
+                {
+                    <option value="@team">@team</option>
+                }
+            </select>
+        </div>
 
-                <button @onclick="FetchPrediction" disabled="@isFetching"
-                        class="w-full flex justify-center items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold py-3 px-4 rounded-xl shadow-md transition-all duration-200">
-                    
-                    @if (isFetching)
+        <button class="app-btn app-btn-primary" @onclick="FetchPrediction" 
+                disabled="@(isFetching || string.IsNullOrEmpty(homeTeam) || string.IsNullOrEmpty(awayTeam))">
+            @if (isFetching)
+            {
+                <span class="spinner"></span>
+                <span>Analyzing...</span>
+            }
+            else
+            {
+                <span>&#9889;</span>
+                <span>Predict Outcome</span>
+            }
+        </button>
+
+        <!-- Error -->
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="app-alert app-alert-error">@errorMessage</div>
+        }
+
+        <!-- Results -->
+        @if (result != null && !isFetching)
+        {
+            <div class="result-section">
+                <h3>AI Prediction</h3>
+
+                <div class="result-card">
+                    <!-- Winner -->
+                    <div class="result-winner-block">
+                        <div class="result-winner-label">Predicted Winner</div>
+                        <div class="result-winner-name">@result.PredictedWinner</div>
+                    </div>
+
+                    <!-- Win Probabilities -->
+                    <div class="result-row">
+                        <span class="result-label">@result.HomeTeam Win%</span>
+                        <span class="result-label" style="font-weight:700; color: var(--text-primary);">@((result.HomeWinProb * 100).ToString("F1"))%</span>
+                    </div>
+                    <div class="progress-track">
+                        <div class="progress-fill" style="width: @((result.HomeWinProb * 100).ToString("F0"))%"></div>
+                    </div>
+
+                    <div class="result-row" style="margin-top: 4px;">
+                        <span class="result-label">@result.AwayTeam Win%</span>
+                        <span class="result-label" style="font-weight:700; color: var(--text-primary);">@((result.AwayWinProb * 100).ToString("F1"))%</span>
+                    </div>
+                    <div class="progress-track">
+                        <div class="progress-fill" style="width: @((result.AwayWinProb * 100).ToString("F0"))%"></div>
+                    </div>
+
+                    <!-- Details -->
+                    <div style="margin-top: 16px;">
+                        <div class="result-row">
+                            <span class="result-label">Predicted Margin</span>
+                            <span class="result-badge">@result.PredictedMargin.ToString("F1") pts</span>
+                        </div>
+                        <div class="result-row">
+                            <span class="result-label">Predicted Total</span>
+                            <span class="result-badge">@result.PredictedTotal.ToString("F0")</span>
+                        </div>
+                        <div class="result-row">
+                            <span class="result-label">Expected Score</span>
+                            <span class="result-badge">@result.HomeExpectedPts.ToString("F0") - @result.AwayExpectedPts.ToString("F0")</span>
+                        </div>
+                        <div class="result-row">
+                            <span class="result-label">Confidence</span>
+                            <span class="confidence-badge">@result.ConfidenceLevel</span>
+                        </div>
+                        <div class="result-row">
+                            <span class="result-label">Model</span>
+                            <span class="result-badge">@result.Model</span>
+                        </div>
+                    </div>
+
+                    @if (result.HasValue)
                     {
-                        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span>Analyzing Stats...</span>
+                        <div class="app-alert app-alert-success" style="margin-top: 12px;">
+                            &#128176; Value bet detected!
+                        </div>
                     }
-                    else
-                    {
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                        <span>Generate Prediction</span>
-                    }
-                </button>
+                </div>
             </div>
-
-            <!-- Error Message -->
-            @if (!string.IsNullOrEmpty(errorMessage))
-            {
-                <div class="mt-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-md">
-                    <div class="flex">
-                        <div class="ml-3">
-                            <p class="text-sm text-red-700 font-medium">@errorMessage</p>
-                        </div>
-                    </div>
-                </div>
-            }
-
-            <!-- Results Section -->
-            @if (predictionResult != null && !isFetching)
-            {
-                <div class="mt-8 transform transition-all animate-fade-in-up">
-                    <h3 class="text-xs uppercase tracking-wider font-bold text-gray-500 mb-3 ml-1">AI Recommendation</h3>
-                    
-                    <div class="bg-indigo-50 rounded-xl p-5 border border-indigo-100 shadow-inner">
-                        <div class="flex justify-between items-center mb-4">
-                            <span class="text-sm font-semibold text-gray-600">Model Used</span>
-                            <span class="px-2 py-1 bg-indigo-200 text-indigo-800 text-xs font-bold rounded">@predictionResult.Value.GetProperty("model_info").GetProperty("type").GetString()</span>
-                        </div>
-                        
-                        <div class="flex flex-col items-center py-2 border-t border-b border-indigo-100 my-4">
-                            <span class="text-xs text-gray-500 uppercase tracking-wide font-semibold">Predicted Winner</span>
-                            <span class="text-3xl font-black text-indigo-700 mt-1">
-                                @predictionResult.Value.GetProperty("predictions").GetProperty("driver").GetString()
-                            </span>
-                        </div>
-                        
-                        <div class="space-y-3 mt-4">
-                            <div class="flex justify-between items-center">
-                                <span class="text-sm font-medium text-gray-600">Win Probability</span>
-                                <span class="text-sm font-bold text-gray-900">@predictionResult.Value.GetProperty("predictions").GetProperty("win_probability").GetDouble()%</span>
-                            </div>
-                            
-                            <!-- Progress Bar -->
-                            <div class="w-full bg-gray-200 rounded-full h-2.5">
-                                <div class="bg-indigo-600 h-2.5 rounded-full" style="width: @(predictionResult.Value.GetProperty("predictions").GetProperty("win_probability").GetDouble())%"></div>
-                            </div>
-                            
-                            <div class="flex justify-between items-center pt-2">
-                                <span class="text-sm font-medium text-gray-600">Confidence Level</span>
-                                <span class="px-3 py-1 bg-green-100 text-green-800 text-xs font-bold rounded-full border border-green-200 uppercase">
-                                    @predictionResult.Value.GetProperty("predictions").GetProperty("confidence").GetString()
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            }
-        </div>
+        }
     </div>
 </div>
 
-<style>
-    .animate-fade-in-up {
-        animation: fadeInUp 0.5s ease-out;
-    }
-    @@keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-</style>
-
 @code {
+    private string homeTeam = "";
+    private string awayTeam = "";
     private bool isFetching = false;
-    private JsonElement? predictionResult;
+    private PredictionResult? result;
     private string? errorMessage;
+
+    private readonly string[] nbaTeams = new[]
+    {
+        "76ers", "Bucks", "Bulls", "Cavaliers", "Celtics",
+        "Clippers", "Grizzlies", "Hawks", "Heat", "Hornets",
+        "Jazz", "Kings", "Knicks", "Lakers", "Magic",
+        "Mavericks", "Nets", "Nuggets", "Pacers", "Pelicans",
+        "Pistons", "Raptors", "Rockets", "Spurs", "Suns",
+        "Thunder", "Timberwolves", "Trail Blazers", "Warriors", "Wizards"
+    };
 
     private async Task FetchPrediction()
     {
         isFetching = true;
         errorMessage = null;
-        predictionResult = null;
+        result = null;
         StateHasChanged();
 
         try
         {
-            // Connect to Python Backend (Base Address is already set from Preferences using our ConfigService)
-            var requestBody = new { features = new { driver = "Lakers", start_pos = 2, track_type = "superspeedway" } };
-            
-            var response = await Http.PostAsJsonAsync("nba/predict/classification", requestBody);
-            
+            var url = $"odds/nba/predict?home_team={Uri.EscapeDataString(homeTeam)}&away_team={Uri.EscapeDataString(awayTeam)}";
+            var response = await Http.PostAsync(url, null);
+
             if (response.IsSuccessStatusCode)
             {
                 var content = await response.Content.ReadAsStringAsync();
                 var doc = JsonDocument.Parse(content);
-                predictionResult = doc.RootElement;
+                var root = doc.RootElement;
+
+                result = new PredictionResult
+                {
+                    HomeTeam = root.GetProperty("home_team").GetString() ?? homeTeam,
+                    AwayTeam = root.GetProperty("away_team").GetString() ?? awayTeam,
+                    PredictedWinner = root.GetProperty("predicted_winner").GetString() ?? "Unknown",
+                    HomeWinProb = root.GetProperty("home_win_probability").GetDouble(),
+                    AwayWinProb = root.GetProperty("away_win_probability").GetDouble(),
+                    PredictedMargin = root.GetProperty("predicted_margin").GetDouble(),
+                    PredictedTotal = root.GetProperty("predicted_total").GetDouble(),
+                    HomeExpectedPts = root.GetProperty("home_expected_points").GetDouble(),
+                    AwayExpectedPts = root.GetProperty("away_expected_points").GetDouble(),
+                    ConfidenceLevel = root.GetProperty("confidence_level").GetString() ?? "unknown",
+                    Model = root.GetProperty("model").GetString() ?? "unknown",
+                    HasValue = root.GetProperty("has_value").GetBoolean()
+                };
             }
             else
             {
-                errorMessage = $"Server error: {response.StatusCode}. Ensure your Python ML service is running at {Http.BaseAddress}";
+                var errContent = await response.Content.ReadAsStringAsync();
+                errorMessage = $"Server error ({response.StatusCode}): {errContent}";
             }
         }
         catch (HttpRequestException ex)
         {
-            errorMessage = $"Network Error: {ex.Message}. Could not connect to {Http.BaseAddress}";
+            errorMessage = $"Connection failed: {ex.Message}. Check Settings to verify your backend URL.";
         }
         catch (Exception ex)
         {
-            errorMessage = "An unexpected error occurred: " + ex.Message;
+            errorMessage = "Error: " + ex.Message;
         }
         finally
         {
             isFetching = false;
         }
+    }
+
+    private class PredictionResult
+    {
+        public string HomeTeam { get; set; } = "";
+        public string AwayTeam { get; set; } = "";
+        public string PredictedWinner { get; set; } = "";
+        public double HomeWinProb { get; set; }
+        public double AwayWinProb { get; set; }
+        public double PredictedMargin { get; set; }
+        public double PredictedTotal { get; set; }
+        public double HomeExpectedPts { get; set; }
+        public double AwayExpectedPts { get; set; }
+        public string ConfidenceLevel { get; set; } = "";
+        public string Model { get; set; } = "";
+        public bool HasValue { get; set; }
     }
 }
