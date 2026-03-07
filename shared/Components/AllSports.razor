@@ -1,0 +1,247 @@
+@page "/all-sports"
+@using System.Net.Http.Json
+@using System.Text.Json
+@using SportsBettingAnalyzer.Shared.Services
+@inject HttpClient Http
+@inject IServerConfigService ServerConfig
+@inject NavigationManager NavigationManager
+
+<div class="app-card" style="margin-bottom: 24px;">
+    <div class="app-card-header" style="background: linear-gradient(135deg, #4f46e5, #312e81) !important;">
+        <h2>🌐 All Sports Scan</h2>
+        <p>Cross-market deep value search</p>
+    </div>
+
+    <div class="app-card-body">
+        
+        <div style="margin-bottom: 16px;">
+            <label class="app-label">Select Sportsbook</label>
+            <select class="app-select" @bind="_selectedSportsbook">
+                <option value="fanduel">FanDuel</option>
+                <option value="draftkings">DraftKings</option>
+                <option value="betmgm">BetMGM</option>
+            </select>
+        </div>
+
+        <button class="app-btn app-btn-primary" @onclick="RunFullAnalysis" disabled="@_isLoading">
+            @if (_isLoading)
+            {
+                <span class="spinner"></span>
+                <span>Scanning Markets...</span>
+            }
+            else
+            {
+                <span>🔍 Scan All Sports</span>
+            }
+        </button>
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="app-alert app-alert-error">@_errorMessage</div>
+        }
+        @if (!string.IsNullOrEmpty(_successMessage))
+        {
+            <div class="app-alert app-alert-success">@_successMessage</div>
+        }
+
+        @if (_analysisResult != null)
+        {
+            <div style="display: flex; gap: 8px; margin-top: 16px;">
+                <div style="flex:1; background: var(--surface-overlay); padding: 12px; border-radius: 8px; text-align: center; border: 1px solid var(--border-light);">
+                    <div style="font-size: 10px; text-transform: uppercase; color: var(--text-muted); font-weight: 800;">Scanned</div>
+                    <div style="font-size: 20px; font-weight: 800; color: var(--text-primary);">@_analysisResult.TotalGames</div>
+                </div>
+                <div style="flex:1; background: var(--surface-overlay); padding: 12px; border-radius: 8px; text-align: center; border: 1px solid var(--border-light);">
+                    <div style="font-size: 10px; text-transform: uppercase; color: var(--text-muted); font-weight: 800;">Value Bets</div>
+                    <div style="font-size: 20px; font-weight: 800; color: #10b981;">@_analysisResult.TotalValueBets</div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 16px; display: flex; align-items: center; justify-content: space-between;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" @bind="_onlyValue" style="width: 16px; height: 16px;" />
+                    <span style="font-size: 13px; color: var(--text-secondary); font-weight: 600;">Only Value Apps</span>
+                </label>
+            </div>
+            <div style="margin-top: 12px;">
+                <input type="text" class="app-input" @bind="_searchString" @bind:event="oninput" placeholder="Search teams or sports..." />
+            </div>
+        }
+
+    </div>
+</div>
+
+@if (_games.Any())
+{
+    <div style="padding: 0 16px; margin-bottom: 24px;">
+        @foreach (var game in FilteredGames)
+        {
+            <div class="result-card" style="margin-bottom: 12px; padding: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                    <div>
+                        <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--accent);">@game.SportKey.Replace("_", " ")</span>
+                        <div style="font-size: 14px; font-weight: 700; color: var(--text-primary); margin-top: 2px;">@game.AwayTeam</div>
+                        <div style="font-size: 12px; color: var(--text-muted);">at @game.HomeTeam</div>
+                    </div>
+                    @if (game.HasValue)
+                    {
+                        <span style="background: rgba(16,185,129,0.15); color: #10b981; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 800;">VALUE</span>
+                    }
+                </div>
+
+                <div style="display: flex; justify-content: space-between; border-top: 1px dashed var(--border-light); padding-top: 12px; margin-top: 8px;">
+                    <div style="text-align: center;">
+                        <span style="font-size: 10px; color: var(--text-muted); display: block; font-weight: 700;">AWAY ML</span>
+                        <span style="font-size: 14px; font-weight: 700; font-family: 'SF Mono', Consolas, monospace;">@FormatML(game.AwayML)</span>
+                    </div>
+                    <div style="text-align: center;">
+                        <span style="font-size: 10px; color: var(--text-muted); display: block; font-weight: 700;">HOME ML</span>
+                        <span style="font-size: 14px; font-weight: 700; font-family: 'SF Mono', Consolas, monospace;">@FormatML(game.HomeML)</span>
+                    </div>
+                    <div style="text-align: center;">
+                        <span style="font-size: 10px; color: var(--text-muted); display: block; font-weight: 700;">EDGE</span>
+                        <span style="font-size: 14px; font-weight: 700; color: #10b981;">@(game.Edge > 0 ? $"+{game.Edge:F1}%" : "--")</span>
+                    </div>
+                </div>
+            </div>
+        }
+        
+        @if (!FilteredGames.Any())
+        {
+             <div class="app-alert app-alert-info" style="text-align: center;">
+                 No games match your search/filter criteria.
+             </div>
+        }
+    </div>
+}
+
+@code {
+    private bool _isLoading = false;
+    private string _selectedSportsbook = "fanduel";
+    private string _searchString = "";
+    private bool _onlyValue = true;
+    private DateTime? _lastUpdate;
+    private MultiSportAnalysisResponse? _analysisResult;
+    private List<AnalyzedGame> _games = new();
+    
+    private string _errorMessage = "";
+    private string _successMessage = "";
+
+    private IEnumerable<AnalyzedGame> FilteredGames => _games.Where(FilterFunc);
+
+    private async Task RunFullAnalysis()
+    {
+        _isLoading = true;
+        _errorMessage = "";
+        _successMessage = "";
+        StateHasChanged();
+
+        try
+        {
+            var baseUrl = ServerConfig.GetBaseUrl();
+            _analysisResult = await Http.GetFromJsonAsync<MultiSportAnalysisResponse>($"{baseUrl}/odds/all-sports/analyze?sportsbook={_selectedSportsbook}");
+            if (_analysisResult != null)
+            {
+                _lastUpdate = DateTime.Now;
+                _games.Clear();
+
+                foreach (var g in _analysisResult.AllGames)
+                {
+                    try
+                    {
+                        var analyzed = ParseGame(g);
+                        analyzed.RawData = g;
+                        _games.Add(analyzed);
+                    }
+                    catch { }
+                }
+                
+                _successMessage = $"Scan complete! Found {_analysisResult.TotalValueBets} value bets.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Analysis failed: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private AnalyzedGame ParseGame(JsonElement g)
+    {
+        string home = g.TryGetProperty("home_team", out var h) ? h.GetString() ?? "Unknown" : "Unknown";
+        string away = g.TryGetProperty("away_team", out var a) ? a.GetString() ?? "Unknown" : "Unknown";
+        string gameTime = g.TryGetProperty("game_time", out var t) ? t.GetString() ?? "" : "";
+        string sport = g.TryGetProperty("sport_key", out var s) ? s.GetString() ?? "" : "";
+        
+        int homeML = g.TryGetProperty("home_moneyline", out var hml) ? (hml.ValueKind == JsonValueKind.Number ? hml.GetInt32() : 0) : 0;
+        int awayML = g.TryGetProperty("away_moneyline", out var aml) ? (aml.ValueKind == JsonValueKind.Number ? aml.GetInt32() : 0) : 0;
+        
+        bool hasValue = g.TryGetProperty("has_value", out var hv) && hv.GetBoolean();
+        
+        double edge = 0;
+        if (g.TryGetProperty("prediction", out var pred))
+        {
+            if (pred.TryGetProperty("edge", out var e)) edge = e.GetDouble() * 100;
+        }
+        else if (g.TryGetProperty("edge", out var e))
+        {
+            edge = e.GetDouble() * 100;
+        }
+
+        return new AnalyzedGame
+        {
+            HomeTeam = home,
+            AwayTeam = away,
+            HomeML = homeML,
+            AwayML = awayML,
+            GameTime = gameTime,
+            SportKey = sport,
+            HasValue = hasValue,
+            Edge = (decimal)edge
+        };
+    }
+
+    private string FormatML(int ml) => ml > 0 ? $"+{ml}" : ml.ToString();
+
+    private bool FilterFunc(AnalyzedGame element)
+    {
+        if (_onlyValue && !element.HasValue) return false;
+        if (string.IsNullOrWhiteSpace(_searchString)) return true;
+        if (element.HomeTeam.Contains(_searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        if (element.AwayTeam.Contains(_searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        if (element.SportKey.Contains(_searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    public class AnalyzedGame
+    {
+        public string HomeTeam { get; set; } = "";
+        public string AwayTeam { get; set; } = "";
+        public int HomeML { get; set; }
+        public int AwayML { get; set; }
+        public string GameTime { get; set; } = "";
+        public string SportKey { get; set; } = "";
+        public bool HasValue { get; set; }
+        public decimal Edge { get; set; }
+        public JsonElement RawData { get; set; }
+    }
+
+    public class MultiSportAnalysisResponse
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("timestamp")]
+        public string Timestamp { get; set; } = "";
+        
+        [System.Text.Json.Serialization.JsonPropertyName("total_games")]
+        public int TotalGames { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("total_value_bets")]
+        public int TotalValueBets { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("all_games")]
+        public List<JsonElement> AllGames { get; set; } = new();
+    }
+}

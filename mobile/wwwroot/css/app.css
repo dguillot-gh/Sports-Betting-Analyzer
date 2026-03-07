@@ -93,25 +93,31 @@ body {
 }
 
 /* --- Top Row / Header --- */
-.top-row {
+.app-header {
     background: linear-gradient(135deg, #1e3a8a, #1d4ed8);
     color: #fff;
-    padding: 10px 16px;
+    padding: 18px 20px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    font-weight: 600;
-    font-size: 14px;
-    box-shadow: 0 2px 12px rgba(99, 102, 241, 0.2);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    position: relative;
+    z-index: 50;
+    min-height: 64px;
+    box-sizing: border-box;
 }
 
-.top-row a {
-    color: rgba(255, 255, 255, 0.7);
-    text-decoration: none;
-    font-size: 13px;
+.app-header-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
-.top-row a:hover {
+.app-header-title h1 {
+    font-size: 20px;
+    font-weight: 800;
+    margin: 0;
+    letter-spacing: -0.5px;
     color: #fff;
 }
 
@@ -119,12 +125,6 @@ body {
 .sidebar {
     background: var(--surface);
     border-bottom: 1px solid var(--border);
-}
-
-.sidebar .top-row {
-    padding: 14px 16px;
-    font-size: 16px;
-    letter-spacing: -0.3px;
 }
 
 .sidebar .navbar-brand {
@@ -138,13 +138,23 @@ body {
 .navbar-toggler {
     appearance: none;
     position: absolute;
-    top: 14px;
+    top: 12px;
     right: 16px;
-    width: 32px;
-    height: 32px;
+    width: 40px;
+    height: 40px;
     cursor: pointer;
-    z-index: 10;
+    z-index: 100;
     border: none;
+    border-radius: 8px;
+    background: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28255, 255, 255, 0.95%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2.5' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e") no-repeat center/1.8rem;
+    background-color: rgba(255, 255, 255, 0.05);
+    transition: background-color 0.2s;
+}
+
+.navbar-toggler:hover,
+.navbar-toggler:active,
+.navbar-toggler:checked {
+    background-color: rgba(255, 255, 255, 0.15);
 }
 
 .nav-scrollable {
