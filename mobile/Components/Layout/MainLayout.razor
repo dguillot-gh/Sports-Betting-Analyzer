@@ -6,20 +6,22 @@
     </div>
 
     <main>
-        <!-- Removed redundant desktop top-row -->
-
-        <article class="content px-4">
-            <ErrorBoundary>
-                <ChildContent>
-                    @Body
-                </ChildContent>
-                <ErrorContent Context="ex">
-                    <div class="blazor-error-boundary">
-                        <h3>An unhandled exception occurred!</h3>
-                        <pre>@ex.ToString()</pre>
-                    </div>
-                </ErrorContent>
-            </ErrorBoundary>
-        </article>
+        <div class="content-wrapper">
+            <article class="content px-4">
+                <ErrorBoundary>
+                    <ChildContent>
+                        @Body
+                    </ChildContent>
+                    <ErrorContent Context="ex">
+                        <div class="blazor-error-boundary">
+                            <h3>An unhandled exception occurred!</h3>
+                            <pre>@ex.ToString()</pre>
+                        </div>
+                    </ErrorContent>
+                </ErrorBoundary>
+            </article>
+        </div>
     </main>
+
+    <BottomNav />
 </div>

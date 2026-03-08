@@ -1,0 +1,99 @@
+@using SportsBettingAnalyzer.Shared.Models
+@using SportsBettingAnalyzer.Shared.Services
+@inject IAppSettingsService AppSettings
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<div class="bottom-nav">
+    @foreach (var item in _navItems)
+    {
+        <div class="nav-item-bottom @(IsActive(item.Url) ? "active" : "")" @onclick="() => HandleNavigation(item)">
+            <span class="nav-icon">@item.Icon</span>
+            <span class="nav-label">@item.Label</span>
+        </div>
+    }
+</div>
+
+<style>
+    .bottom-nav {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 65px;
+        background: rgba(15, 23, 42, 0.85);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        z-index: 1000;
+        padding-bottom: env(safe-area-inset-bottom);
+        box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .nav-item-bottom {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #94a3b8;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        padding: 8px 0;
+    }
+
+    .nav-item-bottom.active {
+        color: #60a5fa;
+    }
+
+    .nav-item-bottom .nav-icon {
+        font-size: 20px;
+        margin-bottom: 2px;
+    }
+
+    .nav-item-bottom .nav-label {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    /* Hide on desktop */
+    @@media (min-width: 641px) {
+        .bottom-nav {
+            display: none;
+        }
+    }
+</style>
+
+@code {
+    private List<NavItem> _navItems = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _navItems = await AppSettings.GetBottomNavItemsAsync();
+    }
+
+    private bool IsActive(string url)
+    {
+        if (url == "MENU_TOGGLE") return false;
+        var relative = Nav.ToBaseRelativePath(Nav.Uri);
+        if (string.IsNullOrEmpty(url)) return string.IsNullOrEmpty(relative);
+        return relative.StartsWith(url, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task HandleNavigation(NavItem item)
+    {
+        if (item.Url == "MENU_TOGGLE")
+        {
+            await JS.InvokeVoidAsync("eval", "document.querySelector('.navbar-toggler').click()");
+        }
+        else
+        {
+            Nav.NavigateTo(item.Url);
+        }
+    }
+}

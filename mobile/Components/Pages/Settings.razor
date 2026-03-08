@@ -1,53 +1,151 @@
 @page "/settings"
 @using SportsBettingAnalyzer.Shared.Services
+@using SportsBettingAnalyzer.Shared.Models
 @inject IServerConfigService ConfigService
+@inject IAppSettingsService AppSettings
+@inject NavigationManager Nav
 
 <div class="app-card settings-card">
     <div class="app-card-header">
         <h2>&#9881; Settings</h2>
-        <p>Configure your backend connection</p>
+        <p>App configuration and preferences</p>
     </div>
 
     <div class="app-card-body">
-        <div style="margin-bottom: 16px;">
-            <label class="app-label" for="serverUrl">Python Backend URL</label>
-            <input class="app-input"
-                   id="serverUrl"
-                   type="text"
-                   @bind="serverUrl"
-                   placeholder="e.g. http://192.168.1.50:8003" />
-            <p class="settings-hint">Include http:// and port number. Use 10.0.2.2 for Android emulator.</p>
+        <!-- Backend Selection -->
+        <div class="settings-section">
+            <h3 class="settings-title">📡 Backend Connection</h3>
+            <div class="settings-field">
+                <label class="app-label" for="serverUrl">Python Backend URL</label>
+                <input class="app-input"
+                       id="serverUrl"
+                       type="text"
+                       @bind="serverUrl"
+                       placeholder="e.g. http://192.168.1.50:8003" />
+                <p class="settings-hint">Include http:// and port number. Use 10.0.2.2 for Android emulator.</p>
+            </div>
         </div>
 
-        <button class="app-btn app-btn-primary" @onclick="SaveSettings">
-            Save Configuration
+        <hr class="settings-divider" />
+
+        <!-- Navigation Customization -->
+        <div class="settings-section">
+            <h3 class="settings-title">📱 Bottom Navigation</h3>
+            <p class="settings-hint mb-3">Select up to 5 items to show on your mobile bottom bar.</p>
+            
+            <div class="nav-picker">
+                @foreach (var available in _allAvailable)
+                {
+                    var isSelected = _selectedItems.Any(i => i.Url == available.Url);
+                    <div class="nav-picker-item @(isSelected ? "selected" : "")" @onclick="() => ToggleItem(available)">
+                        <span class="picker-icon">@available.Icon</span>
+                        <span class="picker-label">@available.Label</span>
+                        @if (isSelected)
+                        {
+                            <span class="picker-check">✓</span>
+                        }
+                    </div>
+                }
+            </div>
+            
+            @if (_selectedItems.Count >= 5)
+            {
+                <p class="limit-warning">⚠️ Maximum of 5 items reached.</p>
+            }
+        </div>
+
+        <button class="app-btn app-btn-primary mt-4" @onclick="SaveSettings" style="width: 100%;">
+            Save All Settings
         </button>
 
         @if (showSuccessMessage)
         {
-            <div class="app-alert app-alert-success">
-                &#10003; Settings saved! Restart app to apply changes.
+            <div class="app-alert app-alert-success mt-3">
+                &#10003; Settings saved!
             </div>
         }
     </div>
 </div>
 
+<style>
+    .settings-section { margin-bottom: 24px; }
+    .settings-title { font-size: 16px; font-weight: 800; margin-bottom: 16px; color: var(--text-primary); }
+    .settings-divider { border: 0; border-top: 1px solid var(--border-light); margin: 24px 0; }
+    .nav-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 10px; }
+    
+    .nav-picker-item { 
+        background: var(--surface-raised); 
+        border: 1px solid var(--border); 
+        border-radius: 8px; 
+        padding: 12px 8px; 
+        display: flex; 
+        flex-direction: column; 
+        align-items: center; 
+        cursor: pointer;
+        position: relative;
+        transition: all 0.2s;
+    }
+    
+    .nav-picker-item.selected { 
+        border-color: #60a5fa; 
+        background: rgba(96, 165, 250, 0.1); 
+    }
+    
+    .picker-icon { font-size: 24px; margin-bottom: 4px; }
+    .picker-label { font-size: 11px; font-weight: 700; color: var(--text-secondary); text-align: center; }
+    .picker-check { position: absolute; top: 4px; right: 4px; color: #60a5fa; font-weight: 900; font-size: 12px; }
+    
+    .limit-warning { font-size: 11px; color: var(--danger); font-weight: 700; margin-top: 12px; }
+    
+    .mt-4 { margin-top: 24px; }
+    .mb-3 { margin-bottom: 12px; }
+</style>
+
 @code {
     private string serverUrl = "";
     private bool showSuccessMessage = false;
+    private List<NavItem> _allAvailable = new();
+    private List<NavItem> _selectedItems = new();
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         serverUrl = ConfigService.GetBaseUrl();
+        _allAvailable = AppSettings.GetAvailableNavItems();
+        _selectedItems = await AppSettings.GetBottomNavItemsAsync();
+        
+        // Ensure menu toggle is always at least available internally even if not in _allAvailable list
+        // (For now I added it to the default but not to the 'available' picker to keep it clean)
+    }
+
+    private void ToggleItem(NavItem item)
+    {
+        var existing = _selectedItems.FirstOrDefault(i => i.Url == item.Url);
+        if (existing != null)
+        {
+            _selectedItems.Remove(existing);
+        }
+        else if (_selectedItems.Count < 5)
+        {
+            _selectedItems.Add(item);
+        }
     }
 
     private async Task SaveSettings()
     {
         ConfigService.SetBaseUrl(serverUrl);
+        
+        // Ensure we preserve the "Menu" toggle if it was there but not in picker
+        // Or better yet, just let the user pick it too if they want.
+        // For simplicity, we'll just save what they selected.
+        await AppSettings.SaveBottomNavItemsAsync(_selectedItems);
+        
         showSuccessMessage = true;
-
-        await Task.Delay(3000);
-        showSuccessMessage = false;
         StateHasChanged();
+
+        await Task.Delay(2000);
+        showSuccessMessage = false;
+        
+        // Immediate reload to apply Nav changes
+        Nav.NavigateTo(Nav.Uri, forceLoad: true);
     }
 }

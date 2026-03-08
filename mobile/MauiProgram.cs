@@ -19,6 +19,7 @@ public static class MauiProgram
 		builder.Services.AddMauiBlazorWebView();
 
 		builder.Services.AddSingleton<IServerConfigService, MauiServerConfigService>();
+		builder.Services.AddSingleton<IAppSettingsService, MauiAppSettingsService>();
 
 		builder.Services.AddScoped(sp => 
 		{
