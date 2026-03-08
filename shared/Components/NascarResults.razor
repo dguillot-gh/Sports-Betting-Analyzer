@@ -4,9 +4,12 @@
 @inject SportsBettingAnalyzer.Shared.Services.IServerConfigService ServerConfig
 
 <div class="app-card" style="margin-bottom: 24px;">
-    <div class="app-card-header" style="background: linear-gradient(135deg, #1e293b, #0f172a) !important;">
+    <div class="app-card-header" style="background: linear-gradient(135deg, #1e293b, #0f172a) !important; position: relative;">
         <h2>🏁 NASCAR Results</h2>
         <p>Race results, points, and driver finishes</p>
+        <a href="/nascar/standings" class="header-shortcut">
+            <span>🏆 View Standings</span>
+        </a>
     </div>
 
     <div class="app-card-body">
@@ -25,7 +28,7 @@
                 <div class="filter-col" style="flex: 0.6;">
                     <label class="app-label">Season</label>
                     <select class="app-select" @bind="_selectedSeason">
-                        <option value="">All</option>
+                        <option value="">Latest</option>
                         @foreach (var season in _availableSeasons)
                         {
                             <option value="@season">@season</option>
@@ -36,84 +39,71 @@
 
             <div class="filter-row mt-2">
                 <div class="filter-col">
-                    <label class="app-label">Driver Match</label>
-                    <input class="app-input" type="text" placeholder="Driver name..." @bind="_selectedDriver" />
-                </div>
-            </div>
-
-            <div class="filter-row mt-2">
-                 <div class="filter-col">
-                    <label class="app-label">Finish Filter</label>
-                    <select class="app-select" @bind="_finishFilter">
-                        <option value="">All Finishes</option>
-                        <option value="1">Wins Only</option>
-                        <option value="5">Top 5</option>
-                        <option value="10">Top 10</option>
-                        <option value="20">Top 20</option>
-                    </select>
+                    <label class="app-label">Search Driver</label>
+                    <input class="app-input" type="text" placeholder="E.g. Chase Elliott..." @bind="_selectedDriver" />
                 </div>
             </div>
 
             <div class="filter-row mt-3">
-                <button class="app-btn app-btn-primary" @onclick="LoadResults" disabled="@_isLoading">
+                <button class="app-btn app-btn-primary" @onclick="LoadResults" disabled="@_isLoading" style="width: 100%;">
                     @if (_isLoading)
                     {
                         <span class="spinner"></span>
-                        <span>Searching...</span>
+                        <span>Updating...</span>
                     }
                     else
                     {
-                        <span>🔍 Search Races</span>
+                        <span>🔍 View Results</span>
                     }
                 </button>
             </div>
         </div>
 
-        @if (_results.Any())
+        @if (_groupedRaces.Any())
         {
             <div class="results-meta">
-                <span>Showing @_results.Count results</span>
+                <span>Showing @_totalResults finishes across @_groupedRaces.Count races</span>
             </div>
 
-            <div class="scores-list">
-                @foreach (var result in _results)
+            <div class="race-groups">
+                @foreach (var race in _groupedRaces)
                 {
-                    <div class="score-card">
-                        <div class="score-card-header">
-                            <span class="score-week">@result.Season &bull; @TruncateTrack(result.Track)</span>
-                            <span class="score-status @GetFinishClass(result.Finish)">
-                                P@(result.Finish)
-                            </span>
-                        </div>
-                        
-                        <div class="driver-matchup">
-                            <div class="driver-primary">
-                                <span class="driver-name">@result.Driver</span>
-                                <span class="driver-team">@TruncateTeam(result.Team)</span>
+                    <div class="race-group-card">
+                        <div class="race-header">
+                            <div class="race-header-main">
+                                <span class="race-season">@race.Season @race.Series.ToUpper()</span>
+                                <h3 class="race-track">@race.Track</h3>
                             </div>
-                        </div>
-
-                        <div class="race-stats">
-                            <div class="stat-box">
-                                <span class="stat-lbl">START</span>
-                                <span class="stat-val">@(result.Start?.ToString() ?? "-")</span>
-                            </div>
-                            <div class="stat-box">
-                                <span class="stat-lbl">LED</span>
-                                <span class="stat-val @(result.Led > 0 ? "stat-led" : "")">@result.Led</span>
-                            </div>
-                            <div class="stat-box">
-                                <span class="stat-lbl">PTS</span>
-                                <span class="stat-val">@(result.Pts?.ToString() ?? "-")</span>
+                            <div class="race-header-count">
+                                <span>@race.Results.Count Entrants</span>
                             </div>
                         </div>
                         
-                        @if (result.Status != null && result.Status.ToLower() != "running")
-                        {
-                            <div class="score-performer" style="color:var(--danger)">
-                                <span>⚠️ @result.Status</span>
+                        <div class="race-results-table">
+                            <div class="table-header">
+                                <span class="col-pos">P</span>
+                                <span class="col-driver">Driver</span>
+                                <span class="col-start">S</span>
+                                <span class="col-points">PTS</span>
                             </div>
-                        }
+                            
+                            @foreach (var res in race.Results.OrderBy(r => r.Finish))
+                            {
+                                <div class="table-row">
+                                    <span class="col-pos pos-badge @GetFinishClass(res.Finish)">@res.Finish</span>
+                                    <div class="col-driver">
+                                        <span class="driver-name">@res.Driver</span>
+                                        <span class="driver-team-mini">@res.Team</span>
+                                    </div>
+                                    <span class="col-start">@res.Start</span>
+                                    <span class="col-points">@res.Pts</span>
+                                </div>
+                                @if (res.Status != null && res.Status.ToLower() != "running")
+                                {
+                                    <div class="row-status">🏁 @res.Status</div>
+                                }
+                            }
+                        </div>
                     </div>
                 }
             </div>
@@ -136,42 +126,84 @@
 
     .results-meta { text-align: center; font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 12px; letter-spacing: 1px; }
 
-    .scores-list { display: flex; flex-direction: column; gap: 12px; }
-    .score-card { background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; }
-    .score-card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-light); padding-bottom: 8px; margin-bottom: 12px; }
-    .score-week { font-size: 11px; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .header-shortcut { 
+        position: absolute; 
+        top: 16px; 
+        right: 16px; 
+        background: rgba(255,255,255,0.08); 
+        padding: 6px 12px; 
+        border-radius: 20px; 
+        font-size: 11px; 
+        font-weight: 800; 
+        color: #60a5fa; 
+        text-decoration: none;
+        backdrop-filter: blur(4px);
+        border: 1px solid rgba(255,255,255,0.1);
+        transition: all 0.2s ease;
+    }
+    .header-shortcut:hover { background: rgba(255,255,255,0.15); transform: translateY(-1px); }
+
+    .race-groups { display: flex; flex-direction: column; gap: 20px; }
+    .race-group-card { background: var(--surface-raised); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
     
-    .score-status { font-size: 12px; font-weight: 800; padding: 2px 8px; border-radius: 4px; letter-spacing: 0.5px; }
-    .score-status.Win { background: var(--success-bg); color: var(--success); }
-    .score-status.Top5 { background: rgba(96,165,250,0.15); color: #60a5fa; }
-    .score-status.Top10 { background: rgba(148,163,184,0.1); color: #94a3b8; }
-    .score-status.Other { background: transparent; color: var(--text-muted); font-weight:600; }
+    .race-header { 
+        background: rgba(255,255,255,0.03); 
+        padding: 12px 16px; 
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .race-season { font-size: 10px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+    .race-track { font-size: 16px; font-weight: 800; color: var(--text-primary); margin: 2px 0 0 0; }
+    .race-header-count { font-size: 11px; font-weight: 700; color: var(--text-muted); background: var(--surface-overlay); padding: 4px 8px; border-radius: 4px; }
 
-    .driver-matchup { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
-    .driver-primary { display: flex; flex-direction: column; }
-    .driver-name { font-size: 16px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.2px;}
-    .driver-team { font-size: 11px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.5px; text-transform: uppercase; }
+    .race-results-table { padding: 4px 0; }
+    .table-header { 
+        display: flex; 
+        padding: 8px 16px; 
+        font-size: 9px; 
+        font-weight: 800; 
+        color: var(--text-muted); 
+        text-transform: uppercase; 
+        border-bottom: 1px solid var(--border-light);
+        gap: 12px;
+    }
+    
+    .table-row { 
+        display: flex; 
+        padding: 10px 16px; 
+        align-items: center; 
+        border-bottom: 1px solid rgba(255,255,255,0.02);
+        gap: 12px;
+    }
+    .table-row:last-child { border-bottom: none; }
 
-    .race-stats { display: flex; align-items: center; background: var(--surface-overlay); border-radius: 6px; padding: 10px; }
-    .stat-box { flex: 1; text-align: center; border-right: 1px solid var(--border); }
-    .stat-box:last-child { border-right: none; }
-    .stat-lbl { display: block; font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
-    .stat-val { font-weight: 800; font-size: 14px; color: var(--text-secondary); }
-    .stat-led { color: #f59e0b; } /* Amber for laps led */
+    .col-pos { width: 24px; text-align: center; font-weight: 900; }
+    .col-driver { flex: 1; display: flex; flex-direction: column; }
+    .col-start { width: 24px; text-align: center; font-size: 11px; color: var(--text-muted); }
+    .col-points { width: 32px; text-align: center; font-weight: 800; color: #60a5fa; }
 
-    .score-performer { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border-light); font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 4px; font-weight: 600;}
+    .pos-badge { font-size: 12px; padding: 2px 0; border-radius: 4px; }
+    .pos-badge.Win { background: var(--success-bg); color: var(--success); }
+    .pos-badge.Top5 { color: #60a5fa; }
+    .pos-badge.Top10 { color: #94a3b8; }
+    
+    .driver-name { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+    .driver-team-mini { font-size: 9px; color: var(--text-muted); text-transform: uppercase; }
+
+    .row-status { padding: 4px 16px 8px 52px; font-size: 10px; font-weight: 700; color: var(--danger); opacity: 0.8; }
 </style>
 
 @code {
     private string _selectedSeries = "cup";
     private int? _selectedSeason;
     private string? _selectedDriver;
-    private int? _finishFilter;
     private bool _isLoading = false;
     private bool _hasSearched = false;
     
     private List<int> _availableSeasons = new();
-    private List<RaceResultItem> _results = new();
+    private List<RaceGroup> _groupedRaces = new();
     private int _totalResults = 0;
 
     protected override async Task OnInitializedAsync()
@@ -204,24 +236,36 @@
         try
         {
             var baseUrl = ServerConfig.GetBaseUrl();
-            var url = $"{baseUrl}/db/races/nascar/list?series={_selectedSeries}&limit=50"; // Limit to 50 for mobile
+            var url = $"{baseUrl}/db/races/nascar/list?series={_selectedSeries}&limit=200"; // Fetch more to allow grouping
             
             if (_selectedSeason.HasValue)
                 url += $"&season={_selectedSeason.Value}";
             if (!string.IsNullOrEmpty(_selectedDriver))
                 url += $"&driver={Uri.EscapeDataString(_selectedDriver)}";
-            if (_finishFilter.HasValue)
-                url += $"&finish_max={_finishFilter.Value}";
             
             var response = await Http.GetFromJsonAsync<RaceResultsResponse>(url);
-            
-            _results = response?.Results ?? new();
-            _totalResults = response?.Total ?? 0;
+            var flatResults = response?.Results ?? new();
+            _totalResults = flatResults.Count;
+
+            // Grouping logic
+            _groupedRaces = flatResults
+                .GroupBy(r => new { r.Season, r.Series, r.Track, r.RaceNum })
+                .Select(g => new RaceGroup
+                {
+                    Season = g.Key.Season,
+                    Series = g.Key.Series ?? "cup",
+                    Track = g.Key.Track ?? "Unknown Track",
+                    RaceNum = g.Key.RaceNum,
+                    Results = g.ToList()
+                })
+                .OrderByDescending(g => g.Season)
+                .ThenByDescending(g => g.RaceNum)
+                .ToList();
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading results: {ex.Message}");
-            _results = new();
+            _groupedRaces = new();
         }
         finally
         {
@@ -238,12 +282,6 @@
         _ => "Other"
     };
 
-    private string TruncateTrack(string? track) => 
-        track != null && track.Length > 22 ? track[..19] + "..." : track ?? "";
-
-    private string TruncateTeam(string? team) => 
-        team != null && team.Length > 20 ? team[..17] + "..." : team ?? "Independent";
-
     private class SeasonsResponse
     {
         public List<int> Seasons { get; set; } = new();
@@ -253,6 +291,15 @@
     {
         public List<RaceResultItem> Results { get; set; } = new();
         public int Total { get; set; }
+    }
+
+    private class RaceGroup
+    {
+        public int Season { get; set; }
+        public string Series { get; set; } = "";
+        public string Track { get; set; } = "";
+        public int? RaceNum { get; set; }
+        public List<RaceResultItem> Results { get; set; } = new();
     }
 
     private class RaceResultItem
@@ -272,9 +319,6 @@
         [System.Text.Json.Serialization.JsonPropertyName("race_num")]
         public int? RaceNum { get; set; }
         
-        [System.Text.Json.Serialization.JsonPropertyName("race_name")]
-        public string? RaceName { get; set; }
-        
         [System.Text.Json.Serialization.JsonPropertyName("driver")]
         public string? Driver { get; set; }
         
@@ -284,12 +328,6 @@
         [System.Text.Json.Serialization.JsonPropertyName("start")]
         public int? Start { get; set; }
         
-        [System.Text.Json.Serialization.JsonPropertyName("led")]
-        public int? Led { get; set; }
-        
-        [System.Text.Json.Serialization.JsonPropertyName("laps")]
-        public int? Laps { get; set; }
-        
         [System.Text.Json.Serialization.JsonPropertyName("pts")]
         public int? Pts { get; set; }
         
@@ -298,11 +336,5 @@
         
         [System.Text.Json.Serialization.JsonPropertyName("team")]
         public string? Team { get; set; }
-        
-        [System.Text.Json.Serialization.JsonPropertyName("make")]
-        public string? Make { get; set; }
-        
-        [System.Text.Json.Serialization.JsonPropertyName("rating")]
-        public double? Rating { get; set; }
     }
 }

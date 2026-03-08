@@ -39,14 +39,17 @@ async def download_file(url: str, filename: str):
         logger.error(f"Failed to download {url}: {response.status_code}")
         return None
 
-async def import_parquet(conn, sport_id: int, series: str, file_path: Path):
-    logger.info(f"Importing {series} from {file_path}...")
+async def import_parquet(conn, sport_id: int, series: str, file_path: Path, min_year: int = 2012):
+    logger.info(f"Importing {series} from {file_path} (min_year={min_year})...")
     df = pd.read_parquet(file_path)
-    logger.info(f"Loaded {len(df)} rows")
     
-    # Standardize columns (based on typical nascaR.data format)
-    # The search results said columns might be 'Season', 'Race', 'Track', 'Driver', etc.
-    # We need to map them to what our system expects or just store in metadata.
+    # Filter by year early to save processing time
+    if 'Season' in df.columns:
+        df = df[df['Season'] >= min_year]
+    elif 'season' in df.columns:
+        df = df[df['season'] >= min_year]
+        
+    logger.info(f"Loaded {len(df)} rows after year filtering")
     
     imported = 0
     # Process in batches
@@ -55,19 +58,53 @@ async def import_parquet(conn, sport_id: int, series: str, file_path: Path):
         batch = df.iloc[i:i+batch_size]
         for _, row in batch.iterrows():
             try:
-                # Season is the year
+                # Mapping from Parquet/nascaR.data format to our DB metadata format
+                mapping = {
+                    'Season': 'season',
+                    'Driver': 'driver_name',
+                    'Finish': 'finish',
+                    'Start': 'start',
+                    'Track': 'track',
+                    'Race': 'race_num',
+                    'Laps': 'laps',
+                    'Led': 'led',
+                    'Pts': 'pts',
+                    'Status': 'status',
+                    'Team': 'team',
+                    'Manufacturer': 'make',
+                    'Rating': 'rating',
+                    'Series': 'series_label'
+                }
+
+                # Extract standardized values
                 season = int(row.get('Season') or row.get('season') or 2026)
                 
-                # Check for 2026 specifically if we want just recent
-                # But usually we import everything and let the DB upsert handle it
-                
+                # Double check year filter in row loop just in case
+                if season < min_year:
+                    continue
+
                 driver = row.get('Driver') or row.get('driver') or "Unknown"
                 track = row.get('Track') or row.get('track') or "Unknown"
                 race_num = row.get('Race') or row.get('race')
                 
-                metadata = row.to_dict()
-                # Clean NaNs for JSON
-                metadata = {k: v for k, v in metadata.items() if not pd.isna(v)}
+                # Build metadata with both standardized and original keys for compatibility
+                metadata = {}
+                row_dict = row.to_dict()
+                for raw_key, val in row_dict.items():
+                    if pd.isna(val):
+                        continue
+                    
+                    # Store original
+                    metadata[raw_key] = val
+                    # Store standardized if mapped
+                    if raw_key in mapping:
+                        metadata[mapping[raw_key]] = val
+
+                # Ensure critical fields aren't missing
+                if 'driver_name' not in metadata and 'Driver' in metadata:
+                    metadata['driver_name'] = metadata['Driver']
+                if 'finish' not in metadata and 'Finish' in metadata:
+                    metadata['finish'] = metadata['Finish']
                 
                 content_hash = compute_hash({
                     'sport': 'nascar',
@@ -87,25 +124,28 @@ async def import_parquet(conn, sport_id: int, series: str, file_path: Path):
                 )
                 imported += 1
             except Exception as e:
-                logger.debug(f"Error importing row: {e}")
+                logger.error(f"Error importing row: {e}")
         
-        logger.info(f"Progress: {i + len(batch)}/{len(df)}")
+        logger.info(f"Progress: {min(i + batch_size, len(df))}/{len(df)}")
         
     return imported
 
-async def run_import():
+async def run_import(min_year: int = 2012):
     conn = await asyncpg.connect(DATABASE_URL)
     try:
         sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = 'nascar'")
         if not sport_id:
             sport_id = await conn.fetchval("INSERT INTO sports (name) VALUES ('nascar') RETURNING id")
             
+        total_imported = 0
         for series, url in PARQUET_URLS.items():
             filename = f"{series}_series.parquet"
             path = await download_file(url, filename)
             if path:
-                count = await import_parquet(conn, sport_id, series, path)
+                count = await import_parquet(conn, sport_id, series, path, min_year=min_year)
                 logger.info(f"Imported {count} results for {series}")
+                total_imported += count
+        return total_imported
                 
     finally:
         await conn.close()

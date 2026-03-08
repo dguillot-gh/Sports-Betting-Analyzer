@@ -1,0 +1,218 @@
+@page "/nascar/standings"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject SportsBettingAnalyzer.Shared.Services.IServerConfigService ServerConfig
+
+<div class="app-card" style="margin-bottom: 24px;">
+    <div class="app-card-header" style="background: linear-gradient(135deg, #1e293b, #0f172a) !important;">
+        <h2>🏆 NASCAR Standings</h2>
+        <p>Season championship points leaderboard</p>
+    </div>
+
+    <div class="app-card-body">
+        
+        <!-- Filters -->
+        <div class="filter-section">
+            <div class="filter-row">
+                <div class="filter-col">
+                    <label class="app-label">Series</label>
+                    <select class="app-select" @bind="_selectedSeries" @bind:after="LoadStandings">
+                        <option value="cup">Cup Series</option>
+                        <option value="xfinity">Xfinity Series</option>
+                        <option value="trucks">Trucks Series</option>
+                    </select>
+                </div>
+                <div class="filter-col" style="flex: 0.6;">
+                    <label class="app-label">Season</label>
+                    <select class="app-select" @bind="_selectedSeason" @bind:after="LoadStandings">
+                        @foreach (var season in _availableSeasons)
+                        {
+                            <option value="@season">@season</option>
+                        }
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        @if (_isLoading)
+        {
+            <div class="loading-state">
+                <span class="spinner"></span>
+                <span>Calculating Standings...</span>
+            </div>
+        }
+        else if (_standings.Any())
+        {
+            <div class="standings-list">
+                @foreach (var item in _standings)
+                {
+                    <div class="standings-card">
+                        <div class="rank-badge">
+                            <span class="rank-num">#@item.Rank</span>
+                        </div>
+                        
+                        <div class="driver-info">
+                            <span class="driver-name">@item.Driver</span>
+                            <span class="driver-team">@item.Team</span>
+                        </div>
+
+                        <div class="standings-stats">
+                            <div class="pts-box">
+                                <span class="pts-val">@item.Points</span>
+                                <span class="pts-lbl">PTS</span>
+                            </div>
+                            
+                            <div class="extra-stats">
+                                <div class="stat-mini">
+                                    <span class="mini-val">@item.Wins</span>
+                                    <span class="mini-lbl">W</span>
+                                </div>
+                                <div class="stat-mini">
+                                    <span class="mini-val">@item.Top5</span>
+                                    <span class="mini-lbl">T5</span>
+                                </div>
+                                <div class="stat-mini">
+                                    <span class="mini-val">@item.Top10</span>
+                                    <span class="mini-lbl">T10</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        @if (item.Behind > 0)
+                        {
+                            <div class="behind-label">-@item.Behind</div>
+                        }
+                        else if (item.Rank == 1)
+                        {
+                            <div class="leader-label">LEADER</div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="app-alert app-alert-info" style="margin-top: 16px;">
+                No standings data available for this selection.
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .filter-section { background: var(--surface-overlay); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 20px; }
+    .filter-row { display: flex; gap: 10px; }
+    .filter-col { flex: 1; }
+    
+    .loading-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; gap: 12px; color: var(--text-secondary); }
+
+    .standings-list { display: flex; flex-direction: column; gap: 8px; }
+    .standings-card { 
+        display: flex; 
+        align-items: center; 
+        background: var(--surface-raised); 
+        border: 1px solid var(--border); 
+        border-radius: var(--radius-sm); 
+        padding: 10px 14px; 
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .rank-badge { 
+        width: 40px; 
+        height: 40px; 
+        background: var(--surface-overlay); 
+        border-radius: 50%; 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        margin-right: 14px;
+        border: 2px solid var(--border-light);
+    }
+    .rank-num { font-weight: 900; font-size: 14px; color: var(--text-primary); }
+
+    .driver-info { flex: 1; display: flex; flex-direction: column; }
+    .driver-name { font-size: 15px; font-weight: 800; color: var(--text-primary); }
+    .driver-team { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+    .standings-stats { display: flex; align-items: center; gap: 16px; margin-right: 10px; }
+    
+    .pts-box { text-align: right; min-width: 45px; }
+    .pts-val { display: block; font-size: 18px; font-weight: 900; color: #60a5fa; line-height: 1; }
+    .pts-lbl { font-size: 8px; color: var(--text-muted); font-weight: 700; }
+
+    .extra-stats { display: flex; gap: 8px; background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 4px; }
+    .stat-mini { text-align: center; min-width: 18px; }
+    .mini-val { display: block; font-size: 10px; font-weight: 800; color: var(--text-secondary); }
+    .mini-lbl { font-size: 7px; color: var(--text-muted); text-transform: uppercase; }
+
+    .behind-label { font-size: 10px; font-weight: 700; color: var(--danger); opacity: 0.8; }
+    .leader-label { font-size: 9px; font-weight: 900; color: #f59e0b; background: rgba(245,158,11,0.1); padding: 2px 4px; border-radius: 3px; }
+
+    /* Top 3 styles */
+    .standings-card:nth-child(1) .rank-badge { border-color: #fbbf24; background: rgba(251,191,36,0.1); }
+    .standings-card:nth-child(1) .rank-num { color: #fbbf24; }
+    
+    .standings-card:nth-child(2) .rank-badge { border-color: #94a3b8; background: rgba(148,163,184,0.1); }
+    .standings-card:nth-child(2) .rank-num { color: #94a3b8; }
+    
+    .standings-card:nth-child(3) .rank-badge { border-color: #b45309; background: rgba(180,83,9,0.1); }
+    .standings-card:nth-child(3) .rank-num { color: #b45309; }
+</style>
+
+@code {
+    private string _selectedSeries = "cup";
+    private int _selectedSeason = 2026;
+    private bool _isLoading = false;
+    
+    private List<int> _availableSeasons = Enumerable.Range(2025, DateTime.Now.Year - 2024 + 1).Reverse().ToList();
+    private List<StandingsItem> _standings = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStandings();
+    }
+
+    private async Task LoadStandings()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        
+        try
+        {
+            var baseUrl = ServerConfig.GetBaseUrl();
+            var url = $"{baseUrl}/db/races/nascar/standings/{_selectedSeason}?series={_selectedSeries}";
+            
+            var response = await Http.GetFromJsonAsync<StandingsResponse>(url);
+            _standings = response?.Standings ?? new();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading standings: {ex.Message}");
+            _standings = new();
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private class StandingsResponse
+    {
+        public List<StandingsItem> Standings { get; set; } = new();
+    }
+
+    private class StandingsItem
+    {
+        public int Rank { get; set; }
+        public string? Driver { get; set; }
+        public string? Team { get; set; }
+        public int Races { get; set; }
+        public int Points { get; set; }
+        public int Wins { get; set; }
+        public int Top5 { get; set; }
+        public int Top10 { get; set; }
+        public int Behind { get; set; }
+    }
+}

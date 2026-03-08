@@ -1268,34 +1268,139 @@ async def get_race_results_list(
         
         total_count = await conn.fetchval(count_query, *count_params)
         
+        # Helpers to safely cast
+        def safe_int(val):
+            if val is None or val == "" or str(val).lower() == 'nan' or str(val).lower() == 'none':
+                 return None
+            try:
+                return int(float(val))
+            except (ValueError, TypeError):
+                return None
+                
+        def safe_float(val):
+            if val is None or val == "" or str(val).lower() == 'nan' or str(val).lower() == 'none':
+                 return None
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                return None
+
         # Format results
         race_results = []
         for row in results:
             meta = json.loads(row["metadata"]) if row["metadata"] else {}
+            
+            # Case-insensitive/Standardized fallbacks for metadata keys
+            # Explicitly cast to int where expected to avoid .0 in JSON
+            v_start = safe_int(meta.get("start") or meta.get("Start"))
+            v_finish = safe_int(meta.get("finish") or meta.get("Finish"))
+            v_race = safe_int(meta.get("race_num") or meta.get("Race"))
+            v_led = safe_int(meta.get("led") or meta.get("Led"))
+            v_laps = safe_int(meta.get("laps") or meta.get("Laps"))
+            v_pts = safe_int(meta.get("pts") or meta.get("Pts"))
+            v_rating = safe_float(meta.get("rating") or meta.get("Rating"))
+
             race_results.append({
                 "id": row["id"],
-                "season": row["season"],
+                "season": int(row["season"]),
                 "series": row["series"],
                 "track": row["track"],
-                "race_num": meta.get("race_num"),
-                "race_name": meta.get("race_name"),
-                "driver": meta.get("driver_name"),
-                "finish": meta.get("finish"),
-                "start": meta.get("start"),
-                "led": meta.get("led"),
-                "laps": meta.get("laps"),
-                "pts": meta.get("pts"),
-                "status": meta.get("status"),
-                "team": meta.get("team"),
-                "make": meta.get("make"),
-                "rating": meta.get("rating"),
+                "race_num": v_race,
+                "race_name": meta.get("race_name") or meta.get("Race_Name"),
+                "driver": meta.get("driver_name") or meta.get("Driver"),
+                "finish": v_finish,
+                "start": v_start,
+                "led": v_led,
+                "laps": v_laps,
+                "pts": v_pts,
+                "status": meta.get("status") or meta.get("Status"),
+                "team": meta.get("team") or meta.get("Team"),
+                "make": meta.get("make") or meta.get("Manufacturer") or meta.get("Make"),
+                "rating": v_rating,
             })
         
-        return {
-            "results": race_results,
+        from fastapi.responses import JSONResponse
+        return JSONResponse(content={
+            "results": [
+                {
+                    "id": r["id"],
+                    "season": int(r["season"]),
+                    "series": r["series"],
+                    "track": r["track"],
+                    "race_num": int(r["race_num"]) if r["race_num"] is not None else None,
+                    "race_name": r["race_name"],
+                    "driver": r["driver"],
+                    "finish": int(r["finish"]) if r["finish"] is not None else None,
+                    "start": int(r["start"]) if r["start"] is not None else None,
+                    "led": int(r["led"]) if r["led"] is not None else None,
+                    "laps": int(r["laps"]) if r["laps"] is not None else None,
+                    "pts": int(r["pts"]) if r["pts"] is not None else None,
+                    "status": r["status"],
+                    "team": r["team"],
+                    "make": r["make"],
+                    "rating": float(r["rating"]) if r["rating"] is not None else None,
+                } for r in race_results
+            ],
             "total": total_count,
             "limit": limit,
             "offset": offset,
+        })
+    finally:
+        await conn.close()
+
+@router.get("/races/nascar/standings/{season}")
+async def get_nascar_standings(season: int, series: str = "cup"):
+    """
+    Get NASCAR season standings by series.
+    Aggregates points, wins, top 5s, and top 10s from race results.
+    """
+    conn = await get_db_connection()
+    try:
+        # Get sport_id for nascar
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = 'nascar'")
+        if not sport_id:
+            return {"standings": []}
+
+        # Query to aggregate standings from JSON metadata
+        query = """
+            SELECT 
+                row_to_json(r)->'metadata'->>'driver_name' as driver,
+                row_to_json(r)->'metadata'->>'team' as team,
+                COUNT(*) as races,
+                SUM(CAST(NULLIF(row_to_json(r)->'metadata'->>'pts', '') AS numeric))::int as points,
+                COUNT(*) FILTER (WHERE CAST(NULLIF(row_to_json(r)->'metadata'->>'finish', '') AS numeric)::int = 1) as wins,
+                COUNT(*) FILTER (WHERE CAST(NULLIF(row_to_json(r)->'metadata'->>'finish', '') AS numeric)::int <= 5) as top5,
+                COUNT(*) FILTER (WHERE CAST(NULLIF(row_to_json(r)->'metadata'->>'finish', '') AS numeric)::int <= 10) as top10
+            FROM results r
+            WHERE sport_id = $1 AND season = $2 AND series = $3
+            GROUP BY 1, 2
+            ORDER BY points DESC
+        """
+        rows = await conn.fetch(query, sport_id, season, series)
+        
+        standings = []
+        max_points = 0
+        for i, row in enumerate(rows):
+            pts = row["points"] or 0
+            if i == 0:
+                max_points = pts
+            
+            standings.append({
+                "rank": i + 1,
+                "driver": row["driver"],
+                "team": row["team"],
+                "races": row["races"],
+                "points": int(pts),
+                "wins": int(row["wins"] or 0),
+                "top5": int(row["top5"] or 0),
+                "top10": int(row["top10"] or 0),
+                "behind": int(max_points - pts)
+            })
+            
+        return {
+            "season": season,
+            "series": series,
+            "standings": standings
         }
     finally:
         await conn.close()
