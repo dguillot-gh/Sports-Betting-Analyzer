@@ -403,42 +403,24 @@ async def run_rda_import(series: str, year_start: int, year_end: int, clear_exis
             finally:
                 await clear_conn.close()
         
-        import_status["nascar_rda"]["progress"].append("Starting RDA file import...")
+        import_status["nascar_rda"]["progress"].append("Starting Parquet file import directly from R2...")
         
-        # 2. Run RDA import
-        from scripts.rda_importer import import_nascar_rda
+        # 2. Run Parquet import
+        from scripts.nascar_parquet_importer import run_import as import_nascar_parquet
         
         def progress_cb(msg):
             import_status["nascar_rda"]["progress"].append(msg)
-            # Keep log size manageable
             if len(import_status["nascar_rda"]["progress"]) > 100:
                  import_status["nascar_rda"]["progress"] = import_status["nascar_rda"]["progress"][-100:]
 
-        result = await import_nascar_rda(
-            series=series if series and series != 'all' else None,
-            year_start=year_start,
-            year_end=year_end,
-            progress_callback=progress_cb
-        )
+        rows = await import_nascar_parquet()
         
-        # 3. Comprehensive Row Count
-        rows = 0
-        if result.get("series_results"):
-            for sr in result["series_results"]:
-                rows += sr.get("results_imported", 0)
-                rows += sr.get("stats_computed", 0)
-        
-        status = "COMPLETED" if result.get("status") == "success" else "FAILED"
+        status = "COMPLETED"
         import_status["nascar_rda"]["status"] = status.lower()
         import_status["nascar_rda"]["completed_at"] = datetime.now().isoformat()
-        import_status["nascar_rda"]["result"] = {**result, "rows": rows}
+        import_status["nascar_rda"]["result"] = {"status": "success", "rows": rows}
         
-        # Add summary to progress
-        if result.get("series_results"):
-            for sr in result["series_results"]:
-                import_status["nascar_rda"]["progress"].append(
-                    f"✅ {sr['series']}: {sr['results_imported']} results, {sr['stats_computed']} stats"
-                )
+        import_status["nascar_rda"]["progress"].append(f"✅ Imported {rows} results from Parquet sources")
         import_status["nascar_rda"]["progress"].append(f"Import {status.lower()}!")
         
         # 4. Update DB Log

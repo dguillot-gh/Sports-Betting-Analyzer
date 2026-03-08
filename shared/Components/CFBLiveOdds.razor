@@ -1,6 +1,7 @@
 @page "/odds/cfb"
-@inject HttpClient Http
 @using System.Text.Json
+@inject HttpClient Http
+@inject SportsBettingAnalyzer.Shared.Services.IServerConfigService ServerConfig
 
 <div class="app-card">
     <div class="app-card-header">
@@ -230,7 +231,8 @@
 
         try
         {
-            var url = "http://backend:8000/odds/cfb/analyze-all?sportsbook=fanduel";
+            var baseUrl = ServerConfig.GetBaseUrl();
+            var url = $"{baseUrl}/odds/cfb/analyze-all?sportsbook=fanduel";
             var response = await Http.PostAsync(url, null);
 
             if (response.IsSuccessStatusCode)

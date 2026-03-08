@@ -48,7 +48,7 @@ NFLVERSE_PBP_BASE = "https://github.com/nflverse/nflverse-pbp/releases/download"
 current_year = datetime.now().year
 # NFL season corresponds to the year it started (e.g., Jan 2026 is still the 2025 season)
 # A new season's data starts appearing around July/August of that year
-active_season = current_year if datetime.now().month >= 7 else current_year - 1
+active_season = current_year if datetime.now().month >= 4 else current_year - 1 # Adjusted to April for draft/schedule releases
 
 IMPORT_YEARS = list(range(2016, active_season + 1))
 IMPORT_YEARS_MODERN = list(range(2020, active_season + 1))
@@ -111,8 +111,9 @@ ADVANCED_STATS = {
     "advstats_season_def": f"{NFLVERSE_BASE}/pfr_advstats/advstats_season_def.parquet",
 }
 
-# 2025 season data (play-by-play files, per game)
+# 2025/2026 season data (play-by-play files, per game)
 PBP_2025_TAG = "raw_pbp_2025"
+PBP_2026_TAG = "raw_pbp_2026"
 
 # Local data paths
 DATA_DIR = Path("/app/data/nfl")

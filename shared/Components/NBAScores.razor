@@ -1,6 +1,7 @@
 @page "/nba/scores"
-@inject HttpClient Http
 @using System.Net.Http.Json
+@inject HttpClient Http
+@inject SportsBettingAnalyzer.Shared.Services.IServerConfigService ServerConfig
 
 <div class="app-card">
     <div class="app-card-header" style="background: linear-gradient(135deg, #c2410c, #ea580c) !important;">
@@ -176,7 +177,8 @@
         
         try
         {
-            var url = $"http://backend:8000/db/games/nba/schedule?limit=50";
+            var baseUrl = ServerConfig.GetBaseUrl();
+            var url = $"{baseUrl}/db/games/nba/schedule?limit=50";
             
             if (_selectedSeason.HasValue)
                 url += $"&season={_selectedSeason.Value}";

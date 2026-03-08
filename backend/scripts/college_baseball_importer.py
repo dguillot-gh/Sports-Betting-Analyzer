@@ -31,7 +31,7 @@ STATUS_FILE = DATA_DIR / "import_status.json"
 DIVISION_PRIORITY = [1]
 
 # D2 fallback years to try if current year fails
-D2_FALLBACK_YEARS = [2024, 2023]
+D2_FALLBACK_YEARS = [2025, 2024]
 
 
 def get_smart_year() -> int:
@@ -93,8 +93,10 @@ def get_teams(division: int = 1) -> List[Dict]:
 
 
 
-def get_team_player_stats(team_id: str, stat_type: str = "batting", year: int = 2024, division: int = 1) -> List[Dict]:
+def get_team_player_stats(team_id: str, stat_type: str = "batting", year: Optional[int] = None, division: int = 1) -> List[Dict]:
     """Get list of players for a team (Pure Python / GitHub Cache preferred)."""
+    if year is None:
+        year = get_smart_year()
     team_id_str = str(team_id)
     stats_file = DATA_DIR / "stats" / f"{team_id_str}_{stat_type}.csv"
     
@@ -132,8 +134,10 @@ def get_team_stats(team_id: str, stat_type: str = "stats", entity_type: str = "t
     return None
 
 
-def get_team_schedule(team_id, year: int = 2024) -> List[Dict]:
+def get_team_schedule(team_id, year: Optional[int] = None) -> List[Dict]:
     """Schedules are no longer supported in the simplified pure-Python engine."""
+    if year is None:
+        year = get_smart_year()
     return []
 
 
@@ -473,7 +477,7 @@ async def sync_to_postgresql(import_results: Dict):
             # Stats row
             stats = get_team_stats(team_id, entity_type="team")
             if stats:
-                season = stats.get("season", 2024)
+                season = stats.get("season", get_smart_year())
                 await conn.execute(
                     """INSERT INTO stats (entity_id, season, stat_type, stats)
                        VALUES ($1, $2, 'season_summary', $3)
@@ -506,7 +510,7 @@ async def sync_to_postgresql(import_results: Dict):
                             sport_id, p_name, s.get("team"), json.dumps(p_meta), p_hash
                         )
                         
-                        season = s.get("season", 2024)
+                        season = s.get("season", get_smart_year())
                         await conn.execute(
                             """INSERT INTO stats (entity_id, season, stat_type, stats)
                                VALUES ($1, $2, 'season_summary', $3)
@@ -532,7 +536,7 @@ LSU_TEAM_ID = 365
 if __name__ == "__main__":
     async def test():
         # Test import D1 teams
-        result = await run_college_baseball_import(division=1, year=2025)
+        result = await run_college_baseball_import(division=1, year=get_smart_year())
         print(json.dumps(result, indent=2))
     
     asyncio.run(test())

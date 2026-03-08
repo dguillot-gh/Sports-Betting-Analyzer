@@ -19,7 +19,7 @@ from services.notifications import NotificationService
 #Script imports
 from scripts.ncaab_importer import import_ncaab_data
 from scripts.migrate_data import run_migration
-from scripts.rda_importer import import_nascar_rda
+from scripts.nascar_parquet_importer import run_import as import_nascar_parquet
 from scripts.college_baseball_importer import run_college_baseball_import
 
 logger = logging.getLogger(__name__)
@@ -282,37 +282,13 @@ class SchedulerService:
 
     @staticmethod
     async def _import_nascar_task():
-        """Worker for NASCAR (RDA 2012-Current).
+        """Worker for NASCAR (Parquet 2026+).
         
-        Step 1: Sync .rda files from GitHub (kyleGrealis/nascaR.data)
-        Step 2: Import the synced .rda files into the database
+        Fetches latest race results directly from Cloudflare R2 Parquet sources.
+        Replacing the outdated .rda sync.
         """
-        from pathlib import Path
-        from src.data_sources import NASCARDataUpdater
-        
-        current_year = datetime.now().year
-        
-        # Step 1: Sync latest .rda files from GitHub
-        try:
-            nascar_data_dir = Path(__file__).resolve().parent.parent / 'data' / 'nascar' / 'raw'
-            updater = NASCARDataUpdater(nascar_data_dir)
-            sync_result = updater.update()
-            if sync_result.get("success"):
-                logger.info(f"NASCAR GitHub sync successful: {sync_result.get('files', [])}")
-            else:
-                logger.warning(f"NASCAR GitHub sync had errors: {sync_result.get('errors', [])}")
-        except Exception as e:
-            logger.warning(f"NASCAR GitHub sync failed (continuing with local files): {e}")
-        
-        # Step 2: Import from .rda files into database
-        res = await import_nascar_rda(year_start=2012, year_end=current_year)
-        
-        # Calculate rows
-        rows = 0
-        if res.get("series_results"):
-             rows = sum(r.get('results_imported', 0) for r in res['series_results'])
-             
-        return {"rows": rows}
+        rows = await import_nascar_parquet()
+        return {"rows": rows or 0}
 
     @staticmethod
     async def _import_baseball_task():

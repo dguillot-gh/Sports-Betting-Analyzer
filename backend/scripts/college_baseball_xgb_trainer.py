@@ -380,8 +380,8 @@ class CollegeBaseballXGBTrainer:
         # ------------------------------------------------------------------
         all_team_stats = {}  # {(year, team_id): stats_dict}
 
-        # Try to load historical data from GitHub for years 2021-2025
-        years_to_use = [2021, 2022, 2023, 2024, 2025]
+        # Try to load historical data from GitHub for years 2021-2026
+        years_to_use = [2021, 2022, 2023, 2024, 2025, 2026]
         logger.info(f"Fetching multi-year data for training: {years_to_use}")
 
         try:
@@ -470,7 +470,7 @@ class CollegeBaseballXGBTrainer:
                 pp = data_path / f"{tid}_pitching.csv"
                 s = self._aggregate_team_from_csvs(str(bp), str(pp))
                 if s:
-                    all_team_stats[key] = {'year': 2025, 'team_id': tid, **s}
+                    all_team_stats[key] = {'year': 2026, 'team_id': tid, **s}
 
         # Filter to teams with valid stats
         valid_teams = {k: v for k, v in all_team_stats.items()

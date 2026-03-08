@@ -1,6 +1,7 @@
 @page "/nascar/results"
-@inject HttpClient Http
 @using System.Net.Http.Json
+@inject HttpClient Http
+@inject SportsBettingAnalyzer.Shared.Services.IServerConfigService ServerConfig
 
 <div class="app-card" style="margin-bottom: 24px;">
     <div class="app-card-header" style="background: linear-gradient(135deg, #1e293b, #0f172a) !important;">
@@ -183,8 +184,9 @@
     {
         try
         {
+            var baseUrl = ServerConfig.GetBaseUrl();
             var response = await Http.GetFromJsonAsync<SeasonsResponse>(
-                $"http://backend:8000/db/races/nascar/seasons?series={_selectedSeries}");
+                $"{baseUrl}/db/races/nascar/seasons?series={_selectedSeries}");
             _availableSeasons = response?.Seasons ?? new List<int>();
         }
         catch
@@ -201,7 +203,8 @@
         
         try
         {
-            var url = $"http://backend:8000/db/races/nascar/list?series={_selectedSeries}&limit=50"; // Limit to 50 for mobile
+            var baseUrl = ServerConfig.GetBaseUrl();
+            var url = $"{baseUrl}/db/races/nascar/list?series={_selectedSeries}&limit=50"; // Limit to 50 for mobile
             
             if (_selectedSeason.HasValue)
                 url += $"&season={_selectedSeason.Value}";

@@ -224,7 +224,7 @@ async def scrape_and_store(days_back: int = 7) -> Dict[str, Any]:
     }
 
 
-async def backfill_season(year: int = 2025) -> Dict[str, Any]:
+async def backfill_season(year: int = 2026) -> Dict[str, Any]:
     """
     Backfill an entire season of game results.
     College baseball season runs roughly Feb 14 - June 30.
@@ -259,7 +259,7 @@ if __name__ == "__main__":
     days = int(sys.argv[1]) if len(sys.argv) > 1 else 7
     
     if "--backfill" in sys.argv:
-        year = int(sys.argv[sys.argv.index("--backfill") + 1]) if len(sys.argv) > sys.argv.index("--backfill") + 1 else 2025
+        year = int(sys.argv[sys.argv.index("--backfill") + 1]) if len(sys.argv) > sys.argv.index("--backfill") + 1 else 2026
         result = asyncio.run(backfill_season(year))
     else:
         result = asyncio.run(scrape_and_store(days_back=days))
