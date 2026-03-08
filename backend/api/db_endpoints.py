@@ -1609,6 +1609,157 @@ async def get_game_schedule(
         await conn.close()
 
 
+@router.get("/standings/{sport}")
+async def get_league_standings(
+    sport: str,
+    season: int = None
+):
+    """
+    Get professional league standings (NBA, NFL, NHL).
+    Aggregates W/L, Points, and ATS records from the results table.
+    """
+    if sport not in ["nfl", "nba", "nhl"]:
+        raise HTTPException(status_code=400, detail=f"Standings not supported for: {sport}")
+    
+    conn = await get_db_connection()
+    try:
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
+        if not sport_id:
+            raise HTTPException(status_code=404, detail=f"Sport '{sport}' not found")
+        
+        # Default to latest season if not specified
+        if not season:
+            season = await conn.fetchval(
+                "SELECT MAX(season) FROM results WHERE sport_id = $1", 
+                sport_id
+            ) or 2024
+
+        query = ""
+        if sport == "nfl":
+            # NFL Standings from nfl_schedule
+            query = """
+                WITH games AS (
+                    SELECT 
+                        metadata->>'home_team' as home,
+                        metadata->>'away_team' as away,
+                        (metadata->>'home_score')::int as h_score,
+                        (metadata->>'away_score')::int as a_score,
+                        (metadata->>'spread_line')::float as spread
+                    FROM results 
+                    WHERE sport_id = $1 AND series = 'nfl_schedule' AND season = $2
+                      AND metadata->>'home_score' IS NOT NULL
+                ),
+                team_stats AS (
+                    SELECT home as team, 
+                           CASE WHEN h_score > a_score THEN 1 ELSE 0 END as win,
+                           CASE WHEN h_score < a_score THEN 1 ELSE 0 END as loss,
+                           CASE WHEN h_score = a_score THEN 1 ELSE 0 END as tie,
+                           h_score as pf, a_score as pa,
+                           CASE WHEN h_score + COALESCE(spread, 0) > a_score THEN 1 ELSE 0 END as ats_win,
+                           CASE WHEN h_score + COALESCE(spread, 0) < a_score THEN 1 ELSE 0 END as ats_loss,
+                           CASE WHEN h_score + COALESCE(spread, 0) = a_score THEN 1 ELSE 0 END as ats_push
+                    FROM games
+                    UNION ALL
+                    SELECT away as team,
+                           CASE WHEN a_score > h_score THEN 1 ELSE 0 END as win,
+                           CASE WHEN a_score < h_score THEN 1 ELSE 0 END as loss,
+                           CASE WHEN a_score = h_score THEN 1 ELSE 0 END as tie,
+                           a_score as pf, h_score as pa,
+                           CASE WHEN a_score - COALESCE(spread, 0) > h_score THEN 1 ELSE 0 END as ats_win,
+                           CASE WHEN a_score - COALESCE(spread, 0) < h_score THEN 1 ELSE 0 END as ats_loss,
+                           CASE WHEN a_score - COALESCE(spread, 0) = h_score THEN 1 ELSE 0 END as ats_push
+                    FROM games
+                )
+                SELECT team, 
+                       COALESCE(SUM(win), 0) as wins, COALESCE(SUM(loss), 0) as losses, COALESCE(SUM(tie), 0) as ties,
+                       COALESCE(SUM(pf), 0) as points_for, COALESCE(SUM(pa), 0) as points_against,
+                       COALESCE(SUM(ats_win), 0) as ats_wins, COALESCE(SUM(ats_loss), 0) as ats_losses, COALESCE(SUM(ats_push), 0) as ats_pushes
+                FROM team_stats
+                GROUP BY team
+                ORDER BY wins DESC, (SUM(pf) - SUM(pa)) DESC
+            """
+        elif sport == "nba":
+            # NBA Standings from nba_schedule
+            query = """
+                WITH games AS (
+                    SELECT 
+                        metadata->>'home_team' as home,
+                        metadata->>'away_team' as away,
+                        (metadata->>'home_score')::int as h_score,
+                        (metadata->>'away_score')::int as a_score
+                    FROM results 
+                    WHERE sport_id = $1 AND series = 'nba_schedule' AND season = $2
+                      AND metadata->>'home_score' IS NOT NULL
+                ),
+                team_stats AS (
+                    SELECT home as team, 
+                           CASE WHEN h_score > a_score THEN 1 ELSE 0 END as win,
+                           CASE WHEN h_score < a_score THEN 1 ELSE 0 END as loss,
+                           h_score as pf, a_score as pa
+                    FROM games
+                    UNION ALL
+                    SELECT away as team,
+                           CASE WHEN a_score > h_score THEN 1 ELSE 0 END as win,
+                           CASE WHEN a_score < h_score THEN 1 ELSE 0 END as loss,
+                           a_score as pf, h_score as pa
+                    FROM games
+                )
+                SELECT team, 
+                       COALESCE(SUM(win), 0) as wins, COALESCE(SUM(loss), 0) as losses, 
+                       COALESCE(SUM(pf), 0) as points_for, COALESCE(SUM(pa), 0) as points_against
+                FROM team_stats
+                GROUP BY team
+                ORDER BY wins DESC, (SUM(pf) - SUM(pa)) DESC
+            """
+        elif sport == "nhl":
+            # NHL Standings from MoneyPuck data (series='nhl')
+            query = """
+                SELECT 
+                    metadata->>'team' as team,
+                    COALESCE(SUM(CASE WHEN (metadata->>'gameWin')::int = 1 THEN 1 ELSE 0 END), 0) as wins,
+                    COALESCE(SUM(CASE WHEN (metadata->>'gameWin')::int = 0 AND (metadata->>'otLoss')::int = 0 THEN 1 ELSE 0 END), 0) as losses,
+                    COALESCE(SUM((metadata->>'otLoss')::int), 0) as ot_losses,
+                    COALESCE(SUM((metadata->>'goalsFor')::int), 0) as points_for,
+                    COALESCE(SUM((metadata->>'goalsAgainst')::int), 0) as points_against,
+                    COALESCE(SUM(CASE WHEN (metadata->>'gameWin')::int = 1 THEN 2 ELSE (metadata->>'otLoss')::int END), 0) as points
+                FROM results 
+                WHERE sport_id = $1 AND series = 'nhl' AND season = $2
+                GROUP BY team
+                ORDER BY points DESC, wins DESC
+            """
+
+        rows = await conn.fetch(query, sport_id, int(season))
+        
+        standings = []
+        for row in rows:
+            d = dict(row)
+            # Add win percentage
+            total_games = d['wins'] + d['losses'] + d.get('ties', 0) + d.get('ot_losses', 0)
+            d['win_pct'] = round(d['wins'] / total_games, 3) if total_games > 0 else 0
+            
+            # Format record string
+            if sport == "nhl":
+                d['record'] = f"{d['wins']}-{d['losses']}-{d['otLosses' if 'otLosses' in d else 'ot_losses']}"
+            elif d.get('ties', 0) > 0:
+                d['record'] = f"{d['wins']}-{d['losses']}-{d['ties']}"
+            else:
+                d['record'] = f"{d['wins']}-{d['losses']}"
+                
+            # Format ATS record if available
+            if 'ats_wins' in d:
+                d['ats_record'] = f"{d['ats_wins']}-{d['ats_losses']}-{d['ats_pushes']}"
+                
+            standings.append(d)
+
+        return {
+            "sport": sport,
+            "season": season,
+            "standings": standings
+        }
+    finally:
+        await conn.close()
+
+
 @router.get("/games/{sport}/list")
 async def get_game_list(
     sport: str,

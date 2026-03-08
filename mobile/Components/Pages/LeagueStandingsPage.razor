@@ -1,0 +1,83 @@
+@page "/standings"
+@page "/standings/{Sport}"
+@using SportsBettingAnalyzer.Shared.Components
+
+<div class="page-container">
+    <div class="sport-selector">
+        <button class="sport-btn @(SelectedSport == "nfl" ? "active" : "")" @onclick='() => ChangeSport("nfl")'>
+            🏈 <span>NFL</span>
+        </button>
+        <button class="sport-btn @(SelectedSport == "nba" ? "active" : "")" @onclick='() => ChangeSport("nba")'>
+            🏀 <span>NBA</span>
+        </button>
+        <button class="sport-btn @(SelectedSport == "nhl" ? "active" : "")" @onclick='() => ChangeSport("nhl")'>
+            🏒 <span>NHL</span>
+        </button>
+    </div>
+
+    <LeagueStandings Sport="@SelectedSport" Season="@_selectedSeason" />
+</div>
+
+<style>
+    .page-container {
+        padding: 12px;
+        max-width: 800px;
+        margin: 0 auto;
+    }
+
+    .sport-selector {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 16px;
+        background: var(--surface-raised);
+        padding: 4px;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border);
+    }
+
+    .sport-btn {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 10px;
+        border: none;
+        background: transparent;
+        color: var(--text-muted);
+        font-weight: 700;
+        font-size: 0.85rem;
+        border-radius: var(--radius-sm);
+        transition: all 0.2s ease;
+    }
+
+    .sport-btn span {
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .sport-btn.active {
+        background: white;
+        color: var(--text-primary);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    [data-theme='dark'] .sport-btn.active {
+        background: var(--surface-overlay);
+        color: white;
+    }
+</style>
+
+@code {
+    [Parameter] public string? Sport { get; set; }
+    
+    private string SelectedSport => (Sport ?? "nfl").ToLower();
+    private int? _selectedSeason;
+
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private void ChangeSport(string sport)
+    {
+        Nav.NavigateTo($"/standings/{sport}");
+    }
+}

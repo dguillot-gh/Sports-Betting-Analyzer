@@ -14,99 +14,147 @@
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="all-sports">
+            <NavLink class="nav-link" href="/all-sports">
                 <span class="nav-icon">🌐</span> All Sports Scan
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="predict/nba">
+            <NavLink class="nav-link" href="/predict/nba">
                 <span class="nav-icon">&#9889;</span> NBA Predictor
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="odds/nba">
+            <NavLink class="nav-link" href="/odds/nba">
                 <span class="nav-icon">&#127936;</span> NBA Odds
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="odds/nhl">
+            <NavLink class="nav-link" href="/odds/nhl">
                 <span class="nav-icon">&#127954;</span> NHL Odds
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="odds/nfl">
+            <NavLink class="nav-link" href="/odds/nfl">
                 <span class="nav-icon">&#127944;</span> NFL Odds
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="odds/ncaab">
+            <NavLink class="nav-link" href="/odds/ncaab">
                 <span class="nav-icon">&#127936;</span> NCAAB Odds
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="odds/cfb">
+            <NavLink class="nav-link" href="/odds/cfb">
                 <span class="nav-icon">&#127944;</span> CFB Odds
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="odds/college-baseball">
+            <NavLink class="nav-link" href="/odds/college-baseball">
                 <span class="nav-icon">&#9918;</span> Coll. Baseball Odds
             </NavLink>
         </div>
+        <div class="nav-section-header px-3 mt-2">
+            <span class="section-title">RESULTS</span>
+        </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="nfl/scores">
-                <span class="nav-icon">&#127944;</span> NFL Results
+            <NavLink class="nav-link" href="/nfl/scores">
+                <span class="nav-icon">🏈</span> NFL Results
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="nba/scores">
-                <span class="nav-icon">&#127936;</span> NBA Results
+            <NavLink class="nav-link" href="/nba/scores">
+                <span class="nav-icon">🏀</span> NBA Results
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="nascar/results">
+            <NavLink class="nav-link" href="/nascar/results">
                 <span class="nav-icon">🏁</span> NASCAR Results
             </NavLink>
         </div>
+
+        <div class="nav-section-header px-3 mt-2">
+            <span class="section-title">STANDINGS</span>
+        </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="nascar/standings">
-                <span class="nav-icon">🏆</span> NASCAR Standings
+            <NavLink class="nav-link" href="/standings/nfl">
+                <span class="nav-icon">🏈</span> NFL Standings
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="about">
+            <NavLink class="nav-link" href="/standings/nba">
+                <span class="nav-icon">🏀</span> NBA Standings
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="/standings/nhl">
+                <span class="nav-icon">🏒</span> NHL Standings
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="/nascar/standings">
+                <span class="nav-icon">🏁</span> NASCAR Standings
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="/about">
                 <span class="nav-icon">ℹ️</span> About
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="betting-101">
+            <NavLink class="nav-link" href="/betting-101">
                 <span class="nav-icon">🎓</span> Betting 101
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="data-center">
+            <NavLink class="nav-link" href="/data-center">
                 <span class="nav-icon">🖥️</span> Data Center
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="bet-tracker">
+            <NavLink class="nav-link" href="/bet-tracker">
                 <span class="nav-icon">&#128203;</span> Bet Tracker
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="paper-trading">
+            <NavLink class="nav-link" href="/paper-trading">
                 <span class="nav-icon">&#128184;</span> Paper Trading
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="weather">
+            <NavLink class="nav-link" href="/weather">
                 <span class="nav-icon">&#9729;</span> Weather
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="settings">
+            <NavLink class="nav-link" href="/settings">
                 <span class="nav-icon">&#9881;</span> Settings
             </NavLink>
         </div>
     </nav>
 </div>
+
+<style>
+    .compact-mobile { height: 45px; min-height: 45px; display: flex; align-items: center; padding: 0 12px; background: var(--surface); border-bottom: 1px solid var(--border); }
+    .app-header-title { display: flex; align-items: center; gap: 8px; }
+    .header-emoji { font-size: 1.2rem; }
+    .compact-mobile h1 { font-size: 1rem; font-weight: 800; margin: 0; color: var(--text-primary); }
+    
+    .nav-section-header {
+        padding-top: 12px;
+        padding-bottom: 4px;
+        border-bottom: 1px solid var(--border-light);
+        margin-bottom: 4px;
+    }
+    .section-title {
+        font-size: 0.65rem;
+        font-weight: 800;
+        color: var(--text-muted);
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+    }
+
+    .nav-icon { margin-right: 12px; font-size: 1.1rem; width: 24px; text-align: center; display: inline-block; }
+    .nav-link { border-radius: 8px; margin: 2px 0; transition: all 0.2s; }
+    .nav-link:hover { background: var(--surface-hover); }
+    .nav-link.active { background: var(--surface-overlay); color: white !important; font-weight: 700; }
+</style>
