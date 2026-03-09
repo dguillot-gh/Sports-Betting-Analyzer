@@ -34,8 +34,8 @@ main {
 
     ::deep .navbar-toggler {
         margin: 0 !important;
-        width: 32px !important;
-        height: 32px !important;
+        width: 34px !important;
+        height: 34px !important;
     }
 }
 
@@ -76,7 +76,7 @@ main {
     }
 
     .content-wrapper {
-        padding-bottom: calc(65px + env(safe-area-inset-bottom) + 30px);
+        padding-bottom: calc(65px + env(safe-area-inset-bottom) + 60px);
     }
 }
 

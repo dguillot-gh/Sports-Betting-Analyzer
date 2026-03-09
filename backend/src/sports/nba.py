@@ -55,7 +55,7 @@ class NBASport(BaseSport):
         return self._team_name_map.get(full_name, full_name)
 
     def load_data(self) -> pd.DataFrame:
-        """Load NBA data from CSV files. Tries game-level data first, falls back to player data."""
+        """Load NBA data from CSV files. Returns empty DataFrame if files not found."""
         if self.df is not None:
             return self.df
         
@@ -68,7 +68,8 @@ class NBASport(BaseSport):
         # Fall back to player per game stats (original behavior)
         player_file = self.data_dir / 'raw' / 'Player Per Game.csv'
         if not player_file.exists():
-            raise FileNotFoundError(f"NBA player data not found at {player_file}")
+            print(f"WARNING: NBA player data not found at {player_file}, returning empty DataFrame")
+            return pd.DataFrame()  # Return empty DataFrame instead of raising error
             
         df = pd.read_csv(player_file)
         

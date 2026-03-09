@@ -61,7 +61,7 @@ async def ensure_sport_exists(conn) -> int:
         )
     return sport_id
 
-async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, progress_callback=None):
+async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, start_year: int = 2023, progress_callback=None):
     """Import team game-by-game data from MoneyPuck."""
     logger.info("Starting MoneyPuck game-level import...")
     
@@ -106,6 +106,14 @@ async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, pro
             
             if pd.isna(team_name) or pd.isna(game_id):
                 continue
+            
+            # Skip seasons before start_year
+            try:
+                parsed_season = int(season.split('-')[0]) if isinstance(season, str) and '-' in season else int(float(season))
+            except:
+                parsed_season = 0
+            if parsed_season < start_year:
+                continue
                 
             # Create Team Entity if not exists (using content hash for uniqueness)
             if team_name not in team_map:
@@ -114,7 +122,7 @@ async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, pro
                     ent_id = await conn.fetchval(
                         """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
                            VALUES ($1, $2, 'team', 'nhl', $3, $4)
-                           ON CONFLICT (content_hash) DO UPDATE SET name = EXCLUDED.name
+                           ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL DO UPDATE SET name = EXCLUDED.name
                            RETURNING id""",
                         sport_id, team_name, json.dumps({"is_nhl": True}), team_hash
                     )
@@ -150,7 +158,7 @@ async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, pro
                 await conn.execute(
                     """INSERT INTO results (sport_id, season, series, metadata, content_hash)
                        VALUES ($1, $2, 'nhl', $3, $4)
-                       ON CONFLICT (content_hash) DO UPDATE SET metadata = EXCLUDED.metadata""",
+                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL DO UPDATE SET metadata = EXCLUDED.metadata""",
                     sport_id, clean_season, json.dumps(metadata), result_hash
                 )
                 count += 1
@@ -212,7 +220,7 @@ async def import_player_bios(conn, sport_id: int):
         await conn.execute(
             """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
                VALUES ($1, $2, 'player', 'nhl', $3, $4)
-               ON CONFLICT (content_hash) DO UPDATE SET metadata = EXCLUDED.metadata""",
+               ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL DO UPDATE SET metadata = EXCLUDED.metadata""",
             sport_id, name, json.dumps(metadata), player_hash
         )
         count += 1
@@ -238,7 +246,7 @@ async def sync_live_standings(conn, sport_id: int):
     except Exception as e:
         logger.error(f"Failed to sync standings: {e}")
 
-async def import_all_nhl(clear_existing: bool = False, progress_callback=None) -> dict:
+async def import_all_nhl(clear_existing: bool = False, start_year: int = 2023, progress_callback=None) -> dict:
     """
     Standardized entry point for NHL import (used by scheduler).
     Downloads fresh data from MoneyPuck + NHL API and imports to DB.
@@ -272,7 +280,7 @@ async def import_all_nhl(clear_existing: bool = False, progress_callback=None) -
         # 1. MoneyPuck game data (always fresh download)
         if progress_callback:
             progress_callback("Downloading MoneyPuck game data...")
-        await import_moneypuck_game_data(conn, sport_id, progress_callback=progress_callback)
+        await import_moneypuck_game_data(conn, sport_id, start_year=start_year, progress_callback=progress_callback)
         
         game_count = await conn.fetchval(
             "SELECT COUNT(*) FROM results WHERE sport_id = $1", sport_id

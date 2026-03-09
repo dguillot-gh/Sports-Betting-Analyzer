@@ -1,0 +1,539 @@
+@page "/power-rankings"
+@page "/power-rankings/{Sport}"
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@inject HttpClient Http
+@inject SportsBettingAnalyzer.Shared.Services.IServerConfigService ServerConfig
+
+<div class="pr-container">
+    <div class="pr-header">
+        <h1>@(_sport.ToUpper()) Power Rankings</h1>
+        <p class="pr-subtitle">Data-driven team rankings</p>
+    </div>
+
+    @if (_sport == "nfl" && _rankings.Any())
+    {
+        <div class="pr-meta">
+            <span class="pr-season">Season @_season</span>
+            @if (_throughWeek > 0)
+            {
+                <span class="pr-week">Through Week @_throughWeek</span>
+            }
+            <span class="pr-teams">@_rankings.Count teams</span>
+        </div>
+    }
+
+    <!-- Sport Toggle -->
+    <div class="pr-sport-toggle">
+        <button class="pr-sport-btn @(_sport == "nfl" ? "active" : "")" @onclick='() => SwitchSport("nfl")'>NFL</button>
+        <button class="pr-sport-btn @(_sport == "nascar" ? "active" : "")" @onclick='() => SwitchSport("nascar")'>NASCAR</button>
+    </div>
+
+    <!-- Series Selector for NASCAR -->
+    @if (_sport == "nascar")
+    {
+        <div class="pr-series-toggle">
+            <button class="pr-series-btn @(_series == "cup" ? "active" : "")" @onclick='() => SwitchSeries("cup")'>Cup</button>
+            <button class="pr-series-btn @(_series == "xfinity" ? "active" : "")" @onclick='() => SwitchSeries("xfinity")'>Xfinity</button>
+            <button class="pr-series-btn @(_series == "trucks" ? "active" : "")" @onclick='() => SwitchSeries("trucks")'>Trucks</button>
+        </div>
+    }
+
+    @if (_isLoading)
+    {
+        <div class="pr-loading">
+            <div class="pr-spinner"></div>
+            <p>Computing rankings...</p>
+        </div>
+    }
+    else if (_rankings.Any())
+    {
+        <div class="pr-rankings">
+            @foreach (var team in _rankings)
+            {
+                <div class="pr-team-card">
+                    <div class="pr-rank-badge @GetRankClass(team.Rank)">
+                        @team.Rank
+                    </div>
+                    <div class="pr-team-body">
+                        <div class="pr-team-header">
+                            <span class="pr-team-name">@team.Team</span>
+                            <span class="pr-team-record">@team.Record</span>
+                        </div>
+                        <div class="pr-team-stats">
+                            <div class="pr-stat-row">
+                                <span class="pr-stat-label">Power</span>
+                                <span class="pr-stat-value pr-power">@team.PowerScore</span>
+                            </div>
+                            @if (_sport == "nfl")
+                            {
+                                <div class="pr-stat-row">
+                                    <span class="pr-stat-label">Win %</span>
+                                    <span class="pr-stat-value @GetRateClass(team.WinPct)">@((team.WinPct * 100).ToString("F1"))%</span>
+                                </div>
+                                <div class="pr-stat-row">
+                                    <span class="pr-stat-label">Diff</span>
+                                    <span class="pr-stat-value @GetDiffClass(team.PtDiff)">@team.PtDiff</span>
+                                </div>
+                                <div class="pr-stat-row">
+                                    <span class="pr-stat-label">SOS</span>
+                                    <span class="pr-stat-value @GetRateClass(team.Sos)">@((team.Sos * 100).ToString("F0"))%</span>
+                                </div>
+                                <div class="pr-stat-row">
+                                    <span class="pr-stat-label">ATS</span>
+                                    <span class="pr-stat-value">@team.AtsRecord</span>
+                                </div>
+                                <div class="pr-stat-row">
+                                    <span class="pr-stat-label">Recent</span>
+                                    <span class="pr-stat-value @GetRateClass(team.RecentPct)">@((team.RecentPct * 100).ToString("F0"))%</span>
+                                </div>
+                            }
+                            else if (_sport == "nascar")
+                            {
+                                <div class="pr-stat-row">
+                                    <span class="pr-stat-label">Avg Finish</span>
+                                    <span class="pr-stat-value @GetFinishClass(team.AvgFinish)">@team.AvgFinish</span>
+                                </div>
+                                <div class="pr-stat-row">
+                                    <span class="pr-stat-label">Top-5</span>
+                                    <span class="pr-stat-value">@team.Top5</span>
+                                </div>
+                                <div class="pr-stat-row">
+                                    <span class="pr-stat-label">Top-10</span>
+                                    <span class="pr-stat-value">@team.Top10</span>
+                                </div>
+                                <div class="pr-stat-row">
+                                    <span class="pr-stat-label">Wins</span>
+                                    <span class="pr-stat-value">@team.Wins</span>
+                                </div>
+                                <div class="pr-stat-row">
+                                    <span class="pr-stat-label">Laps Led %</span>
+                                    <span class="pr-stat-value @GetRateClass(team.LapsLedRate)">@((team.LapsLedRate * 100).ToString("F1"))%</span>
+                                </div>
+                                <div class="pr-stat-row">
+                                    <span class="pr-stat-label">Recent Avg</span>
+                                    <span class="pr-stat-value @GetFinishClass(team.RecentAvg)">@team.RecentAvg</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="pr-weights-note">
+            @if (_sport == "nfl")
+            {
+                <p>Weights: Win% 30% | Diff 25% | SOS 20% | ATS 15% | Recent 10%</p>
+            }
+            else if (_sport == "nascar")
+            {
+                <p>Weights: Avg Finish 30% | Recent 25% | Top-5 20% | Laps Led 15% | Track 10%</p>
+            }
+        </div>
+    }
+    else if (!_isLoading)
+    {
+        <div class="pr-empty">
+            <p>No rankings available for @_sport.ToUpper().</p>
+        </div>
+    }
+</div>
+
+<style>
+    .pr-container {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 0 8px;
+    }
+
+    .pr-header {
+        text-align: center;
+        padding: 16px 0 8px;
+    }
+
+    .pr-header h1 {
+        font-size: 20px;
+        font-weight: 800;
+        color: var(--text-primary, #e2e8f0);
+        margin: 0 0 2px;
+    }
+
+    .pr-subtitle {
+        font-size: 12px;
+        color: var(--text-muted, #64748b);
+        margin: 0;
+    }
+
+    .pr-meta {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        margin-bottom: 12px;
+        font-size: 11px;
+        color: var(--text-muted, #64748b);
+    }
+
+    .pr-sport-toggle {
+        display: flex;
+        justify-content: center;
+        gap: 4px;
+        margin: 12px 0;
+        background: var(--surface, #1e1e2e);
+        border-radius: 10px;
+        padding: 4px;
+        border: 1px solid var(--border, #2e2e44);
+    }
+
+    .pr-sport-btn {
+        flex: 1;
+        padding: 8px 16px;
+        border: none;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        background: transparent;
+        color: var(--text-secondary, #94a3b8);
+        transition: all 0.15s;
+    }
+
+    .pr-sport-btn.active {
+        background: var(--primary, #2563eb);
+        color: #fff;
+    }
+
+    .pr-series-toggle {
+        display: flex;
+        justify-content: center;
+        gap: 4px;
+        margin: 8px 0;
+        background: var(--surface, #1e1e2e);
+        border-radius: 8px;
+        padding: 3px;
+        border: 1px solid var(--border, #2e2e44);
+    }
+
+    .pr-series-btn {
+        flex: 1;
+        padding: 6px 12px;
+        border: none;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        background: transparent;
+        color: var(--text-secondary, #94a3b8);
+        transition: all 0.15s;
+    }
+
+    .pr-series-btn.active {
+        background: var(--primary, #2563eb);
+        color: #fff;
+    }
+
+    .pr-loading, .pr-empty {
+        text-align: center;
+        padding: 32px 16px;
+        color: var(--text-muted, #64748b);
+        font-size: 13px;
+    }
+
+    .pr-spinner {
+        display: inline-block;
+        width: 28px;
+        height: 28px;
+        border: 3px solid rgba(255, 255, 255, 0.1);
+        border-top-color: var(--primary, #60a5fa);
+        border-radius: 50%;
+        animation: pr-spin 0.6s linear infinite;
+        margin-bottom: 8px;
+    }
+
+    .pr-rankings {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding-bottom: 16px;
+    }
+
+    .pr-team-card {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: var(--surface, #1e1e2e);
+        border: 1px solid var(--border, #2e2e44);
+        border-radius: 10px;
+        padding: 12px;
+    }
+
+    .pr-rank-badge {
+        flex-shrink: 0;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        font-size: 14px;
+        font-weight: 800;
+        color: #fff;
+    }
+
+    .pr-rank-badge.top {
+        background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    }
+
+    .pr-rank-badge.mid {
+        background: linear-gradient(135deg, #60a5fa, #3b82f6);
+    }
+
+    .pr-rank-badge.low {
+        background: linear-gradient(135deg, #94a3b8, #64748b);
+    }
+
+    .pr-team-body {
+        flex: 1;
+    }
+
+    .pr-team-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+    }
+
+    .pr-team-name {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--text-primary, #e2e8f0);
+    }
+
+    .pr-team-record {
+        font-size: 12px;
+        color: var(--text-muted, #64748b);
+    }
+
+    .pr-team-stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .pr-stat-row {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .pr-stat-label {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-muted, #64748b);
+    }
+
+    .pr-stat-value {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--text-primary, #e2e8f0);
+    }
+
+    .pr-power {
+        color: #60a5fa;
+    }
+
+    .rate-hot {
+        color: var(--success, #4ade80);
+    }
+
+    .rate-warm {
+        color: #fbbf24;
+    }
+
+    .rate-cold {
+        color: #f87171;
+    }
+
+    .diff-pos {
+        color: var(--success, #4ade80);
+    }
+
+    .diff-neg {
+        color: #f87171;
+    }
+
+    .pr-weights-note {
+        text-align: center;
+        margin-top: 12px;
+        font-size: 10px;
+        color: var(--text-muted, #64748b);
+    }
+
+    @@keyframes pr-spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
+
+@code {
+    [Parameter] public string? Sport { get; set; }
+
+    private string _sport = "nfl";
+    private string _series = "cup";
+    private int _season = 2024;
+    private int _throughWeek = 0;
+    private bool _isLoading = false;
+    private List<PowerRankingResult> _rankings = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrEmpty(Sport))
+            _sport = Sport.ToLower();
+
+        await LoadRankings();
+    }
+
+    private async Task SwitchSport(string sport)
+    {
+        _sport = sport;
+        _rankings = new();
+        await LoadRankings();
+    }
+
+    private async Task SwitchSeries(string series)
+    {
+        _series = series;
+        _rankings = new();
+        await LoadRankings();
+    }
+
+    private async Task LoadRankings()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var baseUrl = ServerConfig.GetBaseUrl();
+            if (_sport == "nfl")
+            {
+                var json = await Http.GetStringAsync($"{baseUrl}/db/nfl/power-rankings?season=2024");
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                
+                _season = root.TryGetProperty("season", out var s) && s.ValueKind != JsonValueKind.Null ? s.GetInt32() : 0;
+                _throughWeek = root.TryGetProperty("through_week", out var w) && w.ValueKind != JsonValueKind.Null ? w.GetInt32() : 0;
+                
+                if (root.TryGetProperty("rankings", out var arr))
+                {
+                    _rankings = arr.EnumerateArray()
+                        .Select(r => new PowerRankingResult
+                        {
+                            Rank = r.TryGetProperty("rank", out var rank) ? rank.GetInt32() : 0,
+                            Team = r.TryGetProperty("team", out var team) ? team.GetString() ?? "" : "",
+                            Record = r.TryGetProperty("record", out var record) ? record.GetString() ?? "" : "",
+                            PowerScore = r.TryGetProperty("power_score", out var ps) && ps.ValueKind == JsonValueKind.Number ? ps.GetDouble() : 0,
+                            WinPct = r.TryGetProperty("win_pct", out var wp) && wp.ValueKind == JsonValueKind.Number ? wp.GetDouble() : 0,
+                            PtDiff = r.TryGetProperty("pt_diff", out var pd) && pd.ValueKind == JsonValueKind.Number ? pd.GetInt32() : 0,
+                            Sos = r.TryGetProperty("sos", out var sos) && sos.ValueKind == JsonValueKind.Number ? sos.GetDouble() : 0,
+                            AtsRecord = r.TryGetProperty("ats_record", out var ats) ? ats.GetString() ?? "" : "",
+                            RecentPct = r.TryGetProperty("recent_pct", out var rp) && rp.ValueKind == JsonValueKind.Number ? rp.GetDouble() : 0,
+                        })
+                        .ToList();
+                }
+            }
+            else if (_sport == "nascar")
+            {
+                var json = await Http.GetStringAsync($"{baseUrl}/db/nascar/power-rankings?series={_series}&season=2024");
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                
+                _season = root.TryGetProperty("season", out var s) && s.ValueKind != JsonValueKind.Null ? s.GetInt32() : 0;
+                _throughWeek = root.TryGetProperty("through_race", out var w) && w.ValueKind != JsonValueKind.Null ? w.GetInt32() : 0;
+                
+                if (root.TryGetProperty("rankings", out var arr))
+                {
+                    _rankings = arr.EnumerateArray()
+                        .Select(r => new PowerRankingResult
+                        {
+                            Rank = r.TryGetProperty("rank", out var rank) ? rank.GetInt32() : 0,
+                            Team = r.TryGetProperty("driver", out var driver) ? driver.GetString() ?? "" : "",
+                            Record = $"{(r.TryGetProperty("wins", out var wins) ? wins.GetInt32() : 0)} wins",
+                            PowerScore = r.TryGetProperty("power_score", out var ps) && ps.ValueKind == JsonValueKind.Number ? ps.GetDouble() : 0,
+                            AvgFinish = r.TryGetProperty("avg_finish", out var af) && af.ValueKind == JsonValueKind.Number ? af.GetDouble() : 0,
+                            RecentAvg = r.TryGetProperty("recent_avg", out var ra) && ra.ValueKind == JsonValueKind.Number ? ra.GetDouble() : 0,
+                            Top5 = r.TryGetProperty("top5", out var t5) ? t5.GetInt32() : 0,
+                            Top10 = r.TryGetProperty("top10", out var t10) ? t10.GetInt32() : 0,
+                            Wins = r.TryGetProperty("wins", out var w2) ? w2.GetInt32() : 0,
+                            LapsLedRate = r.TryGetProperty("laps_led_rate", out var llr) && llr.ValueKind == JsonValueKind.Number ? llr.GetDouble() : 0,
+                            // Fill NFL fields with defaults for compatibility
+                            WinPct = 0,
+                            PtDiff = 0,
+                            Sos = 0,
+                            AtsRecord = "",
+                            RecentPct = r.TryGetProperty("recent_avg", out var ra2) && ra2.ValueKind == JsonValueKind.Number ? (1.0 - (ra2.GetDouble() - 1) / 39) : 0,
+                        })
+                        .ToList();
+                }
+            }
+        }
+        catch
+        {
+            _rankings = new();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private string GetRankClass(int rank)
+    {
+        if (rank <= 6) return "top";
+        if (rank <= 20) return "mid";
+        return "low";
+    }
+
+    private string GetRateClass(double rate)
+    {
+        if (rate >= 0.65) return "rate-hot";
+        if (rate >= 0.50) return "rate-warm";
+        return "rate-cold";
+    }
+
+    private string GetDiffClass(int diff)
+    {
+        if (diff > 0) return "diff-pos";
+        if (diff < 0) return "diff-neg";
+        return "";
+    }
+
+    private string GetFinishClass(double finish)
+    {
+        if (finish <= 10) return "rate-hot";
+        if (finish <= 20) return "rate-warm";
+        return "rate-cold";
+    }
+
+    public class PowerRankingResult
+    {
+        public int Rank { get; set; }
+        public string Team { get; set; } = "";
+        public string Record { get; set; } = "";
+        public double PowerScore { get; set; }
+        // NFL fields
+        public double WinPct { get; set; }
+        public int PtDiff { get; set; }
+        public double Sos { get; set; }
+        public string AtsRecord { get; set; } = "";
+        public double RecentPct { get; set; }
+        // NASCAR fields
+        public double AvgFinish { get; set; }
+        public double RecentAvg { get; set; }
+        public int Top5 { get; set; }
+        public int Top10 { get; set; }
+        public int Wins { get; set; }
+        public double LapsLedRate { get; set; }
+    }
+}

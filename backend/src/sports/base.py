@@ -65,10 +65,15 @@ class BaseSport(ABC):
         """Get paths to data files based on config."""
         paths = {}
         if 'data' in self.config:
+            # Check for custom data_dir (e.g., nflverse)
+            data_dir = self.data_dir
+            if 'data_dir' in self.config['data']:
+                data_dir = self.data_dir.parent / self.config['data']['data_dir']
+            
             for key, filename in self.config['data'].items():
                 if key.endswith('_file'):
-                    # Check root data dir first (for enhanced files)
-                    p = self.data_dir / filename
+                    # Check custom data dir first
+                    p = data_dir / filename
                     if p.exists():
                         paths[key] = p
                     else:

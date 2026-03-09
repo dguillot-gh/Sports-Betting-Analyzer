@@ -61,26 +61,26 @@ class SportFactory:
         cfg = SportFactory.load_yaml(CFG_DIR / 'nascar_config.yaml')
         
         # Map a series keyword to a NASCAR config override
-        series_to_rda = {
-            'cup': 'cup_enhanced.csv',
-            'xfinity': 'xfinity_enhanced.csv',
-            'truck': 'truck_enhanced.csv',
+        series_to_parquet = {
+            'cup': 'raw/cup_series.parquet',
+            'xfinity': 'raw/xfinity_series.parquet', 
+            'truck': 'raw/trucks_series.parquet',
         }
 
-        label = 'csv'  # default label
+        label = 'parquet'  # default label
         if series:
             s = series.lower().strip()
             if s == 'all':
-                # Force the loader to scan all RDA files by clearing data block
+                # Force the loader to scan all parquet files by clearing data block
                 cfg['data'] = {}
                 label = 'all'
-            elif s in series_to_rda:
-                # Point directly to a specific RDA file
+            elif s in series_to_parquet:
+                # Point directly to a specific parquet file
                 cfg.setdefault('data', {})
-                cfg['data']['results_file'] = series_to_rda[s]
+                cfg['data']['results_file'] = series_to_parquet[s]
                 label = s
             else:
-                raise HTTPException(status_code=400, detail=f"Unknown series '{series}'. Use cup|xfinity|truck|all|csv.")
+                raise HTTPException(status_code=400, detail=f"Unknown series '{series}'. Use cup|xfinity|truck|all|parquet.")
         
         # Inject series into config for the sport instance to use
         if series:
