@@ -1,0 +1,406 @@
+﻿@page "/"
+@using System.Text.Json
+@inject HttpClient Http
+@inject SportsBettingAnalyzer.Shared.Services.IServerConfigService ServerConfig
+
+<div class="home-hero">
+    <h1>Sports Betting Analyzer</h1>
+    <p>@DateTime.Now.ToString("dddd, MMMM d")</p>
+</div>
+
+<!-- Live Slate Banner -->
+<a class="slate-banner" href="/todays-slate">
+    <div class="slate-banner-icon">📅</div>
+    <div class="slate-banner-text">
+        <h3>Today's Slate</h3>
+        @if (_totalGames > 0)
+        {
+            <p>@_totalGames games today@(_liveGames > 0 ? $" — {_liveGames} LIVE" : "") across @_sportCount sports</p>
+        }
+        else
+        {
+            <p>All games across NFL, NBA, NHL & more — live scores, odds, and status</p>
+        }
+    </div>
+    <div class="slate-banner-arrow">›</div>
+</a>
+
+@if (_totalGames > 0)
+{
+    <div class="home-stats-row">
+        <div class="home-stat">
+            <span class="home-stat-num">@_totalGames</span>
+            <span class="home-stat-lbl">Games</span>
+        </div>
+        <div class="home-stat">
+            <span class="home-stat-num @(_liveGames > 0 ? "live" : "")">@_liveGames</span>
+            <span class="home-stat-lbl">Live</span>
+        </div>
+        <div class="home-stat">
+            <span class="home-stat-num">@_finalGames</span>
+            <span class="home-stat-lbl">Final</span>
+        </div>
+        <div class="home-stat">
+            <span class="home-stat-num">@_upcomingGames</span>
+            <span class="home-stat-lbl">Upcoming</span>
+        </div>
+    </div>
+}
+
+<div class="dashboard-section px-4">
+    <h2 class="section-title">Analysis & Models</h2>
+    <div class="dashboard-grid">
+        <a class="feature-card compact" href="/predict/nba">
+            <div class="feature-icon feature-icon-purple">⚡</div>
+            <div class="feature-text">
+                <h3>NBA Predictor</h3>
+                <p>ML Outcome Models</p>
+            </div>
+        </a>
+        <a class="feature-card compact" href="/all-sports">
+            <div class="feature-icon feature-icon-blue">🌐</div>
+            <div class="feature-text">
+                <h3>All Sports Scan</h3>
+                <p>Cross-Market Values</p>
+            </div>
+        </a>
+        <a class="feature-card compact" href="/hit-rates">
+            <div class="feature-icon" style="background:rgba(249,115,22,0.15);color:#f97316;">📊</div>
+            <div class="feature-text">
+                <h3>Hit Rates</h3>
+                <p>Prop Consistency</p>
+            </div>
+        </a>
+        <a class="feature-card compact" href="/power-rankings">
+            <div class="feature-icon" style="background:rgba(34,197,94,0.15);color:#22c55e;">🏆</div>
+            <div class="feature-text">
+                <h3>Power Rankings</h3>
+                <p>NFL & NASCAR</p>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="dashboard-section px-4 mt-4">
+    <h2 class="section-title">Live Odds Monitors</h2>
+    <div class="dashboard-grid">
+        <a class="feature-card compact" href="/odds/nfl">
+            <div class="feature-icon feature-icon-purple">🏈</div>
+            <div class="feature-text">
+                <h3>NFL Odds</h3>
+                <p>Spreads & Totals</p>
+            </div>
+        </a>
+        <a class="feature-card compact" href="/odds/ncaab">
+            <div class="feature-icon feature-icon-green">🏀</div>
+            <div class="feature-text">
+                <h3>NCAAB Odds</h3>
+                <p>College Hoops</p>
+            </div>
+        </a>
+        <a class="feature-card compact" href="/odds/nba">
+            <div class="feature-icon feature-icon-green">🏀</div>
+            <div class="feature-text">
+                <h3>NBA Odds</h3>
+                <p>Pro Basketball</p>
+            </div>
+        </a>
+        <a class="feature-card compact" href="/odds/nhl">
+            <div class="feature-icon feature-icon-blue">🏒</div>
+            <div class="feature-text">
+                <h3>NHL Odds</h3>
+                <p>Pro Hockey</p>
+            </div>
+        </a>
+        <a class="feature-card compact" href="/odds/cfb">
+            <div class="feature-icon feature-icon-purple">🏈</div>
+            <div class="feature-text">
+                <h3>CFB Odds</h3>
+                <p>College Football</p>
+            </div>
+        </a>
+        <a class="feature-card compact" href="/odds/college-baseball">
+            <div class="feature-icon feature-icon-green">⚾</div>
+            <div class="feature-text">
+                <h3>College Baseball</h3>
+                <p>NCAA Baseball</p>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="dashboard-section px-4 mt-4">
+    <h2 class="section-title">Game & Race Results</h2>
+    <div class="dashboard-grid">
+        <a class="feature-card compact" href="/nfl/scores">
+            <div class="feature-icon feature-icon-purple">🏈</div>
+            <div class="feature-text">
+                <h3>NFL Results</h3>
+                <p>Recent Scores</p>
+            </div>
+        </a>
+        <a class="feature-card compact" href="/nba/scores">
+            <div class="feature-icon feature-icon-green">🏀</div>
+            <div class="feature-text">
+                <h3>NBA Results</h3>
+                <p>Recent Scores</p>
+            </div>
+        </a>
+        <a class="feature-card compact" href="/nascar/results">
+            <div class="feature-icon">🏁</div>
+            <div class="feature-text">
+                <h3>NASCAR Results</h3>
+                <p>Race Finishes</p>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="dashboard-section px-4 mt-4">
+    <h2 class="section-title">Professional Standings</h2>
+    <div class="dashboard-grid">
+        <a class="feature-card compact" href="/standings/nfl">
+            <div class="feature-icon feature-icon-purple">🏈</div>
+            <div class="feature-text">
+                <h3>NFL Standings</h3>
+                <p>Records & ATS</p>
+            </div>
+        </a>
+        <a class="feature-card compact" href="/standings/nba">
+            <div class="feature-icon feature-icon-green">🏀</div>
+            <div class="feature-text">
+                <h3>NBA Standings</h3>
+                <p>Conference Rank</p>
+            </div>
+        </a>
+        <a class="feature-card compact" href="/standings/nhl">
+            <div class="feature-icon feature-icon-blue">🏒</div>
+            <div class="feature-text">
+                <h3>NHL Standings</h3>
+                <p>League Points</p>
+            </div>
+        </a>
+        <a class="feature-card compact" href="/nascar/standings">
+            <div class="feature-icon">🏆</div>
+            <div class="feature-text">
+                <h3>NASCAR Points</h3>
+                <p>Driver Standings</p>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="dashboard-section px-4 mt-4 mb-4">
+    <h2 class="section-title">Tools & Tracking</h2>
+    <div class="dashboard-grid">
+        <a class="feature-card compact" href="/bet-tracker">
+            <div class="feature-icon" style="background: rgba(255,165,0,0.15); color: #FFA500;">📋</div>
+            <div class="feature-text">
+                <h3>Bet Tracker</h3>
+                <p>Bankroll Logs</p>
+            </div>
+        </a>
+        <a class="feature-card compact" href="/paper-trading">
+            <div class="feature-icon feature-icon-green">💸</div>
+            <div class="feature-text">
+                <h3>Paper Trading</h3>
+                <p>Simulate Bets</p>
+            </div>
+        </a>
+        <a class="feature-card compact" href="/settings">
+            <div class="feature-icon feature-icon-blue">⚙️</div>
+            <div class="feature-text">
+                <h3>Settings</h3>
+                <p>App Config</p>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="dashboard-section px-4 mt-4 mb-8">
+    <h2 class="section-title">Information</h2>
+    <div class="dashboard-grid">
+        <a class="feature-card compact" href="/about">
+            <div class="feature-icon feature-icon-blue">ℹ️</div>
+            <div class="feature-text">
+                <h3>About App</h3>
+                <p>Tech Stack & Licensing</p>
+            </div>
+        </a>
+    </div>
+</div>
+
+<style>
+    .slate-banner {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 0 16px 8px;
+        padding: 14px 16px;
+        background: linear-gradient(135deg, #1e3a8a, #2563eb);
+        border-radius: 12px;
+        text-decoration: none;
+        color: #fff;
+        box-shadow: 0 4px 16px rgba(37, 99, 235, 0.3);
+        transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .slate-banner:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+        color: #fff;
+        text-decoration: none;
+    }
+    .slate-banner-icon {
+        font-size: 28px;
+        flex-shrink: 0;
+    }
+    .slate-banner-text h3 {
+        margin: 0 0 2px;
+        font-size: 16px;
+        font-weight: 800;
+    }
+    .slate-banner-text p {
+        margin: 0;
+        font-size: 12px;
+        opacity: 0.8;
+        line-height: 1.3;
+    }
+    .slate-banner-arrow {
+        margin-left: auto;
+        font-size: 24px;
+        opacity: 0.6;
+        flex-shrink: 0;
+    }
+
+    .dashboard-section {
+        margin-top: 1rem;
+    }
+    .section-title {
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-weight: 700;
+        color: var(--text-muted);
+        margin-bottom: 12px;
+        padding-left: 4px;
+    }
+    .dashboard-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+    /* Overriding feature card for this grid */
+    .feature-card.compact {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 16px;
+        gap: 12px;
+    }
+    .feature-card.compact .feature-text h3 {
+        font-size: 15px;
+        font-weight: 700;
+        margin-bottom: 4px;
+    }
+    .feature-card.compact .feature-text p {
+        font-size: 11px;
+    }
+
+    .home-stats-row {
+        display: flex;
+        justify-content: space-around;
+        margin: 0 16px 12px;
+        padding: 12px 8px;
+        background: var(--surface, #1e1e2e);
+        border: 1px solid var(--border, #2e2e44);
+        border-radius: 10px;
+    }
+    .home-stat {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+    }
+    .home-stat-num {
+        font-size: 20px;
+        font-weight: 800;
+        color: var(--text-primary, #e2e8f0);
+    }
+    .home-stat-num.live {
+        color: #4ade80;
+    }
+    .home-stat-lbl {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-muted, #64748b);
+    }
+</style>
+
+@code {
+    private int _totalGames = 0;
+    private int _liveGames = 0;
+    private int _finalGames = 0;
+    private int _upcomingGames = 0;
+    private int _sportCount = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadGameCounts();
+    }
+
+    private async Task LoadGameCounts()
+    {
+        try
+        {
+            var baseUrl = ServerConfig.GetBaseUrl();
+            var sports = new[] { "nba", "nfl", "nhl", "ncaab" };
+            int total = 0, live = 0, final_ = 0, upcoming = 0, sportsWith = 0;
+
+            var tasks = sports.Select(async sport =>
+            {
+                try
+                {
+                    var json = await Http.GetStringAsync($"{baseUrl}/espn/{sport}");
+                    using var doc = JsonDocument.Parse(json);
+                    if (doc.RootElement.TryGetProperty("games", out var games))
+                    {
+                        var count = games.GetArrayLength();
+                        if (count == 0) return (0, 0, 0, 0);
+                        int l = 0, f = 0, u = 0;
+                        foreach (var g in games.EnumerateArray())
+                        {
+                            var status = g.TryGetProperty("status", out var st) ? st.GetString() ?? "" : "";
+                            if (status.Contains("Final", StringComparison.OrdinalIgnoreCase) || status.Contains("Postponed", StringComparison.OrdinalIgnoreCase))
+                                f++;
+                            else if (status.Contains("In Progress", StringComparison.OrdinalIgnoreCase) || status.Contains("Halftime", StringComparison.OrdinalIgnoreCase) || status.Contains("End of", StringComparison.OrdinalIgnoreCase) || (status.Contains("Quarter", StringComparison.OrdinalIgnoreCase) && !status.Contains("Final")) || (status.Contains("Period", StringComparison.OrdinalIgnoreCase) && !status.Contains("Final")))
+                                l++;
+                            else
+                                u++;
+                        }
+                        return (count, l, f, u);
+                    }
+                }
+                catch { }
+                return (0, 0, 0, 0);
+            }).ToArray();
+
+            var results = await Task.WhenAll(tasks);
+            foreach (var (count, l, f, u) in results)
+            {
+                total += count;
+                live += l;
+                final_ += f;
+                upcoming += u;
+                if (count > 0) sportsWith++;
+            }
+
+            _totalGames = total;
+            _liveGames = live;
+            _finalGames = final_;
+            _upcomingGames = upcoming;
+            _sportCount = sportsWith;
+        }
+        catch { }
+    }
+}

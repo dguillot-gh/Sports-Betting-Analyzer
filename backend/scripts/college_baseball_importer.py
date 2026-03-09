@@ -31,7 +31,7 @@ STATUS_FILE = DATA_DIR / "import_status.json"
 DIVISION_PRIORITY = [1]
 
 # D2 fallback years to try if current year fails
-D2_FALLBACK_YEARS = [2024, 2023]
+D2_FALLBACK_YEARS = [2025, 2024]
 
 
 def get_smart_year() -> int:
@@ -93,8 +93,10 @@ def get_teams(division: int = 1) -> List[Dict]:
 
 
 
-def get_team_player_stats(team_id: str, stat_type: str = "batting", year: int = 2024, division: int = 1) -> List[Dict]:
+def get_team_player_stats(team_id: str, stat_type: str = "batting", year: Optional[int] = None, division: int = 1) -> List[Dict]:
     """Get list of players for a team (Pure Python / GitHub Cache preferred)."""
+    if year is None:
+        year = get_smart_year()
     team_id_str = str(team_id)
     stats_file = DATA_DIR / "stats" / f"{team_id_str}_{stat_type}.csv"
     
@@ -132,8 +134,10 @@ def get_team_stats(team_id: str, stat_type: str = "stats", entity_type: str = "t
     return None
 
 
-def get_team_schedule(team_id, year: int = 2024) -> List[Dict]:
+def get_team_schedule(team_id, year: Optional[int] = None) -> List[Dict]:
     """Schedules are no longer supported in the simplified pure-Python engine."""
+    if year is None:
+        year = get_smart_year()
     return []
 
 
@@ -226,7 +230,7 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
                 
                 # Normalize columns for matching
                 df_all.columns = [c.lower().strip() for c in df_all.columns]
-                target_col = 'team' if 'team' in df_all.columns else ('team name' if 'team name' in df_all.columns else 'team_name')
+                target_col = 'team name' if 'team name' in df_all.columns else ('team_name' if 'team_name' in df_all.columns else 'team')
                 
                 # Match teams
                 match_count = 0
@@ -237,24 +241,57 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
                     # Normalization logic
                     def clean(s): return re.sub(r'[^a-z0-9]', '', str(s).lower())
                     
+                    # Abbreviation expansion for matching
+                    def expand_abbrevs(s):
+                        """Expand common NCAA abbreviations to full words."""
+                        s = re.sub(r'\bSt\.\s', 'State ', s)
+                        s = re.sub(r'\bSt\.\s*$', 'State', s)
+                        s = re.sub(r'\bKy\.\s', 'Kentucky ', s)
+                        s = re.sub(r'\bKy\.\s*$', 'Kentucky', s)
+                        s = re.sub(r'\bIll\.\s', 'Illinois ', s)
+                        s = re.sub(r'\bIll\.\s*$', 'Illinois', s)
+                        s = re.sub(r'\bMo\.\s', 'Missouri ', s)
+                        s = re.sub(r'\bMo\.\s*$', 'Missouri', s)
+                        s = re.sub(r'\bLa\.\s', 'Louisiana ', s)
+                        s = re.sub(r'\bLa\.\s*$', 'Louisiana', s)
+                        s = re.sub(r'\bFla\.\s', 'Florida ', s)
+                        s = re.sub(r'\bFla\.\s*$', 'Florida', s)
+                        s = re.sub(r'\bMiss\.\s', 'Mississippi ', s)
+                        s = re.sub(r'\bMiss\.\s*$', 'Mississippi', s)
+                        s = re.sub(r'\bArk\.\s', 'Arkansas ', s)
+                        s = re.sub(r'\bArk\.\s*$', 'Arkansas', s)
+                        s = re.sub(r'\bConn\.\s', 'Connecticut ', s)
+                        s = re.sub(r'\bConn\.\s*$', 'Connecticut', s)
+                        s = re.sub(r'\bSo\.\s', 'Southern ', s)
+                        s = re.sub(r'\bSo\.\s*$', 'Southern', s)
+                        return s
+                    
                     # Match candidates:
                     # 1. Direct mapping from source-of-truth CSV
                     # 2. Cleaning heuristics (Conference suffix removal)
-                    # 3. Robust normalized match
+                    # 3. Expanded abbreviations
+                    # 4. Robust normalized match
                     
                     mapped_name = TEAM_NAME_MAPPINGS.get(n_name, n_name)
                     cleaned_name = re.sub(r'\s*\(.*?\)', '', mapped_name).strip()
+                    expanded_name = expand_abbrevs(cleaned_name)
                     
                     m_norm = clean(mapped_name)
                     c_norm = clean(cleaned_name)
                     n_norm = clean(n_name)
+                    e_norm = clean(expanded_name)
                     
                     mask = (df_all[target_col].apply(clean) == m_norm) | \
                            (df_all[target_col].apply(clean) == c_norm) | \
-                           (df_all[target_col].apply(clean) == n_norm)
+                           (df_all[target_col].apply(clean) == n_norm) | \
+                           (df_all[target_col].apply(clean) == e_norm)
                     
                     if not any(mask):
-                        # Final straw: Substring match for short names
+                        # Substring match with expanded name
+                        mask = df_all[target_col].str.contains(expanded_name, case=False, na=False, regex=False)
+                    
+                    if not any(mask):
+                        # Final straw: Substring match with original cleaned name
                         mask = df_all[target_col].str.contains(cleaned_name, case=False, na=False, regex=False)
                     
                     team_df = df_all[mask]
@@ -440,7 +477,7 @@ async def sync_to_postgresql(import_results: Dict):
             # Stats row
             stats = get_team_stats(team_id, entity_type="team")
             if stats:
-                season = stats.get("season", 2024)
+                season = stats.get("season", get_smart_year())
                 await conn.execute(
                     """INSERT INTO stats (entity_id, season, stat_type, stats)
                        VALUES ($1, $2, 'season_summary', $3)
@@ -473,7 +510,7 @@ async def sync_to_postgresql(import_results: Dict):
                             sport_id, p_name, s.get("team"), json.dumps(p_meta), p_hash
                         )
                         
-                        season = s.get("season", 2024)
+                        season = s.get("season", get_smart_year())
                         await conn.execute(
                             """INSERT INTO stats (entity_id, season, stat_type, stats)
                                VALUES ($1, $2, 'season_summary', $3)
@@ -499,7 +536,7 @@ LSU_TEAM_ID = 365
 if __name__ == "__main__":
     async def test():
         # Test import D1 teams
-        result = await run_college_baseball_import(division=1, year=2025)
+        result = await run_college_baseball_import(division=1, year=get_smart_year())
         print(json.dumps(result, indent=2))
     
     asyncio.run(test())

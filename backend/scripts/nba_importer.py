@@ -90,7 +90,7 @@ async def import_via_sportsdataverse_api(conn, sport_id: int, progress_callback=
     
     try:
         # Load player boxscores for recent seasons
-        years_to_load = [2023, 2024, 2025]
+        years_to_load = [2023, 2024, 2025, 2026]
         
         for year in years_to_load:
             try:
@@ -234,7 +234,7 @@ async def import_season_stats_via_basketball_reference(conn, sport_id: int, play
     stats_computed = 0
     
     # Years to import from Basketball Reference
-    years_to_import = [2021, 2022, 2023, 2024, 2025]
+    years_to_import = [2021, 2022, 2023, 2024, 2025, 2026]
     
     for year in years_to_import:
         try:
@@ -1108,7 +1108,7 @@ async def import_game_logs_via_nba_api(conn, sport_id: int, progress_callback=No
     
     try:
         # Load game logs by season
-        seasons = ["2023-24", "2024-25"]
+        seasons = ["2023-24", "2024-25", "2025-26"]
         
         all_logs = []
         for season in seasons:

@@ -1,0 +1,329 @@
+@using System.Net.Http.Json
+@using System.Text.Json.Serialization
+@inject HttpClient Http
+@inject SportsBettingAnalyzer.Shared.Services.IServerConfigService ServerConfig
+
+<div class="standings-container">
+    <div class="standings-header" style="background: @GetSportGradient()">
+        <div class="header-main">
+            <h3>@Sport.ToUpper() Standings</h3>
+            <span class="season-badge">@Season</span>
+        </div>
+        <p class="header-sub">@GetSportDescription()</p>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="standings-loading">
+            <div class="spinner"></div>
+            <span>Calculating records...</span>
+        </div>
+    }
+    else if (_error != null)
+    {
+        <div class="standings-error">
+            <i class="bi bi-exclamation-triangle"></i>
+            <span>@_error</span>
+            <button class="retry-btn" @onclick="LoadStandings">Retry</button>
+        </div>
+    }
+    else if (_standings.Any())
+    {
+        <div class="table-responsive">
+            <table class="standings-table">
+                <thead>
+                    <tr>
+                        <th class="col-team">TEAM</th>
+                        <th class="col-center">REC</th>
+                        <th class="col-center">PCT</th>
+                        @if (Sport == "nhl")
+                        {
+                            <th class="col-center highlighted">PTS</th>
+                        }
+                        <th class="col-center">DIFF</th>
+                        <th class="col-center">ATS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var entry in _standings)
+                    {
+                        <tr>
+                            <td class="col-team">
+                                <span class="team-name">@entry.Team</span>
+                            </td>
+                            <td class="col-center record">@entry.Record</td>
+                            <td class="col-center pct">@entry.WinPct.ToString("F3").TrimStart('0')</td>
+                            @if (Sport == "nhl")
+                            {
+                                <td class="col-center points highlighted">@entry.Points</td>
+                            }
+                            <td class="col-center diff @(entry.Diff >= 0 ? "pos" : "neg")">
+                                @(entry.Diff > 0 ? "+" : "")@entry.Diff
+                            </td>
+                            <td class="col-center ats">
+                                <span class="ats-val">@entry.AtsRecord</span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="standings-footer">
+            <span>ATS: Against The Spread</span>
+            <span class="update-time">LATEST DATA</span>
+        </div>
+    }
+    else
+    {
+        <div class="standings-empty">
+            <p>No standings data available for @Sport.ToUpper().</p>
+            <p class="empty-hint">Game data may not have been imported yet for this sport.</p>
+        </div>
+    }
+</div>
+
+<style>
+    .standings-container {
+        background: var(--surface);
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border);
+        overflow: hidden;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+
+    .standings-header {
+        padding: 16px;
+        color: white;
+    }
+
+    .header-main {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 4px;
+    }
+
+    .standings-header h3 {
+        margin: 0;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        font-size: 1.25rem;
+    }
+
+    .season-badge {
+        background: rgba(255,255,255,0.2);
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 700;
+    }
+
+    .header-sub {
+        margin: 0;
+        font-size: 0.8rem;
+        opacity: 0.9;
+    }
+
+    .standings-loading, .standings-empty, .standings-error {
+        padding: 40px 20px;
+        text-align: center;
+        color: var(--text-secondary);
+    }
+
+    .empty-hint {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        margin-top: 4px;
+    }
+
+    .spinner {
+        width: 30px;
+        height: 30px;
+        border: 3px solid var(--border);
+        border-top-color: #3b82f6;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 12px;
+    }
+
+    @@keyframes spin { to { transform: rotate(360deg); } }
+
+    .table-responsive {
+        overflow-x: auto;
+    }
+
+    .standings-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+    }
+
+    .standings-table th {
+        background: var(--surface-raised);
+        padding: 10px 12px;
+        text-align: left;
+        font-size: 0.7rem;
+        font-weight: 700;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .standings-table td {
+        padding: 12px;
+        border-bottom: 1px solid var(--border-light);
+    }
+
+    .col-center { text-align: center !important; }
+    
+    .col-team { font-weight: 700; color: var(--text-primary); }
+    
+    .record { font-family: 'SF Mono', Consolas, monospace; font-weight: 600; }
+    
+    .pct { color: var(--text-secondary); }
+    
+    .highlighted { background: rgba(59, 130, 246, 0.05); }
+    .points { font-weight: 800; color: #3b82f6; font-size: 1rem; }
+    
+    .diff { font-weight: 600; font-size: 0.8rem; }
+    .diff.pos { color: var(--success); }
+    .diff.neg { color: var(--error); }
+    
+    .ats { font-size: 0.75rem; }
+    .ats-val { 
+        background: var(--surface-overlay); 
+        padding: 2px 6px; 
+        border-radius: 4px;
+        color: var(--text-muted);
+    }
+
+    .standings-footer {
+        padding: 10px 16px;
+        background: var(--surface-raised);
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.65rem;
+        color: var(--text-muted);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .retry-btn {
+        display: block;
+        margin: 12px auto 0;
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 6px 16px;
+        border-radius: 4px;
+        font-weight: 600;
+    }
+</style>
+
+@code {
+    [Parameter] public string Sport { get; set; } = "nfl";
+    [Parameter] public int? Season { get; set; }
+
+    private List<StandingsEntry> _standings = new();
+    private bool _isLoading = true;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadStandings();
+    }
+
+    private async Task LoadStandings()
+    {
+        _isLoading = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            var baseUrl = ServerConfig.GetBaseUrl();
+            var url = $"{baseUrl}/db/standings/{Sport}";
+            if (Season.HasValue) url += $"?season={Season.Value}";
+
+            var response = await Http.GetFromJsonAsync<StandingsResponse>(url);
+            if (response?.Standings != null)
+            {
+                _standings = response.Standings;
+                if (Season == null) Season = response.Season;
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = "Failed to load standings. Make sure the backend is running.";
+            Console.WriteLine($"Standings Error: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetSportGradient()
+    {
+        return Sport.ToLower() switch
+        {
+            "nfl" => "linear-gradient(135deg, #013369, #d50a0a)",
+            "nba" => "linear-gradient(135deg, #1d428a, #c8102e)",
+            "nhl" => "linear-gradient(135deg, #000000, #a2aaad)",
+            _ => "linear-gradient(135deg, #444, #222)"
+        };
+    }
+
+    private string GetSportDescription()
+    {
+        return Sport.ToLower() switch
+        {
+            "nfl" => "W-L-T Record & ATS Trends",
+            "nba" => "Full Season Conference Records",
+            "nhl" => "Points-based League Standings",
+            _ => "League Standings"
+        };
+    }
+
+    public class StandingsResponse
+    {
+        [JsonPropertyName("sport")]
+        public string Sport { get; set; } = "";
+        [JsonPropertyName("season")]
+        public int Season { get; set; }
+        [JsonPropertyName("standings")]
+        public List<StandingsEntry> Standings { get; set; } = new();
+    }
+
+    public class StandingsEntry
+    {
+        [JsonPropertyName("team")]
+        public string Team { get; set; } = "";
+        [JsonPropertyName("wins")]
+        public int Wins { get; set; }
+        [JsonPropertyName("losses")]
+        public int Losses { get; set; }
+        [JsonPropertyName("ties")]
+        public int Ties { get; set; }
+        [JsonPropertyName("ot_losses")]
+        public int OtLosses { get; set; }
+        [JsonPropertyName("win_pct")]
+        public double WinPct { get; set; }
+        [JsonPropertyName("record")]
+        public string Record { get; set; } = "";
+        [JsonPropertyName("points")]
+        public int Points { get; set; }
+        [JsonPropertyName("points_for")]
+        public int PointsFor { get; set; }
+        [JsonPropertyName("points_against")]
+        public int PointsAgainst { get; set; }
+        public int Diff => PointsFor - PointsAgainst;
+        [JsonPropertyName("ats_record")]
+        public string AtsRecord { get; set; } = "0-0-0";
+    }
+}

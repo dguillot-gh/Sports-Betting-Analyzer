@@ -1,6 +1,6 @@
 name: nascar
 data:
-  results_file: cup_enhanced.csv
+  results_file: cup_series.parquet
 features:
   categorical:
     - driver

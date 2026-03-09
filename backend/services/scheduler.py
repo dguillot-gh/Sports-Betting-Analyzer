@@ -19,7 +19,7 @@ from services.notifications import NotificationService
 #Script imports
 from scripts.ncaab_importer import import_ncaab_data
 from scripts.migrate_data import run_migration
-from scripts.rda_importer import import_nascar_rda
+from scripts.nascar_parquet_importer import run_import as import_nascar_parquet
 from scripts.college_baseball_importer import run_college_baseball_import
 
 logger = logging.getLogger(__name__)
@@ -134,6 +134,14 @@ class SchedulerService:
             # --- 6. NHL ---
             res_nhl = await cls._run_job_wrapper("nhl", cls._import_nhl_task)
             results.append(res_nhl)
+
+            # --- 7. College Baseball Game Results (ESPN) ---
+            res_bb_results = await cls._run_job_wrapper("baseball_results", cls._scrape_baseball_results_task)
+            results.append(res_bb_results)
+
+            # --- 8. College Baseball Model Retraining ---
+            res_bb_train = await cls._run_job_wrapper("baseball_training", cls._retrain_baseball_models_task)
+            results.append(res_bb_train)
             
             # --- Send Notification ---
             await NotificationService.send_summary_report(results)
@@ -274,37 +282,13 @@ class SchedulerService:
 
     @staticmethod
     async def _import_nascar_task():
-        """Worker for NASCAR (RDA 2012-Current).
+        """Worker for NASCAR (Parquet 2026+).
         
-        Step 1: Sync .rda files from GitHub (kyleGrealis/nascaR.data)
-        Step 2: Import the synced .rda files into the database
+        Fetches latest race results directly from Cloudflare R2 Parquet sources.
+        Replacing the outdated .rda sync.
         """
-        from pathlib import Path
-        from src.data_sources import NASCARDataUpdater
-        
-        current_year = datetime.now().year
-        
-        # Step 1: Sync latest .rda files from GitHub
-        try:
-            nascar_data_dir = Path(__file__).resolve().parent.parent / 'data' / 'nascar' / 'raw'
-            updater = NASCARDataUpdater(nascar_data_dir)
-            sync_result = updater.update()
-            if sync_result.get("success"):
-                logger.info(f"NASCAR GitHub sync successful: {sync_result.get('files', [])}")
-            else:
-                logger.warning(f"NASCAR GitHub sync had errors: {sync_result.get('errors', [])}")
-        except Exception as e:
-            logger.warning(f"NASCAR GitHub sync failed (continuing with local files): {e}")
-        
-        # Step 2: Import from .rda files into database
-        res = await import_nascar_rda(year_start=2012, year_end=current_year)
-        
-        # Calculate rows
-        rows = 0
-        if res.get("series_results"):
-             rows = sum(r.get('results_imported', 0) for r in res['series_results'])
-             
-        return {"rows": rows}
+        rows = await import_nascar_parquet()
+        return {"rows": rows or 0}
 
     @staticmethod
     async def _import_baseball_task():
@@ -319,6 +303,27 @@ class SchedulerService:
              raise Exception("College Baseball import failed: All sources failed")
              
         return {"rows": rows}
+
+    @staticmethod
+    async def _scrape_baseball_results_task():
+        """Worker for College Baseball game results scraping (ESPN)."""
+        from scripts.college_baseball_results_scraper import fetch_college_baseball_scores, store_game_results
+        games = await fetch_college_baseball_scores(days_back=2)
+        inserted = await store_game_results(games)
+        return {
+            "rows": inserted,
+            "games_fetched": len(games),
+            "games_inserted": inserted,
+            "game_details": games[:20],  # Include up to 20 games for email report
+        }
+
+    @staticmethod
+    async def _retrain_baseball_models_task():
+        """Worker for retraining College Baseball XGBoost models."""
+        from scripts.college_baseball_xgb_trainer import CollegeBaseballXGBTrainer
+        trainer = CollegeBaseballXGBTrainer()
+        trainer.train_from_csvs()
+        return {"rows": 0, "detail": "Stat-based models retrained"}
 
     @staticmethod
     async def _import_nhl_task():

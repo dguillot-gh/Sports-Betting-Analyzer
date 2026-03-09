@@ -1,0 +1,379 @@
+@page "/odds/ncaab"
+@inject HttpClient Http
+@using System.Text.Json
+
+<div class="app-card">
+    <div class="app-card-header">
+        <h2>&#127936; Live NCAAB Odds</h2>
+        <p>Real-time lines from FanDuel</p>
+    </div>
+
+    <div class="app-card-body">
+        <button class="app-btn app-btn-primary" @onclick="LoadOdds" disabled="@isLoading">
+            @if (isLoading)
+            {
+                <span class="spinner"></span>
+                <span>Loading...</span>
+            }
+            else
+            {
+                <span>&#8635;</span>
+                <span>@(games.Count > 0 ? "Refresh Odds" : "Load Today's Odds")</span>
+            }
+        </button>
+
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="app-alert app-alert-error">@errorMessage</div>
+        }
+
+        @if (!string.IsNullOrEmpty(oddsDate) && games.Count > 0)
+        {
+            <div class="odds-meta">
+                <span>&#128197; @oddsDate</span>
+                <span>@games.Count games</span>
+            </div>
+        }
+
+        @if (games.Count > 0)
+        {
+            <div class="odds-list">
+                @foreach (var game in games)
+                {
+                    var gameId = $"{game.AwayTeam}-{game.HomeTeam}";
+                    var isExpanded = expandedGameId == gameId;
+
+                    <div class="game-card @(isExpanded ? "expanded" : "")" @onclick="() => ToggleGamePrediction(game)">
+                        <div class="game-status">
+                            <span>@FormatStatus(game.Status)</span>
+                            @if (game.HasValue)
+                            {
+                                <span style="color:var(--success); font-weight:bold; font-size:10px;">★ VALUE</span>
+                            }
+                            @if (!isExpanded)
+                            {
+                                <span class="expand-hint">Tap to predict</span>
+                            }
+                        </div>
+
+                        <div class="game-matchup">
+                            <div class="team-row">
+                                <span class="team-name">@game.AwayTeam</span>
+                                <span class="team-ml @(game.AwayMoneyline > 0 ? "ml-positive" : "ml-negative")">
+                                    @FormatML(game.AwayMoneyline)
+                                </span>
+                            </div>
+                            <div class="team-separator">at</div>
+                            <div class="team-row">
+                                <span class="team-name">@game.HomeTeam</span>
+                                <span class="team-ml @(game.HomeMoneyline > 0 ? "ml-positive" : "ml-negative")">
+                                    @FormatML(game.HomeMoneyline)
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="game-lines">
+                            <div class="line-item">
+                                <span class="line-label">Spread</span>
+                                <span class="line-value">@FormatSpread(game.Spread)</span>
+                            </div>
+                            <div class="line-divider"></div>
+                            <div class="line-item">
+                                <span class="line-label">O/U</span>
+                                <span class="line-value">@game.OverUnder</span>
+                            </div>
+                        </div>
+
+                        @if (game.HomeScore > 0 || game.AwayScore > 0)
+                        {
+                            <div class="game-score">
+                                <span>@game.AwayScore</span>
+                                <span class="score-dash">-</span>
+                                <span>@game.HomeScore</span>
+                            </div>
+                        }
+
+                        @if (isExpanded)
+                        {
+                            <div class="prediction-section" @onclick:stopPropagation="true">
+                                @if (currentPrediction != null)
+                                {
+                                    <div class="prediction-ml-boxes">
+                                        <div class="ml-box">
+                                            <div class="ml-label">AWAY ML</div>
+                                            <div class="ml-val">@FormatML(game.AwayMoneyline)</div>
+                                        </div>
+                                        <div class="ml-box">
+                                            <div class="ml-label">HOME ML</div>
+                                            <div class="ml-val">@FormatML(game.HomeMoneyline)</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="prediction-table">
+                                        <div class="pt-header">
+                                            <div class="pt-col-label">METRIC</div>
+                                            <div class="pt-col-val">BASE</div>
+                                            <div class="pt-col-val">XGB v2</div>
+                                        </div>
+                                        
+                                        <!-- Win % -->
+                                        <div class="pt-row">
+                                            <div class="pt-col-label">Win % (Home)</div>
+                                            <div class="pt-col-val val-blue">@(FormatPct(currentPrediction.HomeWinProb))</div>
+                                            <div class="pt-col-val val-blue">
+                                                @if (currentPrediction.V2Available) 
+                                                { 
+                                                    @FormatPct(currentPrediction.V2WinProb) 
+                                                } 
+                                                else 
+                                                { 
+                                                    <span>—</span> 
+                                                }
+                                            </div>
+                                        </div>
+
+                                        <!-- Pick -->
+                                        <div class="pt-row">
+                                            <div class="pt-col-label">Predicted Winner</div>
+                                            <div class="pt-col-val val-green">
+                                                @(currentPrediction.PredictedWinner ?? "—")
+                                            </div>
+                                            <div class="pt-col-val val-green">
+                                                —
+                                            </div>
+                                        </div>
+
+                                        <!-- O/U Line -->
+                                        <div class="pt-row">
+                                            <div class="pt-col-label">Predicted Total</div>
+                                            <div class="pt-col-val">
+                                                @(currentPrediction.PredictedTotal.HasValue == true ? $"{currentPrediction.PredictedTotal:F1}" : "—")
+                                            </div>
+                                            <div class="pt-col-val">
+                                                @(currentPrediction.V2Available ? $"{currentPrediction.V2Total:F1}" : "—")
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    @if (game.HasValue)
+                                    {
+                                        <div class="signal-banner">
+                                            &#10003; EDGE DETECTED
+                                        </div>
+                                    }
+                                }
+                                else if (predictionError != null)
+                                {
+                                    <div class="app-alert app-alert-error">@predictionError</div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+        else if (!isLoading && hasLoaded)
+        {
+            <div class="app-alert app-alert-error" style="margin-top: 16px;">
+                No NCAAB games found for today.
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .odds-meta { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; margin-top: 16px; font-size: 12px; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+    .odds-list { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+    .game-card { background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; transition: border-color 0.15s ease, box-shadow 0.15s ease; cursor: pointer; }
+    .game-card:hover { border-color: var(--border-light); }
+    .game-card.expanded { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+    .game-status { display: flex; justify-content: space-between; font-size: 11px; font-weight: 600; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+    .expand-hint { color: var(--text-muted); font-weight: 500; text-transform: none; letter-spacing: normal; }
+    .game-matchup { margin-bottom: 12px; }
+    .team-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
+    .team-name { font-weight: 700; font-size: 15px; color: var(--text-primary); }
+    .team-ml { font-weight: 700; font-size: 14px; font-family: 'SF Mono', 'Consolas', monospace; }
+    .ml-positive { color: var(--success); }
+    .ml-negative { color: var(--danger); }
+    .team-separator { text-align: center; font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 2px; padding: 2px 0; }
+    .game-lines { display: flex; align-items: center; background: var(--surface-overlay); border-radius: 6px; padding: 8px 12px; }
+    .line-item { flex: 1; text-align: center; }
+    .line-label { display: block; font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+    .line-value { font-weight: 700; font-size: 15px; color: var(--text-primary); }
+    .line-divider { width: 1px; height: 28px; background: var(--border); margin: 0 8px; }
+    .game-score { display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 20px; font-weight: 800; color: var(--primary); }
+    .score-dash { color: var(--text-muted); font-weight: 400; }
+    .prediction-section { margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--border-light); animation: slideDown 0.3s ease-out forwards; }
+    .prediction-ml-boxes { display: flex; gap: 8px; margin-bottom: 16px; }
+    .ml-box { flex: 1; background: transparent; border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 10px; text-align: center; }
+    .ml-box .ml-label { font-size: 10px; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 4px; }
+    .ml-box .ml-val { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+    .prediction-table { background: var(--surface-overlay); border-radius: var(--radius-sm); border: 1px solid var(--border); overflow: hidden; }
+    .pt-header { display: flex; padding: 10px 12px; background: transparent; border-bottom: 1px solid var(--border); font-size: 11px; font-weight: 700; color: var(--text-muted); letter-spacing: 1px; }
+    .pt-row { display: flex; padding: 12px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 600; align-items: center; }
+    .pt-row:last-child { border-bottom: none; }
+    .pt-col-label { flex: 2; color: var(--text-secondary); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+    .pt-col-val { flex: 1; text-align: right; color: var(--text-primary); }
+    .val-blue { color: #38bdf8; }
+    .val-green { color: var(--success); }
+    .val-pos { color: var(--success); }
+    .val-neg { color: var(--danger); }
+    .signal-banner { margin-top: 16px; background: var(--success-bg); border: 1px solid var(--success-border); color: var(--success); padding: 10px; border-radius: 20px; text-align: center; font-size: 11px; font-weight: 800; letter-spacing: 1px; }
+    @@keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+
+@code {
+    private bool isLoading = false;
+    private bool hasLoaded = false;
+    private string? errorMessage;
+    private string? oddsDate;
+    private List<NcaabGame> games = new();
+
+    private string? expandedGameId;
+    private PredictionInfo? currentPrediction;
+    private string? predictionError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOdds();
+    }
+
+    private async Task LoadOdds()
+    {
+        isLoading = true;
+        errorMessage = null;
+        expandedGameId = null;
+        StateHasChanged();
+
+        try
+        {
+            var url = "odds/ncaab/analyze-all?sportsbook=fanduel";
+            var response = await Http.PostAsync(url, null);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                var doc = JsonDocument.Parse(content);
+                var root = doc.RootElement;
+
+                oddsDate = DateTime.Today.ToShortDateString();
+                games.Clear();
+
+                if (root.TryGetProperty("games", out var gamesArr))
+                {
+                    foreach (var g in gamesArr.EnumerateArray())
+                    {
+                        var newGame = new NcaabGame
+                        {
+                            HomeTeam = g.TryGetProperty("home_team", out var ht) ? (ht.GetString() ?? "") : "",
+                            AwayTeam = g.TryGetProperty("away_team", out var at) ? (at.GetString() ?? "") : "",
+                            HomeScore = g.TryGetProperty("home_score", out var hs) && hs.ValueKind != JsonValueKind.Null ? hs.GetInt32() : 0,
+                            AwayScore = g.TryGetProperty("away_score", out var as_sc) && as_sc.ValueKind != JsonValueKind.Null ? as_sc.GetInt32() : 0,
+                            Status = g.TryGetProperty("status", out var st) && st.ValueKind != JsonValueKind.Null ? st.GetString() ?? "" : "",
+                            OverUnder = g.TryGetProperty("over_under", out var ou) && ou.ValueKind != JsonValueKind.Null ? ou.GetDouble() : 0,
+                            Spread = g.TryGetProperty("spread", out var sp) && sp.ValueKind != JsonValueKind.Null ? sp.GetDouble() : 0,
+                            HomeMoneyline = g.TryGetProperty("home_moneyline", out var hml) && hml.ValueKind != JsonValueKind.Null ? hml.GetInt32() : 0,
+                            AwayMoneyline = g.TryGetProperty("away_moneyline", out var aml) && aml.ValueKind != JsonValueKind.Null ? aml.GetInt32() : 0,
+                            HasValue = g.TryGetProperty("has_value", out var hv) && hv.ValueKind != JsonValueKind.Null && hv.GetBoolean()
+                        };
+
+                        if (g.TryGetProperty("prediction", out var pred) && pred.ValueKind != JsonValueKind.Null)
+                        {
+                            newGame.Prediction = ParsePredictionInfo(pred);
+                        }
+
+                        games.Add(newGame);
+                    }
+                }
+            }
+            else
+            {
+                errorMessage = $"Server returned {response.StatusCode}";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Error connecting to backend: " + ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+            hasLoaded = true;
+            StateHasChanged();
+        }
+    }
+
+    private void ToggleGamePrediction(NcaabGame game)
+    {
+        var gameId = $"{game.AwayTeam}-{game.HomeTeam}";
+        if (expandedGameId == gameId)
+        {
+            expandedGameId = null;
+            return;
+        }
+
+        expandedGameId = gameId;
+        currentPrediction = game.Prediction;
+        predictionError = null;
+        StateHasChanged();
+    }
+
+    private PredictionInfo ParsePredictionInfo(JsonElement el)
+    {
+        return new PredictionInfo
+        {
+            HomeWinProb = el.TryGetProperty("home_win_probability", out var hw) && hw.ValueKind != JsonValueKind.Null ? hw.GetDouble() : null,
+            PredictedWinner = el.TryGetProperty("predicted_winner", out var pw) && pw.ValueKind != JsonValueKind.Null ? pw.GetString() : null,
+            PredictedTotal = el.TryGetProperty("predicted_total", out var pt) && pt.ValueKind != JsonValueKind.Null ? pt.GetDouble() : null,
+            V2Available = el.TryGetProperty("v2_available", out var v2a) && v2a.ValueKind != JsonValueKind.Null && v2a.GetBoolean(),
+            V2WinProb = el.TryGetProperty("v2_win_prob", out var v2w) && v2w.ValueKind != JsonValueKind.Null ? v2w.GetDouble() : null,
+            V2Total = el.TryGetProperty("v2_total", out var v2t) && v2t.ValueKind != JsonValueKind.Null ? v2t.GetDouble() : null,
+        };
+    }
+
+    private string FormatML(int ml) => ml > 0 ? $"+{ml}" : ml.ToString();
+    private string FormatSpread(double spread) => spread > 0 ? $"+{spread}" : spread.ToString();
+    private string FormatPct(double? prob) => prob.HasValue ? $"{(prob.Value * 100):F1}%" : "—";
+    private bool IsPositive(double? val) => val.HasValue && val.Value > 0;
+
+    private string FormatStatus(string status)
+    {
+        if (string.IsNullOrEmpty(status)) return "";
+        if (status.Contains(" ET", StringComparison.OrdinalIgnoreCase))
+        {
+            var timePart = status.Replace(" ET", "", StringComparison.OrdinalIgnoreCase).Trim();
+            if (TimeSpan.TryParse(timePart, out var time))
+            {
+                var cstTime = time.Subtract(TimeSpan.FromHours(1));
+                if (cstTime.Ticks < 0) cstTime = cstTime.Add(TimeSpan.FromHours(24));
+                return DateTime.Today.Add(cstTime).ToString("h:mm tt") + " CST";
+            }
+        }
+        return status;
+    }
+
+    private class NcaabGame
+    {
+        public string HomeTeam { get; set; } = "";
+        public string AwayTeam { get; set; } = "";
+        public int HomeScore { get; set; }
+        public int AwayScore { get; set; }
+        public string Status { get; set; } = "";
+        public double OverUnder { get; set; }
+        public double Spread { get; set; }
+        public int HomeMoneyline { get; set; }
+        public int AwayMoneyline { get; set; }
+        public bool HasValue { get; set; }
+        public PredictionInfo? Prediction { get; set; }
+    }
+
+    private class PredictionInfo
+    {
+        public double? HomeWinProb { get; set; }
+        public string? PredictedWinner { get; set; }
+        public double? PredictedTotal { get; set; }
+        public bool V2Available { get; set; }
+        public double? V2WinProb { get; set; }
+        public double? V2Total { get; set; }
+    }
+}

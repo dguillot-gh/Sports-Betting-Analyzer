@@ -1,0 +1,209 @@
+@page "/predict/nba"
+@inject HttpClient Http
+@using System.Net.Http.Json
+@using System.Text.Json
+
+<div class="app-card">
+    <!-- Header -->
+    <div class="app-card-header">
+        <h2>NBA AI Predictor</h2>
+        <p>Machine Learning Powered Analysis</p>
+    </div>
+
+    <div class="app-card-body">
+        <!-- Team Selection -->
+        <div style="margin-bottom: 12px;">
+            <label class="app-label">Home Team</label>
+            <select class="app-select" @bind="homeTeam">
+                <option value="">Select home team...</option>
+                @foreach (var team in nbaTeams)
+                {
+                    <option value="@team">@team</option>
+                }
+            </select>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+            <label class="app-label">Away Team</label>
+            <select class="app-select" @bind="awayTeam">
+                <option value="">Select away team...</option>
+                @foreach (var team in nbaTeams)
+                {
+                    <option value="@team">@team</option>
+                }
+            </select>
+        </div>
+
+        <button class="app-btn app-btn-primary" @onclick="FetchPrediction" 
+                disabled="@(isFetching || string.IsNullOrEmpty(homeTeam) || string.IsNullOrEmpty(awayTeam))">
+            @if (isFetching)
+            {
+                <span class="spinner"></span>
+                <span>Analyzing...</span>
+            }
+            else
+            {
+                <span>&#9889;</span>
+                <span>Predict Outcome</span>
+            }
+        </button>
+
+        <!-- Error -->
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="app-alert app-alert-error">@errorMessage</div>
+        }
+
+        <!-- Results -->
+        @if (result != null && !isFetching)
+        {
+            <div class="result-section">
+                <h3>AI Prediction</h3>
+
+                <div class="result-card">
+                    <!-- Winner -->
+                    <div class="result-winner-block">
+                        <div class="result-winner-label">Predicted Winner</div>
+                        <div class="result-winner-name">@result.PredictedWinner</div>
+                    </div>
+
+                    <!-- Win Probabilities -->
+                    <div class="result-row">
+                        <span class="result-label">@result.HomeTeam Win%</span>
+                        <span class="result-label" style="font-weight:700; color: var(--text-primary);">@((result.HomeWinProb * 100).ToString("F1"))%</span>
+                    </div>
+                    <div class="progress-track">
+                        <div class="progress-fill" style="width: @((result.HomeWinProb * 100).ToString("F0"))%"></div>
+                    </div>
+
+                    <div class="result-row" style="margin-top: 4px;">
+                        <span class="result-label">@result.AwayTeam Win%</span>
+                        <span class="result-label" style="font-weight:700; color: var(--text-primary);">@((result.AwayWinProb * 100).ToString("F1"))%</span>
+                    </div>
+                    <div class="progress-track">
+                        <div class="progress-fill" style="width: @((result.AwayWinProb * 100).ToString("F0"))%"></div>
+                    </div>
+
+                    <!-- Details -->
+                    <div style="margin-top: 16px;">
+                        <div class="result-row">
+                            <span class="result-label">Predicted Margin</span>
+                            <span class="result-badge">@result.PredictedMargin.ToString("F1") pts</span>
+                        </div>
+                        <div class="result-row">
+                            <span class="result-label">Predicted Total</span>
+                            <span class="result-badge">@result.PredictedTotal.ToString("F0")</span>
+                        </div>
+                        <div class="result-row">
+                            <span class="result-label">Expected Score</span>
+                            <span class="result-badge">@result.HomeExpectedPts.ToString("F0") - @result.AwayExpectedPts.ToString("F0")</span>
+                        </div>
+                        <div class="result-row">
+                            <span class="result-label">Confidence</span>
+                            <span class="confidence-badge">@result.ConfidenceLevel</span>
+                        </div>
+                        <div class="result-row">
+                            <span class="result-label">Model</span>
+                            <span class="result-badge">@result.Model</span>
+                        </div>
+                    </div>
+
+                    @if (result.HasValue)
+                    {
+                        <div class="app-alert app-alert-success" style="margin-top: 12px;">
+                            &#128176; Value bet detected!
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private string homeTeam = "";
+    private string awayTeam = "";
+    private bool isFetching = false;
+    private PredictionResult? result;
+    private string? errorMessage;
+
+    private readonly string[] nbaTeams = new[]
+    {
+        "76ers", "Bucks", "Bulls", "Cavaliers", "Celtics",
+        "Clippers", "Grizzlies", "Hawks", "Heat", "Hornets",
+        "Jazz", "Kings", "Knicks", "Lakers", "Magic",
+        "Mavericks", "Nets", "Nuggets", "Pacers", "Pelicans",
+        "Pistons", "Raptors", "Rockets", "Spurs", "Suns",
+        "Thunder", "Timberwolves", "Trail Blazers", "Warriors", "Wizards"
+    };
+
+    private async Task FetchPrediction()
+    {
+        isFetching = true;
+        errorMessage = null;
+        result = null;
+        StateHasChanged();
+
+        try
+        {
+            var url = $"odds/nba/predict?home_team={Uri.EscapeDataString(homeTeam)}&away_team={Uri.EscapeDataString(awayTeam)}";
+            var response = await Http.PostAsync(url, null);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                var doc = JsonDocument.Parse(content);
+                var root = doc.RootElement;
+
+                result = new PredictionResult
+                {
+                    HomeTeam = root.GetProperty("home_team").GetString() ?? homeTeam,
+                    AwayTeam = root.GetProperty("away_team").GetString() ?? awayTeam,
+                    PredictedWinner = root.GetProperty("predicted_winner").GetString() ?? "Unknown",
+                    HomeWinProb = root.GetProperty("home_win_probability").GetDouble(),
+                    AwayWinProb = root.GetProperty("away_win_probability").GetDouble(),
+                    PredictedMargin = root.GetProperty("predicted_margin").GetDouble(),
+                    PredictedTotal = root.GetProperty("predicted_total").GetDouble(),
+                    HomeExpectedPts = root.GetProperty("home_expected_points").GetDouble(),
+                    AwayExpectedPts = root.GetProperty("away_expected_points").GetDouble(),
+                    ConfidenceLevel = root.GetProperty("confidence_level").GetString() ?? "unknown",
+                    Model = root.GetProperty("model").GetString() ?? "unknown",
+                    HasValue = root.GetProperty("has_value").GetBoolean()
+                };
+            }
+            else
+            {
+                var errContent = await response.Content.ReadAsStringAsync();
+                errorMessage = $"Server error ({response.StatusCode}): {errContent}";
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = $"Connection failed: {ex.Message}. Check Settings to verify your backend URL.";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Error: " + ex.Message;
+        }
+        finally
+        {
+            isFetching = false;
+        }
+    }
+
+    private class PredictionResult
+    {
+        public string HomeTeam { get; set; } = "";
+        public string AwayTeam { get; set; } = "";
+        public string PredictedWinner { get; set; } = "";
+        public double HomeWinProb { get; set; }
+        public double AwayWinProb { get; set; }
+        public double PredictedMargin { get; set; }
+        public double PredictedTotal { get; set; }
+        public double HomeExpectedPts { get; set; }
+        public double AwayExpectedPts { get; set; }
+        public string ConfidenceLevel { get; set; } = "";
+        public string Model { get; set; } = "";
+        public bool HasValue { get; set; }
+    }
+}

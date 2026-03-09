@@ -1,0 +1,23 @@
+{
+  "trained_at": "2026-03-06T20:22:15.403286",
+  "samples": 9135,
+  "ml_accuracy": 0.5935611038107753,
+  "ml_accuracy_std": 0.016671486493722687,
+  "ou_mae": 15.456769480561146,
+  "ou_mae_std": 0.16436432353705038,
+  "epochs": 50,
+  "cv_folds": 5,
+  "cv_method": "TimeSeriesSplit",
+  "features": [
+    "home_ppg",
+    "home_opp_ppg",
+    "away_ppg",
+    "away_opp_ppg",
+    "home_win_pct",
+    "away_win_pct",
+    "home_last10_wins",
+    "away_last10_wins",
+    "rest_days_home",
+    "rest_days_away"
+  ]
+}

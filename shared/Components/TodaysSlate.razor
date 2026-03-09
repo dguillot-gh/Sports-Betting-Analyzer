@@ -1,0 +1,670 @@
+@page "/todays-slate"
+@using System.Text.Json
+@using System.Net.Http.Json
+@implements IDisposable
+@inject HttpClient Http
+@inject SportsBettingAnalyzer.Shared.Services.IServerConfigService ServerConfig
+
+<div class="slate-container">
+    <div class="slate-header">
+        <h1>Today's Slate</h1>
+        <p class="slate-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+        <div class="slate-meta">
+            @if (_lastUpdated.HasValue)
+            {
+                <span class="slate-updated">Updated @_lastUpdated.Value.ToString("h:mm:ss tt")</span>
+            }
+            <span class="slate-auto-badge">Auto-refresh @(_autoRefreshEnabled ? "ON" : "OFF")</span>
+        </div>
+        <div class="slate-actions">
+            <button class="slate-refresh-btn" @onclick="LoadAllGames" disabled="@_loading">
+                @if (_loading)
+                {
+                    <span class="slate-spinner"></span>
+                }
+                else
+                {
+                    <span>Refresh</span>
+                }
+            </button>
+            <button class="slate-toggle-btn @(_autoRefreshEnabled ? "active" : "")" @onclick="ToggleAutoRefresh">
+                @(_autoRefreshEnabled ? "Pause" : "Auto")
+            </button>
+        </div>
+    </div>
+
+    @if (_loading && !_hasAnyData)
+    {
+        <div class="slate-loading">
+            <div class="slate-spinner-lg"></div>
+            <p>Loading today's games...</p>
+        </div>
+    }
+    else if (_error != null && !_hasAnyData)
+    {
+        <div class="slate-error">
+            <p>@_error</p>
+            <button class="slate-refresh-btn" @onclick="LoadAllGames">Try Again</button>
+        </div>
+    }
+    else
+    {
+        @foreach (var sport in _sports)
+        {
+            var games = GetGamesForSport(sport.Key);
+            <div class="slate-sport-section">
+                <div class="slate-sport-header">
+                    <span class="slate-sport-icon">@sport.Icon</span>
+                    <span class="slate-sport-name">@sport.Label</span>
+                    <span class="slate-game-count">@games.Count game@(games.Count != 1 ? "s" : "")</span>
+                </div>
+
+                @if (games.Count == 0)
+                {
+                    <div class="slate-no-games">
+                        <span>No games scheduled today</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="slate-games-list">
+                        @foreach (var game in games)
+                        {
+                            <div class="slate-game-card @GetStatusClass(game.Status)">
+                                <div class="slate-game-status-bar">
+                                    <span class="slate-status @GetStatusBadgeClass(game.Status)">@FormatStatus(game.Status)</span>
+                                    @if (!string.IsNullOrEmpty(game.GameTime))
+                                    {
+                                        <span class="slate-time">@FormatTime(game.GameTime)</span>
+                                    }
+                                </div>
+                                <div class="slate-matchup">
+                                    <div class="slate-team">
+                                        <span class="slate-team-name">@game.AwayAbbrev</span>
+                                        <span class="slate-team-record">@game.AwayRecord</span>
+                                    </div>
+                                    <div class="slate-score-block">
+                                        @if (IsLiveOrFinal(game.Status))
+                                        {
+                                            <span class="slate-score">@game.AwayScore</span>
+                                            <span class="slate-score-sep">-</span>
+                                            <span class="slate-score">@game.HomeScore</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="slate-vs">@FormatTime(game.GameTime)</span>
+                                        }
+                                    </div>
+                                    <div class="slate-team slate-team-right">
+                                        <span class="slate-team-name">@game.HomeAbbrev</span>
+                                        <span class="slate-team-record">@game.HomeRecord</span>
+                                    </div>
+                                </div>
+                                @if (game.Spread != null || game.OverUnder != null)
+                                {
+                                    <div class="slate-odds-row">
+                                        @if (game.Spread != null)
+                                        {
+                                            <span class="slate-odds-chip">Spread: @FormatSpread(game.Spread.Value)</span>
+                                        }
+                                        @if (game.OverUnder != null)
+                                        {
+                                            <span class="slate-odds-chip">O/U: @game.OverUnder.Value.ToString("F1")</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+
+        @if (!_hasAnyData)
+        {
+            <div class="slate-empty">
+                <p>No games found for today across any sport.</p>
+            </div>
+        }
+    }
+</div>
+
+<style>
+    .slate-container {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 0 4px;
+    }
+
+    .slate-header {
+        text-align: center;
+        padding: 20px 16px 12px;
+    }
+
+    .slate-header h1 {
+        font-size: 22px;
+        font-weight: 800;
+        margin: 0 0 4px;
+        color: var(--text-primary, #e2e8f0);
+        letter-spacing: -0.5px;
+    }
+
+    .slate-date {
+        font-size: 13px;
+        color: var(--text-muted, #64748b);
+        margin: 0 0 8px;
+    }
+
+    .slate-meta {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        margin-bottom: 10px;
+    }
+
+    .slate-updated {
+        font-size: 11px;
+        color: var(--text-muted, #64748b);
+    }
+
+    .slate-auto-badge {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--success, #4ade80);
+        background: rgba(74, 222, 128, 0.1);
+        padding: 2px 8px;
+        border-radius: 4px;
+    }
+
+    .slate-actions {
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+    }
+
+    .slate-toggle-btn {
+        background: var(--surface-raised, #262637);
+        border: 1px solid var(--border, #2e2e44);
+        color: var(--text-secondary, #94a3b8);
+        padding: 6px 14px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+
+    .slate-toggle-btn.active {
+        border-color: var(--success, #4ade80);
+        color: var(--success, #4ade80);
+    }
+
+    .slate-refresh-btn {
+        background: var(--surface-raised, #262637);
+        border: 1px solid var(--border, #2e2e44);
+        color: var(--text-primary, #e2e8f0);
+        padding: 6px 16px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.15s;
+    }
+
+    .slate-refresh-btn:hover {
+        background: var(--surface-overlay, #2a2a3d);
+        border-color: var(--border-light, #3a3a52);
+    }
+
+    .slate-refresh-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .slate-loading, .slate-error, .slate-empty {
+        text-align: center;
+        padding: 40px 16px;
+        color: var(--text-muted, #64748b);
+    }
+
+    .slate-error {
+        color: var(--danger, #f87171);
+    }
+
+    .slate-sport-section {
+        margin-bottom: 20px;
+    }
+
+    .slate-sport-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        margin-bottom: 8px;
+        border-bottom: 1px solid var(--border, #2e2e44);
+    }
+
+    .slate-sport-icon {
+        font-size: 18px;
+    }
+
+    .slate-sport-name {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text-primary, #e2e8f0);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .slate-game-count {
+        margin-left: auto;
+        font-size: 11px;
+        color: var(--text-muted, #64748b);
+        font-weight: 600;
+    }
+
+    .slate-no-games {
+        padding: 12px 16px;
+        font-size: 13px;
+        color: var(--text-muted, #64748b);
+        text-align: center;
+        font-style: italic;
+    }
+
+    .slate-games-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 0 4px;
+    }
+
+    .slate-game-card {
+        background: var(--surface, #1e1e2e);
+        border: 1px solid var(--border, #2e2e44);
+        border-radius: 10px;
+        padding: 10px 12px;
+        transition: border-color 0.15s;
+    }
+
+    .slate-game-card.live {
+        border-color: var(--success, #4ade80);
+        border-width: 1.5px;
+    }
+
+    .slate-game-card.final {
+        opacity: 0.7;
+    }
+
+    .slate-game-status-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+    }
+
+    .slate-status {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 2px 6px;
+        border-radius: 4px;
+    }
+
+    .slate-status.scheduled {
+        background: var(--surface-overlay, #2a2a3d);
+        color: var(--text-secondary, #94a3b8);
+    }
+
+    .slate-status.live {
+        background: rgba(74, 222, 128, 0.15);
+        color: var(--success, #4ade80);
+        animation: pulse 2s infinite;
+    }
+
+    .slate-status.final {
+        background: var(--surface-overlay, #2a2a3d);
+        color: var(--text-muted, #64748b);
+    }
+
+    .slate-time {
+        font-size: 11px;
+        color: var(--text-muted, #64748b);
+    }
+
+    .slate-matchup {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .slate-team {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+    }
+
+    .slate-team-right {
+        text-align: right;
+        align-items: flex-end;
+    }
+
+    .slate-team-name {
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--text-primary, #e2e8f0);
+        letter-spacing: 0.5px;
+    }
+
+    .slate-team-record {
+        font-size: 11px;
+        color: var(--text-muted, #64748b);
+    }
+
+    .slate-score-block {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 80px;
+        justify-content: center;
+    }
+
+    .slate-score {
+        font-size: 20px;
+        font-weight: 800;
+        color: var(--text-primary, #e2e8f0);
+        min-width: 28px;
+        text-align: center;
+    }
+
+    .slate-score-sep {
+        font-size: 14px;
+        color: var(--text-muted, #64748b);
+    }
+
+    .slate-vs {
+        font-size: 12px;
+        color: var(--text-secondary, #94a3b8);
+        font-weight: 600;
+    }
+
+    .slate-odds-row {
+        display: flex;
+        gap: 8px;
+        margin-top: 6px;
+        padding-top: 6px;
+        border-top: 1px solid var(--border, #2e2e44);
+    }
+
+    .slate-odds-chip {
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--primary, #60a5fa);
+        background: rgba(96, 165, 250, 0.1);
+        padding: 2px 8px;
+        border-radius: 4px;
+    }
+
+    .slate-spinner, .slate-spinner-lg {
+        display: inline-block;
+        border: 2px solid rgba(255, 255, 255, 0.15);
+        border-top-color: var(--primary, #60a5fa);
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+    }
+
+    .slate-spinner {
+        width: 14px;
+        height: 14px;
+    }
+
+    .slate-spinner-lg {
+        width: 32px;
+        height: 32px;
+        border-width: 3px;
+        margin-bottom: 12px;
+    }
+
+    @@keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    @@keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.6; }
+    }
+</style>
+
+@code {
+    private bool _loading = false;
+    private string? _error = null;
+    private bool _hasAnyData = false;
+    private DateTime? _lastUpdated = null;
+    private bool _autoRefreshEnabled = true;
+    private System.Threading.Timer? _refreshTimer;
+
+    private Dictionary<string, List<SlateGame>> _gamesBySport = new();
+
+    private List<SportConfig> _sports = new()
+    {
+        new("nfl", "NFL", "🏈"),
+        new("nba", "NBA", "🏀"),
+        new("nhl", "NHL", "🏒"),
+        new("ncaab", "NCAAB", "🏀"),
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAllGames();
+        StartAutoRefresh();
+    }
+
+    private void StartAutoRefresh()
+    {
+        _refreshTimer = new System.Threading.Timer(async _ =>
+        {
+            if (_autoRefreshEnabled && !_loading)
+            {
+                await InvokeAsync(async () =>
+                {
+                    await LoadAllGames();
+                });
+            }
+        }, null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
+    }
+
+    private void ToggleAutoRefresh()
+    {
+        _autoRefreshEnabled = !_autoRefreshEnabled;
+    }
+
+    private async Task LoadAllGames()
+    {
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            var baseUrl = ServerConfig.GetBaseUrl();
+            var tasks = new Dictionary<string, Task<List<SlateGame>>>
+            {
+                ["nfl"] = FetchEspnGames(baseUrl, "nfl"),
+                ["nba"] = FetchEspnGames(baseUrl, "nba"),
+                ["nhl"] = FetchEspnGames(baseUrl, "nhl"),
+                ["ncaab"] = FetchEspnGames(baseUrl, "ncaab"),
+            };
+
+            await Task.WhenAll(tasks.Values);
+
+            _gamesBySport.Clear();
+            foreach (var kvp in tasks)
+            {
+                try
+                {
+                    _gamesBySport[kvp.Key] = await kvp.Value;
+                }
+                catch
+                {
+                    _gamesBySport[kvp.Key] = new List<SlateGame>();
+                }
+            }
+
+            _hasAnyData = _gamesBySport.Values.Any(g => g.Count > 0);
+            _lastUpdated = DateTime.Now;
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to load games: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task<List<SlateGame>> FetchEspnGames(string baseUrl, string sport)
+    {
+        var games = new List<SlateGame>();
+        try
+        {
+            var json = await Http.GetStringAsync($"{baseUrl}/espn/{sport}");
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("games", out var gamesArr))
+            {
+                foreach (var g in gamesArr.EnumerateArray())
+                {
+                    // Parse spread - ESPN returns as string like "PHI -3.5" or numeric
+                    double? spread = null;
+                    if (g.TryGetProperty("spread", out var spEl))
+                    {
+                        if (spEl.ValueKind == JsonValueKind.Number)
+                            spread = spEl.GetDouble();
+                        else if (spEl.ValueKind == JsonValueKind.String)
+                        {
+                            var spStr = spEl.GetString() ?? "";
+                            // Extract numeric portion from "TEAM -3.5" format
+                            var parts = spStr.Split(' ');
+                            if (parts.Length >= 2 && double.TryParse(parts[^1], out var spVal))
+                                spread = spVal;
+                        }
+                    }
+
+                    // Parse over/under
+                    double? overUnder = null;
+                    if (g.TryGetProperty("over_under", out var ouEl) && ouEl.ValueKind == JsonValueKind.Number)
+                        overUnder = ouEl.GetDouble();
+
+                    games.Add(new SlateGame
+                    {
+                        Sport = sport,
+                        HomeTeam = g.GetProperty("home_team").GetString() ?? "",
+                        HomeAbbrev = g.GetProperty("home_abbrev").GetString() ?? "",
+                        HomeScore = g.TryGetProperty("home_score", out var hs) ? hs.GetString() ?? "0" : "0",
+                        HomeRecord = g.TryGetProperty("home_record", out var hr) ? hr.GetString() ?? "" : "",
+                        AwayTeam = g.GetProperty("away_team").GetString() ?? "",
+                        AwayAbbrev = g.GetProperty("away_abbrev").GetString() ?? "",
+                        AwayScore = g.TryGetProperty("away_score", out var aws) ? aws.GetString() ?? "0" : "0",
+                        AwayRecord = g.TryGetProperty("away_record", out var ar) ? ar.GetString() ?? "" : "",
+                        Status = g.TryGetProperty("status", out var st) ? st.GetString() ?? "Scheduled" : "Scheduled",
+                        GameTime = g.TryGetProperty("game_time", out var gt) ? gt.GetString() ?? "" : "",
+                        Spread = spread,
+                        OverUnder = overUnder,
+                    });
+                }
+            }
+        }
+        catch { }
+        return games;
+    }
+
+    private List<SlateGame> GetGamesForSport(string sport) =>
+        _gamesBySport.TryGetValue(sport, out var g) ? g : new();
+
+    private string GetStatusClass(string status)
+    {
+        if (IsLive(status)) return "live";
+        if (IsFinal(status)) return "final";
+        return "";
+    }
+
+    private string GetStatusBadgeClass(string status)
+    {
+        if (IsLive(status)) return "live";
+        if (IsFinal(status)) return "final";
+        return "scheduled";
+    }
+
+    private bool IsLive(string status) =>
+        status.Contains("In Progress", StringComparison.OrdinalIgnoreCase) ||
+        status.Contains("Halftime", StringComparison.OrdinalIgnoreCase) ||
+        status.Contains("End of", StringComparison.OrdinalIgnoreCase) ||
+        (status.Contains("Quarter", StringComparison.OrdinalIgnoreCase) && !status.Contains("Final")) ||
+        (status.Contains("Period", StringComparison.OrdinalIgnoreCase) && !status.Contains("Final")) ||
+        (status.Contains("Half", StringComparison.OrdinalIgnoreCase) && !status.Contains("Final"));
+
+    private bool IsFinal(string status) =>
+        status.Contains("Final", StringComparison.OrdinalIgnoreCase) ||
+        status.Contains("Postponed", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsLiveOrFinal(string status) => IsLive(status) || IsFinal(status);
+
+    private string FormatStatus(string status)
+    {
+        if (IsLive(status)) return "LIVE";
+        if (IsFinal(status)) return status.Length > 12 ? "FINAL" : status.ToUpper();
+        return "UPCOMING";
+    }
+
+    private string FormatTime(string isoTime)
+    {
+        if (string.IsNullOrEmpty(isoTime)) return "";
+        try
+        {
+            if (DateTime.TryParse(isoTime, out var dt))
+            {
+                var local = dt.Kind == DateTimeKind.Utc ? dt.ToLocalTime() : dt;
+                return local.ToString("h:mm tt");
+            }
+        }
+        catch { }
+        return isoTime;
+    }
+
+    private string FormatSpread(double spread) =>
+        spread > 0 ? $"+{spread:F1}" : $"{spread:F1}";
+
+    private record SportConfig(string Key, string Label, string Icon);
+
+    private class SlateGame
+    {
+        public string Sport { get; set; } = "";
+        public string HomeTeam { get; set; } = "";
+        public string HomeAbbrev { get; set; } = "";
+        public string HomeScore { get; set; } = "0";
+        public string HomeRecord { get; set; } = "";
+        public string AwayTeam { get; set; } = "";
+        public string AwayAbbrev { get; set; } = "";
+        public string AwayScore { get; set; } = "0";
+        public string AwayRecord { get; set; } = "";
+        public string Status { get; set; } = "Scheduled";
+        public string GameTime { get; set; } = "";
+        public double? Spread { get; set; }
+        public double? OverUnder { get; set; }
+    }
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+    }
+}

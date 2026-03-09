@@ -1,0 +1,109 @@
+@page "/data-center"
+
+<div class="app-card">
+    <div class="app-card-header" style="background: linear-gradient(135deg, #1e3a8a, #4f46e5) !important;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+                <h2>🖥️ Data Center</h2>
+                <p>System health monitoring</p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="display: block; width: 8px; height: 8px; background: #10b981; border-radius: 50%; box-shadow: 0 0 8px #10b981;"></span>
+                <span style="font-size: 11px; font-weight: 800; color: #10b981; text-transform: uppercase;">ONLINE</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-card-body">
+        
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 20px;">
+            This is a read-only view of the primary system's data ingestion capabilities and health metrics. Use the web dashboard for administrative controls.
+        </p>
+
+        <!-- Data Feeds -->
+        <h3 style="font-size: 14px; font-weight: 800; color: var(--text-primary); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid var(--border); padding-bottom: 6px;">Live Feeds</h3>
+        
+        <div class="feed-grid">
+            <div class="feed-card">
+                <div class="feed-top">
+                    <span class="feed-name">NFLverse Datasets</span>
+                    <span class="feed-status ok">ACTIVE</span>
+                </div>
+                <div class="feed-detail">Last sync: 2 hours ago</div>
+                <div class="feed-detail">Rows ingested: 124,512</div>
+            </div>
+
+            <div class="feed-card">
+                <div class="feed-top">
+                    <span class="feed-name">hoopR Stats API</span>
+                    <span class="feed-status ok">ACTIVE</span>
+                </div>
+                <div class="feed-detail">Last sync: 15 mins ago</div>
+                <div class="feed-detail">Rows ingested: 9,841</div>
+            </div>
+
+            <div class="feed-card border-warning">
+                <div class="feed-top">
+                    <span class="feed-name">The Odds API</span>
+                    <span class="feed-status warn">RATE LIMIT</span>
+                </div>
+                <div class="feed-detail">Calls remaining: 4/500</div>
+                <div class="feed-detail">Next reset: 30 mins</div>
+            </div>
+        </div>
+
+        <!-- System Resources -->
+        <h3 style="font-size: 14px; font-weight: 800; color: var(--text-primary); margin-top: 24px; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid var(--border); padding-bottom: 6px;">Proxy Server Resources</h3>
+        
+        <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px;">
+            <!-- CPU -->
+            <div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                    <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">CPU Usage</span>
+                    <span style="font-size: 12px; font-weight: 800; color: var(--text-primary);">14%</span>
+                </div>
+                <div style="width: 100%; height: 6px; background: var(--surface-overlay); border-radius: 3px; overflow: hidden;">
+                    <div style="width: 14%; height: 100%; background: #3b82f6;"></div>
+                </div>
+            </div>
+
+            <!-- Memory -->
+            <div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                    <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">RAM Utilization (FastAPI)</span>
+                    <span style="font-size: 12px; font-weight: 800; color: var(--text-primary);">1.2 GB / 4.0 GB</span>
+                </div>
+                <div style="width: 100%; height: 6px; background: var(--surface-overlay); border-radius: 3px; overflow: hidden;">
+                    <div style="width: 30%; height: 100%; background: #10b981;"></div>
+                </div>
+            </div>
+
+            <!-- Disk -->
+            <div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                    <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">Database Storage (SQLite)</span>
+                    <span style="font-size: 12px; font-weight: 800; color: var(--text-primary);">412 MB / 10 GB</span>
+                </div>
+                <div style="width: 100%; height: 6px; background: var(--surface-overlay); border-radius: 3px; overflow: hidden;">
+                    <div style="width: 4%; height: 100%; background: #8b5cf6;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="app-alert app-alert-info">
+            View the Web Dashboard at `http://proxy:8000/docs` to execute manual jobs.
+        </div>
+    </div>
+</div>
+
+<style>
+    .feed-grid { display: flex; flex-direction: column; gap: 10px; }
+    .feed-card { background: var(--surface-overlay); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+    .feed-card.border-warning { border-color: rgba(245,158,11,0.3); background: rgba(245,158,11,0.05); }
+    .feed-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px dashed var(--border-light); padding-bottom: 6px;}
+    .feed-name { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+    .feed-status { font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.5px; }
+    .feed-status.ok { background: rgba(16,185,129,0.15); color: #10b981; }
+    .feed-status.warn { background: rgba(245,158,11,0.15); color: #f59e0b; }
+    .feed-detail { font-size: 12px; color: var(--text-muted); font-family: 'SF Mono', Consolas, monospace;}
+</style>

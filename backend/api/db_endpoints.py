@@ -256,6 +256,9 @@ async def run_csv_import(sport: str):
         elif sport == 'nfl':
             from scripts.nfl_importer import import_all_nfl
             result = await import_all_nfl(clear_existing=False, progress_callback=update_progress)
+        elif sport == 'nhl':
+            from scripts.nhl_importer import import_all_nhl
+            result = await import_all_nhl(clear_existing=False, progress_callback=update_progress)
         else:
             from scripts.migrate_data import run_migration
             await run_migration(sport)
@@ -403,42 +406,24 @@ async def run_rda_import(series: str, year_start: int, year_end: int, clear_exis
             finally:
                 await clear_conn.close()
         
-        import_status["nascar_rda"]["progress"].append("Starting RDA file import...")
+        import_status["nascar_rda"]["progress"].append("Starting Parquet file import directly from R2...")
         
-        # 2. Run RDA import
-        from scripts.rda_importer import import_nascar_rda
+        # 2. Run Parquet import
+        from scripts.nascar_parquet_importer import run_import as import_nascar_parquet
         
         def progress_cb(msg):
             import_status["nascar_rda"]["progress"].append(msg)
-            # Keep log size manageable
             if len(import_status["nascar_rda"]["progress"]) > 100:
                  import_status["nascar_rda"]["progress"] = import_status["nascar_rda"]["progress"][-100:]
 
-        result = await import_nascar_rda(
-            series=series if series and series != 'all' else None,
-            year_start=year_start,
-            year_end=year_end,
-            progress_callback=progress_cb
-        )
+        rows = await import_nascar_parquet()
         
-        # 3. Comprehensive Row Count
-        rows = 0
-        if result.get("series_results"):
-            for sr in result["series_results"]:
-                rows += sr.get("results_imported", 0)
-                rows += sr.get("stats_computed", 0)
-        
-        status = "COMPLETED" if result.get("status") == "success" else "FAILED"
+        status = "COMPLETED"
         import_status["nascar_rda"]["status"] = status.lower()
         import_status["nascar_rda"]["completed_at"] = datetime.now().isoformat()
-        import_status["nascar_rda"]["result"] = {**result, "rows": rows}
+        import_status["nascar_rda"]["result"] = {"status": "success", "rows": rows}
         
-        # Add summary to progress
-        if result.get("series_results"):
-            for sr in result["series_results"]:
-                import_status["nascar_rda"]["progress"].append(
-                    f"✅ {sr['series']}: {sr['results_imported']} results, {sr['stats_computed']} stats"
-                )
+        import_status["nascar_rda"]["progress"].append(f"✅ Imported {rows} results from Parquet sources")
         import_status["nascar_rda"]["progress"].append(f"Import {status.lower()}!")
         
         # 4. Update DB Log
@@ -1286,34 +1271,139 @@ async def get_race_results_list(
         
         total_count = await conn.fetchval(count_query, *count_params)
         
+        # Helpers to safely cast
+        def safe_int(val):
+            if val is None or val == "" or str(val).lower() == 'nan' or str(val).lower() == 'none':
+                 return None
+            try:
+                return int(float(val))
+            except (ValueError, TypeError):
+                return None
+                
+        def safe_float(val):
+            if val is None or val == "" or str(val).lower() == 'nan' or str(val).lower() == 'none':
+                 return None
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                return None
+
         # Format results
         race_results = []
         for row in results:
             meta = json.loads(row["metadata"]) if row["metadata"] else {}
+            
+            # Case-insensitive/Standardized fallbacks for metadata keys
+            # Explicitly cast to int where expected to avoid .0 in JSON
+            v_start = safe_int(meta.get("start") or meta.get("Start"))
+            v_finish = safe_int(meta.get("finish") or meta.get("Finish"))
+            v_race = safe_int(meta.get("race_num") or meta.get("Race"))
+            v_led = safe_int(meta.get("led") or meta.get("Led"))
+            v_laps = safe_int(meta.get("laps") or meta.get("Laps"))
+            v_pts = safe_int(meta.get("pts") or meta.get("Pts"))
+            v_rating = safe_float(meta.get("rating") or meta.get("Rating"))
+
             race_results.append({
                 "id": row["id"],
-                "season": row["season"],
+                "season": int(row["season"]),
                 "series": row["series"],
                 "track": row["track"],
-                "race_num": meta.get("race_num"),
-                "race_name": meta.get("race_name"),
-                "driver": meta.get("driver_name"),
-                "finish": meta.get("finish"),
-                "start": meta.get("start"),
-                "led": meta.get("led"),
-                "laps": meta.get("laps"),
-                "pts": meta.get("pts"),
-                "status": meta.get("status"),
-                "team": meta.get("team"),
-                "make": meta.get("make"),
-                "rating": meta.get("rating"),
+                "race_num": v_race,
+                "race_name": meta.get("race_name") or meta.get("Race_Name"),
+                "driver": meta.get("driver_name") or meta.get("Driver"),
+                "finish": v_finish,
+                "start": v_start,
+                "led": v_led,
+                "laps": v_laps,
+                "pts": v_pts,
+                "status": meta.get("status") or meta.get("Status"),
+                "team": meta.get("team") or meta.get("Team"),
+                "make": meta.get("make") or meta.get("Manufacturer") or meta.get("Make"),
+                "rating": v_rating,
             })
         
-        return {
-            "results": race_results,
+        from fastapi.responses import JSONResponse
+        return JSONResponse(content={
+            "results": [
+                {
+                    "id": r["id"],
+                    "season": int(r["season"]),
+                    "series": r["series"],
+                    "track": r["track"],
+                    "race_num": int(r["race_num"]) if r["race_num"] is not None else None,
+                    "race_name": r["race_name"],
+                    "driver": r["driver"],
+                    "finish": int(r["finish"]) if r["finish"] is not None else None,
+                    "start": int(r["start"]) if r["start"] is not None else None,
+                    "led": int(r["led"]) if r["led"] is not None else None,
+                    "laps": int(r["laps"]) if r["laps"] is not None else None,
+                    "pts": int(r["pts"]) if r["pts"] is not None else None,
+                    "status": r["status"],
+                    "team": r["team"],
+                    "make": r["make"],
+                    "rating": float(r["rating"]) if r["rating"] is not None else None,
+                } for r in race_results
+            ],
             "total": total_count,
             "limit": limit,
             "offset": offset,
+        })
+    finally:
+        await conn.close()
+
+@router.get("/races/nascar/standings/{season}")
+async def get_nascar_standings(season: int, series: str = "cup"):
+    """
+    Get NASCAR season standings by series.
+    Aggregates points, wins, top 5s, and top 10s from race results.
+    """
+    conn = await get_db_connection()
+    try:
+        # Get sport_id for nascar
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = 'nascar'")
+        if not sport_id:
+            return {"standings": []}
+
+        # Query to aggregate standings from JSON metadata
+        query = """
+            SELECT 
+                row_to_json(r)->'metadata'->>'driver_name' as driver,
+                row_to_json(r)->'metadata'->>'team' as team,
+                COUNT(*) as races,
+                SUM(CAST(NULLIF(row_to_json(r)->'metadata'->>'pts', '') AS numeric))::int as points,
+                COUNT(*) FILTER (WHERE CAST(NULLIF(row_to_json(r)->'metadata'->>'finish', '') AS numeric)::int = 1) as wins,
+                COUNT(*) FILTER (WHERE CAST(NULLIF(row_to_json(r)->'metadata'->>'finish', '') AS numeric)::int <= 5) as top5,
+                COUNT(*) FILTER (WHERE CAST(NULLIF(row_to_json(r)->'metadata'->>'finish', '') AS numeric)::int <= 10) as top10
+            FROM results r
+            WHERE sport_id = $1 AND season = $2 AND series = $3
+            GROUP BY 1, 2
+            ORDER BY points DESC
+        """
+        rows = await conn.fetch(query, sport_id, season, series)
+        
+        standings = []
+        max_points = 0
+        for i, row in enumerate(rows):
+            pts = row["points"] or 0
+            if i == 0:
+                max_points = pts
+            
+            standings.append({
+                "rank": i + 1,
+                "driver": row["driver"],
+                "team": row["team"],
+                "races": row["races"],
+                "points": int(pts),
+                "wins": int(row["wins"] or 0),
+                "top5": int(row["top5"] or 0),
+                "top10": int(row["top10"] or 0),
+                "behind": int(max_points - pts)
+            })
+            
+        return {
+            "season": season,
+            "series": series,
+            "standings": standings
         }
     finally:
         await conn.close()
@@ -1517,6 +1607,246 @@ async def get_game_schedule(
             "count": len(games),
             "limit": limit,
             "offset": offset
+        }
+    finally:
+        await conn.close()
+
+
+@router.get("/standings/{sport}")
+async def get_league_standings(
+    sport: str,
+    season: int = None
+):
+    """
+    Get professional league standings (NBA, NFL, NHL).
+    Aggregates W/L, Points, and ATS records from the results table.
+    """
+    if sport not in ["nfl", "nba", "nhl"]:
+        raise HTTPException(status_code=400, detail=f"Standings not supported for: {sport}")
+    
+    conn = await get_db_connection()
+    try:
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
+        if not sport_id:
+            raise HTTPException(status_code=404, detail=f"Sport '{sport}' not found")
+        
+        # Default to latest season with standings-compatible data
+        if not season:
+            if sport == "nfl":
+                season = await conn.fetchval(
+                    "SELECT MAX(season) FROM results WHERE sport_id = $1 AND series = 'nfl_schedule'",
+                    sport_id
+                )
+            elif sport == "nba":
+                # Prefer nba_schedule, fallback to nba_game_log
+                season = await conn.fetchval(
+                    "SELECT MAX(season) FROM results WHERE sport_id = $1 AND series = 'nba_schedule'",
+                    sport_id
+                )
+                if not season:
+                    season = await conn.fetchval(
+                        "SELECT MAX(season) FROM results WHERE sport_id = $1 AND series = 'nba_game_log'",
+                        sport_id
+                    )
+            elif sport == "nhl":
+                season = await conn.fetchval(
+                    "SELECT MAX(season) FROM results WHERE sport_id = $1 AND series = 'nhl'",
+                    sport_id
+                )
+            
+            if not season:
+                # Final fallback
+                season = await conn.fetchval(
+                    "SELECT MAX(season) FROM results WHERE sport_id = $1",
+                    sport_id
+                ) or 2024
+
+        query = ""
+        if sport == "nfl":
+            # NFL Standings from nfl_schedule
+            query = """
+                WITH games AS (
+                    SELECT 
+                        metadata->>'home_team' as home,
+                        metadata->>'away_team' as away,
+                        (metadata->>'home_score')::int as h_score,
+                        (metadata->>'away_score')::int as a_score,
+                        (metadata->>'spread_line')::float as spread
+                    FROM results 
+                    WHERE sport_id = $1 AND series = 'nfl_schedule' AND season = $2
+                      AND metadata->>'home_score' IS NOT NULL
+                ),
+                team_stats AS (
+                    SELECT home as team, 
+                           CASE WHEN h_score > a_score THEN 1 ELSE 0 END as win,
+                           CASE WHEN h_score < a_score THEN 1 ELSE 0 END as loss,
+                           CASE WHEN h_score = a_score THEN 1 ELSE 0 END as tie,
+                           h_score as pf, a_score as pa,
+                           CASE WHEN h_score + COALESCE(spread, 0) > a_score THEN 1 ELSE 0 END as ats_win,
+                           CASE WHEN h_score + COALESCE(spread, 0) < a_score THEN 1 ELSE 0 END as ats_loss,
+                           CASE WHEN h_score + COALESCE(spread, 0) = a_score THEN 1 ELSE 0 END as ats_push
+                    FROM games
+                    UNION ALL
+                    SELECT away as team,
+                           CASE WHEN a_score > h_score THEN 1 ELSE 0 END as win,
+                           CASE WHEN a_score < h_score THEN 1 ELSE 0 END as loss,
+                           CASE WHEN a_score = h_score THEN 1 ELSE 0 END as tie,
+                           a_score as pf, h_score as pa,
+                           CASE WHEN a_score - COALESCE(spread, 0) > h_score THEN 1 ELSE 0 END as ats_win,
+                           CASE WHEN a_score - COALESCE(spread, 0) < h_score THEN 1 ELSE 0 END as ats_loss,
+                           CASE WHEN a_score - COALESCE(spread, 0) = h_score THEN 1 ELSE 0 END as ats_push
+                    FROM games
+                )
+                SELECT team, 
+                       COALESCE(SUM(win), 0) as wins, COALESCE(SUM(loss), 0) as losses, COALESCE(SUM(tie), 0) as ties,
+                       COALESCE(SUM(pf), 0) as points_for, COALESCE(SUM(pa), 0) as points_against,
+                       COALESCE(SUM(ats_win), 0) as ats_wins, COALESCE(SUM(ats_loss), 0) as ats_losses, COALESCE(SUM(ats_push), 0) as ats_pushes
+                FROM team_stats
+                GROUP BY team
+                ORDER BY wins DESC, (SUM(pf) - SUM(pa)) DESC
+            """
+        elif sport == "nba":
+            # Try nba_schedule first (game-level data with home/away scores)
+            schedule_count = await conn.fetchval(
+                "SELECT COUNT(*) FROM results WHERE sport_id = $1 AND series = 'nba_schedule' AND season = $2",
+                sport_id, int(season)
+            )
+            
+            if schedule_count and schedule_count > 0:
+                # NBA Standings from nba_schedule
+                query = """
+                    WITH games AS (
+                        SELECT 
+                            metadata->>'home_team' as home,
+                            metadata->>'away_team' as away,
+                            (metadata->>'home_score')::int as h_score,
+                            (metadata->>'away_score')::int as a_score
+                        FROM results 
+                        WHERE sport_id = $1 AND series = 'nba_schedule' AND season = $2
+                          AND metadata->>'home_score' IS NOT NULL
+                    ),
+                    team_stats AS (
+                        SELECT home as team, 
+                               CASE WHEN h_score > a_score THEN 1 ELSE 0 END as win,
+                               CASE WHEN h_score < a_score THEN 1 ELSE 0 END as loss,
+                               h_score as pf, a_score as pa
+                        FROM games
+                        UNION ALL
+                        SELECT away as team,
+                               CASE WHEN a_score > h_score THEN 1 ELSE 0 END as win,
+                               CASE WHEN a_score < h_score THEN 1 ELSE 0 END as loss,
+                               a_score as pf, h_score as pa
+                        FROM games
+                    )
+                    SELECT team, 
+                           COALESCE(SUM(win), 0) as wins, COALESCE(SUM(loss), 0) as losses, 
+                           COALESCE(SUM(pf), 0) as points_for, COALESCE(SUM(pa), 0) as points_against
+                    FROM team_stats
+                    GROUP BY team
+                    ORDER BY wins DESC, (SUM(pf) - SUM(pa)) DESC
+                """
+            else:
+                # Fallback: derive standings from nba_game_log (player game logs)
+                # Deduplicate by game_id + team to get one row per team per game
+                query = """
+                    WITH unique_games AS (
+                        SELECT DISTINCT ON (metadata->>'game_id', metadata->>'team')
+                            metadata->>'team' as team,
+                            metadata->>'wl' as wl,
+                            (metadata->>'pts')::int as pts
+                        FROM results
+                        WHERE sport_id = $1 AND series = 'nba_game_log' AND season = $2
+                          AND metadata->>'wl' IS NOT NULL
+                          AND metadata->>'team' IS NOT NULL
+                        ORDER BY metadata->>'game_id', metadata->>'team', (metadata->>'min')::float DESC NULLS LAST
+                    )
+                    SELECT team,
+                           COALESCE(SUM(CASE WHEN wl = 'W' THEN 1 ELSE 0 END), 0) as wins,
+                           COALESCE(SUM(CASE WHEN wl = 'L' THEN 1 ELSE 0 END), 0) as losses,
+                           COALESCE(SUM(pts), 0) as points_for,
+                           0 as points_against
+                    FROM unique_games
+                    GROUP BY team
+                    ORDER BY wins DESC
+                """
+        elif sport == "nhl":
+            # NHL: Fetch live standings from NHL API directly (MoneyPuck data is situation-level, not game-level)
+            import httpx
+            try:
+                today = datetime.now().strftime("%Y-%m-%d")
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(f"https://api-web.nhle.com/v1/standings/{today}")
+                    if resp.status_code == 200:
+                        nhl_data = resp.json()
+                        standings = []
+                        for team in nhl_data.get("standings", []):
+                            abbrev = team.get("teamAbbrev", {}).get("default", "")
+                            name = team.get("teamName", {}).get("default", "") or team.get("teamCommonName", {}).get("default", abbrev)
+                            wins = team.get("wins", 0)
+                            losses = team.get("losses", 0)
+                            ot_losses = team.get("otLosses", 0)
+                            pts = team.get("points", 0)
+                            gf = team.get("goalFor", 0)
+                            ga = team.get("goalAgainst", 0)
+                            total_games = wins + losses + ot_losses
+                            standings.append({
+                                "team": f"{abbrev} {name}" if name else abbrev,
+                                "wins": wins,
+                                "losses": losses,
+                                "ot_losses": ot_losses,
+                                "points": pts,
+                                "points_for": gf,
+                                "points_against": ga,
+                                "win_pct": round(wins / total_games, 3) if total_games > 0 else 0,
+                                "record": f"{wins}-{losses}-{ot_losses}",
+                                "ats_record": "N/A",
+                            })
+                        standings.sort(key=lambda x: (-x["points"], -x["wins"]))
+                        return {
+                            "sport": "nhl",
+                            "season": season or datetime.now().year,
+                            "standings": standings,
+                            "source": "NHL API"
+                        }
+            except Exception as e:
+                logger.error(f"NHL API standings fetch failed: {e}")
+            # Fallback: return empty
+            return {
+                "sport": "nhl",
+                "season": season or datetime.now().year,
+                "standings": [],
+                "error": "Could not fetch NHL standings from API"
+            }
+
+        rows = await conn.fetch(query, sport_id, int(season))
+        
+        standings = []
+        for row in rows:
+            d = dict(row)
+            # Add win percentage
+            total_games = d['wins'] + d['losses'] + d.get('ties', 0) + d.get('ot_losses', 0)
+            d['win_pct'] = round(d['wins'] / total_games, 3) if total_games > 0 else 0
+            
+            # Format record string
+            if sport == "nhl":
+                d['record'] = f"{d['wins']}-{d['losses']}-{d.get('ot_losses', 0)}"
+            elif d.get('ties', 0) > 0:
+                d['record'] = f"{d['wins']}-{d['losses']}-{d['ties']}"
+            else:
+                d['record'] = f"{d['wins']}-{d['losses']}"
+                
+            # Format ATS record if available, otherwise default
+            if 'ats_wins' in d:
+                d['ats_record'] = f"{d['ats_wins']}-{d['ats_losses']}-{d['ats_pushes']}"
+            else:
+                d['ats_record'] = "N/A"
+                
+            standings.append(d)
+
+        return {
+            "sport": sport,
+            "season": season,
+            "standings": standings
         }
     finally:
         await conn.close()
@@ -2040,6 +2370,121 @@ async def run_nba_import(clear_existing: bool):
 
 
 # =============================================================================
+# NHL Import Endpoints
+# =============================================================================
+
+@router.post("/import/nhl")
+async def import_nhl_data(
+    background_tasks: BackgroundTasks,
+    clear_existing: bool = False,
+    start_year: int = Query(2023, description="Earliest season to import (default: 2023)")
+):
+    """
+    Start NHL data import from MoneyPuck.
+    Downloads game-by-game team data and player bios.
+    Filters to seasons >= start_year to avoid importing decades of history.
+    """
+    if import_status.get("nhl", {}).get("status") == "running":
+        return {
+            "status": "already_running",
+            "message": "NHL import is already in progress",
+            "started_at": import_status["nhl"]["started_at"]
+        }
+    
+    import_status["nhl"] = {
+        "status": "running",
+        "started_at": datetime.now().isoformat(),
+        "completed_at": None,
+        "progress": ["NHL import started..."],
+        "result": None,
+        "error": None
+    }
+    
+    background_tasks.add_task(run_nhl_import, clear_existing, start_year)
+    
+    return {
+        "status": "started",
+        "message": f"NHL data import started (MoneyPuck, seasons >= {start_year})",
+        "clear_existing": clear_existing,
+        "start_year": start_year
+    }
+
+
+@router.get("/import/nhl/status")
+async def get_nhl_import_status():
+    """Get the current status of NHL import."""
+    return import_status.get("nhl", {"status": "not_started"})
+
+
+async def run_nhl_import(clear_existing: bool, start_year: int = 2023):
+    """Background task for NHL import with DB logging."""
+    import asyncpg
+    conn = None
+    log_id = None
+    start_time = datetime.now()
+    
+    try:
+        from scripts.nhl_importer import import_all_nhl
+        
+        conn = await asyncpg.connect(DATABASE_URL)
+        log_id = await conn.fetchval("""
+            INSERT INTO import_logs (sport, status, start_time)
+            VALUES ('nhl', 'IN_PROGRESS', NOW())
+            RETURNING id
+        """)
+        
+        def progress_callback(msg):
+            import_status["nhl"]["progress"].append(msg)
+            logger.info(f"NHL Import: {msg}")
+        
+        result = await import_all_nhl(
+            clear_existing=clear_existing,
+            start_year=start_year,
+            progress_callback=progress_callback
+        )
+        
+        rows = (result.get("games_imported", 0) + 
+                result.get("players_imported", 0))
+        
+        status = "COMPLETED" if result.get("status") == "success" else "FAILED"
+        import_status["nhl"]["status"] = status.lower()
+        import_status["nhl"]["completed_at"] = datetime.now().isoformat()
+        import_status["nhl"]["result"] = {**result, "rows": rows}
+        
+        duration = (datetime.now() - start_time).total_seconds()
+        error_msg = "; ".join(result.get("errors", [])) if result.get("errors") else None
+        
+        await conn.execute("""
+            UPDATE import_logs 
+            SET status = $2, end_time = NOW(), duration_seconds = $3, 
+                rows_imported = $4, error_message = $5
+            WHERE id = $1
+        """, log_id, status, duration, rows, error_msg)
+        
+        if result.get("errors"):
+            import_status["nhl"]["error"] = error_msg
+        
+    except Exception as e:
+        logger.error(f"NHL import failed: {e}")
+        import_status["nhl"]["status"] = "failed"
+        import_status["nhl"]["completed_at"] = datetime.now().isoformat()
+        import_status["nhl"]["error"] = str(e)
+        import_status["nhl"]["progress"].append(f"❌ Error: {e}")
+        
+        if conn and log_id:
+            duration = (datetime.now() - start_time).total_seconds()
+            await conn.execute("""
+                UPDATE import_logs 
+                SET status = 'FAILED', end_time = NOW(), duration_seconds = $2, 
+                    error_message = $3
+                WHERE id = $1
+            """, log_id, duration, str(e))
+    finally:
+        if conn:
+            await conn.close()
+
+
+# =============================================================================
 # NFL/NBA Profile Endpoints
 # =============================================================================
 
@@ -2376,3 +2821,640 @@ async def get_available_seasons(sport: str):
         return {"seasons": [row["season"] for row in rows]}
     finally:
         await conn.close()
+
+
+# ========================================================
+# NFL Power Rankings
+# ========================================================
+
+@router.get("/nfl/power-rankings")
+async def get_nfl_power_rankings(
+    season: Optional[int] = Query(None, description="NFL season year (default: latest)"),
+):
+    """
+    Compute NFL Power Rankings from game results.
+    
+    Composite score based on:
+    - Win percentage (30%)
+    - Point differential per game (25%)  
+    - Strength of schedule (20%)
+    - ATS record (15%)
+    - Recent form - last 5 games (10%)
+    """
+    import asyncpg
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = 'nfl'")
+        if not sport_id:
+            raise HTTPException(status_code=404, detail="NFL sport not found")
+        
+        if not season:
+            season = await conn.fetchval(
+                "SELECT MAX(season) FROM results WHERE sport_id = $1 AND series = 'nfl_schedule'",
+                sport_id
+            )
+        if not season:
+            return {"rankings": [], "season": 0}
+        
+        # Fetch all completed games for the season
+        rows = await conn.fetch(
+            """SELECT metadata FROM results 
+               WHERE sport_id = $1 AND series = 'nfl_schedule' AND season = $2
+               AND metadata->>'home_score' IS NOT NULL
+               AND metadata->>'game_type' = 'REG'
+            """,
+            sport_id, int(season)
+        )
+        
+        if not rows:
+            return {"rankings": [], "season": season}
+        
+        # Build team stats
+        teams = {}
+        games_list = []
+        
+        for row in rows:
+            m = row["metadata"] if isinstance(row["metadata"], dict) else json.loads(row["metadata"])
+            home = m.get("home_team", "")
+            away = m.get("away_team", "")
+            h_score = int(m.get("home_score", 0))
+            a_score = int(m.get("away_score", 0))
+            spread = float(m.get("spread_line", 0) or 0)
+            week = int(m.get("week", 0) or 0)
+            
+            if not home or not away:
+                continue
+            
+            games_list.append({
+                "home": home, "away": away,
+                "h_score": h_score, "a_score": a_score,
+                "spread": spread, "week": week
+            })
+            
+            for team in [home, away]:
+                if team not in teams:
+                    teams[team] = {
+                        "wins": 0, "losses": 0, "ties": 0,
+                        "pf": 0, "pa": 0,
+                        "ats_wins": 0, "ats_losses": 0, "ats_pushes": 0,
+                        "opponents": [], "recent_results": []
+                    }
+            
+            # Home team stats
+            if h_score > a_score:
+                teams[home]["wins"] += 1
+                teams[away]["losses"] += 1
+            elif a_score > h_score:
+                teams[away]["wins"] += 1
+                teams[home]["losses"] += 1
+            else:
+                teams[home]["ties"] += 1
+                teams[away]["ties"] += 1
+            
+            teams[home]["pf"] += h_score
+            teams[home]["pa"] += a_score
+            teams[away]["pf"] += a_score
+            teams[away]["pa"] += h_score
+            
+            teams[home]["opponents"].append(away)
+            teams[away]["opponents"].append(home)
+            
+            # ATS: home team favored if spread < 0 (e.g. KC -3 means spread_line = -3 for away perspective typically)
+            # nfl_data_py spread_line is from home perspective: positive = home is underdog
+            home_margin = h_score - a_score
+            if spread != 0:
+                ats_margin = home_margin + spread  # spread is typically the line the home team gets
+                if ats_margin > 0:
+                    teams[home]["ats_wins"] += 1
+                    teams[away]["ats_losses"] += 1
+                elif ats_margin < 0:
+                    teams[home]["ats_losses"] += 1
+                    teams[away]["ats_wins"] += 1
+                else:
+                    teams[home]["ats_pushes"] += 1
+                    teams[away]["ats_pushes"] += 1
+            
+            # Recent results (track by week for sorting)
+            teams[home]["recent_results"].append((week, 1 if h_score > a_score else 0))
+            teams[away]["recent_results"].append((week, 1 if a_score > h_score else 0))
+        
+        # Calculate composite rankings
+        rankings = []
+        max_games = max((t["wins"] + t["losses"] + t["ties"]) for t in teams.values()) if teams else 1
+        
+        for name, t in teams.items():
+            total = t["wins"] + t["losses"] + t["ties"]
+            if total == 0:
+                continue
+            
+            # 1. Win % (0-1)
+            win_pct = (t["wins"] + 0.5 * t["ties"]) / total
+            
+            # 2. Point differential per game (-inf to +inf, normalize later)
+            pt_diff_pg = (t["pf"] - t["pa"]) / total
+            
+            # 3. Strength of schedule (avg opponent win%)
+            opp_win_pcts = []
+            for opp in t["opponents"]:
+                if opp in teams:
+                    ot = teams[opp]
+                    og = ot["wins"] + ot["losses"] + ot["ties"]
+                    if og > 0:
+                        opp_win_pcts.append((ot["wins"] + 0.5 * ot["ties"]) / og)
+            sos = sum(opp_win_pcts) / len(opp_win_pcts) if opp_win_pcts else 0.5
+            
+            # 4. ATS performance
+            ats_total = t["ats_wins"] + t["ats_losses"] + t["ats_pushes"]
+            ats_pct = t["ats_wins"] / ats_total if ats_total > 0 else 0.5
+            
+            # 5. Recent form (last 5 games)
+            recent = sorted(t["recent_results"], key=lambda x: -x[0])[:5]
+            recent_pct = sum(r[1] for r in recent) / len(recent) if recent else 0.5
+            
+            rankings.append({
+                "team": name,
+                "wins": t["wins"],
+                "losses": t["losses"],
+                "ties": t["ties"],
+                "record": f"{t['wins']}-{t['losses']}" + (f"-{t['ties']}" if t["ties"] > 0 else ""),
+                "pf": t["pf"],
+                "pa": t["pa"],
+                "pt_diff": t["pf"] - t["pa"],
+                "pt_diff_pg": round(pt_diff_pg, 1),
+                "win_pct": round(win_pct, 3),
+                "sos": round(sos, 3),
+                "ats_record": f"{t['ats_wins']}-{t['ats_losses']}-{t['ats_pushes']}",
+                "ats_pct": round(ats_pct, 3),
+                "recent_pct": round(recent_pct, 3),
+                # Raw components for composite calc
+                "_win_pct": win_pct,
+                "_pt_diff_pg": pt_diff_pg,
+                "_sos": sos,
+                "_ats_pct": ats_pct,
+                "_recent_pct": recent_pct,
+            })
+        
+        # Normalize point differential to 0-1 range
+        if rankings:
+            pd_vals = [r["_pt_diff_pg"] for r in rankings]
+            pd_min, pd_max = min(pd_vals), max(pd_vals)
+            pd_range = pd_max - pd_min if pd_max != pd_min else 1
+            
+            for r in rankings:
+                pd_norm = (r["_pt_diff_pg"] - pd_min) / pd_range
+                
+                # Composite: Win%(30) + PtDiff(25) + SOS(20) + ATS(15) + Recent(10)
+                composite = (
+                    0.30 * r["_win_pct"] +
+                    0.25 * pd_norm +
+                    0.20 * r["_sos"] +
+                    0.15 * r["_ats_pct"] +
+                    0.10 * r["_recent_pct"]
+                )
+                r["power_score"] = round(composite * 100, 1)
+                
+                # Clean up internal fields
+                del r["_win_pct"]
+                del r["_pt_diff_pg"]
+                del r["_sos"]
+                del r["_ats_pct"]
+                del r["_recent_pct"]
+            
+            rankings.sort(key=lambda x: -x["power_score"])
+            
+            # Add rank
+            for i, r in enumerate(rankings):
+                r["rank"] = i + 1
+        
+        latest_week = max(g["week"] for g in games_list) if games_list else 0
+        
+        return {
+            "season": season,
+            "through_week": latest_week,
+            "total_teams": len(rankings),
+            "rankings": rankings,
+            "weights": {
+                "win_pct": 0.30,
+                "point_differential": 0.25,
+                "strength_of_schedule": 0.20,
+                "ats_performance": 0.15,
+                "recent_form": 0.10
+            }
+        }
+    finally:
+        await conn.close()
+
+
+# ========================================================
+# NASCAR Power Rankings (per series)
+# ========================================================
+
+def _to_float(val, default=0.0):
+    """Safely convert value to float, handling string representations."""
+    if val is None:
+        return default
+    if isinstance(val, (int, float)):
+        return float(val)
+    try:
+        return float(str(val).replace(",", ""))
+    except (ValueError, TypeError):
+        return default
+
+def _to_int(val, default=0):
+    """Safely convert value to int, handling string representations."""
+    if val is None:
+        return default
+    if isinstance(val, int):
+        return val
+    try:
+        return int(float(str(val).replace(",", "")))
+    except (ValueError, TypeError):
+        return default
+
+@router.get("/nascar/power-rankings")
+async def get_nascar_power_rankings(
+    series: str = Query("cup", description="NASCAR series: cup, trucks, xfinity"),
+    season: Optional[int] = Query(None, description="Season year (default: latest)"),
+):
+    """
+    Compute NASCAR Power Rankings for a specific series.
+    
+    Composite score based on:
+    - Average finish (30%)
+    - Recent form - last 5 races (25%)
+    - Top-5/Top-10 rate (20%)
+    - Laps led rate (15%)
+    - Track-type performance (10%)
+    """
+    import asyncpg
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = 'nascar'")
+        if not sport_id:
+            raise HTTPException(status_code=404, detail="NASCAR sport not found")
+        
+        if series not in {"cup", "trucks", "xfinity"}:
+            raise HTTPException(status_code=400, detail="Series must be one of: cup, trucks, xfinity")
+        
+        if not season:
+            season = await conn.fetchval(
+                "SELECT MAX(season) FROM results WHERE sport_id = $1 AND series = $2",
+                sport_id, series
+            )
+        if not season:
+            return {"rankings": [], "season": 0, "series": series}
+        
+        # Fetch all race results for the season/series
+        rows = await conn.fetch(
+            """SELECT metadata FROM results 
+               WHERE sport_id = $1 AND series = $2 AND season = $3
+               AND metadata->>'Finish' IS NOT NULL
+            """,
+            sport_id, series, int(season)
+        )
+        
+        if not rows:
+            return {"rankings": [], "season": season, "series": series}
+        
+        # Build driver stats
+        drivers = {}
+        race_count = 0
+        
+        for row in rows:
+            m = row["metadata"] if isinstance(row["metadata"], dict) else json.loads(row["metadata"])
+            driver = m.get("driver_name", "") or m.get("Driver", "")
+            finish = (m.get("Finish") or m.get("finish")) or 0
+            start = (m.get("Start") or m.get("start")) or 0
+            laps = (m.get("Laps") or m.get("laps")) or 0
+            led = (m.get("Led") or m.get("led")) or 0.0
+            pts = (m.get("Pts") or m.get("pts")) or 0.0
+            win = (m.get("Win") or m.get("win")) or 0
+            track = m.get("Track", "") or m.get("track", "")
+            surface = m.get("Surface", "") or m.get("surface", "")
+            length = (m.get("Length") or m.get("length")) or 0.0
+            race_num = (m.get("Race") or m.get("race_num")) or 0
+            
+            if not driver or finish == 0:
+                continue
+            
+            race_count = max(race_count, race_num)
+            
+            if driver not in drivers:
+                drivers[driver] = {
+                    "finishes": [], "starts": [], "top5": 0, "top10": 0, "wins": 0,
+                    "laps": 0, "led": 0, "pts": 0, "track_perf": {}, "race_nums": []
+                }
+            
+            d = drivers[driver]
+            d["finishes"].append(finish)
+            d["starts"].append(start)
+            d["laps"] += laps
+            d["led"] += led
+            d["pts"] += pts
+            d["wins"] += win
+            d["race_nums"].append(race_num)
+            
+            if finish <= 5:
+                d["top5"] += 1
+            if finish <= 10:
+                d["top10"] += 1
+            
+            # Track type performance
+            track_type = "unknown"
+            if surface:
+                track_type = surface.lower()
+            elif length:
+                if length >= 2.0:
+                    track_type = "superspeedway"
+                elif length >= 1.0:
+                    track_type = "intermediate"
+                else:
+                    track_type = "short"
+            
+            if track_type not in d["track_perf"]:
+                d["track_perf"][track_type] = {"finishes": [], "count": 0}
+            d["track_perf"][track_type]["finishes"].append(finish)
+            d["track_perf"][track_type]["count"] += 1
+        
+        # Calculate rankings
+        rankings = []
+        for name, d in drivers.items():
+            total_races = len(d["finishes"])
+            if total_races == 0:
+                continue
+            
+            # 1. Average finish (lower is better, invert for scoring)
+            avg_finish = sum(d["finishes"]) / total_races
+            avg_finish_score = 1.0 - (avg_finish - 1) / 39  # Normalize 1-40 to 0-1, invert
+            
+            # 2. Recent form (last 5 races)
+            recent_races = sorted(zip(d["race_nums"], d["finishes"]), key=lambda x: -x[0])[:5]
+            recent_finishes = [f for _, f in recent_races]
+            recent_avg = sum(recent_finishes) / len(recent_finishes) if recent_finishes else 20
+            recent_score = 1.0 - (recent_avg - 1) / 39
+            
+            # 3. Top-5/Top-10 rate
+            top5_rate = d["top5"] / total_races
+            top10_rate = d["top10"] / total_races
+            
+            # 4. Laps led rate
+            laps_led_rate = d["led"] / d["laps"] if d["laps"] > 0 else 0
+            
+            # 5. Track-type consistency (average finish variance across track types)
+            track_scores = []
+            for perf in d["track_perf"].values():
+                if perf["count"] >= 2:
+                    avg = sum(perf["finishes"]) / perf["count"]
+                    track_scores.append(1.0 - (avg - 1) / 39)
+            track_consistency = sum(track_scores) / len(track_scores) if track_scores else 0.5
+            
+            rankings.append({
+                "driver": name,
+                "races": total_races,
+                "wins": d["wins"],
+                "top5": d["top5"],
+                "top10": d["top10"],
+                "avg_finish": round(avg_finish, 1),
+                "recent_avg": round(recent_avg, 1),
+                "top5_rate": round(top5_rate, 3),
+                "top10_rate": round(top10_rate, 3),
+                "laps_led_rate": round(laps_led_rate, 3),
+                "track_consistency": round(track_consistency, 3),
+                "pts": d["pts"],
+                # Raw components for composite calc
+                "_avg_finish_score": avg_finish_score,
+                "_recent_score": recent_score,
+                "_top5_rate": top5_rate,
+                "_laps_led_rate": laps_led_rate,
+                "_track_consistency": track_consistency,
+            })
+        
+        # Composite: AvgFinish(30) + Recent(25) + Top5(20) + LapsLed(15) + Track(10)
+        for r in rankings:
+            composite = (
+                0.30 * r["_avg_finish_score"] +
+                0.25 * r["_recent_score"] +
+                0.20 * r["_top5_rate"] +
+                0.15 * r["_laps_led_rate"] +
+                0.10 * r["_track_consistency"]
+            )
+            r["power_score"] = round(composite * 100, 1)
+            
+            # Clean up internal fields
+            for key in list(r.keys()):
+                if key.startswith("_"):
+                    del r[key]
+        
+        rankings.sort(key=lambda x: -x["power_score"])
+        
+        # Add rank
+        for i, r in enumerate(rankings):
+            r["rank"] = i + 1
+        
+        return {
+            "season": season,
+            "series": series,
+            "through_race": race_count,
+            "total_drivers": len(rankings),
+            "rankings": rankings,
+            "weights": {
+                "avg_finish": 0.30,
+                "recent_form": 0.25,
+                "top5_rate": 0.20,
+                "laps_led_rate": 0.15,
+                "track_consistency": 0.10
+            }
+        }
+    finally:
+        await conn.close()
+
+
+# NBA Power Rankings
+# ========================================================
+
+@router.get("/nba/power-rankings")
+async def get_nba_power_rankings(
+    season: Optional[int] = Query(None, description="NBA season year (default: latest)"),
+):
+    """Calculate NBA power rankings based on team performance."""
+    try:
+        import asyncpg
+        from src.config import DATABASE_URL
+        
+        # Default to current season if not specified
+        if season is None:
+            from datetime import datetime
+            season = datetime.now().year
+        
+        conn = await get_db_connection()
+        
+        # Get NBA sport ID
+        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = 'nba'")
+        if not sport_id:
+            raise HTTPException(status_code=404, detail="NBA sport not found")
+        
+        # Get games for the season
+        games_query = """
+            SELECT home_entity_id, away_entity_id, home_score, away_score, game_date
+            FROM results r
+            JOIN sports s ON r.sport_id = s.id
+            WHERE s.name = 'nba' AND r.season = $1
+            AND r.home_score IS NOT NULL AND r.away_score IS NOT NULL
+            ORDER BY r.game_date
+        """
+        games = await conn.fetch(games_query, season)
+        
+        if not games:
+            return {
+                "season": season,
+                "through_games": 0,
+                "total_teams": 0,
+                "rankings": []
+            }
+        
+        # Calculate team stats
+        team_stats = {}
+        
+        for game in games:
+            home_team_id = game['home_entity_id']
+            away_team_id = game['away_entity_id']
+            home_score = game['home_score']
+            away_score = game['away_score']
+            
+            # Skip games without entity IDs
+            if home_team_id is None or away_team_id is None:
+                continue
+            
+            # Use entity IDs as team identifiers
+            home_team = f"Team_{home_team_id}"
+            away_team = f"Team_{away_team_id}"
+            
+            # Initialize teams if not exists
+            if home_team not in team_stats:
+                team_stats[home_team] = {'games': 0, 'wins': 0, 'losses': 0, 'points_for': 0, 'points_against': 0, 'recent': []}
+            if away_team not in team_stats:
+                team_stats[away_team] = {'games': 0, 'wins': 0, 'losses': 0, 'points_for': 0, 'points_against': 0, 'recent': []}
+            
+            # Update stats
+            team_stats[home_team]['games'] += 1
+            team_stats[away_team]['games'] += 1
+            team_stats[home_team]['points_for'] += home_score
+            team_stats[home_team]['points_against'] += away_score
+            team_stats[away_team]['points_for'] += away_score
+            team_stats[away_team]['points_against'] += home_score
+            
+            # Update wins/losses
+            if home_score > away_score:
+                team_stats[home_team]['wins'] += 1
+                team_stats[away_team]['losses'] += 1
+                team_stats[home_team]['recent'].append(1)  # Win
+                team_stats[away_team]['recent'].append(0)  # Loss
+            else:
+                team_stats[away_team]['wins'] += 1
+                team_stats[home_team]['losses'] += 1
+                team_stats[away_team]['recent'].append(1)  # Win
+                team_stats[home_team]['recent'].append(0)  # Loss
+            
+            # Keep only last 10 games for recent form
+            team_stats[home_team]['recent'] = team_stats[home_team]['recent'][-10:]
+            team_stats[away_team]['recent'] = team_stats[away_team]['recent'][-10:]
+        
+        # Calculate power rankings
+        rankings = []
+        
+        for team, stats in team_stats.items():
+            if stats['games'] < 5:  # Skip teams with few games
+                continue
+            
+            win_pct = stats['wins'] / stats['games']
+            point_diff = (stats['points_for'] - stats['points_against']) / stats['games']
+            
+            # Recent form (last 10 games)
+            recent_win_pct = sum(stats['recent']) / len(stats['recent']) if stats['recent'] else 0
+            
+            # Power score calculation
+            # Win percentage: 40% weight
+            # Point differential: 30% weight  
+            # Recent form: 20% weight
+            # Games played (minimum threshold): 10% weight
+            power_score = (
+                (win_pct * 40) +
+                (min(max(point_diff * 2, -20), 20) * 30) +  # Scale point diff, cap at ±20
+                (recent_win_pct * 20) +
+                (min(stats['games'] / 82, 1) * 10)  # Scale games played, max at 82
+            )
+            
+            rankings.append({
+                "team": team,
+                "games": stats['games'],
+                "wins": stats['wins'],
+                "losses": stats['losses'],
+                "record": f"{stats['wins']}-{stats['losses']}",
+                "win_pct": round(win_pct * 100, 1),
+                "points_for": stats['points_for'],
+                "points_against": stats['points_against'],
+                "point_diff": round(point_diff, 1),
+                "point_diff_pg": round(point_diff, 1),
+                "recent_win_pct": round(recent_win_pct * 100, 1),
+                "power_score": round(power_score, 1)
+            })
+        
+        # Sort by power score
+        rankings.sort(key=lambda x: x['power_score'], reverse=True)
+        
+        # Add rank
+        for i, team in enumerate(rankings):
+            team['rank'] = i + 1
+        
+        return {
+            "season": season,
+            "through_games": len(games),
+            "total_teams": len(rankings),
+            "rankings": rankings
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error calculating NBA power rankings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if 'conn' in locals():
+            await conn.close()
+
+
+# Endpoint Aliases for Consistency
+# ========================================================
+
+@router.get("/nfl/teams")
+async def get_nfl_teams():
+    """Get list of NFL teams (alias for profiles endpoint)."""
+    return await get_profile_list("nfl", entity_type="team")
+
+
+@router.get("/nascar/drivers")
+async def get_nascar_drivers():
+    """Get list of NASCAR drivers (alias for profiles endpoint)."""
+    return await get_profile_list("nascar", entity_type="driver")
+
+
+@router.get("/nba/teams")
+async def get_nba_teams():
+    """Get list of NBA teams (alias for profiles endpoint)."""
+    return await get_profile_list("nba", entity_type="team")
+
+
+@router.get("/nfl/standings")
+async def get_nfl_standings_alias():
+    """Get NFL standings (alias for standings endpoint)."""
+    from datetime import datetime
+    current_year = datetime.now().year
+    return await get_league_standings("nfl", current_year)
+
+
+@router.get("/nba/standings")
+async def get_nba_standings_alias():
+    """Get NBA standings (alias for standings endpoint)."""
+    from datetime import datetime
+    current_year = datetime.now().year
+    return await get_league_standings("nba", current_year)

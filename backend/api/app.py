@@ -2355,6 +2355,7 @@ def get_power_rankings(
 ):
     """Calculate and return power rankings for teams/drivers."""
     try:
+        import pandas as pd
         from datetime import datetime
         
         s, label = SportFactory.get_sport(sport, series)
@@ -2369,7 +2370,7 @@ def get_power_rankings(
         
         # Year column detection
         year_col = None
-        for col in ['year', 'season', 'schedule_season']:
+        for col in ['schedule_season', 'year', 'season', 'Season']:
             if col in df.columns:
                 year_col = col
                 break
@@ -2382,13 +2383,19 @@ def get_power_rankings(
         
         if is_nascar:
             # NASCAR: Rank by team performance
-            if 'team_name' not in df.columns:
+            team_col = None
+            for col in ['team_name', 'Team', 'team']:
+                if col in df.columns:
+                    team_col = col
+                    break
+            
+            if not team_col:
                 return {"rankings": [], "sport": sport, "message": "No team data"}
             
             finish_col = 'finish' if 'finish' in df.columns else 'finishing_position'
             
-            for team in df['team_name'].dropna().unique():
-                team_df = df[df['team_name'] == team]
+            for team in df[team_col].dropna().unique():
+                team_df = df[df[team_col] == team]
                 if len(team_df) < 3:
                     continue
                 
@@ -4328,4 +4335,102 @@ async def startup_event():
         SchedulerService.start_scheduler()
     except Exception as e:
         logger.error(f"Startup error: {e}")
+
+
+# Standings endpoints to fix 404 errors for mobile app
+@app.get("/standings/nfl")
+async def get_nfl_standings_redirect(season: Optional[int] = None):
+    """NFL standings endpoint - redirects to db endpoint."""
+    from datetime import datetime
+    if season is None:
+        season = datetime.now().year
+    
+    # Import here to avoid circular imports
+    from api.db_endpoints import get_league_standings
+    return await get_league_standings("nfl", season)
+
+
+@app.get("/standings/nba") 
+async def get_nba_standings_redirect(season: Optional[int] = None):
+    """NBA standings endpoint - redirects to db endpoint."""
+    from datetime import datetime
+    if season is None:
+        season = datetime.now().year
+    
+    from api.db_endpoints import get_league_standings
+    return await get_league_standings("nba", season)
+
+
+@app.get("/standings/nascar")
+async def get_nascar_standings_redirect(season: Optional[int] = None, series: str = "cup"):
+    """NASCAR standings endpoint - redirects to db endpoint."""
+    from datetime import datetime
+    if season is None:
+        season = datetime.now().year
+    
+    from api.db_endpoints import get_nascar_standings
+    return await get_nascar_standings(season, series)
+
+
+@app.get("/nascar/results")
+async def get_nascar_results_alt(season: Optional[int] = None, series: str = "cup"):
+    """NASCAR results endpoint - mobile app compatibility."""
+    from datetime import datetime
+    if season is None:
+        season = datetime.now().year
+    
+    from api.db_endpoints import get_race_results_list
+    return await get_race_results_list("nascar", series, season)
+
+
+# Comprehensive NASCAR endpoints to handle any mobile app URL pattern
+@app.get("/db/standings/nascar")
+async def get_nascar_standings_db_alias(season: Optional[int] = None, series: str = "cup"):
+    """NASCAR standings endpoint - database alias for mobile app compatibility."""
+    from datetime import datetime
+    if season is None:
+        season = datetime.now().year
+    
+    from api.db_endpoints import get_nascar_standings
+    return await get_nascar_standings(season, series)
+
+
+@app.get("/standings/nascar")
+async def get_nascar_standings_redirect(season: Optional[int] = None, series: str = "cup"):
+    """NASCAR standings endpoint - redirects to db endpoint."""
+    from datetime import datetime
+    if season is None:
+        season = datetime.now().year
+    
+    from api.db_endpoints import get_nascar_standings
+    return await get_nascar_standings(season, series)
+
+
+@app.get("/nascar/standings")
+async def get_nascar_standings_alt(season: Optional[int] = None, series: str = "cup"):
+    """NASCAR standings endpoint - mobile app compatibility."""
+    from datetime import datetime
+    if season is None:
+        season = datetime.now().year
+    
+    from api.db_endpoints import get_nascar_standings
+    return await get_nascar_standings(season, series)
+
+
+@app.get("/db/races/nascar/list")
+async def get_nascar_results_db_alias(series: str = "cup", season: Optional[int] = None, driver: Optional[str] = None, limit: int = 200):
+    """NASCAR results endpoint - database alias for mobile app compatibility."""
+    from api.db_endpoints import get_race_results_list
+    return await get_race_results_list("nascar", series, season, driver, limit)
+
+
+@app.get("/nascar/results")
+async def get_nascar_results_alt(season: Optional[int] = None, series: str = "cup"):
+    """NASCAR results endpoint - mobile app compatibility."""
+    from datetime import datetime
+    if season is None:
+        season = datetime.now().year
+    
+    from api.db_endpoints import get_race_results_list
+    return await get_race_results_list("nascar", series, season)
 

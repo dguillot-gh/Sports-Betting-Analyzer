@@ -795,6 +795,70 @@ async def analyze_all_college_baseball_games(
     }
 
 
+@router.post("/college-baseball/scrape-results")
+async def scrape_college_baseball_results(
+    days_back: int = Query(7, description="Number of days to scrape")
+):
+    """
+    Scrape completed college baseball game results from ESPN
+    and store them in the database for the rolling-stats model.
+    """
+    from scripts.college_baseball_results_scraper import scrape_and_store
+    try:
+        result = await scrape_and_store(days_back=days_back)
+        return {"status": "success", **result}
+    except Exception as e:
+        logger.error(f"Error scraping results: {e}")
+        return {"status": "error", "error": str(e)}
+
+
+@router.post("/college-baseball/backfill-season")
+async def backfill_college_baseball_season(
+    year: int = Query(2025, description="Season year to backfill")
+):
+    """
+    Backfill an entire season of college baseball game results.
+    Fetches all completed games from Feb-June of the given year.
+    """
+    from scripts.college_baseball_results_scraper import backfill_season
+    try:
+        result = await backfill_season(year=year)
+        return {"status": "success", **result}
+    except Exception as e:
+        logger.error(f"Error backfilling season: {e}")
+        return {"status": "error", "error": str(e)}
+
+
+@router.post("/college-baseball/train-models")
+async def train_college_baseball_models(
+    mode: str = Query("csv", description="Training mode: 'csv' for stat-based, 'rolling' for DB-based, 'both' for both")
+):
+    """
+    Train/retrain the College Baseball XGBoost models.
+    - csv: Retrain stat-based models from multi-year CSV data
+    - rolling: Train rolling-stats models from DB game results
+    - both: Run both training pipelines
+    """
+    from scripts.college_baseball_xgb_trainer import CollegeBaseballXGBTrainer
+    try:
+        trainer = CollegeBaseballXGBTrainer()
+        results = {}
+
+        if mode in ("csv", "both"):
+            trainer.train_from_csvs()
+            results["csv_training"] = "complete"
+
+        if mode in ("rolling", "both"):
+            import asyncio
+            await trainer.train()
+            results["rolling_training"] = "complete"
+
+        return {"status": "success", "mode": mode, **results}
+    except Exception as e:
+        logger.error(f"Error training models: {e}")
+        return {"status": "error", "error": str(e)}
+
+
 @router.post("/ncaab/update-torvik")
 async def update_torvik_data():
     """

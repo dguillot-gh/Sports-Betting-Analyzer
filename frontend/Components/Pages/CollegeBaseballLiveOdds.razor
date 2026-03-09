@@ -95,24 +95,26 @@
                             <!-- Odds Table -->
                             <div class="rounded-lg border border-slate-800 overflow-hidden text-xs">
                                 <TwTable TItem="object">
-                                    <TwTr>
-                                        <TwTd Class="bg-slate-900/20 font-medium text-slate-400">Moneyline</TwTd>
-                                        <TwTd Class="text-right">@FormatOdds(game.HomeMoneyline) / @FormatOdds(game.AwayMoneyline)</TwTd>
-                                    </TwTr>
-                                    @if (game.Spread.HasValue)
-                                    {
+                                    <ChildContent>
                                         <TwTr>
-                                            <TwTd Class="bg-slate-900/20 font-medium text-slate-400">Spread</TwTd>
-                                            <TwTd Class="text-right">@game.Spread.Value.ToString("+0.0;-0.0")</TwTd>
+                                            <TwTd Class="bg-slate-900/20 font-medium text-slate-400">Moneyline</TwTd>
+                                            <TwTd Class="text-right">@FormatOdds(game.HomeMoneyline) / @FormatOdds(game.AwayMoneyline)</TwTd>
                                         </TwTr>
-                                    }
-                                    @if (game.OverUnder.HasValue)
-                                    {
-                                        <TwTr>
-                                            <TwTd Class="bg-slate-900/20 font-medium text-slate-400">O/U</TwTd>
-                                            <TwTd Class="text-right">@game.OverUnder.Value</TwTd>
-                                        </TwTr>
-                                    }
+                                        @if (game.Spread.HasValue)
+                                        {
+                                            <TwTr>
+                                                <TwTd Class="bg-slate-900/20 font-medium text-slate-400">Spread</TwTd>
+                                                <TwTd Class="text-right">@game.Spread.Value.ToString("+0.0;-0.0")</TwTd>
+                                            </TwTr>
+                                        }
+                                        @if (game.OverUnder.HasValue)
+                                        {
+                                            <TwTr>
+                                                <TwTd Class="bg-slate-900/20 font-medium text-slate-400">O/U</TwTd>
+                                                <TwTd Class="text-right">@game.OverUnder.Value</TwTd>
+                                            </TwTr>
+                                        }
+                                    </ChildContent>
                                 </TwTable>
                             </div>
 
@@ -123,19 +125,21 @@
                                     <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Model Predictions</h4>
                                     <div class="rounded-lg border border-slate-800 overflow-hidden text-xs">
                                         <TwTable TItem="object">
-                                            <TwTr>
-                                                <TwTd Class="bg-slate-900/20 font-medium text-slate-400">Winner</TwTd>
-                                                <TwTd class="text-right">
-                                                    <span class="font-bold @(game.Prediction.HomeWinProbability > 0.5 ? "text-emerald-500" : "text-red-500")">
-                                                        @game.Prediction.PredictedWinner
-                                                    </span>
-                                                    <span class="text-slate-500 text-[10px]"> (@((game.Prediction.HomeWinProbability * 100).ToString("F0"))%)</span>
-                                                </TwTd>
-                                            </TwTr>
-                                            <TwTr>
-                                                <TwTd Class="bg-slate-900/20 font-medium text-slate-400">Proj Total</TwTd>
-                                                <TwTd class="text-right font-medium">@game.Prediction.PredictedTotal</TwTd>
-                                            </TwTr>
+                                            <ChildContent>
+                                                <TwTr>
+                                                    <TwTd Class="bg-slate-900/20 font-medium text-slate-400">Winner</TwTd>
+                                                    <TwTd class="text-right">
+                                                        <span class="font-bold @(game.Prediction.HomeWinProbability > 0.5 ? "text-emerald-500" : "text-red-500")">
+                                                            @game.Prediction.PredictedWinner
+                                                        </span>
+                                                        <span class="text-slate-500 text-[10px]"> (@((game.Prediction.HomeWinProbability * 100).ToString("F0"))%)</span>
+                                                    </TwTd>
+                                                </TwTr>
+                                                <TwTr>
+                                                    <TwTd Class="bg-slate-900/20 font-medium text-slate-400">Proj Total</TwTd>
+                                                    <TwTd class="text-right font-medium">@game.Prediction.PredictedTotal</TwTd>
+                                                </TwTr>
+                                            </ChildContent>
                                         </TwTable>
                                     </div>
                                 </div>

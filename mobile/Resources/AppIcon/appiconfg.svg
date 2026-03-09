@@ -1,0 +1,27 @@
+<svg width="456" height="456" viewBox="0 0 456 456" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer Glow aligned to center (228, 228) with scaled radius -->
+  <circle cx="228" cy="228" r="178" fill="#60A5FA" fill-opacity="0.15" />
+  
+  <!-- Football Silhouette Base Scaled -->
+  <g transform="translate(142, 142) scale(1.34)">
+    <path d="M34.4004 93.5996C20.8004 80 20.8004 57.6 34.4004 44L44 34.4004C57.6 20.8004 80 20.8004 93.5996 34.4004C107.2 48 107.2 70.4 93.5996 84L84 93.5996C70.4 107.2 48 107.2 34.4004 93.5996Z" fill="url(#paint0_linear)"/>
+    
+    <!-- Laces -->
+    <path d="M72 40L40 72" stroke="white" stroke-width="4" stroke-linecap="round"/>
+    <path d="M68 44L75 51" stroke="white" stroke-width="4" stroke-linecap="round"/>
+    <path d="M60 52L67 59" stroke="white" stroke-width="4" stroke-linecap="round"/>
+    <path d="M52 60L59 67" stroke="white" stroke-width="4" stroke-linecap="round"/>
+    <path d="M44 68L51 75" stroke="white" stroke-width="4" stroke-linecap="round"/>
+
+    <!-- Stripes -->
+    <path d="M80 30L98 48" stroke="white" stroke-opacity="0.9" stroke-width="4" stroke-linecap="round"/>
+    <path d="M30 80L48 98" stroke="white" stroke-opacity="0.9" stroke-width="4" stroke-linecap="round"/>
+  </g>
+
+  <defs>
+    <linearGradient id="paint0_linear" x1="30" y1="30" x2="98" y2="98" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#1E3A8A"/>
+    </linearGradient>
+  </defs>
+</svg>

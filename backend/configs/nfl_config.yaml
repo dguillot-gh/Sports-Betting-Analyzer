@@ -1,7 +1,9 @@
 name: nfl
 data:
-  scores_file: spreadspoke_scores.csv
-  teams_file: nfl_teams.csv
+  data_dir: nflverse
+  schedules_file: schedules.csv
+  players_file: players.csv
+  roster_file: roster.csv
 features:
   categorical:
     - home_id
