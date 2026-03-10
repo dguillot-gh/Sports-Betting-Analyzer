@@ -30,7 +30,7 @@
                     </div>
                     <div class="p-4 rounded-lg border border-slate-700 bg-slate-800/50">
                         <div class="text-sm font-semibold text-slate-400 mb-1">Git SHA</div>
-                        <div class="text-lg font-mono text-white text-xs">@versionInfo.GitSha.Substring(0, 8)</div>
+                        <div class="text-lg font-mono text-white text-xs">@(versionInfo.GitSha.Length > 8 ? versionInfo.GitSha.Substring(0, 8) : versionInfo.GitSha)</div>
                     </div>
                     <div class="p-4 rounded-lg border border-slate-700 bg-slate-800/50">
                         <div class="text-sm font-semibold text-slate-400 mb-1">Build Time</div>

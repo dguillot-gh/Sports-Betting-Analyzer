@@ -2,7 +2,6 @@
 @using SportsBettingAnalyzer.Shared.Services
 @using SportsBettingAnalyzer.Shared.Models
 @using SportsBettingAnalyzer.Mobile.Models
-@using SportsBettingAnalyzer.Services
 @using System.Net.Http.Json
 @inject IServerConfigService ConfigService
 @inject IAppSettingsService AppSettings
@@ -91,7 +90,7 @@
                 </div>
                 <div class="version-item">
                     <div class="version-label">Git SHA</div>
-                    <div class="version-value small">@versionInfo.GitSha.Substring(0, 8)</div>
+                    <div class="version-value small">@(versionInfo.GitSha.Length > 8 ? versionInfo.GitSha.Substring(0, 8) : versionInfo.GitSha)</div>
                 </div>
                 <div class="version-item">
                     <div class="version-label">Build Time</div>
@@ -276,7 +275,7 @@
         animation: spin 1s linear infinite; 
     }
     
-    @keyframes spin { 
+    @@keyframes spin { 
         0% { transform: rotate(0deg); } 
         100% { transform: rotate(360deg); } 
     }
@@ -291,7 +290,7 @@
     private bool showSuccessMessage = false;
     private List<NavItem> _allAvailable = new();
     private List<NavItem> _selectedItems = new();
-    private VersionInfo? versionInfo;
+    private DeploymentVersionInfo? versionInfo;
     private bool isLoadingVersion = true;
 
     protected override async Task OnInitializedAsync()
@@ -319,13 +318,13 @@
             httpClient.BaseAddress = new Uri(ConfigService.GetBaseUrl());
             httpClient.Timeout = TimeSpan.FromSeconds(10);
             
-            var response = await httpClient.GetFromJsonAsync<VersionInfo>("/deployments/current");
+            var response = await httpClient.GetFromJsonAsync<DeploymentVersionInfo>("/deployments/current");
             versionInfo = response;
         }
         catch (Exception ex)
         {
             // Handle error gracefully - show default info
-            versionInfo = new VersionInfo 
+            versionInfo = new DeploymentVersionInfo 
             { 
                 Version = "unknown",
                 Environment = "offline",

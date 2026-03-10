@@ -4,9 +4,9 @@ using System.Collections.Generic;
 namespace SportsBettingAnalyzer.Mobile.Models
 {
     /// <summary>
-    /// Version information from backend API
+    /// Deployment version information from backend API
     /// </summary>
-    public class VersionInfo
+    public class DeploymentVersionInfo
     {
         [JsonPropertyName("version")]
         public string Version { get; set; } = string.Empty;
