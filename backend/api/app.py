@@ -3,6 +3,7 @@ import src.patch_xgboost  # Monkeypatch for legacy sportsdataverse models
 from pathlib import Path
 import sys
 import json
+import os
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime
@@ -36,6 +37,7 @@ from api.nascar_live_endpoints import router as nascar_live_router
 from api.nhl_endpoints import router as nhl_router
 from api.expert_picks_endpoints import router as expert_picks_router
 from api.baseball_endpoints import router as baseball_router
+from api.deployment_endpoints import router as deployment_router
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 # import pandas as pd  <-- Moved to local function scope
@@ -59,11 +61,16 @@ from dataset_manager import DatasetManager
 from data_sources import NASCARDataUpdater, NFLDataUpdater, GitHubDataSource, BaseDataUpdater
 from services.scheduler import SchedulerService
 
+# Import version management (full semantic versioning)
+from src.version import get_version, get_version_info
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title='Sports ML API', version='1.2')
+# Get version
+current_version = get_version()
+app = FastAPI(title='Sports ML API', version=current_version)
 
 setup_log_capture()  # Enable log capture for /logs endpoint
 app.include_router(db_router)  # Database endpoints
@@ -87,6 +94,7 @@ app.include_router(nascar_live_router)  # NASCAR Live Dashboard Logic
 app.include_router(nhl_router)  # NHL Data and Predictions
 app.include_router(expert_picks_router)  # CBS Expert Picks scraper data
 app.include_router(baseball_router)  # College Baseball Data
+app.include_router(deployment_router)  # Deployment tracking
 
 # Dev CORS. Tighten for production.
 app.add_middleware(
@@ -122,7 +130,14 @@ def model_paths(sport: str, series_label: str, task: str) -> Path:
 # ---------- Health ----------
 @app.get('/health')
 def health():
-    return {'ok': True, 'sports': ['nascar', 'nfl', 'nba'], 'version': '1.2'}
+    return {'ok': True, 'sports': ['nascar', 'nfl', 'nba'], 'version': current_version}
+
+
+# ---------- Version Information ----------
+@app.get('/version')
+def get_version_endpoint():
+    """Get version information"""
+    return get_version_info()
 
 
 # ---------- Schema & Prediction Endpoints ----------
@@ -4383,6 +4398,33 @@ async def get_nascar_results_alt(season: Optional[int] = None, series: str = "cu
     return await get_race_results_list("nascar", series, season)
 
 
+# ============================================
+# Startup Event - Register Current Version
+# ============================================
+@app.on_event("startup")
+async def startup_event():
+    """Register current version on startup"""
+    try:
+        import asyncio
+        from api.deployment_endpoints import register_current_version
+        
+        # Wait a moment for database to be ready
+        await asyncio.sleep(2)
+        
+        result = await register_current_version()
+        if result.get("success"):
+            logger.info(f"Version registered: {result.get('deployment_id')}")
+        else:
+            logger.warning(f"Failed to register version: {result.get('error')}")
+    except Exception as e:
+        logger.warning(f"Could not register version on startup: {str(e)}")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
 # Comprehensive NASCAR endpoints to handle any mobile app URL pattern
 @app.get("/db/standings/nascar")
 async def get_nascar_standings_db_alias(season: Optional[int] = None, series: str = "cup"):
@@ -4433,4 +4475,31 @@ async def get_nascar_results_alt(season: Optional[int] = None, series: str = "cu
     
     from api.db_endpoints import get_race_results_list
     return await get_race_results_list("nascar", series, season)
+
+
+# ============================================
+# Startup Event - Register Current Version
+# ============================================
+@app.on_event("startup")
+async def startup_event():
+    """Register current version on startup"""
+    try:
+        import asyncio
+        from api.deployment_endpoints import register_current_version
+        
+        # Wait a moment for database to be ready
+        await asyncio.sleep(2)
+        
+        result = await register_current_version()
+        if result.get("success"):
+            logger.info(f"Version registered: {result.get('deployment_id')}")
+        else:
+            logger.warning(f"Failed to register version: {result.get('error')}")
+    except Exception as e:
+        logger.warning(f"Could not register version on startup: {str(e)}")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 

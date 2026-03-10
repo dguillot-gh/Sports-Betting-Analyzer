@@ -441,13 +441,55 @@ public class DataUpdateResponse
     public bool Success { get; set; }
 
     [JsonPropertyName("message")]
-    public string Message { get; set; } = "";
+    public string Message { get; set; } = string.Empty;
 
     [JsonPropertyName("files")]
     public List<string>? Files { get; set; }
 
     [JsonPropertyName("updated_at")]
     public string? UpdatedAt { get; set; }
+}
+
+/// <summary>
+/// Version information models
+/// </summary>
+public class VersionInfo
+{
+    [JsonPropertyName("version")]
+    public string Version { get; set; } = string.Empty;
+
+    [JsonPropertyName("git_sha")]
+    public string GitSha { get; set; } = string.Empty;
+
+    [JsonPropertyName("git_branch")]
+    public string GitBranch { get; set; } = string.Empty;
+
+    [JsonPropertyName("build_time")]
+    public string BuildTime { get; set; } = string.Empty;
+
+    [JsonPropertyName("environment")]
+    public string Environment { get; set; } = string.Empty;
+
+    [JsonPropertyName("deployment_id")]
+    public string DeploymentId { get; set; } = string.Empty;
+
+    [JsonPropertyName("components")]
+    public List<DeploymentComponent> Components { get; set; } = new();
+}
+
+public class DeploymentComponent
+{
+    [JsonPropertyName("component_name")]
+    public string ComponentName { get; set; } = string.Empty;
+
+    [JsonPropertyName("component_version")]
+    public string ComponentVersion { get; set; } = string.Empty;
+
+    [JsonPropertyName("component_sha")]
+    public string ComponentSha { get; set; } = string.Empty;
+
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = string.Empty;
 }
 
 public class RetrainResponse
@@ -1559,6 +1601,79 @@ public class PythonMLServiceClient
         {
             _logger.LogError(ex, "Error triggering NCAAB import");
             return new DataUpdateResponse { Success = false, Message = ex.Message };
+        }
+    }
+
+    /// <summary>
+    /// Get current version information
+    /// </summary>
+    public async Task<VersionInfo> GetVersionInfoAsync()
+    {
+        try
+        {
+            if (!await IsHealthyAsync())
+            {
+                _logger.LogWarning("Python ML Service unavailable, returning default version info");
+                return new VersionInfo 
+                { 
+                    Version = "unknown",
+                    Environment = "offline",
+                    Components = new List<DeploymentComponent>
+                    {
+                        new DeploymentComponent 
+                        { 
+                            ComponentName = "backend", 
+                            ComponentVersion = "unknown", 
+                            Status = "offline" 
+                        }
+                    }
+                };
+            }
+
+            var response = await _httpClient.GetFromJsonAsync<VersionInfo>("/deployments/current");
+            return response ?? new VersionInfo 
+            { 
+                Version = "unknown",
+                Environment = "unknown"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting version information");
+            return new VersionInfo 
+            { 
+                Version = "error",
+                Environment = "error"
+            };
+        }
+    }
+
+    /// <summary>
+    /// Get deployment history
+    /// </summary>
+    public async Task<List<Dictionary<string, object>>> GetDeploymentHistoryAsync(int limit = 10)
+    {
+        try
+        {
+            if (!await IsHealthyAsync())
+            {
+                return new List<Dictionary<string, object>>();
+            }
+
+            var response = await _httpClient.GetFromJsonAsync<Dictionary<string, object>>($"/deployments?limit={limit}");
+            
+            if (response?.ContainsKey("deployments") == true)
+            {
+                return System.Text.Json.JsonSerializer.Deserialize<List<Dictionary<string, object>>>(response["deployings"].ToString()) 
+                       ?? new List<Dictionary<string, object>>();
+            }
+
+            return new List<Dictionary<string, object>>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting deployment history");
+            return new List<Dictionary<string, object>>();
         }
     }
 }

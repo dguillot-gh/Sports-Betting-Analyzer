@@ -1,0 +1,174 @@
+@using SportsBettingAnalyzer.Shared.Services
+@inject IVersionService VersionService
+
+<div class="version-display">
+    @if (_versionInfo != null)
+    {
+        <div class="version-info">
+            <span class="version-badge">v@_versionInfo.Version</span>
+            @if (!string.IsNullOrEmpty(_versionInfo.GitBranch))
+            {
+                <span class="branch-info">@_versionInfo.GitBranch</span>
+            }
+            @if (_versionInfo.CommitCount > 0)
+            {
+                <span class="commit-info">#@_versionInfo.CommitCount</span>
+            }
+        </div>
+        
+        @if (_showDetails && _versionInfo != null)
+        {
+            <div class="version-details">
+                <div class="detail-row">
+                    <span class="label">Version:</span>
+                    <span class="value">v@_versionInfo.Version</span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Branch:</span>
+                    <span class="value">@_versionInfo.GitBranch</span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Commit:</span>
+                    <span class="value">@_versionInfo.GitSha.Substring(0, 8)</span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Built:</span>
+                    <span class="value">@_versionInfo.BuildTime</span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Environment:</span>
+                    <span class="value">@_versionInfo.Environment</span>
+                </div>
+                @if (!string.IsNullOrEmpty(_versionInfo.CommitMessage))
+                {
+                    <div class="detail-row">
+                        <span class="label">Last Commit:</span>
+                        <span class="value commit-message">@_versionInfo.CommitMessage</span>
+                    </div>
+                }
+            </div>
+        }
+    }
+    else
+    {
+        <div class="version-loading">
+            <span class="loading-text">Loading version...</span>
+        </div>
+    }
+</div>
+
+<style>
+.version-display {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+}
+
+.version-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.version-badge {
+    background: #2563eb;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+.branch-info {
+    background: #059669;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+}
+
+.commit-info {
+    background: #6b7280;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+}
+
+.version-details {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 12px;
+    margin-top: 8px;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+    font-size: 11px;
+}
+
+.detail-row .label {
+    color: #6b7280;
+    font-weight: 600;
+}
+
+.detail-row .value {
+    color: #111827;
+    font-family: 'Courier New', monospace;
+}
+
+.commit-message {
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.version-loading {
+    color: #6b7280;
+    font-style: italic;
+}
+</style>
+
+@code {
+    private VersionInfo? _versionInfo;
+    private bool _showDetails = false;
+
+    [Parameter]
+    public bool ShowDetails { get; set; } = false;
+
+    [Parameter]
+    public bool AutoLoad { get; set; } = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AutoLoad)
+        {
+            await LoadVersion();
+        }
+    }
+
+    private async Task LoadVersion()
+    {
+        try
+        {
+            _versionInfo = await VersionService.GetVersionInfoAsync();
+        }
+        catch
+        {
+            _versionInfo = new VersionInfo 
+            { 
+                Version = "Error", 
+                Environment = "Offline" 
+            };
+        }
+    }
+
+    public void ToggleDetails()
+    {
+        _showDetails = !_showDetails;
+        StateHasChanged();
+    }
+}

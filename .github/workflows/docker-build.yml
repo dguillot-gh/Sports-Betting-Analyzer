@@ -44,6 +44,36 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=
             type=ref,event=branch
+            type=raw,value={{branch}}-{{date 'YYYYMMDD'}}-{{sha}}
+
+      - name: Generate Version
+        id: version-gen
+        run: |
+          # Generate semantic version based on date and commit count
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          DATE=$(date +%Y.%m.%d)
+          VERSION="${DATE}.${COMMIT_COUNT}"
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "git_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "git_branch=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+          echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+          
+          echo "Generated version: ${VERSION}"
+          echo "Git SHA: ${SHORT_SHA}"
+          echo "Branch: ${GITHUB_REF_NAME}"
+
+      - name: Get version from Python
+        id: version
+        run: |
+          cd backend
+          python -c "
+import sys
+sys.path.append('src')
+from version import get_version
+print(f'version={get_version()}')
+" >> $GITHUB_OUTPUT
 
       - name: Build and push Backend
         uses: docker/build-push-action@v5
@@ -51,9 +81,28 @@ jobs:
           context: ./backend
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            org.opencontainers.image.version=${{ steps.version-gen.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          build-args: |
+            VERSION=${{ steps.version-gen.outputs.version }}
+            GIT_SHA=${{ steps.version-gen.outputs.git_sha }}
+            GIT_BRANCH=${{ steps.version-gen.outputs.git_branch }}
+            BUILD_TIME=${{ steps.version-gen.outputs.build_time }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Register Deployment
+        if: github.event_name != 'pull_request'
+        run: |
+          # Wait a moment for deployment to be available
+          sleep 30
+          
+          # Register the deployment
+          curl -X POST "http://localhost:8003/deployments/register-simple" \
+            -H "Content-Type: application/json" \
+            || echo "Deployment registration failed (service may not be ready)"
 
   build-frontend:
     runs-on: ubuntu-latest
