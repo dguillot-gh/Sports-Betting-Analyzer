@@ -76,7 +76,7 @@ main {
     }
 
     .content-wrapper {
-        padding-bottom: calc(65px + env(safe-area-inset-bottom) + 30px);
+        padding-bottom: calc(65px + env(safe-area-inset-bottom) + 80px);
     }
 }
 

@@ -1714,16 +1714,25 @@ async def get_league_standings(
         elif sport == "nhl":
             # NHL Standings from MoneyPuck data (series='nhl')
             query = """
+                WITH games AS (
+                    SELECT 
+                        metadata->>'team' as team,
+                        (metadata->>'gameWin')::int as win,
+                        (metadata->>'otLoss')::int as ot_loss,
+                        (metadata->>'goalsFor')::int as gf,
+                        (metadata->>'goalsAgainst')::int as ga
+                    FROM results 
+                    WHERE sport_id = $1 AND series = 'nhl' AND season = $2
+                )
                 SELECT 
-                    metadata->>'team' as team,
-                    COALESCE(SUM(CASE WHEN (metadata->>'gameWin')::int = 1 THEN 1 ELSE 0 END), 0) as wins,
-                    COALESCE(SUM(CASE WHEN (metadata->>'gameWin')::int = 0 AND (metadata->>'otLoss')::int = 0 THEN 1 ELSE 0 END), 0) as losses,
-                    COALESCE(SUM((metadata->>'otLoss')::int), 0) as ot_losses,
-                    COALESCE(SUM((metadata->>'goalsFor')::int), 0) as points_for,
-                    COALESCE(SUM((metadata->>'goalsAgainst')::int), 0) as points_against,
-                    COALESCE(SUM(CASE WHEN (metadata->>'gameWin')::int = 1 THEN 2 ELSE (metadata->>'otLoss')::int END), 0) as points
-                FROM results 
-                WHERE sport_id = $1 AND series = 'nhl' AND season = $2
+                    team,
+                    COALESCE(SUM(win), 0) as wins,
+                    COALESCE(SUM(CASE WHEN win = 0 AND ot_loss = 0 THEN 1 ELSE 0 END), 0) as losses,
+                    COALESCE(SUM(ot_loss), 0) as ot_losses,
+                    COALESCE(SUM(gf), 0) as points_for,
+                    COALESCE(SUM(ga), 0) as points_against,
+                    COALESCE(SUM(CASE WHEN win = 1 THEN 2 ELSE ot_loss END), 0) as points
+                FROM games
                 GROUP BY team
                 ORDER BY points DESC, wins DESC
             """
