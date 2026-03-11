@@ -15,6 +15,9 @@ class ImportLogResponse(BaseModel):
     end_time: Optional[datetime] = None
     duration_seconds: Optional[float] = None
     rows_imported: int
+    new_rows_imported: int = 0
+    updated_rows_imported: int = 0
+    files_processed: int = 0
     error_message: Optional[str] = None
 
 @router.post("/run-imports")

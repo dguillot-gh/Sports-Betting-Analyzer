@@ -51,7 +51,9 @@ async def import_parquet(conn, sport_id: int, series: str, file_path: Path, min_
         
     logger.info(f"Loaded {len(df)} rows after year filtering")
     
-    imported = 0
+    new_count = 0
+    updated_count = 0
+    
     # Process in batches
     batch_size = 1000
     for i in range(0, len(df), batch_size):
@@ -115,20 +117,24 @@ async def import_parquet(conn, sport_id: int, series: str, file_path: Path, min_
                     'race_num': race_num
                 })
                 
-                await conn.execute(
+                is_new = await conn.fetchval(
                     """INSERT INTO results (sport_id, season, series, track, metadata, content_hash)
                        VALUES ($1, $2, $3, $4, $5, $6)
                        ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                       DO UPDATE SET metadata = EXCLUDED.metadata""",
+                       DO UPDATE SET metadata = EXCLUDED.metadata
+                       RETURNING (xmax = 0)""",
                     sport_id, season, series, track, json.dumps(metadata), content_hash
                 )
-                imported += 1
+                if is_new:
+                    new_count += 1
+                else:
+                    updated_count += 1
             except Exception as e:
                 logger.error(f"Error importing row: {e}")
         
         logger.info(f"Progress: {min(i + batch_size, len(df))}/{len(df)}")
         
-    return imported
+    return {"total": new_count + updated_count, "new": new_count, "updated": updated_count}
 
 async def run_import(min_year: int = 2012):
     conn = await asyncpg.connect(DATABASE_URL)
@@ -137,15 +143,17 @@ async def run_import(min_year: int = 2012):
         if not sport_id:
             sport_id = await conn.fetchval("INSERT INTO sports (name) VALUES ('nascar') RETURNING id")
             
-        total_imported = 0
+        summary = {"rows": 0, "new": 0, "updated": 0}
         for series, url in PARQUET_URLS.items():
             filename = f"{series}_series.parquet"
             path = await download_file(url, filename)
             if path:
-                count = await import_parquet(conn, sport_id, series, path, min_year=min_year)
-                logger.info(f"Imported {count} results for {series}")
-                total_imported += count
-        return total_imported
+                res = await import_parquet(conn, sport_id, series, path, min_year=min_year)
+                logger.info(f"Imported {res['total']} results for {series} ({res['new']} new, {res['updated']} updated)")
+                summary["rows"] += res["total"]
+                summary["new"] += res["new"]
+                summary["updated"] += res["updated"]
+        return summary
                 
     finally:
         await conn.close()

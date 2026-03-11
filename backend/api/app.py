@@ -4344,10 +4344,22 @@ async def import_ncaab_root(background_tasks: BackgroundTasks, start_year: int =
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize scheduler and import logs on startup."""
+    """Initialize all backend services on startup."""
     try:
+        # 1. Initialize Scheduler
         await SchedulerService.init_db()
         SchedulerService.start_scheduler()
+        
+        # 2. Register current version
+        import asyncio
+        from api.deployment_endpoints import register_current_version
+        await asyncio.sleep(2)
+        result = await register_current_version()
+        if result.get("success"):
+            logger.info(f"Version registered: {result.get('deployment_id')}")
+        else:
+            logger.warning(f"Failed to register version: {result.get('error')}")
+            
     except Exception as e:
         logger.error(f"Startup error: {e}")
 
@@ -4480,23 +4492,7 @@ async def get_nascar_results_alt(season: Optional[int] = None, series: str = "cu
 # ============================================
 # Startup Event - Register Current Version
 # ============================================
-@app.on_event("startup")
-async def startup_event():
-    """Register current version on startup"""
-    try:
-        import asyncio
-        from api.deployment_endpoints import register_current_version
-        
-        # Wait a moment for database to be ready
-        await asyncio.sleep(2)
-        
-        result = await register_current_version()
-        if result.get("success"):
-            logger.info(f"Version registered: {result.get('deployment_id')}")
-        else:
-            logger.warning(f"Failed to register version: {result.get('error')}")
-    except Exception as e:
-        logger.warning(f"Could not register version on startup: {str(e)}")
+# Startup event moved above to consolidate with scheduler
 
 
 if __name__ == "__main__":

@@ -1,109 +1,226 @@
 @page "/data-center"
+@using SportsBettingAnalyzer.Shared.Models
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject SportsBettingAnalyzer.Shared.Services.IServerConfigService ServerConfig
 
-<div class="app-card">
-    <div class="app-card-header" style="background: linear-gradient(135deg, #1e3a8a, #4f46e5) !important;">
+<div class="app-card animate-fade-in">
+    <div class="app-card-header premium-header">
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
             <div>
-                <h2>🖥️ Data Center</h2>
-                <p>System health monitoring</p>
+                <h2 class="premium-title">🖥️ Data Center</h2>
+                <p class="premium-subtitle">System health & real-time metrics</p>
             </div>
-            <div style="display: flex; align-items: center; gap: 6px;">
-                <span style="display: block; width: 8px; height: 8px; background: #10b981; border-radius: 50%; box-shadow: 0 0 8px #10b981;"></span>
-                <span style="font-size: 11px; font-weight: 800; color: #10b981; text-transform: uppercase;">ONLINE</span>
+            <div class="status-badge pulse">
+                <span class="status-dot"></span>
+                <span class="status-text">SYSTEM ONLINE</span>
             </div>
         </div>
     </div>
 
     <div class="app-card-body">
         
-        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 20px;">
-            This is a read-only view of the primary system's data ingestion capabilities and health metrics. Use the web dashboard for administrative controls.
-        </p>
-
-        <!-- Data Feeds -->
-        <h3 style="font-size: 14px; font-weight: 800; color: var(--text-primary); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid var(--border); padding-bottom: 6px;">Live Feeds</h3>
-        
-        <div class="feed-grid">
-            <div class="feed-card">
-                <div class="feed-top">
-                    <span class="feed-name">NFLverse Datasets</span>
-                    <span class="feed-status ok">ACTIVE</span>
-                </div>
-                <div class="feed-detail">Last sync: 2 hours ago</div>
-                <div class="feed-detail">Rows ingested: 124,512</div>
-            </div>
-
-            <div class="feed-card">
-                <div class="feed-top">
-                    <span class="feed-name">hoopR Stats API</span>
-                    <span class="feed-status ok">ACTIVE</span>
-                </div>
-                <div class="feed-detail">Last sync: 15 mins ago</div>
-                <div class="feed-detail">Rows ingested: 9,841</div>
-            </div>
-
-            <div class="feed-card border-warning">
-                <div class="feed-top">
-                    <span class="feed-name">The Odds API</span>
-                    <span class="feed-status warn">RATE LIMIT</span>
-                </div>
-                <div class="feed-detail">Calls remaining: 4/500</div>
-                <div class="feed-detail">Next reset: 30 mins</div>
-            </div>
+        <div class="action-bar">
+            <p class="action-desc">
+                Monitoring @(_logs?.Count ?? 0) recent ingestion cycles.
+            </p>
+            <button class="app-btn premium-btn" @onclick="TriggerAllImports" disabled="@_isTriggering">
+                @if (_isTriggering) {
+                    <span class="spinner-sm"></span>
+                    <span>QUEUING...</span>
+                } else {
+                    <span>🚀 TRIGGER ALL</span>
+                }
+            </button>
         </div>
 
-        <!-- System Resources -->
-        <h3 style="font-size: 14px; font-weight: 800; color: var(--text-primary); margin-top: 24px; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid var(--border); padding-bottom: 6px;">Proxy Server Resources</h3>
-        
-        <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px;">
-            <!-- CPU -->
-            <div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                    <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">CPU Usage</span>
-                    <span style="font-size: 12px; font-weight: 800; color: var(--text-primary);">14%</span>
-                </div>
-                <div style="width: 100%; height: 6px; background: var(--surface-overlay); border-radius: 3px; overflow: hidden;">
-                    <div style="width: 14%; height: 100%; background: #3b82f6;"></div>
-                </div>
+        @if (_logs == null)
+        {
+            <div class="loading-state">
+                <div class="loading-orb"></div>
+                <p>Analyzing system telemetry...</p>
             </div>
+        }
+        else
+        {
+            <h3 class="section-divider">Recent Activity</h3>
+            
+            <div class="feed-grid">
+                @foreach (var log in _logs)
+                {
+                    <div class="feed-card-premium @(log.Status == "FAILED" ? "failed" : "success")">
+                        <div class="feed-glass-overlay"></div>
+                        <div class="feed-content">
+                            <div class="feed-header">
+                                <span class="sport-label">@log.Sport.ToUpper()</span>
+                                <span class="status-pill @log.Status.ToLower()">@log.Status</span>
+                            </div>
+                            
+                            <div class="time-row">
+                                <span class="time-item">📅 @log.StartTime.ToLocalTime().ToString("MMM dd")</span>
+                                <span class="time-item">🕒 @log.StartTime.ToLocalTime().ToString("HH:mm")</span>
+                                <span class="time-item">⏱️ @(log.DurationSeconds?.ToString("F1") ?? "0")s</span>
+                            </div>
+                            
+                            <div class="metrics-grid">
+                                <div class="metric-box">
+                                    <div class="m-val">@log.RowsImported.ToString("N0")</div>
+                                    <div class="m-label">TOTAL</div>
+                                </div>
+                                <div class="metric-box destacar">
+                                    <div class="m-val green">+@log.NewRowsImported.ToString("N0")</div>
+                                    <div class="m-label">NEW</div>
+                                </div>
+                                <div class="metric-box">
+                                    <div class="m-val blue">@log.UpdatedRowsImported.ToString("N0")</div>
+                                    <div class="m-label">SYNC</div>
+                                </div>
+                            </div>
 
-            <!-- Memory -->
-            <div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                    <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">RAM Utilization (FastAPI)</span>
-                    <span style="font-size: 12px; font-weight: 800; color: var(--text-primary);">1.2 GB / 4.0 GB</span>
-                </div>
-                <div style="width: 100%; height: 6px; background: var(--surface-overlay); border-radius: 3px; overflow: hidden;">
-                    <div style="width: 30%; height: 100%; background: #10b981;"></div>
-                </div>
+                            @if (!string.IsNullOrEmpty(log.ErrorMessage))
+                            {
+                                <div class="error-toast">
+                                    <span class="error-icon">⚠️</span>
+                                    <span class="error-msg">@log.ErrorMessage</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
             </div>
+        }
 
-            <!-- Disk -->
-            <div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                    <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">Database Storage (SQLite)</span>
-                    <span style="font-size: 12px; font-weight: 800; color: var(--text-primary);">412 MB / 10 GB</span>
-                </div>
-                <div style="width: 100%; height: 6px; background: var(--surface-overlay); border-radius: 3px; overflow: hidden;">
-                    <div style="width: 4%; height: 100%; background: #8b5cf6;"></div>
-                </div>
-            </div>
-        </div>
-
-        <div class="app-alert app-alert-info">
-            View the Web Dashboard at `http://proxy:8000/docs` to execute manual jobs.
+        <div class="app-alert glass-info">
+            <span class="info-icon">💡</span>
+            <span>Imports run daily at 3:00 AM CST. Performance metrics are calculated across all active sport analyzers.</span>
         </div>
     </div>
 </div>
 
 <style>
-    .feed-grid { display: flex; flex-direction: column; gap: 10px; }
-    .feed-card { background: var(--surface-overlay); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
-    .feed-card.border-warning { border-color: rgba(245,158,11,0.3); background: rgba(245,158,11,0.05); }
-    .feed-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px dashed var(--border-light); padding-bottom: 6px;}
-    .feed-name { font-size: 14px; font-weight: 700; color: var(--text-primary); }
-    .feed-status { font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.5px; }
-    .feed-status.ok { background: rgba(16,185,129,0.15); color: #10b981; }
-    .feed-status.warn { background: rgba(245,158,11,0.15); color: #f59e0b; }
-    .feed-detail { font-size: 12px; color: var(--text-muted); font-family: 'SF Mono', Consolas, monospace;}
+    :root {
+        --premium-blue: #3b82f6;
+        --premium-green: #10b981;
+        --premium-red: #ef4444;
+        --glass-bg: rgba(255, 255, 255, 0.03);
+        --glass-border: rgba(255, 255, 255, 0.08);
+    }
+
+    .animate-fade-in { animation: fadeIn 0.4s ease-out; }
+    @@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    .premium-header { 
+        background: linear-gradient(135deg, #0f172a, #1e3a8a) !important; 
+        border-bottom: 2px solid var(--premium-blue);
+        padding: 24px 20px !important;
+    }
+    .premium-title { font-size: 1.5rem; font-weight: 900; letter-spacing: -0.5px; margin-bottom: 4px; color: white; }
+    .premium-subtitle { font-size: 0.85rem; color: #94a3b8; font-weight: 500; }
+
+    .status-badge { display: flex; align-items: center; gap: 8px; background: rgba(16, 185, 129, 0.1); padding: 6px 12px; border-radius: 20px; border: 1px solid rgba(16, 185, 129, 0.2); }
+    .status-dot { width: 8px; height: 8px; background: var(--premium-green); border-radius: 50%; box-shadow: 0 0 10px var(--premium-green); }
+    .status-text { font-size: 10px; font-weight: 900; color: var(--premium-green); letter-spacing: 1px; }
+    .pulse { animation: statusPulse 2s infinite; }
+    @@keyframes statusPulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+
+    .action-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding: 12px; background: var(--glass-bg); border-radius: 12px; border: 1px solid var(--glass-border); }
+    .action-desc { font-size: 0.8rem; color: var(--text-secondary); margin: 0; font-weight: 600; }
+    .premium-btn { 
+        background: var(--premium-blue); color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 0.75rem; 
+        font-weight: 800; letter-spacing: 0.5px; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+    .premium-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4); filter: brightness(1.1); }
+    .premium-btn:active { transform: translateY(0); }
+
+    .section-divider { 
+        font-size: 11px; font-weight: 900; color: var(--text-muted); text-transform: uppercase; 
+        letter-spacing: 2px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px;
+    }
+    .section-divider::after { content: ""; flex: 1; height: 1px; background: var(--glass-border); }
+
+    .feed-grid { display: flex; flex-direction: column; gap: 14px; }
+    .feed-card-premium { 
+        position: relative; overflow: hidden; border-radius: 14px; border: 1px solid var(--glass-border); 
+        transition: all 0.3s ease; background: var(--surface-raised);
+    }
+    .feed-card-premium:hover { transform: scale(1.01); border-color: rgba(255,255,255,0.15); box-shadow: 0 8px 20px rgba(0,0,0,0.2); }
+    .feed-card-premium.success { border-left: 4px solid var(--premium-green); }
+    .feed-card-premium.failed { border-left: 4px solid var(--premium-red); }
+
+    .feed-glass-overlay { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 100%); pointer-events: none; }
+    .feed-content { padding: 16px; position: relative; z-index: 1; }
+    
+    .feed-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .sport-label { font-size: 14px; font-weight: 900; color: var(--text-primary); letter-spacing: -0.2px; }
+    .status-pill { font-size: 9px; font-weight: 900; padding: 4px 8px; border-radius: 6px; letter-spacing: 0.5px; }
+    .status-pill.success { background: rgba(16, 185, 129, 0.1); color: var(--premium-green); }
+    .status-pill.failed { background: rgba(239, 68, 68, 0.1); color: var(--premium-red); }
+
+    .time-row { display: flex; gap: 12px; margin-bottom: 16px; }
+    .time-item { font-size: 11px; color: var(--text-muted); font-weight: 600; display: flex; align-items: center; gap: 4px; }
+
+    .metrics-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+    .metric-box { background: rgba(0,0,0,0.2); padding: 10px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; border: 1px solid rgba(255,255,255,0.03); }
+    .metric-box.destacar { background: rgba(16, 185, 129, 0.05); }
+    .m-val { font-size: 14px; font-weight: 900; color: var(--text-primary); font-family: 'SF Mono', 'Roboto Mono', monospace; }
+    .m-val.green { color: var(--premium-green); }
+    .m-val.blue { color: var(--premium-blue); }
+    .m-label { font-size: 8px; font-weight: 800; color: var(--text-muted); margin-top: 2px; }
+
+    .error-toast { margin-top: 14px; padding: 10px; background: rgba(239, 68, 68, 0.08); border-radius: 8px; display: flex; gap: 8px; align-items: flex-start; }
+    .error-icon { font-size: 12px; }
+    .error-msg { font-size: 10px; color: #fca5a5; font-weight: 600; line-height: 1.5; }
+
+    .loading-state { padding: 60px 0; text-align: center; }
+    .loading-orb { width: 40px; height: 40px; margin: 0 auto 16px; border: 3px solid var(--glass-border); border-top-color: var(--premium-blue); border-radius: 50%; animation: spin 1s linear infinite; }
+    @@keyframes spin { to { transform: rotate(360deg); } }
+
+    .glass-info { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 14px; padding: 16px; margin-top: 24px; display: flex; gap: 12px; align-items: flex-start; font-size: 11px; color: var(--text-muted); line-height: 1.6; }
 </style>
+
+@code {
+    private List<ImportLog>? _logs;
+    private bool _isTriggering = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLogs();
+    }
+
+    private async Task LoadLogs()
+    {
+        try
+        {
+            var baseUrl = ServerConfig.GetBaseUrl();
+            var response = await Http.GetFromJsonAsync<List<ImportLog>>($"{baseUrl}/admin/import-logs?limit=15");
+            _logs = response;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading logs: {ex.Message}");
+            _logs = new List<ImportLog>();
+        }
+        StateHasChanged();
+    }
+
+    private async Task TriggerAllImports()
+    {
+        _isTriggering = true;
+        try
+        {
+            var baseUrl = ServerConfig.GetBaseUrl();
+            await Http.PostAsync($"{baseUrl}/admin/run-imports", null);
+            await Task.Delay(2000);
+            await LoadLogs();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error triggering imports: {ex.Message}");
+        }
+        finally
+        {
+            _isTriggering = false;
+        }
+    }
+}

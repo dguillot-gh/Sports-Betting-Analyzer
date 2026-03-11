@@ -139,12 +139,21 @@ async def import_via_sportsdataverse_api(conn, sport_id: int, progress_callback=
                                        VALUES ($1, $2, 'player', 'nba', $3, $4)
                                        ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
                                        DO UPDATE SET name = EXCLUDED.name, metadata = EXCLUDED.metadata
-                                       RETURNING id""",
+                                       RETURNING (id, (xmax = 0))""",
                                     sport_id, str(player_name), json.dumps(metadata), content_hash
                                 )
                                 if entity_id:
-                                    player_map[str(player_id)] = entity_id
+                                    # Postgres returns a record when using multiple columns in RETURNING
+                                    # Handle both single value and tuple (record)
+                                    e_id = entity_id[0] if isinstance(entity_id, (tuple, list, asyncpg.Record)) else entity_id
+                                    is_new = entity_id[1] if isinstance(entity_id, (tuple, list, asyncpg.Record)) else True
+                                    
+                                    player_map[str(player_id)] = e_id
                                     results["players"] += 1
+                                    if is_new:
+                                        results["players_new"] = results.get("players_new", 0) + 1
+                                    else:
+                                        results["players_updated"] = results.get("players_updated", 0) + 1
                             except Exception as e:
                                 logger.debug(f"Error importing player {player_name}: {e}")
                         
@@ -189,14 +198,19 @@ async def import_via_sportsdataverse_api(conn, sport_id: int, progress_callback=
                         })
                         
                         try:
-                            await conn.execute(
+                            is_insert = await conn.fetchval(
                                 """INSERT INTO results (sport_id, season, series, metadata, content_hash)
                                    VALUES ($1, $2, 'nba', $3, $4)
                                    ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                                   DO UPDATE SET metadata = EXCLUDED.metadata""",
+                                   DO UPDATE SET metadata = EXCLUDED.metadata
+                                   RETURNING (xmax = 0)""",
                                 sport_id, year, json.dumps(game_metadata), game_hash
                             )
                             results["games"] += 1
+                            if is_insert:
+                                results["games_new"] = results.get("games_new", 0) + 1
+                            else:
+                                results["games_updated"] = results.get("games_updated", 0) + 1
                         except Exception as e:
                             logger.debug(f"Error importing game: {e}")
                     
@@ -328,14 +342,20 @@ async def import_season_stats_via_basketball_reference(conn, sport_id: int, play
                 
                 try:
                     # Insert into results table
-                    await conn.execute(
+                    is_insert = await conn.fetchval(
                         """INSERT INTO results (sport_id, season, series, metadata, content_hash)
                            VALUES ($1, $2, 'nba', $3, $4)
                            ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                           DO UPDATE SET metadata = EXCLUDED.metadata""",
+                           DO UPDATE SET metadata = EXCLUDED.metadata
+                           RETURNING (xmax = 0)""",
                         sport_id, year, json.dumps(metadata), content_hash
                     )
                     
+                    if is_insert:
+                        results["imported_new"] = results.get("imported_new", 0) + 1
+                    else:
+                        results["imported_updated"] = results.get("imported_updated", 0) + 1
+                        
                     # Also insert into stats table for profile queries
                     entity_id = player_map.get(slug) or player_map.get(player_name)
                     
@@ -381,7 +401,8 @@ async def import_season_stats_via_basketball_reference(conn, sport_id: int, play
             continue
     
     logger.info(f"Imported {imported} NBA season stats from Basketball Reference, {stats_computed} stats table entries")
-    return {"imported": imported, "stats_computed": stats_computed}
+    return {"imported": imported, "stats_computed": stats_computed, 
+            "new": results.get("imported_new", 0), "updated": results.get("imported_updated", 0)}
 
 
 async def import_from_hoopdata(conn, sport_id: int, progress_callback=None) -> dict:
@@ -603,17 +624,25 @@ async def import_from_kaggle(conn, sport_id: int, progress_callback=None) -> dic
                     
                     if str(player_id) not in player_map:
                         try:
-                            entity_id = await conn.fetchval(
+                            # Use RETURNING (xmax = 0) to distinguish INSERT vs UPDATE
+                            entity_data = await conn.fetchval(
                                 """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
                                    VALUES ($1, $2, 'player', 'nba', $3, $4)
                                    ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
                                    DO UPDATE SET name = EXCLUDED.name, metadata = EXCLUDED.metadata
-                                   RETURNING id""",
+                                   RETURNING (id, (xmax = 0))""",
                                 sport_id, str(name), json.dumps(metadata), content_hash
                             )
-                            if entity_id:
-                                player_map[str(player_id)] = entity_id
+                            if entity_data:
+                                e_id = entity_data[0] if isinstance(entity_data, (tuple, list, asyncpg.Record)) else entity_data
+                                is_new = entity_data[1] if isinstance(entity_data, (tuple, list, asyncpg.Record)) else True
+                                
+                                player_map[str(player_id)] = e_id
                                 results["players"] += 1
+                                if is_new:
+                                    results["players_new"] = results.get("players_new", 0) + 1
+                                else:
+                                    results["players_updated"] = results.get("players_updated", 0) + 1
                         except Exception as e:
                             logger.debug(f"Error importing player {name}: {e}")
                 
@@ -691,14 +720,19 @@ async def import_from_kaggle(conn, sport_id: int, progress_callback=None) -> dic
                     })
                     
                     try:
-                        await conn.execute(
+                        is_insert = await conn.fetchval(
                             """INSERT INTO stats (entity_id, season, series, stat_type, stats, content_hash)
                                VALUES ($1, $2, 'nba', 'season_per_game', $3, $4)
                                ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                               DO UPDATE SET stats = EXCLUDED.stats""",
+                               DO UPDATE SET stats = EXCLUDED.stats
+                               RETURNING (xmax = 0)""",
                             int(entity_id), int(season), json.dumps(stats), stats_hash
                         )
                         results["games"] += 1
+                        if is_insert:
+                            results["games_new"] = results.get("games_new", 0) + 1
+                        else:
+                            results["games_updated"] = results.get("games_updated", 0) + 1
                     except Exception as e:
                         logger.debug(f"Error importing season stats: {e}")
                 
@@ -847,13 +881,22 @@ async def import_all_nba(clear_existing: bool = False, progress_callback=None) -
     """
     results = {
         "status": "success",
-        "downloaded": [],
-        "players_imported": 0,
         "games_imported": 0,
-        "season_stats_imported": 0,
+        "games_new": 0,
+        "games_updated": 0,
+        "players_imported": 0,
+        "players_new": 0,
+        "players_updated": 0,
         "box_scores_imported": 0,
+        "box_scores_new": 0,
+        "box_scores_updated": 0,
         "br_stats_imported": 0,
+        "br_stats_new": 0,
+        "br_stats_updated": 0,
         "br_stats_computed": 0,
+        "season_stats_imported": 0,
+        "season_stats_new": 0,
+        "season_stats_updated": 0,
         "errors": []
     }
     
@@ -910,14 +953,6 @@ async def import_all_nba(clear_existing: bool = False, progress_callback=None) -
             results["players_imported"] += hoopdata_result.get("players", 0)
             results["games_imported"] += hoopdata_result.get("games", 0)
         
-        # Step 4: Fallback/supplement with Kaggle files
-        kaggle_result = await import_from_kaggle(conn, sport_id, progress_callback)
-        results["season_stats_imported"] = kaggle_result.get("games", 0)
-        
-        # If no sportsdataverse players, count Kaggle players
-        if results["players_imported"] == 0:
-            results["players_imported"] = kaggle_result.get("players", 0)
-        
         # Import box scores from local files if available
         box_result = await import_box_scores(conn, sport_id, progress_callback)
         results["box_scores_imported"] = box_result.get("imported", 0)
@@ -938,10 +973,27 @@ async def import_all_nba(clear_existing: bool = False, progress_callback=None) -
                 except:
                     pass
         
-        br_result = await import_season_stats_via_basketball_reference(conn, sport_id, player_map, progress_callback)
-        results["br_stats_imported"] = br_result.get("imported", 0)
-        results["br_stats_computed"] = br_result.get("stats_computed", 0)
+                # 2. Basketball Reference (Season Totals + Advanced)
+        if progress_callback:
+            progress_callback("Importing Basketball Reference stats...")
+        br_res = await import_season_stats_via_basketball_reference(conn, sport_id, player_map, progress_callback=progress_callback)
+        results["br_stats_imported"] = br_res.get("imported", 0)
+        results["br_stats_new"] = br_res.get("new", 0)
+        results["br_stats_updated"] = br_res.get("updated", 0)
+        results["br_stats_computed"] = br_res.get("stats_computed", 0)
         
+        # 3. Kaggle Fallback
+        if progress_callback:
+            progress_callback("Importing Kaggle historical data...")
+        k_res = await import_from_kaggle(conn, sport_id, progress_callback=progress_callback)
+        results["season_stats_imported"] = k_res.get("games", 0)
+        results["season_stats_new"] = k_res.get("games_new", 0)
+        results["season_stats_updated"] = k_res.get("games_updated", 0)
+        
+        # Merge player counts
+        results["players_imported"] += k_res.get("players", 0)
+        results["players_new"] += k_res.get("players_new", 0)
+        results["players_updated"] += k_res.get("players_updated", 0)
         # Step 7: Import game schedules using nba_api
         schedule_result = await import_schedules_via_nba_api(conn, sport_id, progress_callback)
         results["schedules_imported"] = schedule_result.get("imported", 0)
