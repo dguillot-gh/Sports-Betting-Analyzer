@@ -1,0 +1,563 @@
+@page "/hit-rates"
+@page "/hit-rates/{Sport}"
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@inject HttpClient Http
+@inject SportsBettingAnalyzer.Shared.Services.IServerConfigService ServerConfig
+
+<div class="hr-container">
+    <div class="hr-header">
+        <h1>@(_sport.ToUpper()) Hit Rates</h1>
+        <p class="hr-subtitle">Prop bet consistency tracker</p>
+    </div>
+
+    <!-- Sport Toggle -->
+    <div class="hr-sport-toggle">
+        <button class="hr-sport-btn @(_sport == "nba" ? "active" : "")" @onclick='() => SwitchSport("nba")'>NBA</button>
+        <button class="hr-sport-btn @(_sport == "nfl" ? "active" : "")" @onclick='() => SwitchSport("nfl")'>NFL</button>
+    </div>
+
+    <!-- Filters -->
+    <div class="hr-filters">
+        <div class="hr-filter-row">
+            <div class="hr-field">
+                <label>Player</label>
+                <input type="text" @bind="_searchPlayer" @bind:event="oninput" placeholder="Search player..." class="hr-input" />
+            </div>
+            <div class="hr-field hr-field-sm">
+                <label>Stat</label>
+                <select @bind="_selectedStat" class="hr-select">
+                    @foreach (var opt in GetStatOptions())
+                    {
+                        <option value="@opt.Key">@opt.Value</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <div class="hr-filter-row">
+            <div class="hr-field hr-field-sm">
+                <label>Season</label>
+                <select @bind="_selectedSeason" class="hr-select">
+                    @foreach (var s in _availableSeasons)
+                    {
+                        <option value="@s">@s</option>
+                    }
+                </select>
+            </div>
+            <div class="hr-field hr-field-sm">
+                <label>Over Line</label>
+                <input type="number" @bind="_threshold" min="0" max="100" class="hr-input" />
+            </div>
+            <div class="hr-field hr-field-sm">
+                <button class="hr-calc-btn" @onclick="CalculateHitRates" disabled="@_isLoading">
+                    @(_isLoading ? "..." : "Go")
+                </button>
+            </div>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="hr-loading">
+            <div class="hr-spinner"></div>
+            <p>Calculating hit rates...</p>
+        </div>
+    }
+    else if (_searchCompleted && !_hitRates.Any())
+    {
+        <div class="hr-empty">No results found. Try a different search or stat.</div>
+    }
+    else if (_hitRates.Any())
+    {
+        <!-- Results -->
+        <div class="hr-results">
+            @foreach (var player in _hitRates)
+            {
+                <div class="hr-player-card">
+                    <div class="hr-player-header">
+                        <div>
+                            <span class="hr-player-name">@player.PlayerName</span>
+                            <span class="hr-player-team">@player.Team</span>
+                        </div>
+                        <div class="hr-season-rate @GetRateClass(player.SeasonRate)">
+                            @((player.SeasonRate * 100).ToString("F0"))%
+                        </div>
+                    </div>
+                    <div class="hr-stat-bar">
+                        <div class="hr-stat-fill" style="width: @((player.SeasonRate * 100).ToString("F0"))%"></div>
+                    </div>
+                    <div class="hr-player-stats">
+                        <div class="hr-stat-item">
+                            <span class="hr-stat-label">L5</span>
+                            <span class="hr-stat-value @GetRateClass(player.Last5Rate)">@player.Last5Hits/@player.Last5Games</span>
+                        </div>
+                        <div class="hr-stat-item">
+                            <span class="hr-stat-label">L10</span>
+                            <span class="hr-stat-value @GetRateClass(player.Last10Rate)">@player.Last10Hits/@player.Last10Games</span>
+                        </div>
+                        <div class="hr-stat-item">
+                            <span class="hr-stat-label">Season</span>
+                            <span class="hr-stat-value">@player.SeasonHits/@player.SeasonGames</span>
+                        </div>
+                        <div class="hr-stat-item">
+                            <span class="hr-stat-label">Avg</span>
+                            <span class="hr-stat-value">@player.SeasonAvg.ToString("F1")</span>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    .hr-container {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 0 8px;
+    }
+
+    .hr-header {
+        text-align: center;
+        padding: 16px 0 8px;
+    }
+
+    .hr-header h1 {
+        font-size: 20px;
+        font-weight: 800;
+        color: var(--text-primary, #e2e8f0);
+        margin: 0 0 2px;
+    }
+
+    .hr-subtitle {
+        font-size: 12px;
+        color: var(--text-muted, #64748b);
+        margin: 0;
+    }
+
+    .hr-sport-toggle {
+        display: flex;
+        justify-content: center;
+        gap: 4px;
+        margin: 12px 0;
+        background: var(--surface, #1e1e2e);
+        border-radius: 10px;
+        padding: 4px;
+        border: 1px solid var(--border, #2e2e44);
+    }
+
+    .hr-sport-btn {
+        flex: 1;
+        padding: 8px 16px;
+        border: none;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        background: transparent;
+        color: var(--text-secondary, #94a3b8);
+        transition: all 0.15s;
+    }
+
+    .hr-sport-btn.active {
+        background: var(--primary, #2563eb);
+        color: #fff;
+    }
+
+    .hr-filters {
+        background: var(--surface, #1e1e2e);
+        border: 1px solid var(--border, #2e2e44);
+        border-radius: 10px;
+        padding: 12px;
+        margin-bottom: 12px;
+    }
+
+    .hr-filter-row {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+
+    .hr-filter-row:last-child {
+        margin-bottom: 0;
+    }
+
+    .hr-field {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .hr-field-sm {
+        flex: 0 0 auto;
+        min-width: 80px;
+    }
+
+    .hr-field label {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-muted, #64748b);
+    }
+
+    .hr-input, .hr-select {
+        background: var(--surface-raised, #262637);
+        border: 1px solid var(--border, #2e2e44);
+        color: var(--text-primary, #e2e8f0);
+        padding: 8px 10px;
+        border-radius: 8px;
+        font-size: 13px;
+        width: 100%;
+        outline: none;
+    }
+
+    .hr-input:focus, .hr-select:focus {
+        border-color: var(--primary, #2563eb);
+    }
+
+    .hr-calc-btn {
+        background: var(--primary, #2563eb);
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        padding: 8px 20px;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        margin-top: 16px;
+        width: 100%;
+        transition: opacity 0.15s;
+    }
+
+    .hr-calc-btn:disabled {
+        opacity: 0.5;
+    }
+
+    .hr-loading, .hr-empty {
+        text-align: center;
+        padding: 32px 16px;
+        color: var(--text-muted, #64748b);
+        font-size: 13px;
+    }
+
+    .hr-spinner {
+        display: inline-block;
+        width: 28px;
+        height: 28px;
+        border: 3px solid rgba(255, 255, 255, 0.1);
+        border-top-color: var(--primary, #60a5fa);
+        border-radius: 50%;
+        animation: hr-spin 0.6s linear infinite;
+        margin-bottom: 8px;
+    }
+
+    .hr-results {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding-bottom: 16px;
+    }
+
+    .hr-player-card {
+        background: var(--surface, #1e1e2e);
+        border: 1px solid var(--border, #2e2e44);
+        border-radius: 10px;
+        padding: 12px;
+    }
+
+    .hr-player-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 8px;
+    }
+
+    .hr-player-name {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--text-primary, #e2e8f0);
+        display: block;
+    }
+
+    .hr-player-team {
+        font-size: 11px;
+        color: var(--text-muted, #64748b);
+    }
+
+    .hr-season-rate {
+        font-size: 20px;
+        font-weight: 800;
+        min-width: 50px;
+        text-align: right;
+    }
+
+    .hr-stat-bar {
+        height: 4px;
+        background: var(--surface-raised, #262637);
+        border-radius: 2px;
+        margin-bottom: 8px;
+        overflow: hidden;
+    }
+
+    .hr-stat-fill {
+        height: 100%;
+        background: var(--primary, #2563eb);
+        border-radius: 2px;
+        transition: width 0.3s;
+    }
+
+    .hr-player-stats {
+        display: flex;
+        gap: 12px;
+    }
+
+    .hr-stat-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+    }
+
+    .hr-stat-label {
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: var(--text-muted, #64748b);
+        letter-spacing: 0.5px;
+    }
+
+    .hr-stat-value {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text-primary, #e2e8f0);
+    }
+
+    .rate-hot {
+        color: var(--success, #4ade80);
+    }
+
+    .rate-warm {
+        color: #fbbf24;
+    }
+
+    .rate-cold {
+        color: #f87171;
+    }
+
+    @@keyframes hr-spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
+
+@code {
+    [Parameter] public string? Sport { get; set; }
+
+    private string _sport = "nba";
+    private string _searchPlayer = "";
+    private string _selectedStat = "pts";
+    private int _selectedSeason = 2025;
+    private double _threshold = 20;
+    private bool _isLoading = false;
+    private bool _searchCompleted = false;
+    private List<int> _availableSeasons = new() { 2025, 2024, 2023 };
+    private List<HitRateResult> _hitRates = new();
+    private List<GameResult> _allGameResults = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrEmpty(Sport))
+            _sport = Sport.ToLower();
+
+        await LoadSeasons();
+    }
+
+    private async Task SwitchSport(string sport)
+    {
+        _sport = sport;
+        _hitRates = new();
+        _searchCompleted = false;
+        _selectedStat = sport == "nba" ? "pts" : "pass_yds";
+        _threshold = sport == "nba" ? 20 : 200;
+        await LoadSeasons();
+    }
+
+    private async Task LoadSeasons()
+    {
+        try
+        {
+            var baseUrl = ServerConfig.GetBaseUrl();
+            var series = _sport == "nba" ? "nba_game_log" : "nfl_game_log";
+            var json = await Http.GetStringAsync($"{baseUrl}/db/games/{_sport}/seasons?series={series}");
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("seasons", out var seasons))
+            {
+                _availableSeasons = seasons.EnumerateArray()
+                    .Select(s => s.GetInt32())
+                    .ToList();
+                if (_availableSeasons.Any())
+                    _selectedSeason = _availableSeasons.First();
+            }
+        }
+        catch { }
+    }
+
+    private async Task CalculateHitRates()
+    {
+        try
+        {
+            _isLoading = true;
+            _searchCompleted = false;
+            StateHasChanged();
+
+            var baseUrl = ServerConfig.GetBaseUrl();
+            var url = $"{baseUrl}/db/games/{_sport}/list?limit=1000&season={_selectedSeason}";
+            if (!string.IsNullOrEmpty(_searchPlayer))
+                url += $"&player={Uri.EscapeDataString(_searchPlayer)}";
+
+            var response = await Http.GetAsync(url);
+            if (!response.IsSuccessStatusCode)
+            {
+                _hitRates = new();
+                _searchCompleted = true;
+                return;
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            var games = JsonSerializer.Deserialize<GameResultsResponse>(json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (games?.Results == null || !games.Results.Any())
+            {
+                _hitRates = new();
+                _searchCompleted = true;
+                return;
+            }
+
+            _allGameResults = games.Results.Where(g => !string.IsNullOrEmpty(g.PlayerName)).ToList();
+
+            var playerGames = _allGameResults
+                .GroupBy(g => g.PlayerName)
+                .ToList();
+
+            _hitRates = playerGames.Select(pg =>
+            {
+                var allGames = pg.OrderByDescending(g => g.GameDate ?? "").ToList();
+                var last5 = allGames.Take(5).ToList();
+                var last10 = allGames.Take(10).ToList();
+
+                int GetStatValue(GameResult g) => _selectedStat switch
+                {
+                    "pts" => g.Pts ?? 0,
+                    "reb" => g.Reb ?? 0,
+                    "ast" => g.Ast ?? 0,
+                    "stl" => g.Stl ?? 0,
+                    "blk" => g.Blk ?? 0,
+                    "fg3" => g.Fg3 ?? 0,
+                    "pass_yds" => g.PassYds ?? 0,
+                    "rush_yds" => g.RushYds ?? 0,
+                    "rec_yds" => g.RecYds ?? 0,
+                    "pass_td" => g.PassTd ?? 0,
+                    _ => 0
+                };
+
+                return new HitRateResult
+                {
+                    PlayerName = pg.Key!,
+                    Team = pg.FirstOrDefault()?.Team ?? "",
+                    Last5Games = last5.Count,
+                    Last5Hits = last5.Count(g => GetStatValue(g) >= _threshold),
+                    Last10Games = last10.Count,
+                    Last10Hits = last10.Count(g => GetStatValue(g) >= _threshold),
+                    SeasonGames = allGames.Count,
+                    SeasonHits = allGames.Count(g => GetStatValue(g) >= _threshold),
+                    SeasonAvg = allGames.Count > 0 ? allGames.Average(g => GetStatValue(g)) : 0,
+                };
+            })
+            .Where(h => h.SeasonGames > 0)
+            .OrderByDescending(h => h.SeasonRate)
+            .ThenByDescending(h => h.SeasonGames)
+            .Take(50)
+            .ToList();
+
+            _searchCompleted = true;
+        }
+        catch
+        {
+            _hitRates = new();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private Dictionary<string, string> GetStatOptions() => _sport switch
+    {
+        "nba" => new()
+        {
+            ["pts"] = "Points",
+            ["reb"] = "Rebounds",
+            ["ast"] = "Assists",
+            ["fg3"] = "3PM",
+            ["stl"] = "Steals",
+            ["blk"] = "Blocks",
+        },
+        "nfl" => new()
+        {
+            ["pass_yds"] = "Pass Yds",
+            ["rush_yds"] = "Rush Yds",
+            ["rec_yds"] = "Rec Yds",
+            ["pass_td"] = "Pass TD",
+        },
+        _ => new() { ["pts"] = "Points" }
+    };
+
+    private string GetRateClass(double rate)
+    {
+        if (rate >= 0.80) return "rate-hot";
+        if (rate >= 0.60) return "rate-warm";
+        return "rate-cold";
+    }
+
+    // Models
+    public class HitRateResult
+    {
+        public string PlayerName { get; set; } = "";
+        public string Team { get; set; } = "";
+        public int Last5Games { get; set; }
+        public int Last5Hits { get; set; }
+        public int Last10Games { get; set; }
+        public int Last10Hits { get; set; }
+        public int SeasonGames { get; set; }
+        public int SeasonHits { get; set; }
+        public double SeasonAvg { get; set; }
+        public double Last5Rate => Last5Games > 0 ? (double)Last5Hits / Last5Games : 0;
+        public double Last10Rate => Last10Games > 0 ? (double)Last10Hits / Last10Games : 0;
+        public double SeasonRate => SeasonGames > 0 ? (double)SeasonHits / SeasonGames : 0;
+    }
+
+    public class GameResultsResponse
+    {
+        public List<GameResult> Results { get; set; } = new();
+    }
+
+    public class GameResult
+    {
+        [JsonPropertyName("season")] public int Season { get; set; }
+        [JsonPropertyName("game_date")] public string? GameDate { get; set; }
+        [JsonPropertyName("player_name")] public string? PlayerName { get; set; }
+        [JsonPropertyName("team")] public string? Team { get; set; }
+        [JsonPropertyName("pts")] public int? Pts { get; set; }
+        [JsonPropertyName("reb")] public int? Reb { get; set; }
+        [JsonPropertyName("ast")] public int? Ast { get; set; }
+        [JsonPropertyName("stl")] public int? Stl { get; set; }
+        [JsonPropertyName("blk")] public int? Blk { get; set; }
+        [JsonPropertyName("fg3")] public int? Fg3 { get; set; }
+        [JsonPropertyName("pass_yds")] public int? PassYds { get; set; }
+        [JsonPropertyName("rush_yds")] public int? RushYds { get; set; }
+        [JsonPropertyName("rec_yds")] public int? RecYds { get; set; }
+        [JsonPropertyName("pass_td")] public int? PassTd { get; set; }
+    }
+}

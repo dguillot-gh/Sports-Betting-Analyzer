@@ -43,6 +43,11 @@ services:
     environment:
       - DATABASE_URL=postgresql://sports_user:${DB_PASSWORD:-sportsbetting2024}@postgres:5432/sports_betting
       - REDIS_URL=redis://redis:6379  # Optional, for caching
+      - APP_VERSION=5.0.13-dev
+      - GIT_SHA=6ac72d7d
+      - GIT_BRANCH=dev
+      - BUILD_TIME=2026-03-09T19:00:00Z
+      - ENVIRONMENT=development
     volumes:
       - ./backend/data:/app/data
       - ./backend/scripts/models:/app/models

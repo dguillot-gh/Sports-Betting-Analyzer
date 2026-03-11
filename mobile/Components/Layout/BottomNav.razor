@@ -42,7 +42,9 @@
         color: #94a3b8;
         cursor: pointer;
         transition: all 0.2s ease;
-        padding: 8px 0;
+        padding: 6px 0 4px;
+        gap: 2px;
+        min-width: 0;
     }
 
     .nav-item-bottom.active {
@@ -51,14 +53,20 @@
 
     .nav-item-bottom .nav-icon {
         font-size: 20px;
-        margin-bottom: 2px;
+        line-height: 1;
     }
 
     .nav-item-bottom .nav-label {
-        font-size: 10px;
+        font-size: 9px;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.3px;
+        line-height: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+        text-align: center;
     }
 
     /* Hide on desktop */
@@ -89,7 +97,8 @@
     {
         if (item.Url == "MENU_TOGGLE")
         {
-            await JS.InvokeVoidAsync("eval", "document.querySelector('.navbar-toggler').click()");
+            await JS.InvokeVoidAsync("eval", 
+                "var cb = document.querySelector('.navbar-toggler'); if(cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); }");
         }
         else
         {

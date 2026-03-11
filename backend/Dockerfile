@@ -1,6 +1,11 @@
 # Stage 1: Build & Infrastructure
 FROM python:3.11-slim as builder
 
+# Build arguments for versioning
+ARG VERSION=unknown
+ARG GIT_SHA=unknown
+ARG GIT_BRANCH=unknown
+
 WORKDIR /app
 
 # Install system build dependencies (compilers + R development headers)
@@ -77,6 +82,14 @@ RUN echo "Starting ONNX Conversion..." && \
 EXPOSE 8000
 ENV PYTHONPATH=/app/src:/app/api:/app
 ENV PYTHONUNBUFFERED=1
+
+# Version information
+ARG VERSION=unknown
+ARG GIT_SHA=unknown
+ARG GIT_BRANCH=unknown
+ENV APP_VERSION=$VERSION
+ENV GIT_SHA=$GIT_SHA
+ENV GIT_BRANCH=$GIT_BRANCH
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

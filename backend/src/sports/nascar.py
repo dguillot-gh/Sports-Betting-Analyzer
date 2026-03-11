@@ -22,55 +22,102 @@ class NASCARSport(BaseSport):
         self._archetype_mapping = {}
 
     def load_data(self) -> pd.DataFrame:
-        """Load NASCAR data, prioritizing enhanced CSV files if available."""
-        # 1. Try loading enhanced CSV files first
-        enhanced_files = sorted(self.data_dir.glob('*_enhanced.csv'))
-        if enhanced_files:
-            print(f"DEBUG: Found {len(enhanced_files)} enhanced data files. Loading...")
-            frames = []
-            for csv_file in enhanced_files:
-                try:
-                    df = pd.read_csv(csv_file)
-                    # Infer series from filename (e.g. cup_enhanced.csv -> cup)
-                    series_name = csv_file.stem.replace('_enhanced', '').lower()
-                    if 'series' not in df.columns:
-                        df['series'] = series_name
-                    frames.append(df)
-                except Exception as e:
-                    print(f"Error loading {csv_file}: {e}")
-            
-            if frames:
-                df = pd.concat(frames, ignore_index=True, sort=False)
-                # Ensure date columns are parsed if needed, though they might be read as objects
-                # Also ensure we populate active entities for the UI
-                self._populate_active_entities(df)
-                # Note: Enhanced data is already preprocessed, but running it through
-                # preprocess_data ensures specific columns like race_win are set if missing
-                df = self.preprocess_data(df)
-                # Merge scraped historical features from ifantasyrace.com
-                df = self._load_scraped_features(df)
-                self.df = df
-                
-                # Load Archetypes
-                archetype_path = self.data_dir.parent / "models" / "nascar" / "archetypes" / "driver_archetypes.json"
-                if archetype_path.exists():
-                    try:
-                        with open(archetype_path, 'r') as f:
-                            arch_data = json.load(f)
-                            self._archetype_mapping = arch_data.get('mapping', {})
-                    except Exception as e:
-                        print(f"Error loading archetypes: {e}")
-                        
-                return df
-
-        # 2. Fallback to existing JSON method
-        json_path = self.data_dir / 'nascar_data.json'
+        """Load NASCAR data, respecting config file overrides and using parquet files."""
+        # Check if config specifies a specific file
+        results_file = None
+        if 'data' in self.config and 'results_file' in self.config['data']:
+            results_file = self.config['data']['results_file']
         
-        if not json_path.exists():
-            # Fallback to old method if JSON doesn't exist
-            print(f"WARNING: Static data file {json_path} not found. Falling back to raw data.")
-            return self._load_raw_data()
+        if results_file:
+            # Load specific file from config
+            file_path = self.data_dir / results_file
+            print(f"DEBUG: Loading specific file from config: {file_path}")
             
+            if file_path.exists() and file_path.suffix == '.parquet':
+                df = pd.read_parquet(file_path)
+                # Infer series from filename
+                series_name = file_path.stem.replace('_series', '').lower()
+                if 'series' not in df.columns:
+                    df['series'] = series_name
+            elif file_path.exists() and file_path.suffix == '.csv':
+                df = pd.read_csv(file_path)
+            else:
+                raise FileNotFoundError(f"Configured file not found: {file_path}")
+        else:
+            # Load parquet files first (updated logic)
+            parquet_files = sorted(self.data_dir.glob('*.parquet'))
+            if parquet_files:
+                print(f"DEBUG: Found {len(parquet_files)} parquet data files. Loading...")
+                frames = []
+                for parquet_file in parquet_files:
+                    try:
+                        df = pd.read_parquet(parquet_file)
+                        # Infer series from filename (e.g. cup_series.parquet -> cup)
+                        series_name = parquet_file.stem.replace('_series', '').lower()
+                        if 'series' not in df.columns:
+                            df['series'] = series_name
+                        frames.append(df)
+                    except Exception as e:
+                        print(f"Error loading {parquet_file}: {e}")
+                
+                if frames:
+                    df = pd.concat(frames, ignore_index=True, sort=False)
+                else:
+                    df = pd.DataFrame()
+            else:
+                # Fallback to enhanced CSV files
+                enhanced_files = sorted(self.data_dir.glob('*_enhanced.csv'))
+                if enhanced_files:
+                    print(f"DEBUG: Found {len(enhanced_files)} enhanced data files. Loading...")
+                    frames = []
+                    for csv_file in enhanced_files:
+                        try:
+                            df = pd.read_csv(csv_file)
+                            # Infer series from filename (e.g. cup_enhanced.csv -> cup)
+                            series_name = csv_file.stem.replace('_enhanced', '').lower()
+                            if 'series' not in df.columns:
+                                df['series'] = series_name
+                            frames.append(df)
+                        except Exception as e:
+                            print(f"Error loading {csv_file}: {e}")
+                    
+                    if frames:
+                        df = pd.concat(frames, ignore_index=True, sort=False)
+                    else:
+                        df = pd.DataFrame()
+                else:
+                    # Final fallback
+                    json_path = self.data_dir / 'nascar_data.json'
+                    if json_path.exists():
+                        return self._load_json_data()
+                    else:
+                        print(f"WARNING: No NASCAR data files found, returning empty DataFrame")
+                        return pd.DataFrame()
+        
+        if df.empty:
+            return df
+        
+        # Process the loaded data
+        self._populate_active_entities(df)
+        df = self.preprocess_data(df)
+        df = self._load_scraped_features(df)
+        self.df = df
+        
+        # Load Archetypes
+        archetype_path = self.data_dir.parent / "models" / "nascar" / "archetypes" / "driver_archetypes.json"
+        if archetype_path.exists():
+            try:
+                with open(archetype_path, 'r') as f:
+                    arch_data = json.load(f)
+                    self._archetype_mapping = arch_data.get('mapping', {})
+            except Exception as e:
+                print(f"Error loading archetypes: {e}")
+                
+        return df
+    
+    def _load_json_data(self) -> pd.DataFrame:
+        """Load data from JSON file (fallback method)."""
+        json_path = self.data_dir / 'nascar_data.json'
         try:
             with open(json_path, 'r') as f:
                 data = json.load(f)
@@ -98,7 +145,7 @@ class NASCARSport(BaseSport):
             
             df = pd.DataFrame(records)
             self.df = self.preprocess_data(df)
-            return self.df
+            return df
             
         except Exception as e:
             print(f"Error loading static data: {e}")

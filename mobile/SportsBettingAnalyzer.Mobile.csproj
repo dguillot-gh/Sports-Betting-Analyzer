@@ -18,11 +18,9 @@
         <SingleProject>true</SingleProject>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <!-- Fix for MSB4018 Error: DOTNET_HOST_PATH is not set in Visual Studio -->
-        <DotNetHostPath Condition="'$(DotNetHostPath)' == ''">$(DOTNET_ROOT)\dotnet.exe</DotNetHostPath>
-        <DotNetHostPath Condition="'$(DotNetHostPath)' == '\dotnet.exe'">C:\Program Files\dotnet\dotnet.exe</DotNetHostPath>
-
-
+        
+        <!-- Fix for MSB4018 Error: DOTNET_HOST_PATH is not set -->
+        <DotNetHostPath Condition="'$(DotNetHostPath)' == ''">C:\Program Files\dotnet\dotnet.exe</DotNetHostPath>
 
         <!-- Display name -->
         <ApplicationTitle>SportsBettingAnalyzer.Mobile</ApplicationTitle>

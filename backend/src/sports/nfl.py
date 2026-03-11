@@ -2,7 +2,7 @@
 NFL sport implementation.
 """
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import pandas as pd
 from .base import BaseSport
 
@@ -14,29 +14,35 @@ class NFLSport(BaseSport):
         super().__init__(config)
 
     def load_data(self) -> pd.DataFrame:
-        """Load NFL data from CSV files and merge with enhanced team stats."""
+        """Load NFL data from nflverse files (schedules, roster, players)."""
         self.validate_data_files()
         paths = self.get_data_paths()
 
-        scores_path = paths.get('scores_file')
-        teams_path = paths.get('teams_file')
+        schedules_path = paths.get('schedules_file')
+        roster_path = paths.get('roster_file')
 
-        if not scores_path or not teams_path:
-            raise ValueError("NFL config must specify scores_file and teams_file")
+        if not schedules_path:
+            raise ValueError("NFL config must specify schedules_file")
 
-        # Load data
-        scores = pd.read_csv(scores_path)
-        teams = pd.read_csv(teams_path)
-
-        # Basic cleaning
-        scores.columns = [c.strip() for c in scores.columns]
-        teams.columns = [c.strip() for c in teams.columns]
+        # Load schedules data (primary game data)
+        schedules = pd.read_csv(schedules_path)
+        schedules.columns = [c.strip() for c in schedules.columns]
+        
+        print(f"DEBUG: NFL schedules columns: {list(schedules.columns)[:10]}...")
+        print(f"DEBUG: NFL schedules shape: {schedules.shape}")
+        
+        # Try to load roster for team mappings
+        teams_df = None
+        if roster_path and roster_path.exists():
+            teams_df = pd.read_csv(roster_path)
+            teams_df.columns = [c.strip() for c in teams_df.columns]
 
         # Apply preprocessing
-        df = self.preprocess_data(scores)
+        df = self.preprocess_data(schedules)
 
-        # Add team mappings
-        df = self._add_team_mappings(df, teams)
+        # Add team mappings if roster available
+        if teams_df is not None:
+            df = self._add_team_mappings(df, teams_df)
         
         # Try to load enhanced team stats and merge
         df = self._merge_team_stats(df)
@@ -96,12 +102,12 @@ class NFLSport(BaseSport):
                 stats['date'] = pd.to_datetime(stats['date'], errors='coerce')
             
             # Create game-level stats for home and away teams (using full names now)
-            home_stats = stats[['date', 'home_full', 'score_home', 'yards_home', 'first_downs_home', 
+            home_stats = stats[['date', 'home_full', 'home_score', 'yards_home', 'first_downs_home', 
                                'rush_yards_home', 'pass_yards_home', 'fumbles_home', 'interceptions_home']].copy()
             home_stats.columns = ['date', 'team', 'pts', 'yards', 'first_downs', 'rush_yards', 
                                  'pass_yards', 'fumbles', 'interceptions']
             
-            away_stats = stats[['date', 'away_full', 'score_away', 'yards_away', 'first_downs_away',
+            away_stats = stats[['date', 'away_full', 'away_score', 'yards_away', 'first_downs_away',
                                'rush_yards_away', 'pass_yards_away', 'fumbles_away', 'interceptions_away']].copy()
             away_stats.columns = ['date', 'team', 'pts', 'yards', 'first_downs', 'rush_yards',
                                  'pass_yards', 'fumbles', 'interceptions']
@@ -176,7 +182,7 @@ class NFLSport(BaseSport):
         """Apply NFL-specific preprocessing."""
         # Create targets
         df = df.copy()
-        df['point_diff'] = df['score_home'] - df['score_away']
+        df['point_diff'] = df['home_score'] - df['away_score']
         df['home_team_win'] = (df['point_diff'] > 0).astype(int)
 
         # Convert booleans
@@ -199,22 +205,38 @@ class NFLSport(BaseSport):
 
         return df
 
-    def _add_team_mappings(self, df: pd.DataFrame, teams: pd.DataFrame) -> pd.DataFrame:
-        """Add team ID mappings to the dataframe."""
-        # Create team mapping dictionary
-        team_map = teams.set_index('team_name')['team_id'].to_dict()
-
-        # Add reverse mappings for short names
-        for _, row in teams.iterrows():
-            team_map.setdefault(row.get('team_name_short', row['team_name']), row['team_id'])
-
-        def map_team(name):
-            return team_map.get(name, name)
-
-        df = df.copy()
-        df['home_id'] = df['team_home'].map(map_team)
-        df['away_id'] = df['team_away'].map(map_team)
-
+    def _add_team_mappings(self, df: pd.DataFrame, teams_df: Optional[pd.DataFrame]) -> pd.DataFrame:
+        """Add team mappings using nflverse data structure."""
+        if teams_df is None:
+            print("DEBUG: No teams_df provided, using direct team names")
+            # For nflverse, the team names are already in the correct format
+            # Just create a simple mapping from team names to themselves
+            unique_teams = set(df['home_team'].unique()) | set(df['away_team'].unique())
+            team_map = {team: team for team in unique_teams if pd.notna(team)}
+            return df
+        
+        print(f"DEBUG: Teams columns: {list(teams_df.columns)[:10]}")
+        
+        # Try different column name patterns for teams data
+        if 'team_name' in teams_df.columns and 'team_id' in teams_df.columns:
+            team_map = teams_df.set_index('team_name')['team_id'].to_dict()
+        elif 'team' in teams_df.columns and 'team_id' in teams_df.columns:
+            team_map = teams_df.set_index('team')['team_id'].to_dict()
+        elif 'team' in teams_df.columns and 'abbreviation' in teams_df.columns:
+            team_map = teams_df.set_index('team')['abbreviation'].to_dict()
+        else:
+            print("DEBUG: Using direct team name mapping")
+            # Fallback: use team names as they are
+            unique_teams = set(df['home_team'].unique()) | set(df['away_team'].unique())
+            team_map = {team: team for team in unique_teams if pd.notna(team)}
+            return df
+        
+        print(f"DEBUG: Created team map with {len(team_map)} entries")
+        
+        # Apply mappings
+        df['home_id'] = df['home_team'].map(team_map)
+        df['away_id'] = df['away_team'].map(team_map)
+        
         return df
 
     def get_feature_columns(self) -> Dict[str, List[str]]:
@@ -243,7 +265,7 @@ class NFLSport(BaseSport):
     def get_entities(self) -> List[str]:
         """Return list of all teams."""
         df = self.load_data()
-        teams = set(df['team_home'].dropna().unique()) | set(df['team_away'].dropna().unique())
+        teams = set(df['home_team'].dropna().unique()) | set(df['away_team'].dropna().unique())
         return sorted(list(teams))
 
     def get_teams(self) -> List[str]:
@@ -260,7 +282,7 @@ class NFLSport(BaseSport):
         df = self.load_data()
         
         # Filter for games involving this team
-        team_games = df[(df['team_home'] == entity_id) | (df['team_away'] == entity_id)].copy()
+        team_games = df[(df['home_team'] == entity_id) | (df['away_team'] == entity_id)].copy()
         
         if team_games.empty:
             return {'stats': {}, 'splits': {}, 'history': []}
@@ -274,10 +296,10 @@ class NFLSport(BaseSport):
 
         # Helper to get team's score and opponent's score
         def get_scores(row):
-            if row['team_home'] == entity_id:
-                return row['score_home'], row['score_away'], 'Home'
+            if row['home_team'] == entity_id:
+                return row['home_score'], row['away_score'], 'Home'
             else:
-                return row['score_away'], row['score_home'], 'Away'
+                return row['away_score'], row['home_score'], 'Away'
 
         # Calculate stats
         wins = 0
@@ -322,7 +344,7 @@ class NFLSport(BaseSport):
                 history.append({
                     "Season": row.get('schedule_season', 'N/A'),
                     "Week": row.get('schedule_week', 'N/A'),
-                    "Opponent": row['team_away'] if loc == 'Home' else row['team_home'],
+                    "Opponent": row['away_team'] if loc == 'Home' else row['home_team'],
                     "Result": "W" if is_win else ("T" if pf == pa else "L"),
                     "Score": f"{int(pf)}-{int(pa)}",
                     "Location": loc

@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 ESPN_NBA_SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"
 ESPN_NFL_SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
 ESPN_NCAAB_SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard"
+ESPN_NHL_SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard"
 ESPN_PROBABILITIES_BASE = "https://sports.core.api.espn.com/v2/sports/{sport}/leagues/{league}/events/{event_id}/competitions/{event_id}/probabilities"
 
 
@@ -305,3 +306,62 @@ async def get_espn_ncaab_predictions():
     except Exception as e:
         logger.error(f"ESPN NCAAB fetch error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/nhl")
+async def get_espn_nhl_scoreboard():
+    """
+    Get ESPN NHL scoreboard for today's games with scores and status.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(ESPN_NHL_SCOREBOARD)
+            if resp.status_code != 200:
+                raise HTTPException(status_code=502, detail="Failed to fetch ESPN NHL data")
+            
+            data = resp.json()
+            games = []
+            
+            for event in data.get("events", []):
+                event_id = event.get("id")
+                competition = event.get("competitions", [{}])[0]
+                competitors = competition.get("competitors", [])
+                
+                if len(competitors) < 2:
+                    continue
+                
+                home = next((c for c in competitors if c.get("homeAway") == "home"), competitors[0])
+                away = next((c for c in competitors if c.get("homeAway") == "away"), competitors[1])
+                
+                odds_data = competition.get("odds", [{}])[0] if competition.get("odds") else {}
+                
+                game_info = {
+                    "event_id": event_id,
+                    "game_time": event.get("date"),
+                    "status": competition.get("status", {}).get("type", {}).get("description", "Unknown"),
+                    "home_team": home.get("team", {}).get("displayName", "Unknown"),
+                    "home_abbrev": home.get("team", {}).get("abbreviation", ""),
+                    "home_score": home.get("score", "0"),
+                    "home_record": next((r.get("summary") for r in home.get("records", []) if r.get("type") == "total"), ""),
+                    "away_team": away.get("team", {}).get("displayName", "Unknown"),
+                    "away_abbrev": away.get("team", {}).get("abbreviation", ""),
+                    "away_score": away.get("score", "0"),
+                    "away_record": next((r.get("summary") for r in away.get("records", []) if r.get("type") == "total"), ""),
+                    "venue": competition.get("venue", {}).get("fullName", ""),
+                    "spread": odds_data.get("details", ""),
+                    "over_under": odds_data.get("overUnder"),
+                }
+                
+                games.append(game_info)
+            
+            return {
+                "sport": "NHL",
+                "source": "ESPN",
+                "games": games,
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"ESPN NHL fetch error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error fetching ESPN NHL data: {str(e)}")

@@ -112,9 +112,9 @@ class NASCARDataUpdater(BaseDataUpdater):
     
     REPO = "kyleGrealis/nascaR.data"
     FILES = [
-        "data/cup_series.rda",
-        "data/xfinity_series.rda", 
-        "data/truck_series.rda"
+        "data/cup_series.parquet",
+        "data/xfinity_series.parquet", 
+        "data/truck_series.parquet"
     ]
     
     def __init__(self, data_dir: Path):
