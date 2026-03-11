@@ -1,4 +1,4 @@
-﻿@page "/"
+@page "/"
 @using SportsBettingAnalyzer.Models
 @using SportsBettingAnalyzer.Services
 @using SportsBettingAnalyzer.Components.Shared.Tailwind
@@ -119,7 +119,10 @@
 
                 <!-- Data Source Status -->
                 <div class="bg-slate-900 rounded-2xl border border-slate-800 p-6">
-                    <h3 class="text-xl font-bold text-white mb-6">📡 Data Source Status</h3>
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold text-white">📡 Data Source Status</h3>
+                        <TwButton Variant="text" Color="blue" Size="sm" Href="/data-center">View Full Metrics →</TwButton>
+                    </div>
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
                         <div class="flex items-center gap-3">
                             <div class="p-2 bg-amber-500/10 rounded-lg text-amber-500">

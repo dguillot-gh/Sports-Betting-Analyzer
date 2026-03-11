@@ -729,6 +729,8 @@ async def import_stats_via_nflreadpy(conn, sport_id: int, player_map: dict, prog
     
     imported = 0
     stats_computed = 0
+    inserted_count = 0
+    updated_count = 0
     
     try:
         # Get season-level aggregates for all modern years
@@ -816,13 +818,18 @@ async def import_stats_via_nflreadpy(conn, sport_id: int, player_map: dict, prog
             
             try:
                 # Insert into results table
-                await conn.execute(
+                is_insert = await conn.fetchval(
                     """INSERT INTO results (sport_id, season, series, metadata, content_hash)
                        VALUES ($1, $2, 'nfl', $3, $4)
                        ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                       DO UPDATE SET metadata = EXCLUDED.metadata""",
+                       DO UPDATE SET metadata = EXCLUDED.metadata
+                       RETURNING (xmax = 0)""",
                     sport_id, int(season), json.dumps(metadata), content_hash
                 )
+                if is_insert:
+                    inserted_count += 1
+                else:
+                    updated_count += 1
                 
                 # ALSO insert into stats table (for profile queries)
                 entity_id = player_map.get(str(player_id))
@@ -869,8 +876,8 @@ async def import_stats_via_nflreadpy(conn, sport_id: int, player_map: dict, prog
             if i % 1000 == 0:
                 gc.collect()
         
-        logger.info(f"Imported {imported} player stats via nflreadpy, {stats_computed} stats table entries")
-        return {"imported": imported, "stats_computed": stats_computed}
+        logger.info(f"Imported {imported} player stats via nflreadpy, {stats_computed} stats table entries (New: {inserted_count}, Updated: {updated_count})")
+        return {"imported": imported, "stats_computed": stats_computed, "new": inserted_count, "updated": updated_count}
         
     except Exception as e:
         logger.error(f"Error loading stats via nflreadpy: {e}")
@@ -963,22 +970,27 @@ async def import_weekly_stats_via_nflreadpy(conn, sport_id: int, player_map: dic
             })
             
             try:
-                await conn.execute(
+                is_insert = await conn.fetchval(
                     """INSERT INTO results (sport_id, season, series, metadata, content_hash)
                        VALUES ($1, $2, 'nfl_weekly', $3, $4)
                        ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                       DO UPDATE SET metadata = EXCLUDED.metadata""",
+                       DO UPDATE SET metadata = EXCLUDED.metadata
+                       RETURNING (xmax = 0)""",
                     sport_id, int(season), json.dumps(metadata), content_hash
                 )
                 imported += 1
+                if is_insert:
+                    inserted_count += 1
+                else:
+                    updated_count += 1
             except Exception as e:
                 logger.debug(f"Error importing weekly stat: {e}")
             
             if i % 2000 == 0:
                 gc.collect()
         
-        logger.info(f"Imported {imported} weekly NFL stats")
-        return {"imported": imported}
+        logger.info(f"Imported {imported} weekly NFL stats (New: {inserted_count}, Updated: {updated_count})")
+        return {"imported": imported, "new": inserted_count, "updated": updated_count}
         
     except Exception as e:
         logger.error(f"Error loading weekly stats: {e}")
@@ -1004,6 +1016,8 @@ async def import_players_via_nflreadpy(conn, sport_id: int, progress_callback=No
         
         player_map = {}
         imported = 0
+        inserted_count = 0
+        updated_count = 0
         
         for i, (_, row) in enumerate(players_df.iterrows()):
             if progress_callback and i % 500 == 0:
@@ -1046,8 +1060,8 @@ async def import_players_via_nflreadpy(conn, sport_id: int, progress_callback=No
             except Exception as e:
                 logger.debug(f"Error importing player {name}: {e}")
         
-        logger.info(f"Imported {imported} players via nflreadpy")
-        return {"imported": imported, "player_map": player_map}
+        logger.info(f"Imported {imported} players via nflreadpy (New: {inserted_count}, Updated: {updated_count})")
+        return {"imported": imported, "player_map": player_map, "new": inserted_count, "updated": updated_count}
         
     except Exception as e:
         logger.error(f"Error loading players via nflreadpy: {e}")
@@ -1305,10 +1319,18 @@ async def import_all_nfl(clear_existing: bool = False, progress_callback=None) -
     """
     results = {
         "status": "success",
-        "downloaded": [],
         "players_imported": 0,
-        "games_imported": 0,
-        "stats_computed": 0,
+        "players_new": 0,
+        "players_updated": 0,
+        "weekly_stats_imported": 0,
+        "weekly_stats_new": 0,
+        "weekly_stats_updated": 0,
+        "season_stats_imported": 0,
+        "season_stats_new": 0,
+        "season_stats_updated": 0,
+        "schedules_imported": 0,
+        "schedules_new": 0,
+        "schedules_updated": 0,
         "errors": []
     }
     
@@ -1328,9 +1350,6 @@ async def import_all_nfl(clear_existing: bool = False, progress_callback=None) -
             progress_callback("Connecting to database...")
         
         conn = await get_db_connection()
-        
-        # Store results dict for use in sub-functions if needed (passed via closure or just shared scope)
-        # Actually, we'll just check at the end.
         
         # Ensure schema has required columns
         await ensure_schema(conn)
@@ -1358,31 +1377,33 @@ async def import_all_nfl(clear_existing: bool = False, progress_callback=None) -
         # Step 4: Import players (using nflreadpy)
         player_result = await import_players_via_nflreadpy(conn, sport_id, progress_callback)
         results["players_imported"] = player_result.get("imported", 0)
+        results["players_new"] = player_result.get("new", 0)
+        results["players_updated"] = player_result.get("updated", 0)
         player_map = player_result.get("player_map", {})
         
-        # Step 5: Import player stats using nflreadpy (2020-2025 all in one call!)
-        # This uses the official nflverse package with pre-aggregated season stats
+        # Step 5: Import player stats using nflreadpy (2020-2025)
         stats_result = await import_stats_via_nflreadpy(conn, sport_id, player_map, progress_callback)
-        results["games_imported"] = stats_result.get("imported", 0)
+        results["season_stats_imported"] = stats_result.get("imported", 0)
+        results["season_stats_new"] = stats_result.get("new", 0)
+        results["season_stats_updated"] = stats_result.get("updated", 0)
         results["stats_computed"] = stats_result.get("stats_computed", 0)
         
-        if results["games_imported"] == 0:
+        if results["season_stats_imported"] == 0:
             msg = f"Warning: No NFL player stats imported for {IMPORT_YEARS_MODERN}."
-            results["errors"].append(msg)
-            results["status"] = "failed" # This will trigger the Pushover error priority
-        
-        # Step 6: Import game schedules using nflreadpy
-        schedule_result = await import_schedules_via_nflreadpy(conn, sport_id, progress_callback)
-        results["schedules_imported"] = schedule_result.get("imported", 0)
-        
-        if results["schedules_imported"] == 0:
-            msg = f"Warning: No NFL schedules imported for {IMPORT_YEARS_MODERN}."
             results["errors"].append(msg)
             results["status"] = "failed"
         
-        # Step 7: Import weekly game-by-game stats for hit rate calculations
+        # Step 6: Import game schedules
+        schedule_result = await import_schedules_via_nflreadpy(conn, sport_id, progress_callback)
+        results["schedules_imported"] = schedule_result.get("imported", 0)
+        results["schedules_new"] = schedule_result.get("new", 0)
+        results["schedules_updated"] = schedule_result.get("updated", 0)
+        
+        # Step 7: Import weekly game-by-game stats
         weekly_result = await import_weekly_stats_via_nflreadpy(conn, sport_id, player_map, progress_callback)
         results["weekly_stats_imported"] = weekly_result.get("imported", 0)
+        results["weekly_stats_new"] = weekly_result.get("new", 0)
+        results["weekly_stats_updated"] = weekly_result.get("updated", 0)
         
         if progress_callback:
             progress_callback("NFL import complete!")
@@ -1474,14 +1495,19 @@ async def import_schedules_via_nflreadpy(conn, sport_id: int, progress_callback=
             content_hash = compute_hash({'sport': 'nfl', 'game_id': str(game_id)})
             
             try:
-                await conn.execute(
+                is_insert = await conn.fetchval(
                     """INSERT INTO results (sport_id, season, series, metadata, content_hash)
                        VALUES ($1, $2, 'nfl_schedule', $3, $4)
                        ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                       DO UPDATE SET metadata = EXCLUDED.metadata""",
+                       DO UPDATE SET metadata = EXCLUDED.metadata
+                       RETURNING (xmax = 0)""",
                     sport_id, int(season) if season else None, json.dumps(metadata), content_hash
                 )
                 imported += 1
+                if is_insert:
+                    results["new"] = results.get("new", 0) + 1
+                else:
+                    results["updated"] = results.get("updated", 0) + 1
             except Exception as e:
                 logger.debug(f"Error importing schedule: {e}")
         
@@ -1491,8 +1517,8 @@ async def import_schedules_via_nflreadpy(conn, sport_id: int, progress_callback=
         logger.error(f"Error in schedule import: {e}")
         return {"imported": imported, "error": str(e)}
     
-    logger.info(f"Imported {imported} NFL schedules")
-    return {"imported": imported}
+    logger.info(f"Imported {imported} NFL schedules (New: {results.get('new', 0)}, Updated: {results.get('updated', 0)})")
+    return {"imported": imported, "new": results.get("new", 0), "updated": results.get("updated", 0)}
 
 
 if __name__ == "__main__":

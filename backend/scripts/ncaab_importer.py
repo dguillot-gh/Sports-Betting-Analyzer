@@ -58,11 +58,22 @@ async def import_ncaab_data(start_year: int = 2018, end_year: int = 2025):
         if process.returncode != 0:
             return {"success": False, "error": f"R script failed with code {process.returncode}"}
 
+        # Try to get row counts from Parquet files
+        games_count = 0
+        try:
+            schedule_path = DATA_DIR / "ncaab_schedule_history.parquet"
+            if schedule_path.exists():
+                games_count = len(pd.read_parquet(schedule_path))
+        except Exception as e:
+            logger.warning(f"Failed to read NCAAB row counts: {e}")
+
         return {
             "success": True,
             "message": f"Imported NCAAB data via hoopR for {start_year}-{end_year}.",
             "data_dir": str(DATA_DIR),
-            "games_processed": 1  # Placeholder since R script doesn't output count
+            "rows": games_count,
+            "new": games_count, # File-based, treat as new
+            "updated": 0
         }
         
     except Exception as e:

@@ -1772,6 +1772,10 @@ async def get_league_standings(
         elif sport == "nhl":
             # NHL: Fetch live standings from NHL API directly (MoneyPuck data is situation-level, not game-level)
             import httpx
+            from datetime import datetime
+            import logging
+            logger = logging.getLogger(__name__) # Ensure logger is defined
+            
             try:
                 today = datetime.now().strftime("%Y-%m-%d")
                 async with httpx.AsyncClient(timeout=10.0) as client:
@@ -1810,13 +1814,37 @@ async def get_league_standings(
                         }
             except Exception as e:
                 logger.error(f"NHL API standings fetch failed: {e}")
-            # Fallback: return empty
-            return {
-                "sport": "nhl",
-                "season": season or datetime.now().year,
-                "standings": [],
-                "error": "Could not fetch NHL standings from API"
-            }
+            
+            # Fallback to DB if API fails or for historical seasons
+            query = """
+                WITH games AS (
+                    SELECT 
+                        metadata->>'team' as team,
+                        (metadata->>'gameWin')::int as win,
+                        (metadata->>'otLoss')::int as ot_loss,
+                        (metadata->>'goalsFor')::int as gf,
+                        (metadata->>'goalsAgainst')::int as ga
+                    FROM results 
+                    WHERE sport_id = $1 AND series = 'nhl' AND season = $2
+                )
+                SELECT 
+                    team,
+                    COALESCE(SUM(win), 0) as wins,
+                    COALESCE(SUM(CASE WHEN win = 0 AND ot_loss = 0 THEN 1 ELSE 0 END), 0) as losses,
+                    COALESCE(SUM(ot_loss), 0) as ot_losses,
+                    COALESCE(SUM(gf), 0) as points_for,
+                    COALESCE(SUM(ga), 0) as points_against,
+                    COALESCE(SUM(CASE WHEN win = 1 THEN 2 ELSE ot_loss END), 0) as points
+                FROM games
+                GROUP BY team
+                ORDER BY points DESC, wins DESC
+            """
+
+        # If query is still None (e.g., NHL API failed and no fallback query was set),
+        # or if it's NFL/NBA, proceed with DB fetch.
+        if query is None:
+            # This case should ideally not be reached if all sports are handled
+            raise HTTPException(status_code=500, detail="Could not determine standings query.")
 
         rows = await conn.fetch(query, sport_id, int(season))
         

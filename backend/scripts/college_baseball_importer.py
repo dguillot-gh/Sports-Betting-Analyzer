@@ -399,7 +399,9 @@ async def run_college_baseball_import(
         "smart_year_used": True,
         "total_teams": 0,
         "results_per_division": {},
-        "synced_to_db": False
+        "synced_to_db": False,
+        "new": 0,
+        "updated": 0
     }
 
     for idx, div in enumerate(divisions_to_import):
@@ -424,7 +426,9 @@ async def run_college_baseball_import(
             logger.info("Syncing imported data to PostgreSQL...")
             for div, res in overall_results["results_per_division"].items():
                 if res.get("success"):
-                    await sync_to_postgresql(res)
+                    metrics = await sync_to_postgresql(res)
+                    overall_results["new"] += metrics.get("teams_new", 0) + metrics.get("players_new", 0)
+                    overall_results["updated"] += metrics.get("teams_updated", 0) + metrics.get("players_updated", 0)
             overall_results["synced_to_db"] = True
             _update_status(f"Complete! Imported {overall_results['total_teams']} teams", 100, source="python")
         except Exception as se:
@@ -434,6 +438,8 @@ async def run_college_baseball_import(
     else:
         _update_status("Import failed for all divisions", 0, is_error=True)
 
+    # Added rows for reporting compatibility
+    overall_results["rows"] = overall_results["new"] + overall_results["updated"]
     return overall_results
 
 
@@ -443,9 +449,10 @@ def compute_hash(data: Dict) -> str:
     return hashlib.sha256(s.encode()).hexdigest()
 
 
-async def sync_to_postgresql(import_results: Dict):
-    """Sync file-based stats to PostgreSQL tables."""
+async def sync_to_postgresql(import_results: Dict) -> Dict[str, int]:
+    """Sync file-based stats to PostgreSQL tables and return metrics."""
     conn = await asyncpg.connect(DATABASE_URL)
+    metrics = {"teams_new": 0, "teams_updated": 0, "players_new": 0, "players_updated": 0}
     try:
         # 1. Ensure sport exists
         sport_id = await conn.fetchval(
@@ -465,13 +472,24 @@ async def sync_to_postgresql(import_results: Dict):
             metadata = {"league": t.get("league"), "division": division}
             content_hash = compute_hash({"sport": "college_baseball", "team_id": team_id})
             
-            entity_id = await conn.fetchval(
+            # Use RETURNING (xmax = 0) to detect if it was a new insert
+            is_new = await conn.fetchval(
                 """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
                    VALUES ($1, $2, 'team', $3, $4, $5)
                    ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
                    DO UPDATE SET name = EXCLUDED.name, metadata = EXCLUDED.metadata
-                   RETURNING id""",
+                   RETURNING (xmax = 0)""",
                 sport_id, team_name, f"D{division}", json.dumps(metadata), content_hash
+            )
+            
+            if is_new:
+                metrics["teams_new"] += 1
+            else:
+                metrics["teams_updated"] += 1
+                
+            # Get entity_id for stats (we need it regardless)
+            entity_id = await conn.fetchval(
+                "SELECT id FROM entities WHERE content_hash = $1", content_hash
             )
             
             # Stats row
@@ -501,13 +519,22 @@ async def sync_to_postgresql(import_results: Dict):
                         p_hash = compute_hash({"sport": "college_baseball", "player_id": p_id})
                         p_meta = {"team": s.get("team"), "league": s.get("league")}
                         
-                        p_entity_id = await conn.fetchval(
+                        is_new_player = await conn.fetchval(
                             """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
                                VALUES ($1, $2, 'player', $3, $4, $5)
                                ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
                                DO UPDATE SET metadata = EXCLUDED.metadata, series = EXCLUDED.series
-                               RETURNING id""",
+                               RETURNING (xmax = 0)""",
                             sport_id, p_name, s.get("team"), json.dumps(p_meta), p_hash
+                        )
+                        
+                        if is_new_player:
+                            metrics["players_new"] += 1
+                        else:
+                            metrics["players_updated"] += 1
+
+                        p_entity_id = await conn.fetchval(
+                            "SELECT id FROM entities WHERE content_hash = $1", p_hash
                         )
                         
                         season = s.get("season", get_smart_year())
@@ -520,6 +547,8 @@ async def sync_to_postgresql(import_results: Dict):
                         )
                 except Exception as pe:
                     logger.debug(f"Error syncing player {p_file}: {pe}")
+        
+        return metrics
 
     finally:
         await conn.close()

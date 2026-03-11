@@ -1,11 +1,18 @@
-﻿@page "/"
+@page "/"
 @using System.Text.Json
 @inject HttpClient Http
 @inject SportsBettingAnalyzer.Shared.Services.IServerConfigService ServerConfig
 
 <div class="home-hero">
-    <h1>Sports Betting Analyzer</h1>
-    <p>@DateTime.Now.ToString("dddd, MMMM d")</p>
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
+        <div>
+            <h1>Sports Betting Analyzer</h1>
+            <p>@DateTime.Now.ToString("dddd, MMMM d")</p>
+        </div>
+        <div class="mini-status @(_isHealthy ? "online" : "offline")">
+            <span class="status-dot"></span>
+        </div>
+    </div>
 </div>
 
 <!-- Live Slate Banner -->
@@ -200,6 +207,13 @@
                 <p>Bankroll Logs</p>
             </div>
         </a>
+        <a class="feature-card compact" href="/data-center">
+            <div class="feature-icon" style="background: rgba(30, 58, 138, 0.15); color: #1e3a8a;">🖥️</div>
+            <div class="feature-text">
+                <h3>Data Center</h3>
+                <p>System Health</p>
+            </div>
+        </a>
         <a class="feature-card compact" href="/paper-trading">
             <div class="feature-icon feature-icon-green">💸</div>
             <div class="feature-text">
@@ -304,6 +318,9 @@
     .feature-card.compact .feature-text p {
         font-size: 11px;
     }
+    .dashboard-section:last-of-type {
+        margin-bottom: 150px !important;
+    }
 
     .home-stats-row {
         display: flex;
@@ -335,6 +352,11 @@
         letter-spacing: 0.5px;
         color: var(--text-muted, #64748b);
     }
+    
+    .mini-status { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(0,0,0,0.2); border-radius: 50%; border: 1px solid rgba(255,255,255,0.05); }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .mini-status.online .status-dot { background: #10b981; box-shadow: 0 0 8px #10b981; }
+    .mini-status.offline .status-dot { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
 </style>
 
 @code {
@@ -343,10 +365,23 @@
     private int _finalGames = 0;
     private int _upcomingGames = 0;
     private int _sportCount = 0;
+    private bool _isHealthy = false;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadGameCounts();
+        await CheckHealth();
+    }
+    
+    private async Task CheckHealth()
+    {
+        try
+        {
+            var baseUrl = ServerConfig.GetBaseUrl();
+            var response = await Http.GetAsync($"{baseUrl}/health");
+            _isHealthy = response.IsSuccessStatusCode;
+        }
+        catch { _isHealthy = false; }
     }
 
     private async Task LoadGameCounts()

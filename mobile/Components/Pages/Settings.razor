@@ -1,6 +1,8 @@
 @page "/settings"
 @using SportsBettingAnalyzer.Shared.Services
 @using SportsBettingAnalyzer.Shared.Models
+@using SportsBettingAnalyzer.Mobile.Models
+@using System.Net.Http.Json
 @inject IServerConfigService ConfigService
 @inject IAppSettingsService AppSettings
 @inject NavigationManager Nav
@@ -67,6 +69,70 @@
     </div>
 </div>
 
+<!-- Version Information Section -->
+<div class="app-card settings-card mt-4">
+    <div class="app-card-header">
+        <h2>&#128128; App Version</h2>
+        <p>Current deployment and version information</p>
+    </div>
+
+    <div class="app-card-body">
+        @if (versionInfo != null)
+        {
+            <div class="version-grid">
+                <div class="version-item">
+                    <div class="version-label">Version</div>
+                    <div class="version-value">@versionInfo.Version</div>
+                </div>
+                <div class="version-item">
+                    <div class="version-label">Environment</div>
+                    <div class="version-value">@versionInfo.Environment</div>
+                </div>
+                <div class="version-item">
+                    <div class="version-label">Git SHA</div>
+                    <div class="version-value small">@(versionInfo.GitSha.Length > 8 ? versionInfo.GitSha.Substring(0, 8) : versionInfo.GitSha)</div>
+                </div>
+                <div class="version-item">
+                    <div class="version-label">Build Time</div>
+                    <div class="version-value small">@versionInfo.BuildTime</div>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(versionInfo.DeploymentId))
+            {
+                <div class="deployment-id">
+                    <div class="version-label">Deployment ID</div>
+                    <div class="version-value small">@versionInfo.DeploymentId</div>
+                </div>
+            }
+
+            @if (versionInfo.Components.Any())
+            {
+                <div class="components-section">
+                    <div class="version-label">Components</div>
+                    @foreach (var component in versionInfo.Components)
+                    {
+                        <div class="component-item">
+                            <div class="flex items-center gap-2">
+                                <div class="status-dot @(component.Status == "success" || component.Status == "running" ? "success" : "warning")"></div>
+                                <span class="component-name">@component.ComponentName</span>
+                            </div>
+                            <div class="component-version">@component.ComponentVersion</div>
+                        </div>
+                    }
+                </div>
+            }
+        }
+        else
+        {
+            <div class="loading-version">
+                <div class="loading-spinner"></div>
+                <span>Loading version information...</span>
+            </div>
+        }
+    </div>
+</div>
+
 <style>
     .settings-section { margin-bottom: 24px; }
     .settings-title { font-size: 16px; font-weight: 800; margin-bottom: 16px; color: var(--text-primary); }
@@ -99,6 +165,124 @@
     
     .mt-4 { margin-top: 24px; }
     .mb-3 { margin-bottom: 12px; }
+    
+    /* Version Information Styles */
+    .version-grid { 
+        display: grid; 
+        grid-template-columns: 1fr 1fr; 
+        gap: 12px; 
+        margin-bottom: 16px; 
+    }
+    
+    .version-item { 
+        background: var(--surface-raised); 
+        border: 1px solid var(--border); 
+        border-radius: 8px; 
+        padding: 12px; 
+        text-align: center; 
+    }
+    
+    .version-label { 
+        font-size: 11px; 
+        font-weight: 700; 
+        color: var(--text-secondary); 
+        margin-bottom: 4px; 
+        text-transform: uppercase; 
+    }
+    
+    .version-value { 
+        font-size: 14px; 
+        font-weight: 700; 
+        color: var(--text-primary); 
+        font-family: monospace; 
+    }
+    
+    .version-value.small { 
+        font-size: 11px; 
+        word-break: break-all; 
+    }
+    
+    .deployment-id { 
+        background: var(--surface-raised); 
+        border: 1px solid var(--border); 
+        border-radius: 8px; 
+        padding: 12px; 
+        margin-bottom: 16px; 
+        text-align: center; 
+    }
+    
+    .components-section { 
+        background: var(--surface-raised); 
+        border: 1px solid var(--border); 
+        border-radius: 8px; 
+        padding: 12px; 
+    }
+    
+    .component-item { 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; 
+        padding: 8px 0; 
+        border-bottom: 1px solid var(--border-light); 
+    }
+    
+    .component-item:last-child { 
+        border-bottom: none; 
+    }
+    
+    .status-dot { 
+        width: 8px; 
+        height: 8px; 
+        border-radius: 50%; 
+        display: inline-block; 
+    }
+    
+    .status-dot.success { 
+        background: #10b981; 
+    }
+    
+    .status-dot.warning { 
+        background: #f59e0b; 
+    }
+    
+    .component-name { 
+        font-weight: 700; 
+        color: var(--text-primary); 
+        font-size: 13px; 
+    }
+    
+    .component-version { 
+        font-family: monospace; 
+        font-size: 11px; 
+        color: var(--text-secondary); 
+    }
+    
+    .loading-version { 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        gap: 8px; 
+        padding: 20px; 
+        color: var(--text-secondary); 
+    }
+    
+    .loading-spinner { 
+        width: 16px; 
+        height: 16px; 
+        border: 2px solid var(--border-light); 
+        border-top: 2px solid var(--primary); 
+        border-radius: 50%; 
+        animation: spin 1s linear infinite; 
+    }
+    
+    @@keyframes spin { 
+        0% { transform: rotate(0deg); } 
+        100% { transform: rotate(360deg); } 
+    }
+    
+    .flex { display: flex; }
+    .items-center { align-items: center; }
+    .gap-2 { gap: 8px; }
 </style>
 
 @code {
@@ -106,6 +290,8 @@
     private bool showSuccessMessage = false;
     private List<NavItem> _allAvailable = new();
     private List<NavItem> _selectedItems = new();
+    private DeploymentVersionInfo? versionInfo;
+    private bool isLoadingVersion = true;
 
     protected override async Task OnInitializedAsync()
     {
@@ -113,8 +299,53 @@
         _allAvailable = AppSettings.GetAvailableNavItems();
         _selectedItems = await AppSettings.GetBottomNavItemsAsync();
         
+        // Load version information
+        await LoadVersionInfo();
+        
         // Ensure menu toggle is always at least available internally even if not in _allAvailable list
         // (For now I added it to the default but not to the 'available' picker to keep it clean)
+    }
+
+    private async Task LoadVersionInfo()
+    {
+        try
+        {
+            isLoadingVersion = true;
+            StateHasChanged();
+            
+            // Create HTTP client to call backend
+            using var httpClient = new HttpClient();
+            httpClient.BaseAddress = new Uri(ConfigService.GetBaseUrl());
+            httpClient.Timeout = TimeSpan.FromSeconds(10);
+            
+            var response = await httpClient.GetFromJsonAsync<DeploymentVersionInfo>("/deployments/current");
+            versionInfo = response;
+        }
+        catch (Exception ex)
+        {
+            // Handle error gracefully - show default info
+            versionInfo = new DeploymentVersionInfo 
+            { 
+                Version = "unknown",
+                Environment = "offline",
+                GitSha = "unknown",
+                BuildTime = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                Components = new List<DeploymentComponent>
+                {
+                    new DeploymentComponent 
+                    { 
+                        ComponentName = "mobile", 
+                        ComponentVersion = "1.0.0", 
+                        Status = "offline" 
+                    }
+                }
+            };
+        }
+        finally
+        {
+            isLoadingVersion = false;
+            StateHasChanged();
+        }
     }
 
     private void ToggleItem(NavItem item)

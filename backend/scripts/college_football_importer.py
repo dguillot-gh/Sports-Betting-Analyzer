@@ -314,6 +314,10 @@ async def run_college_football_import(
             results["message"] = "Import failed - see errors"
         else:
             results["message"] = f"Imported {total_imported} total records"
+            # Add metrics for reporting
+            results["rows"] = total_imported
+            results["new"] = total_imported  # For file sync, we treat all as new for now
+            results["updated"] = 0
         
     except Exception as e:
         results["success"] = False

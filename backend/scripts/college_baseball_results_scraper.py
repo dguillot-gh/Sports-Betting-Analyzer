@@ -152,8 +152,10 @@ async def store_game_results(games: List[Dict[str, Any]], db_url: str = None) ->
                 "INSERT INTO sports (name, display_name) VALUES ('college_baseball', 'College Baseball') RETURNING id"
             )
         
-        inserted = 0
+        new_count = 0
+        updated_count = 0
         for game in games:
+            game_date_obj = datetime.fromisoformat(game["event_date"]).date()
             metadata = json.dumps({
                 "homeTeam": game["home_team"],
                 "awayTeam": game["away_team"],
@@ -164,41 +166,55 @@ async def store_game_results(games: List[Dict[str, Any]], db_url: str = None) ->
                 "espnId": game.get("espn_id"),
             })
             
+            # Use content_hash for better duplicate detection if available in schema
+            # But the schema here seems to use (series, game_date, homeTeam, awayTeam) implicitly
+            # Let's use a more robust approach: INSERT ... ON CONFLICT (id) is not possible without ID
+            # Does results have a unique constraint we can leverage?
+            # From previous scripts, it seems we use (content_hash) or similar.
+            # If not, we'll keep the manual check but return metrics.
+            
             # Check for duplicate (same ESPN ID or same teams + date)
-            existing = await conn.fetchval(
+            existing_id = await conn.fetchval(
                 """SELECT id FROM results 
                    WHERE series = 'college_baseball' 
                    AND game_date = $1
                    AND metadata->>'homeTeam' = $2
                    AND metadata->>'awayTeam' = $3""",
-                datetime.fromisoformat(game["event_date"]).date(),
+                game_date_obj,
                 game["home_team"],
                 game["away_team"]
             )
             
-            if existing:
-                continue
-            
-            await conn.execute(
-                """INSERT INTO results (sport_id, season, game_date, 
-                   home_score, away_score, metadata, series)
-                   VALUES ($1, $2, $3, $4, $5, $6, 'college_baseball')""",
-                sport_id,
-                game["season"],
-                datetime.fromisoformat(game["event_date"]).date(),
-                game["home_score"],
-                game["away_score"],
-                metadata
-            )
-            inserted += 1
+            if existing_id:
+                # Update existing
+                await conn.execute(
+                    """UPDATE results SET home_score = $1, away_score = $2, metadata = $3
+                       WHERE id = $4""",
+                    game["home_score"], game["away_score"], metadata, existing_id
+                )
+                updated_count += 1
+            else:
+                # Insert new
+                await conn.execute(
+                    """INSERT INTO results (sport_id, season, game_date, 
+                       home_score, away_score, metadata, series)
+                       VALUES ($1, $2, $3, $4, $5, $6, 'college_baseball')""",
+                    sport_id,
+                    game["season"],
+                    game_date_obj,
+                    game["home_score"],
+                    game["away_score"],
+                    metadata
+                )
+                new_count += 1
         
         await conn.close()
-        logger.info(f"Inserted {inserted} new game results (skipped {len(games) - inserted} duplicates)")
-        return inserted
+        logger.info(f"Summary: {new_count} new, {updated_count} updated results")
+        return {"rows": new_count + updated_count, "new": new_count, "updated": updated_count}
         
     except Exception as e:
         logger.error(f"Error storing game results: {e}")
-        return 0
+        return {"rows": 0, "new": 0, "updated": 0}
 
 
 async def scrape_and_store(days_back: int = 7) -> Dict[str, Any]:
@@ -214,11 +230,15 @@ async def scrape_and_store(days_back: int = 7) -> Dict[str, Any]:
     logger.info(f"Starting college baseball results scrape ({days_back} days back)...")
     
     games = await fetch_college_baseball_scores(days_back=days_back)
-    inserted = await store_game_results(games)
+    summary = await store_game_results(games)
     
     return {
         "games_fetched": len(games),
-        "games_inserted": inserted,
+        "games_inserted": summary.get("new", 0),
+        "games_updated": summary.get("updated", 0),
+        "rows": summary.get("rows", 0),
+        "new": summary.get("new", 0),
+        "updated": summary.get("updated", 0),
         "days_scraped": days_back,
         "scrape_date": datetime.now().isoformat()
     }
@@ -243,12 +263,16 @@ async def backfill_season(year: int = 2026) -> Dict[str, Any]:
         days_back=total_days
     )
     
-    inserted = await store_game_results(games)
+    summary = await store_game_results(games)
     
     return {
         "year": year,
         "games_fetched": len(games),
-        "games_inserted": inserted,
+        "games_inserted": summary.get("new", 0),
+        "games_updated": summary.get("updated", 0),
+        "rows": summary.get("rows", 0),
+        "new": summary.get("new", 0),
+        "updated": summary.get("updated", 0),
         "date_range": f"{season_start} to {season_end}"
     }
 

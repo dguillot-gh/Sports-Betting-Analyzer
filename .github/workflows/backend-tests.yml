@@ -2,11 +2,11 @@ name: Backend Tests
 
 on:
   push:
-    branches: [master, dev]
+    branches: [dev, master]
     paths:
       - 'backend/**'
   pull_request:
-    branches: [master]
+    branches: [dev, master]
     paths:
       - 'backend/**'
   workflow_dispatch:
@@ -30,25 +30,12 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements-test.txt
-          pip install pytest
+          pip install pytest httpx anyio
 
-      - name: Run College Baseball predictor tests
+      - name: Run all backend tests
         working-directory: .
         env:
           PYTHONPATH: backend
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres # Placeholder for app.py import
         run: |
-          python -m pytest backend/tests/test_college_baseball_predictor.py -v --tb=short
-
-      - name: Run College Baseball enhancement tests
-        working-directory: .
-        env:
-          PYTHONPATH: backend
-        run: |
-          python -m pytest backend/tests/test_college_baseball_enhancements.py -v --tb=short
-
-      - name: Run all college baseball tests
-        working-directory: .
-        env:
-          PYTHONPATH: backend
-        run: |
-          python -m pytest backend/tests/test_college_baseball_predictor.py backend/tests/test_college_baseball_enhancements.py -v --tb=short
+          python -m pytest backend/tests/ -v --tb=short

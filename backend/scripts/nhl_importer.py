@@ -61,7 +61,7 @@ async def ensure_sport_exists(conn) -> int:
         )
     return sport_id
 
-async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, start_year: int = 2023, progress_callback=None):
+async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, start_year: int = 2023, progress_callback=None) -> dict:
     """Import team game-by-game data from MoneyPuck."""
     logger.info("Starting MoneyPuck game-level import...")
     
@@ -88,6 +88,8 @@ async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, sta
 
     # Process CSV in chunks to save memory
     count = 0
+    inserted_count = 0
+    updated_count = 0
     batch_size = 500
     
     # We use a set of team names for lookup
@@ -154,13 +156,21 @@ async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, sta
             except:
                 clean_season = 0
 
+            # Results: Track new vs updated
             try:
-                await conn.execute(
+                # Use RETURNING (xmax = 0) to distinguish INSERT vs UPDATE
+                is_insert = await conn.fetchval(
                     """INSERT INTO results (sport_id, season, series, metadata, content_hash)
                        VALUES ($1, $2, 'nhl', $3, $4)
-                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL DO UPDATE SET metadata = EXCLUDED.metadata""",
+                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL 
+                       DO UPDATE SET metadata = EXCLUDED.metadata
+                       RETURNING (xmax = 0) AS is_insert""",
                     sport_id, clean_season, json.dumps(metadata), result_hash
                 )
+                if is_insert:
+                    inserted_count += 1
+                else:
+                    updated_count += 1
                 count += 1
             except Exception as e:
                 logger.error(f"Row skip error for game {game_id} (Team: {team_name}): {e}")
@@ -173,9 +183,10 @@ async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, sta
         elif count % 5000 == 0:
             logger.info(f"Progress: {count} results imported.")
 
-    logger.info(f"Finished MoneyPuck import. Total results: {count}")
+    logger.info(f"Finished MoneyPuck import. Total: {count} (New: {inserted_count}, Updated: {updated_count})")
+    return {"total": count, "new": inserted_count, "updated": updated_count}
 
-async def import_player_bios(conn, sport_id: int):
+async def import_player_bios(conn, sport_id: int) -> dict:
     """Import player metadata from MoneyPuck."""
     logger.info("Importing player bios...")
     local_file = DATA_DIR / "player_bios.csv"
@@ -200,12 +211,10 @@ async def import_player_bios(conn, sport_id: int):
             logger.error(f"Player bios download failed and no cached file: {e}")
             return
     
-    if not local_file.exists():
-        logger.error("Player bios file missing and download failed.")
-        return
-
     df = pd.read_csv(local_file)
     count = 0
+    inserted_count = 0
+    updated_count = 0
     for _, row in df.iterrows():
         name = row.get('name')
         player_id = row.get('playerId')
@@ -217,15 +226,23 @@ async def import_player_bios(conn, sport_id: int):
         
         player_hash = compute_hash({"sport": "nhl", "player_id": str(player_id)})
         
-        await conn.execute(
+        # Use RETURNING (xmax = 0) to distinguish INSERT vs UPDATE
+        is_insert = await conn.fetchval(
             """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
                VALUES ($1, $2, 'player', 'nhl', $3, $4)
-               ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL DO UPDATE SET metadata = EXCLUDED.metadata""",
+               ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL 
+               DO UPDATE SET metadata = EXCLUDED.metadata
+               RETURNING (xmax = 0) AS is_insert""",
             sport_id, name, json.dumps(metadata), player_hash
         )
+        if is_insert:
+            inserted_count += 1
+        else:
+            updated_count += 1
         count += 1
         
-    logger.info(f"Imported {count} NHL players.")
+    logger.info(f"Imported {count} NHL players (New: {inserted_count}, Updated: {updated_count}).")
+    return {"total": count, "new": inserted_count, "updated": updated_count}
 
 async def sync_live_standings(conn, sport_id: int):
     """Fetch current standings from NHL API."""
@@ -257,7 +274,11 @@ async def import_all_nhl(clear_existing: bool = False, start_year: int = 2023, p
     results = {
         "status": "success",
         "games_imported": 0,
+        "games_new": 0,
+        "games_updated": 0,
         "players_imported": 0,
+        "players_new": 0,
+        "players_updated": 0,
         "errors": []
     }
     
@@ -280,22 +301,18 @@ async def import_all_nhl(clear_existing: bool = False, start_year: int = 2023, p
         # 1. MoneyPuck game data (always fresh download)
         if progress_callback:
             progress_callback("Downloading MoneyPuck game data...")
-        await import_moneypuck_game_data(conn, sport_id, start_year=start_year, progress_callback=progress_callback)
-        
-        game_count = await conn.fetchval(
-            "SELECT COUNT(*) FROM results WHERE sport_id = $1", sport_id
-        )
-        results["games_imported"] = game_count or 0
+        game_res = await import_moneypuck_game_data(conn, sport_id, start_year=start_year, progress_callback=progress_callback)
+        results["games_imported"] = game_res.get("total", 0)
+        results["games_new"] = game_res.get("new", 0)
+        results["games_updated"] = game_res.get("updated", 0)
         
         # 2. Player bios
         if progress_callback:
             progress_callback("Importing player bios...")
-        await import_player_bios(conn, sport_id)
-        
-        player_count = await conn.fetchval(
-            "SELECT COUNT(*) FROM entities WHERE sport_id = $1 AND type = 'player'", sport_id
-        )
-        results["players_imported"] = player_count or 0
+        player_res = await import_player_bios(conn, sport_id)
+        results["players_imported"] = player_res.get("total", 0)
+        results["players_new"] = player_res.get("new", 0)
+        results["players_updated"] = player_res.get("updated", 0)
         
         # 3. Live standings
         if progress_callback:

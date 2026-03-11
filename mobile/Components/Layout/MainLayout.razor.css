@@ -76,7 +76,19 @@ main {
     }
 
     .content-wrapper {
-        padding-bottom: calc(65px + env(safe-area-inset-bottom) + 60px);
+        padding-bottom: calc(65px + env(safe-area-inset-bottom) + 80px);
+    }
+
+    .version-container {
+        position: fixed;
+        bottom: 70px;
+        right: 10px;
+        z-index: 100;
+        pointer-events: none;
+    }
+
+    .version-container ::deep .version-display {
+        pointer-events: auto;
     }
 }
 
