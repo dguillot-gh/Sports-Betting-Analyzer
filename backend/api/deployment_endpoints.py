@@ -12,7 +12,7 @@ from pydantic import BaseModel
 import logging
 
 from src.version import get_version_info
-from src.database import get_db_connection
+from src.database import get_connection
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -56,7 +56,7 @@ class RollbackRequest(BaseModel):
 async def register_deployment_in_db(deployment_data: DeploymentRequest) -> Dict[str, Any]:
     """Register a new deployment in the database"""
     try:
-        async with get_db_connection() as conn:
+        async with get_connection() as conn:
             # Get current version info if not provided
             version_info = get_version_info()
             version = deployment_data.version or version_info.get("version", "unknown")
@@ -128,7 +128,7 @@ async def register_deployment_in_db(deployment_data: DeploymentRequest) -> Dict[
 async def update_deployment_status(deployment_id: str, status: str, component_updates: Optional[Dict[str, str]] = None) -> bool:
     """Update deployment and component status"""
     try:
-        async with get_db_connection() as conn:
+        async with get_connection() as conn:
             # Update deployment status
             update_query = """
                 UPDATE deployments 
@@ -158,7 +158,7 @@ async def update_deployment_status(deployment_id: str, status: str, component_up
 async def get_deployment_info(deployment_id: str) -> Optional[Dict[str, Any]]:
     """Get detailed deployment information"""
     try:
-        async with get_db_connection() as conn:
+        async with get_connection() as conn:
             # Get deployment info
             deployment_query = """
                 SELECT d.*, 
@@ -278,7 +278,7 @@ async def register_current_version():
 async def get_current_deployment():
     """Get current successful deployment information"""
     try:
-        async with get_db_connection() as conn:
+        async with get_connection() as conn:
             query = """
                 SELECT DISTINCT ON (component_name)
                     dc.component_name,
@@ -379,7 +379,7 @@ async def get_deployments(
 ):
     """Get deployment history with optional filtering"""
     try:
-        async with get_db_connection() as conn:
+        async with get_connection() as conn:
             # Build base query
             base_query = """
                 SELECT d.deployment_id, d.version, d.git_sha, d.git_branch,
@@ -500,7 +500,7 @@ async def update_deployment_status_endpoint(
 async def initiate_rollback(deployment_id: str, rollback_request: RollbackRequest):
     """Initiate a rollback to a previous deployment"""
     try:
-        async with get_db_connection() as conn:
+        async with get_connection() as conn:
             # Get current deployment info
             current_deployment = await get_deployment_info(deployment_id)
             if not current_deployment:
@@ -591,7 +591,7 @@ async def monitor_deployment_progress(deployment_id: str):
 async def finalize_deployment(deployment_id: str, final_status: str):
     """Finalize deployment completion"""
     try:
-        async with get_db_connection() as conn:
+        async with get_connection() as conn:
             # Update completion time
             query = """
                 UPDATE deployments 
