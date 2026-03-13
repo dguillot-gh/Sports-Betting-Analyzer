@@ -267,28 +267,33 @@ class SchedulerService:
     async def _import_nba_task():
         """Worker for NBA (BR + Kaggle)."""
         from scripts.nba_importer import import_all_nba
-        res = await import_all_nba(clear_existing=False)
+        def log_progress(msg):
+            logger.info(f"[NBA Import] {msg}")
+            
+        res = await import_all_nba(clear_existing=False, progress_callback=log_progress)
         
         if res.get("status") == "failed":
              raise Exception(f"NBA import failed: {res.get('errors')}")
              
         return {
-            "rows": res.get("total", 0),
-            "new": res.get("new", 0),
-            "updated": res.get("updated", 0),
-            "files": res.get("files_processed", 0)
+            "rows": res.get("games_imported", 0) + res.get("players_imported", 0),
+            "new": res.get("games_new", 0) + res.get("players_new", 0),
+            "updated": res.get("games_updated", 0) + res.get("players_updated", 0),
+            "files": len(res.get("downloaded", []))
         }
 
     @staticmethod
     async def _import_nfl_task():
         """Worker for NFL (nflverse)."""
         from scripts.nfl_importer import import_all_nfl
-        res = await import_all_nfl(clear_existing=False)
+        def log_progress(msg):
+            logger.info(f"[NFL Import] {msg}")
+            
+        res = await import_all_nfl(progress_callback=log_progress)
         
         if res.get("status") == "failed":
              raise Exception(f"NFL import failed: {res.get('errors')}")
-
-        # Combine all metrics
+             
         total = (res.get("players_imported", 0) + 
                  res.get("weekly_stats_imported", 0) + 
                  res.get("season_stats_imported", 0) + 

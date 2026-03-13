@@ -886,6 +886,8 @@ async def import_stats_via_nflreadpy(conn, sport_id: int, player_map: dict, prog
 
 async def import_weekly_stats_via_nflreadpy(conn, sport_id: int, player_map: dict, progress_callback=None) -> dict:
     """Import NFL weekly (game-by-game) stats using nflreadpy for hit rate calculations."""
+    from scripts.batch_db import batch_upsert
+    
     try:
         import nflreadpy as nfl
     except ImportError:
@@ -895,27 +897,32 @@ async def import_weekly_stats_via_nflreadpy(conn, sport_id: int, player_map: dic
     if progress_callback:
         progress_callback("Loading weekly NFL stats for hit rates...")
     
-    imported = 0
+    UPSERT_SQL = """INSERT INTO results (sport_id, season, series, metadata, content_hash)
+                    VALUES ($1, $2, 'nfl_weekly', $3, $4)
+                    ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                    DO UPDATE SET metadata = EXCLUDED.metadata"""
     
     try:
-        # Load weekly stats (no summary_level = game-by-game data)
-        # Only load recent 3 seasons to keep DB size manageable
         recent_years = IMPORT_YEARS_MODERN[-3:] if len(IMPORT_YEARS_MODERN) >= 3 else IMPORT_YEARS_MODERN
-        weekly_df = nfl.load_player_stats(
-            seasons=recent_years
-        )
+        weekly_df = nfl.load_player_stats(seasons=recent_years)
         if hasattr(weekly_df, "to_pandas"):
             weekly_df = weekly_df.to_pandas()
         
         if progress_callback:
-            progress_callback(f"Processing {len(weekly_df)} weekly game records...")
+            progress_callback(f"Preparing {len(weekly_df)} weekly game records for batch insert...")
         
         logger.info(f"Loaded {len(weekly_df)} weekly stats from nflreadpy")
         
-        for i, (_, row) in enumerate(weekly_df.iterrows()):
-            if progress_callback and i % 1000 == 0:
-                progress_callback(f"Importing weekly stats {i}/{len(weekly_df)}...")
-            
+        def safe_val(val):
+            if pd.isna(val):
+                return None
+            if isinstance(val, float):
+                return int(val) if val == int(val) else round(val, 2)
+            return val
+        
+        # Collect all records
+        weekly_records = []
+        for _, row in weekly_df.iterrows():
             player_id = row.get('player_id')
             if pd.isna(player_id):
                 continue
@@ -925,13 +932,6 @@ async def import_weekly_stats_via_nflreadpy(conn, sport_id: int, player_map: dic
             if pd.isna(season) or pd.isna(week):
                 continue
             
-            def safe_val(val):
-                if pd.isna(val):
-                    return None
-                if isinstance(val, float):
-                    return int(val) if val == int(val) else round(val, 2)
-                return val
-            
             metadata = {
                 'player_id': str(player_id),
                 'player_name': safe_val(row.get('player_display_name') or row.get('player_name')),
@@ -939,26 +939,21 @@ async def import_weekly_stats_via_nflreadpy(conn, sport_id: int, player_map: dic
                 'team': safe_val(row.get('recent_team')),
                 'season': int(season),
                 'week': int(week),
-                # Passing
                 'pass_att': safe_val(row.get('attempts')),
                 'pass_cmp': safe_val(row.get('completions')),
                 'pass_yds': safe_val(row.get('passing_yards')),
                 'pass_td': safe_val(row.get('passing_tds')),
                 'pass_int': safe_val(row.get('interceptions')),
-                # Rushing
                 'rush_att': safe_val(row.get('carries')),
                 'rush_yds': safe_val(row.get('rushing_yards')),
                 'rush_td': safe_val(row.get('rushing_tds')),
-                # Receiving  
                 'rec': safe_val(row.get('receptions')),
                 'targets': safe_val(row.get('targets')),
                 'rec_yds': safe_val(row.get('receiving_yards')),
                 'rec_td': safe_val(row.get('receiving_tds')),
-                # Fantasy
                 'fantasy_pts': safe_val(row.get('fantasy_points')),
                 'fantasy_pts_ppr': safe_val(row.get('fantasy_points_ppr')),
             }
-            
             metadata = {k: v for k, v in metadata.items() if v is not None}
             
             content_hash = compute_hash({
@@ -969,28 +964,17 @@ async def import_weekly_stats_via_nflreadpy(conn, sport_id: int, player_map: dic
                 'type': 'weekly_stats'
             })
             
-            try:
-                is_insert = await conn.fetchval(
-                    """INSERT INTO results (sport_id, season, series, metadata, content_hash)
-                       VALUES ($1, $2, 'nfl_weekly', $3, $4)
-                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                       DO UPDATE SET metadata = EXCLUDED.metadata
-                       RETURNING (xmax = 0)""",
-                    sport_id, int(season), json.dumps(metadata), content_hash
-                )
-                imported += 1
-                if is_insert:
-                    inserted_count += 1
-                else:
-                    updated_count += 1
-            except Exception as e:
-                logger.debug(f"Error importing weekly stat: {e}")
-            
-            if i % 2000 == 0:
-                gc.collect()
+            weekly_records.append((sport_id, int(season), json.dumps(metadata), content_hash))
         
-        logger.info(f"Imported {imported} weekly NFL stats (New: {inserted_count}, Updated: {updated_count})")
-        return {"imported": imported, "new": inserted_count, "updated": updated_count}
+        # Batch insert all weekly stats
+        imported = await batch_upsert(
+            conn, UPSERT_SQL, weekly_records,
+            progress_callback=progress_callback,
+            label="NFL weekly stats"
+        )
+        
+        logger.info(f"Imported {imported} weekly NFL stats")
+        return {"imported": imported}
         
     except Exception as e:
         logger.error(f"Error loading weekly stats: {e}")
@@ -1423,6 +1407,8 @@ async def import_all_nfl(clear_existing: bool = False, progress_callback=None) -
 
 async def import_schedules_via_nflreadpy(conn, sport_id: int, progress_callback=None) -> dict:
     """Import NFL game schedules using nflreadpy's load_schedules()."""
+    from scripts.batch_db import batch_upsert
+    
     try:
         import nflreadpy as nfl
     except ImportError:
@@ -1432,44 +1418,44 @@ async def import_schedules_via_nflreadpy(conn, sport_id: int, progress_callback=
     if progress_callback:
         progress_callback("Loading NFL schedules (2020-2025)...")
     
-    imported = 0
+    UPSERT_SQL = """INSERT INTO results (sport_id, season, series, metadata, content_hash)
+                    VALUES ($1, $2, 'nfl_schedule', $3, $4)
+                    ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                    DO UPDATE SET metadata = EXCLUDED.metadata"""
     
     try:
-        # Load schedules for all modern years
         schedules_df = nfl.load_schedules(seasons=IMPORT_YEARS_MODERN)
         if hasattr(schedules_df, "to_pandas"):
             schedules_df = schedules_df.to_pandas()
         
         if progress_callback:
-            progress_callback(f"Processing {len(schedules_df)} games (Years: {IMPORT_YEARS_MODERN})...")
+            progress_callback(f"Preparing {len(schedules_df)} games for batch insert (Years: {IMPORT_YEARS_MODERN})...")
         
         logger.info(f"Loaded {len(schedules_df)} games from nflreadpy schedules (Years: {IMPORT_YEARS_MODERN})")
         
         if len(schedules_df) == 0:
-            logger.warning("nflreadpy returned ZERO schedules. This is likely why the schedules are not updating.")
+            logger.warning("nflreadpy returned ZERO schedules.")
         
-        for i, (_, row) in enumerate(schedules_df.iterrows()):
-            if progress_callback and i % 100 == 0:
-                progress_callback(f"Importing schedules {i}/{len(schedules_df)}...")
-            
+        def safe_val(val):
+            if pd.isna(val):
+                return None
+            if isinstance(val, float):
+                return int(val) if val == int(val) else round(val, 2)
+            return val
+        
+        # Collect all schedule records
+        schedule_records = []
+        for _, row in schedules_df.iterrows():
             game_id = row.get('game_id')
             if pd.isna(game_id):
                 continue
             
             season = row.get('season')
-            week = row.get('week')
-            
-            def safe_val(val):
-                if pd.isna(val):
-                    return None
-                if isinstance(val, float):
-                    return int(val) if val == int(val) else round(val, 2)
-                return val
             
             metadata = {
                 'game_id': str(game_id),
                 'season': safe_val(season),
-                'week': safe_val(week),
+                'week': safe_val(row.get('week')),
                 'game_type': safe_val(row.get('game_type')),
                 'gameday': safe_val(row.get('gameday')),
                 'weekday': safe_val(row.get('weekday')),
@@ -1489,36 +1475,23 @@ async def import_schedules_via_nflreadpy(conn, sport_id: int, progress_callback=
                 'roof': safe_val(row.get('roof')),
                 'surface': safe_val(row.get('surface')),
             }
-            
             metadata = {k: v for k, v in metadata.items() if v is not None}
-            
             content_hash = compute_hash({'sport': 'nfl', 'game_id': str(game_id)})
-            
-            try:
-                is_insert = await conn.fetchval(
-                    """INSERT INTO results (sport_id, season, series, metadata, content_hash)
-                       VALUES ($1, $2, 'nfl_schedule', $3, $4)
-                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                       DO UPDATE SET metadata = EXCLUDED.metadata
-                       RETURNING (xmax = 0)""",
-                    sport_id, int(season) if season else None, json.dumps(metadata), content_hash
-                )
-                imported += 1
-                if is_insert:
-                    results["new"] = results.get("new", 0) + 1
-                else:
-                    results["updated"] = results.get("updated", 0) + 1
-            except Exception as e:
-                logger.debug(f"Error importing schedule: {e}")
+            schedule_records.append((sport_id, int(season) if season else None, json.dumps(metadata), content_hash))
         
-        gc.collect()
+        # Batch insert all schedules
+        imported = await batch_upsert(
+            conn, UPSERT_SQL, schedule_records,
+            progress_callback=progress_callback,
+            label="NFL schedules"
+        )
         
     except Exception as e:
         logger.error(f"Error in schedule import: {e}")
-        return {"imported": imported, "error": str(e)}
+        return {"imported": 0, "error": str(e)}
     
-    logger.info(f"Imported {imported} NFL schedules (New: {results.get('new', 0)}, Updated: {results.get('updated', 0)})")
-    return {"imported": imported, "new": results.get("new", 0), "updated": results.get("updated", 0)}
+    logger.info(f"Imported {imported} NFL schedules")
+    return {"imported": imported}
 
 
 if __name__ == "__main__":

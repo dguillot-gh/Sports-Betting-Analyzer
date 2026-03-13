@@ -70,6 +70,8 @@ async def download_hoopdata(progress_callback=None):
 
 async def import_via_sportsdataverse_api(conn, sport_id: int, progress_callback=None) -> dict:
     """Import NBA data using sportsdataverse Python API directly."""
+    from scripts.batch_db import batch_upsert
+    
     try:
         from sportsdataverse.nba import load_nba_player_boxscore
     except ImportError:
@@ -87,6 +89,11 @@ async def import_via_sportsdataverse_api(conn, sport_id: int, progress_callback=
     
     results = {"players": 0, "games": 0}
     player_map = {}
+    
+    UPSERT_RESULTS_SQL = """INSERT INTO results (sport_id, season, series, metadata, content_hash)
+                            VALUES ($1, $2, 'nba', $3, $4)
+                            ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                            DO UPDATE SET metadata = EXCLUDED.metadata"""
     
     try:
         # Load player boxscores for recent seasons
@@ -108,113 +115,100 @@ async def import_via_sportsdataverse_api(conn, sport_id: int, progress_callback=
                 
                 logger.info(f"Loaded {len(df)} boxscores for {year} via sportsdataverse API")
                 
-                # Process in batches
-                batch_size = 100
-                for start_idx in range(0, len(df), batch_size):
-                    batch = df.iloc[start_idx:start_idx + batch_size]
+                def safe_int(val):
+                    try:
+                        return int(float(val)) if not pd.isna(val) else None
+                    except:
+                        return None
+                
+                # Phase 1: Collect unique players (needs RETURNING id, stays row-by-row)
+                for _, row in df.iterrows():
+                    player_id = row.get('athlete_id') or row.get('player_id')
+                    player_name = row.get('athlete_display_name') or row.get('athlete_name')
                     
-                    for _, row in batch.iterrows():
-                        # Get player info
-                        player_id = row.get('athlete_id') or row.get('player_id')
-                        player_name = row.get('athlete_display_name') or row.get('athlete_name')
+                    if pd.isna(player_id) or pd.isna(player_name):
+                        continue
+                    
+                    if str(player_id) not in player_map:
+                        position = row.get('athlete_position_name', '')
+                        team = row.get('team_short_display_name') or row.get('team_abbreviation', '')
                         
-                        if pd.isna(player_id) or pd.isna(player_name):
-                            continue
-                        
-                        # Create/update player entity if not seen
-                        if str(player_id) not in player_map:
-                            position = row.get('athlete_position_name', '')
-                            team = row.get('team_short_display_name') or row.get('team_abbreviation', '')
-                            
-                            metadata = {
-                                'position': str(position) if not pd.isna(position) else None,
-                                'team': str(team) if not pd.isna(team) else None,
-                            }
-                            
-                            content_hash = compute_hash({'sport': 'nba', 'player_id': str(player_id)})
-                            
-                            try:
-                                entity_id = await conn.fetchval(
-                                    """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
-                                       VALUES ($1, $2, 'player', 'nba', $3, $4)
-                                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                                       DO UPDATE SET name = EXCLUDED.name, metadata = EXCLUDED.metadata
-                                       RETURNING (id, (xmax = 0))""",
-                                    sport_id, str(player_name), json.dumps(metadata), content_hash
-                                )
-                                if entity_id:
-                                    # Postgres returns a record when using multiple columns in RETURNING
-                                    # Handle both single value and tuple (record)
-                                    e_id = entity_id[0] if isinstance(entity_id, (tuple, list, asyncpg.Record)) else entity_id
-                                    is_new = entity_id[1] if isinstance(entity_id, (tuple, list, asyncpg.Record)) else True
-                                    
-                                    player_map[str(player_id)] = e_id
-                                    results["players"] += 1
-                                    if is_new:
-                                        results["players_new"] = results.get("players_new", 0) + 1
-                                    else:
-                                        results["players_updated"] = results.get("players_updated", 0) + 1
-                            except Exception as e:
-                                logger.debug(f"Error importing player {player_name}: {e}")
-                        
-                        # Import game result
-                        def safe_int(val):
-                            try:
-                                return int(float(val)) if not pd.isna(val) else None
-                            except:
-                                return None
-                        
-                        game_id = row.get('game_id')
-                        game_date = row.get('game_date') or row.get('game_date_time')
-                        
-                        game_metadata = {
-                            'player_name': str(player_name),
-                            'game_id': str(game_id) if not pd.isna(game_id) else None,
-                            'game_date': str(game_date) if not pd.isna(game_date) else None,
-                            'team': str(row.get('team_short_display_name', '')) if not pd.isna(row.get('team_short_display_name')) else None,
-                            'opponent': str(row.get('opponent_team_short_display_name', '')) if not pd.isna(row.get('opponent_team_short_display_name')) else None,
-                            'minutes': safe_int(row.get('minutes')),
-                            'pts': safe_int(row.get('points')),
-                            'reb': safe_int(row.get('rebounds')),
-                            'ast': safe_int(row.get('assists')),
-                            'stl': safe_int(row.get('steals')),
-                            'blk': safe_int(row.get('blocks')),
-                            'fg': safe_int(row.get('field_goals_made')),
-                            'fga': safe_int(row.get('field_goals_attempted')),
-                            'fg3': safe_int(row.get('three_point_field_goals_made')),
-                            'fg3a': safe_int(row.get('three_point_field_goals_attempted')),
-                            'ft': safe_int(row.get('free_throws_made')),
-                            'fta': safe_int(row.get('free_throws_attempted')),
-                            'tov': safe_int(row.get('turnovers')),
-                            'source': 'sportsdataverse'
+                        metadata = {
+                            'position': str(position) if not pd.isna(position) else None,
+                            'team': str(team) if not pd.isna(team) else None,
                         }
                         
-                        game_metadata = {k: v for k, v in game_metadata.items() if v is not None}
-                        
-                        game_hash = compute_hash({
-                            'sport': 'nba',
-                            'player_id': str(player_id),
-                            'game_id': str(game_id) if game_id else str(game_date)
-                        })
+                        content_hash = compute_hash({'sport': 'nba', 'player_id': str(player_id)})
                         
                         try:
-                            is_insert = await conn.fetchval(
-                                """INSERT INTO results (sport_id, season, series, metadata, content_hash)
-                                   VALUES ($1, $2, 'nba', $3, $4)
+                            entity_id = await conn.fetchval(
+                                """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
+                                   VALUES ($1, $2, 'player', 'nba', $3, $4)
                                    ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                                   DO UPDATE SET metadata = EXCLUDED.metadata
-                                   RETURNING (xmax = 0)""",
-                                sport_id, year, json.dumps(game_metadata), game_hash
+                                   DO UPDATE SET name = EXCLUDED.name, metadata = EXCLUDED.metadata
+                                   RETURNING id""",
+                                sport_id, str(player_name), json.dumps(metadata), content_hash
                             )
-                            results["games"] += 1
-                            if is_insert:
-                                results["games_new"] = results.get("games_new", 0) + 1
-                            else:
-                                results["games_updated"] = results.get("games_updated", 0) + 1
+                            if entity_id:
+                                player_map[str(player_id)] = entity_id
+                                results["players"] += 1
                         except Exception as e:
-                            logger.debug(f"Error importing game: {e}")
+                            logger.debug(f"Error importing player {player_name}: {e}")
+                
+                if progress_callback:
+                    progress_callback(f"Imported {results['players']} players for {year}, now batch inserting games...")
+                
+                # Phase 2: Collect all game records, then batch insert
+                game_records = []
+                for _, row in df.iterrows():
+                    player_id = row.get('athlete_id') or row.get('player_id')
+                    player_name = row.get('athlete_display_name') or row.get('athlete_name')
                     
-                    gc.collect()
+                    if pd.isna(player_id) or pd.isna(player_name):
+                        continue
+                    
+                    game_id = row.get('game_id')
+                    game_date = row.get('game_date') or row.get('game_date_time')
+                    
+                    game_metadata = {
+                        'player_name': str(player_name),
+                        'game_id': str(game_id) if not pd.isna(game_id) else None,
+                        'game_date': str(game_date) if not pd.isna(game_date) else None,
+                        'team': str(row.get('team_short_display_name', '')) if not pd.isna(row.get('team_short_display_name')) else None,
+                        'opponent': str(row.get('opponent_team_short_display_name', '')) if not pd.isna(row.get('opponent_team_short_display_name')) else None,
+                        'minutes': safe_int(row.get('minutes')),
+                        'pts': safe_int(row.get('points')),
+                        'reb': safe_int(row.get('rebounds')),
+                        'ast': safe_int(row.get('assists')),
+                        'stl': safe_int(row.get('steals')),
+                        'blk': safe_int(row.get('blocks')),
+                        'fg': safe_int(row.get('field_goals_made')),
+                        'fga': safe_int(row.get('field_goals_attempted')),
+                        'fg3': safe_int(row.get('three_point_field_goals_made')),
+                        'fg3a': safe_int(row.get('three_point_field_goals_attempted')),
+                        'ft': safe_int(row.get('free_throws_made')),
+                        'fta': safe_int(row.get('free_throws_attempted')),
+                        'tov': safe_int(row.get('turnovers')),
+                        'source': 'sportsdataverse'
+                    }
+                    
+                    game_metadata = {k: v for k, v in game_metadata.items() if v is not None}
+                    
+                    game_hash = compute_hash({
+                        'sport': 'nba',
+                        'player_id': str(player_id),
+                        'game_id': str(game_id) if game_id else str(game_date)
+                    })
+                    
+                    game_records.append((sport_id, year, json.dumps(game_metadata), game_hash))
+                
+                # Batch insert all games for this year
+                games_inserted = await batch_upsert(
+                    conn, UPSERT_RESULTS_SQL, game_records,
+                    progress_callback=progress_callback,
+                    label=f"NBA {year} games"
+                )
+                results["games"] += games_inserted
                     
             except Exception as e:
                 logger.warning(f"Error loading {year} from sportsdataverse: {e}")
@@ -246,6 +240,8 @@ async def import_season_stats_via_basketball_reference(conn, sport_id: int, play
     
     imported = 0
     stats_computed = 0
+    new_count = 0
+    updated_count = 0
     
     # Years to import from Basketball Reference
     years_to_import = [2021, 2022, 2023, 2024, 2025, 2026]
@@ -352,9 +348,9 @@ async def import_season_stats_via_basketball_reference(conn, sport_id: int, play
                     )
                     
                     if is_insert:
-                        results["imported_new"] = results.get("imported_new", 0) + 1
+                        new_count += 1
                     else:
-                        results["imported_updated"] = results.get("imported_updated", 0) + 1
+                        updated_count += 1
                         
                     # Also insert into stats table for profile queries
                     entity_id = player_map.get(slug) or player_map.get(player_name)
@@ -402,7 +398,7 @@ async def import_season_stats_via_basketball_reference(conn, sport_id: int, play
     
     logger.info(f"Imported {imported} NBA season stats from Basketball Reference, {stats_computed} stats table entries")
     return {"imported": imported, "stats_computed": stats_computed, 
-            "new": results.get("imported_new", 0), "updated": results.get("imported_updated", 0)}
+            "new": new_count, "updated": updated_count}
 
 
 async def import_from_hoopdata(conn, sport_id: int, progress_callback=None) -> dict:
@@ -1020,6 +1016,8 @@ async def import_all_nba(clear_existing: bool = False, progress_callback=None) -
 
 async def import_schedules_via_nba_api(conn, sport_id: int, progress_callback=None) -> dict:
     """Import NBA game schedules using nba_api's LeagueGameFinder."""
+    from scripts.batch_db import batch_upsert
+    
     try:
         from nba_api.stats.endpoints import leaguegamefinder
         import time
@@ -1030,12 +1028,13 @@ async def import_schedules_via_nba_api(conn, sport_id: int, progress_callback=No
     if progress_callback:
         progress_callback("Loading NBA schedules via nba_api...")
     
-    imported = 0
+    UPSERT_SQL = """INSERT INTO results (sport_id, season, series, metadata, content_hash)
+                    VALUES ($1, $2, 'nba_schedule', $3, $4)
+                    ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                    DO UPDATE SET metadata = EXCLUDED.metadata"""
     
     try:
-        # Format seasons for nba_api (e.g., "2024-25")
         seasons_to_load = ["2020-21", "2021-22", "2022-23", "2023-24", "2024-25"]
-        
         all_games = []
         
         for season in seasons_to_load:
@@ -1043,10 +1042,9 @@ async def import_schedules_via_nba_api(conn, sport_id: int, progress_callback=No
                 if progress_callback:
                     progress_callback(f"Loading NBA games for {season}...")
                 
-                # LeagueGameFinder returns games with scores
                 gamefinder = leaguegamefinder.LeagueGameFinder(
                     season_nullable=season,
-                    league_id_nullable='00'  # NBA
+                    league_id_nullable='00'
                 )
                 games_df = gamefinder.get_data_frames()[0]
                 
@@ -1054,9 +1052,7 @@ async def import_schedules_via_nba_api(conn, sport_id: int, progress_callback=No
                     all_games.append(games_df)
                     logger.info(f"Loaded {len(games_df)} game records for {season}")
                 
-                # Rate limit to avoid API throttling
                 time.sleep(1)
-                
             except Exception as e:
                 logger.warning(f"Error loading {season} schedule: {e}")
                 continue
@@ -1065,25 +1061,27 @@ async def import_schedules_via_nba_api(conn, sport_id: int, progress_callback=No
             logger.warning("No NBA games loaded from nba_api")
             return {"imported": 0}
         
-        # Combine all seasons
         games_df = pd.concat(all_games, ignore_index=True)
-        
-        # Group by game_id to get home/away pairs
-        # Each game appears twice (once per team)
         game_ids = games_df['GAME_ID'].unique()
         
         if progress_callback:
-            progress_callback(f"Processing {len(game_ids)} unique NBA games...")
+            progress_callback(f"Preparing {len(game_ids)} unique NBA games for batch insert...")
         
-        for i, game_id in enumerate(game_ids):
-            if progress_callback and i % 100 == 0:
-                progress_callback(f"Importing NBA schedule {i}/{len(game_ids)}...")
-            
+        # Collect all schedule records
+        schedule_records = []
+        
+        def safe_val(val):
+            if pd.isna(val):
+                return None
+            if isinstance(val, float):
+                return int(val) if val == int(val) else round(val, 2)
+            return val
+        
+        for game_id in game_ids:
             game_rows = games_df[games_df['GAME_ID'] == game_id]
             if len(game_rows) < 2:
                 continue
             
-            # Determine home (@) vs away
             home_row = game_rows[game_rows['MATCHUP'].str.contains(' vs. ', na=False)]
             away_row = game_rows[game_rows['MATCHUP'].str.contains(' @ ', na=False)]
             
@@ -1093,16 +1091,8 @@ async def import_schedules_via_nba_api(conn, sport_id: int, progress_callback=No
             home_row = home_row.iloc[0]
             away_row = away_row.iloc[0]
             
-            # Extract season year from season string
             season_str = home_row.get('SEASON_ID', '')
             season_year = int(season_str[1:5]) if len(season_str) >= 5 else 2024
-            
-            def safe_val(val):
-                if pd.isna(val):
-                    return None
-                if isinstance(val, float):
-                    return int(val) if val == int(val) else round(val, 2)
-                return val
             
             metadata = {
                 'game_id': str(game_id),
@@ -1117,28 +1107,20 @@ async def import_schedules_via_nba_api(conn, sport_id: int, progress_callback=No
                 'wl_home': safe_val(home_row.get('WL')),
                 'wl_away': safe_val(away_row.get('WL')),
             }
-            
             metadata = {k: v for k, v in metadata.items() if v is not None}
-            
             content_hash = compute_hash({'sport': 'nba', 'game_id': str(game_id)})
-            
-            try:
-                await conn.execute(
-                    """INSERT INTO results (sport_id, season, series, metadata, content_hash)
-                       VALUES ($1, $2, 'nba_schedule', $3, $4)
-                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                       DO UPDATE SET metadata = EXCLUDED.metadata""",
-                    sport_id, season_year, json.dumps(metadata), content_hash
-                )
-                imported += 1
-            except Exception as e:
-                logger.debug(f"Error importing NBA schedule: {e}")
+            schedule_records.append((sport_id, season_year, json.dumps(metadata), content_hash))
         
-        gc.collect()
+        # Batch insert all schedules
+        imported = await batch_upsert(
+            conn, UPSERT_SQL, schedule_records,
+            progress_callback=progress_callback,
+            label="NBA schedules"
+        )
         
     except Exception as e:
         logger.error(f"Error in NBA schedule import: {e}")
-        return {"imported": imported, "error": str(e)}
+        return {"imported": 0, "error": str(e)}
     
     logger.info(f"Imported {imported} NBA game schedules")
     return {"imported": imported}
@@ -1146,6 +1128,8 @@ async def import_schedules_via_nba_api(conn, sport_id: int, progress_callback=No
 
 async def import_game_logs_via_nba_api(conn, sport_id: int, progress_callback=None) -> dict:
     """Import NBA player game logs for hit rate calculations."""
+    from scripts.batch_db import batch_upsert
+    
     try:
         from nba_api.stats.endpoints import leaguegamelog
         import time
@@ -1156,22 +1140,23 @@ async def import_game_logs_via_nba_api(conn, sport_id: int, progress_callback=No
     if progress_callback:
         progress_callback("Loading NBA player game logs for hit rates...")
     
-    imported = 0
+    UPSERT_SQL = """INSERT INTO results (sport_id, season, series, metadata, content_hash)
+                    VALUES ($1, $2, 'nba_game_log', $3, $4)
+                    ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                    DO UPDATE SET metadata = EXCLUDED.metadata"""
     
     try:
-        # Load game logs by season
         seasons = ["2023-24", "2024-25", "2025-26"]
-        
         all_logs = []
+        
         for season in seasons:
             try:
                 if progress_callback:
                     progress_callback(f"Loading NBA game logs for {season}...")
                 
-                # Get player game logs for the season
                 game_log = leaguegamelog.LeagueGameLog(
                     season=season,
-                    player_or_team_abbreviation='P',  # Player logs
+                    player_or_team_abbreviation='P',
                     season_type_all_star='Regular Season'
                 )
                 logs_df = game_log.get_data_frames()[0]
@@ -1180,8 +1165,7 @@ async def import_game_logs_via_nba_api(conn, sport_id: int, progress_callback=No
                     all_logs.append(logs_df)
                     logger.info(f"Loaded {len(logs_df)} game records for {season}")
                 
-                time.sleep(1)  # Rate limit
-                
+                time.sleep(1)
             except Exception as e:
                 logger.warning(f"Error loading {season} game logs: {e}")
                 continue
@@ -1193,25 +1177,23 @@ async def import_game_logs_via_nba_api(conn, sport_id: int, progress_callback=No
         logs_df = pd.concat(all_logs, ignore_index=True)
         
         if progress_callback:
-            progress_callback(f"Processing {len(logs_df)} NBA game log records...")
+            progress_callback(f"Preparing {len(logs_df)} NBA game log records for batch insert...")
         
-        for i, (_, row) in enumerate(logs_df.iterrows()):
-            if progress_callback and i % 500 == 0:
-                progress_callback(f"Importing NBA game logs {i}/{len(logs_df)}...")
-            
+        def safe_val(val):
+            if pd.isna(val):
+                return None
+            if isinstance(val, float):
+                return int(val) if val == int(val) else round(val, 2)
+            return val
+        
+        # Collect all game log records
+        log_records = []
+        for _, row in logs_df.iterrows():
             player_id = row.get('PLAYER_ID')
             game_id = row.get('GAME_ID')
             if pd.isna(player_id) or pd.isna(game_id):
                 continue
             
-            def safe_val(val):
-                if pd.isna(val):
-                    return None
-                if isinstance(val, float):
-                    return int(val) if val == int(val) else round(val, 2)
-                return val
-            
-            # Extract season year
             season_id = row.get('SEASON_ID', '')
             season_year = int(season_id[1:5]) if len(str(season_id)) >= 5 else 2024
             
@@ -1238,7 +1220,6 @@ async def import_game_logs_via_nba_api(conn, sport_id: int, progress_callback=No
                 'fta': safe_val(row.get('FTA')),
                 'plus_minus': safe_val(row.get('PLUS_MINUS')),
             }
-            
             metadata = {k: v for k, v in metadata.items() if v is not None}
             
             content_hash = compute_hash({
@@ -1248,20 +1229,14 @@ async def import_game_logs_via_nba_api(conn, sport_id: int, progress_callback=No
                 'type': 'game_log'
             })
             
-            try:
-                await conn.execute(
-                    """INSERT INTO results (sport_id, season, series, metadata, content_hash)
-                       VALUES ($1, $2, 'nba_game_log', $3, $4)
-                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                       DO UPDATE SET metadata = EXCLUDED.metadata""",
-                    sport_id, season_year, json.dumps(metadata), content_hash
-                )
-                imported += 1
-            except Exception as e:
-                logger.debug(f"Error importing NBA game log: {e}")
-            
-            if i % 1000 == 0:
-                gc.collect()
+            log_records.append((sport_id, season_year, json.dumps(metadata), content_hash))
+        
+        # Batch insert all game logs
+        imported = await batch_upsert(
+            conn, UPSERT_SQL, log_records,
+            progress_callback=progress_callback,
+            label="NBA game logs"
+        )
         
         logger.info(f"Imported {imported} NBA game logs")
         return {"imported": imported}
