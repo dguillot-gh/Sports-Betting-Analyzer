@@ -26,10 +26,9 @@ ENV LIBARROW_BINARY=true
 ENV NOT_CRAN=true
 RUN R -e "options(repos = c(CRAN = 'https://packagemanager.posit.co/cran/__linux__/bookworm/latest')); install.packages(c('jsonlite', 'dplyr', 'nflseedR', 'nflreadr', 'baseballr', 'hoopR', 'arrow'))"
 
-# 2. Install Build dependencies for ONNX conversion
-# Note: These are heavy but are discarded in Stage 2
-# We pin numpy exactly to 1.26.4 to avoid breaking TensorFlow (which doesn't support NumPy 2.x yet)
-RUN pip install --no-cache-dir "numpy==1.26.4" "tensorflow<2.16" "tf2onnx<1.16" "onnx<1.16" "ml_dtypes<0.4.0" xgboost
+# 2. Install Build dependencies
+# We now only need basic build tools since we removed heavy NN dependencies
+RUN pip install --no-cache-dir xgboost
 
 # 3. Download Models (XGBoosst models)
 COPY scripts/download_xgb_models.py ./scripts/
@@ -73,10 +72,7 @@ COPY --from=builder /app/scripts/nba_ml_reference /app/scripts/nba_ml_reference
 # Create necessary data directories
 RUN mkdir -p data/nascar data/nba data/nfl data/ncaab data/baseball models
 
-# Convert Models to ONNX (Keras to ONNX)
-RUN echo "Starting ONNX Conversion..." && \
-    python scripts/convert_to_onnx.py && \
-    echo "ONNX Conversion complete."
+# Removed ONNX conversion step as we are sticking with XGBoost
 
 # Environment configuration
 EXPOSE 8000

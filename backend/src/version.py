@@ -20,16 +20,20 @@ class VersionManager:
         
     def get_git_info(self) -> Dict[str, str]:
         """Get current git information"""
-        # Check if we're in a container with environment variables set
-        if os.getenv("GIT_SHA") and os.getenv("GIT_BRANCH"):
+        # 1. ALWAYS check environment variables first (handles Docker/CI/CD)
+        if os.getenv("GIT_SHA") and os.getenv("GIT_SHA") != "unknown":
             return {
                 "branch": os.getenv("GIT_BRANCH", "unknown"),
                 "sha": os.getenv("GIT_SHA", "unknown"),
-                "commit_count": 0,  # Can't determine in container
+                "commit_count": 0,  
                 "commit_message": "Container build"
             }
         
+        # 2. Try git commands (handles local development on host)
         try:
+            # Check if git exists
+            subprocess.run(["git", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+            
             # Get current branch
             branch = subprocess.check_output(
                 ["git", "rev-parse", "--abbrev-ref", "HEAD"],
@@ -64,8 +68,8 @@ class VersionManager:
                 "commit_count": int(commit_count),
                 "commit_message": commit_msg
             }
-        except subprocess.CalledProcessError:
-            # Fallback for non-git environments
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            # 3. Fallback for non-git environments (like inside containers without env vars)
             return {
                 "branch": "unknown",
                 "sha": "unknown",

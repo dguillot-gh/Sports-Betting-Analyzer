@@ -12,7 +12,6 @@ pyreadr
 httpx
 aiohttp
 python-multipart
-tf2onnx
 
 asyncpg>=0.29.0
 sportsdataverse
