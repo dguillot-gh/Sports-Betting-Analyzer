@@ -62,7 +62,8 @@ VERSION: str = _resolve_version()
 GIT_SHA: str = _resolve_sha()
 GIT_BRANCH: str = _resolve_branch()
 ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
-BUILD_TIME: str = os.getenv("BUILD_TIME", datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+_raw_build_time = os.getenv("BUILD_TIME", "").strip()
+BUILD_TIME: str = _raw_build_time if _raw_build_time and _raw_build_time != "unknown" else datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 # ---------------------------------------------------------------------------
