@@ -61,14 +61,14 @@ from dataset_manager import DatasetManager
 from data_sources import NASCARDataUpdater, NFLDataUpdater, GitHubDataSource, BaseDataUpdater
 from services.scheduler import SchedulerService
 
-# Import version management (full semantic versioning)
+# Import version management
 from src.version import get_version, get_version_info
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Get version
+# Version — updated to DB-backed value after startup
 current_version = get_version()
 app = FastAPI(title='Sports ML API', version=current_version)
 
@@ -130,14 +130,18 @@ def model_paths(sport: str, series_label: str, task: str) -> Path:
 # ---------- Health ----------
 @app.get('/health')
 def health():
+    global current_version
     return {'ok': True, 'sports': ['nascar', 'nfl', 'nba'], 'version': current_version}
 
 
 # ---------- Version Information ----------
 @app.get('/version')
 def get_version_endpoint():
-    """Get version information"""
-    return get_version_info()
+    """Get version information — includes auto-incremented build number"""
+    global current_version
+    info = get_version_info()
+    info["version"] = current_version  # override with DB-backed version
+    return info
 
 
 # ---------- Schema & Prediction Endpoints ----------
@@ -4345,18 +4349,23 @@ async def import_ncaab_root(background_tasks: BackgroundTasks, start_year: int =
 @app.on_event("startup")
 async def startup_event():
     """Initialize all backend services on startup."""
+    global current_version
     try:
-        # 1. Initialize Scheduler
+        # 1. Ensure version schema exists
+        from src.database import ensure_version_schema
+        await ensure_version_schema()
+        
+        # 2. Initialize Scheduler
         await SchedulerService.init_db()
         SchedulerService.start_scheduler()
         
-        # 2. Register current version
-        import asyncio
+        # 3. Register current version (auto-increments build number)
         from api.deployment_endpoints import register_current_version
-        await asyncio.sleep(2)
         result = await register_current_version()
         if result.get("success"):
-            logger.info(f"Version registered: {result.get('deployment_id')}")
+            current_version = result["version"]
+            app.version = current_version
+            logger.info(f"Version registered: {current_version}")
         else:
             logger.warning(f"Failed to register version: {result.get('error')}")
             
@@ -4409,90 +4418,6 @@ async def get_nascar_results_alt(season: Optional[int] = None, series: str = "cu
     from api.db_endpoints import get_race_results_list
     return await get_race_results_list("nascar", series, season)
 
-
-# ============================================
-# Startup Event - Register Current Version
-# ============================================
-@app.on_event("startup")
-async def startup_event():
-    """Register current version on startup"""
-    try:
-        import asyncio
-        from api.deployment_endpoints import register_current_version
-        
-        # Wait a moment for database to be ready
-        await asyncio.sleep(2)
-        
-        result = await register_current_version()
-        if result.get("success"):
-            logger.info(f"Version registered: {result.get('deployment_id')}")
-        else:
-            logger.warning(f"Failed to register version: {result.get('error')}")
-    except Exception as e:
-        logger.warning(f"Could not register version on startup: {str(e)}")
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
-
-# Comprehensive NASCAR endpoints to handle any mobile app URL pattern
-@app.get("/db/standings/nascar")
-async def get_nascar_standings_db_alias(season: Optional[int] = None, series: str = "cup"):
-    """NASCAR standings endpoint - database alias for mobile app compatibility."""
-    from datetime import datetime
-    if season is None:
-        season = datetime.now().year
-    
-    from api.db_endpoints import get_nascar_standings
-    return await get_nascar_standings(season, series)
-
-
-@app.get("/standings/nascar")
-async def get_nascar_standings_redirect(season: Optional[int] = None, series: str = "cup"):
-    """NASCAR standings endpoint - redirects to db endpoint."""
-    from datetime import datetime
-    if season is None:
-        season = datetime.now().year
-    
-    from api.db_endpoints import get_nascar_standings
-    return await get_nascar_standings(season, series)
-
-
-@app.get("/nascar/standings")
-async def get_nascar_standings_alt(season: Optional[int] = None, series: str = "cup"):
-    """NASCAR standings endpoint - mobile app compatibility."""
-    from datetime import datetime
-    if season is None:
-        season = datetime.now().year
-    
-    from api.db_endpoints import get_nascar_standings
-    return await get_nascar_standings(season, series)
-
-
-@app.get("/db/races/nascar/list")
-async def get_nascar_results_db_alias(series: str = "cup", season: Optional[int] = None, driver: Optional[str] = None, limit: int = 200):
-    """NASCAR results endpoint - database alias for mobile app compatibility."""
-    from api.db_endpoints import get_race_results_list
-    return await get_race_results_list("nascar", series, season, driver, limit)
-
-
-@app.get("/nascar/results")
-async def get_nascar_results_alt(season: Optional[int] = None, series: str = "cup"):
-    """NASCAR results endpoint - mobile app compatibility."""
-    from datetime import datetime
-    if season is None:
-        season = datetime.now().year
-    
-    from api.db_endpoints import get_race_results_list
-    return await get_race_results_list("nascar", series, season)
-
-
-# ============================================
-# Startup Event - Register Current Version
-# ============================================
-# Startup event moved above to consolidate with scheduler
 
 
 if __name__ == "__main__":

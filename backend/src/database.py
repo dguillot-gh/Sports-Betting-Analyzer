@@ -86,3 +86,21 @@ async def fetchval(query: str, *args):
     """Fetch a single value."""
     async with get_connection() as conn:
         return await conn.fetchval(query, *args)
+
+
+async def ensure_version_schema():
+    """Ensure the system_versions table exists."""
+    query = """
+    CREATE TABLE IF NOT EXISTS system_versions (
+        id SERIAL PRIMARY KEY,
+        version TEXT NOT NULL,
+        git_sha TEXT,
+        environment TEXT,
+        deployed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+    try:
+        await execute(query)
+        logger.info("System version schema ensured.")
+    except Exception as e:
+        logger.error(f"Failed to ensure version schema: {e}")

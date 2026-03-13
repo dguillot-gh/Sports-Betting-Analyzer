@@ -45,28 +45,6 @@
                         <div class="text-lg font-mono text-blue-300">@versionInfo.DeploymentId</div>
                     </div>
                 }
-
-                @if (versionInfo.Components.Any())
-                {
-                    <div class="mt-6">
-                        <h3 class="text-lg font-semibold text-white mb-4">Components</h3>
-                        <div class="space-y-2">
-                            @foreach (var component in versionInfo.Components)
-                            {
-                                <div class="flex items-center justify-between p-3 rounded-lg border border-slate-700 bg-slate-800/30">
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-2 h-2 rounded-full @(component.Status == "success" || component.Status == "running" ? "bg-green-500" : "bg-yellow-500")"></div>
-                                        <span class="font-semibold text-white">@component.ComponentName</span>
-                                    </div>
-                                    <div class="text-right">
-                                        <div class="text-sm font-mono text-slate-300">@component.ComponentVersion</div>
-                                        <div class="text-xs text-slate-500">@component.Status</div>
-                                    </div>
-                                </div>
-                            }
-                        </div>
-                    </div>
-                }
             }
             else
             {
@@ -77,7 +55,83 @@
                     </div>
                 </div>
             }
+
+            <!-- Mark Release Section -->
+            <div class="mt-6 pt-6 border-t border-slate-700">
+                <div class="flex items-center justify-between flex-wrap gap-4">
+                    <div>
+                        <h3 class="text-lg font-semibold text-white">Mark Milestone Release</h3>
+                        <p class="text-sm text-slate-400">Bump the major version to mark an important milestone. Next deploys auto-increment from here.</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="flex items-center gap-2">
+                            <label class="text-sm text-slate-400">Major</label>
+                            <input type="number" @bind="releaseMajor" min="1" max="99"
+                                   class="w-16 px-2 py-1 rounded-lg border border-slate-600 bg-slate-800 text-white text-center font-mono" />
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <label class="text-sm text-slate-400">Minor</label>
+                            <input type="number" @bind="releaseMinor" min="0" max="99"
+                                   class="w-16 px-2 py-1 rounded-lg border border-slate-600 bg-slate-800 text-white text-center font-mono" />
+                        </div>
+                        <button @onclick="CreateRelease" disabled="@isCreatingRelease"
+                                class="px-4 py-2 bg-green-600 hover:bg-green-500 disabled:bg-slate-600 text-white rounded-lg font-semibold text-sm transition-colors">
+                            @if (isCreatingRelease)
+                            {
+                                <span>Creating...</span>
+                            }
+                            else
+                            {
+                                <span>🚀 Create @(releaseMajor).@(releaseMinor).0</span>
+                            }
+                        </button>
+                    </div>
+                </div>
+                @if (!string.IsNullOrEmpty(releaseMessage))
+                {
+                    <div class="mt-3 p-3 rounded-lg text-sm @(releaseSuccess ? "bg-green-900/30 border border-green-700 text-green-300" : "bg-red-900/30 border border-red-700 text-red-300")">
+                        @releaseMessage
+                    </div>
+                }
+            </div>
         </TwCard>
+
+        <!-- Deployment History -->
+        @if (deployHistory.Any())
+        {
+            <TwCard Class="p-8 bg-slate-900 border-slate-800">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="bg-purple-600/20 p-3 rounded-xl">
+                        <TwIcon Icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-6 h-6 text-purple-400" />
+                    </div>
+                    <h2 class="text-2xl font-bold text-white">Deploy History</h2>
+                </div>
+                <div class="rounded-xl overflow-hidden border border-slate-800">
+                    <table class="w-full text-sm">
+                        <thead class="bg-slate-800/50">
+                            <tr>
+                                <th class="text-left px-4 py-3 text-slate-400 font-semibold">Version</th>
+                                <th class="text-left px-4 py-3 text-slate-400 font-semibold">Git SHA</th>
+                                <th class="text-left px-4 py-3 text-slate-400 font-semibold">Environment</th>
+                                <th class="text-left px-4 py-3 text-slate-400 font-semibold">Deployed At</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var entry in deployHistory)
+                            {
+                                <tr class="border-t border-slate-800 hover:bg-slate-800/30">
+                                    <td class="px-4 py-3 font-mono text-white font-semibold">@entry.Version</td>
+                                    <td class="px-4 py-3 font-mono text-slate-300 text-xs">@(entry.GitSha.Length > 8 ? entry.GitSha.Substring(0, 8) : entry.GitSha)</td>
+                                    <td class="px-4 py-3 text-slate-300">@entry.Environment</td>
+                                    <td class="px-4 py-3 text-slate-400 text-xs">@entry.DeployedAt</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </TwCard>
+        }
+
         <!-- Header -->
         <TwCard Class="p-8 bg-slate-900 border-slate-800 shadow-2xl">
             <div class="flex items-center gap-6 mb-6">
@@ -291,10 +345,19 @@
 @code {
     private VersionInfo? versionInfo;
     private bool isLoading = true;
+    private List<DeploymentEntry> deployHistory = new();
+    
+    // Release form
+    private int releaseMajor = 2;
+    private int releaseMinor = 0;
+    private bool isCreatingRelease = false;
+    private string? releaseMessage;
+    private bool releaseSuccess;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadVersionInfo();
+        await LoadDeployHistory();
     }
 
     private async Task LoadVersionInfo()
@@ -305,10 +368,19 @@
             StateHasChanged();
             
             versionInfo = await MLService.GetVersionInfoAsync();
+            
+            // Auto-suggest next major version
+            if (versionInfo != null && !string.IsNullOrEmpty(versionInfo.Version))
+            {
+                var parts = versionInfo.Version.Split('.');
+                if (parts.Length > 0 && int.TryParse(parts[0], out var currentMajor))
+                {
+                    releaseMajor = currentMajor + 1;
+                }
+            }
         }
         catch (Exception ex)
         {
-            // Handle error gracefully
             versionInfo = new VersionInfo 
             { 
                 Version = "error",
@@ -323,4 +395,45 @@
             StateHasChanged();
         }
     }
+
+    private async Task LoadDeployHistory()
+    {
+        try
+        {
+            deployHistory = await MLService.GetDeploymentHistoryAsync(10);
+            StateHasChanged();
+        }
+        catch { }
+    }
+
+    private async Task CreateRelease()
+    {
+        isCreatingRelease = true;
+        releaseMessage = null;
+        StateHasChanged();
+        
+        try
+        {
+            var result = await MLService.CreateReleaseAsync(releaseMajor, releaseMinor);
+            releaseSuccess = result.Success;
+            releaseMessage = result.Success 
+                ? $"✅ Release {releaseMajor}.{releaseMinor}.0 created! Next deploy will be {releaseMajor}.{releaseMinor}.1"
+                : $"❌ {result.Message}";
+            
+            // Refresh data
+            await LoadVersionInfo();
+            await LoadDeployHistory();
+        }
+        catch (Exception ex)
+        {
+            releaseSuccess = false;
+            releaseMessage = $"❌ {ex.Message}";
+        }
+        finally
+        {
+            isCreatingRelease = false;
+            StateHasChanged();
+        }
+    }
 }
+

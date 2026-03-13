@@ -41,6 +41,11 @@ CREATE TABLE IF NOT EXISTS import_logs (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Migrate existing tables that were created before these columns were added
+ALTER TABLE import_logs ADD COLUMN IF NOT EXISTS new_rows_imported INTEGER DEFAULT 0;
+ALTER TABLE import_logs ADD COLUMN IF NOT EXISTS updated_rows_imported INTEGER DEFAULT 0;
+ALTER TABLE import_logs ADD COLUMN IF NOT EXISTS files_processed INTEGER DEFAULT 0;
+
 CREATE INDEX IF NOT EXISTS idx_import_logs_status ON import_logs(status);
 CREATE INDEX IF NOT EXISTS idx_import_logs_start_time ON import_logs(start_time);
 """
