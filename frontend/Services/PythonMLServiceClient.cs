@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -1651,29 +1651,67 @@ public class PythonMLServiceClient
     /// <summary>
     /// Get deployment history
     /// </summary>
-    public async Task<List<Dictionary<string, object>>> GetDeploymentHistoryAsync(int limit = 10)
+    public async Task<List<DeploymentEntry>> GetDeploymentHistoryAsync(int limit = 10)
     {
         try
         {
             if (!await IsHealthyAsync())
             {
-                return new List<Dictionary<string, object>>();
+                return new List<DeploymentEntry>();
             }
 
-            var response = await _httpClient.GetFromJsonAsync<Dictionary<string, object>>($"/deployments?limit={limit}");
-            
-            if (response?.ContainsKey("deployments") == true)
-            {
-                return System.Text.Json.JsonSerializer.Deserialize<List<Dictionary<string, object>>>(response["deployings"].ToString()) 
-                       ?? new List<Dictionary<string, object>>();
-            }
-
-            return new List<Dictionary<string, object>>();
+            var response = await _httpClient.GetFromJsonAsync<List<DeploymentEntry>>($"/deployments?limit={limit}");
+            return response ?? new List<DeploymentEntry>();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting deployment history");
-            return new List<Dictionary<string, object>>();
+            return new List<DeploymentEntry>();
         }
     }
+
+    /// <summary>
+    /// Create a milestone release (e.g. bump to 2.0)
+    /// </summary>
+    public async Task<DataUpdateResponse> CreateReleaseAsync(int major, int minor = 0)
+    {
+        try
+        {
+            if (!await IsHealthyAsync())
+            {
+                return new DataUpdateResponse { Success = false, Message = "Backend offline" };
+            }
+
+            var response = await _httpClient.PostAsync($"/deployments/release?major={major}&minor={minor}", null);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<DataUpdateResponse>();
+            return result ?? new DataUpdateResponse { Success = true, Message = $"Release {major}.{minor}.0 created" };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating release");
+            return new DataUpdateResponse { Success = false, Message = ex.Message };
+        }
+    }
+}
+
+/// <summary>
+/// Deployment history entry
+/// </summary>
+public class DeploymentEntry
+{
+    [JsonPropertyName("id")]
+    public int Id { get; set; }
+
+    [JsonPropertyName("version")]
+    public string Version { get; set; } = string.Empty;
+
+    [JsonPropertyName("git_sha")]
+    public string GitSha { get; set; } = string.Empty;
+
+    [JsonPropertyName("environment")]
+    public string Environment { get; set; } = string.Empty;
+
+    [JsonPropertyName("deployed_at")]
+    public string DeployedAt { get; set; } = string.Empty;
 }
