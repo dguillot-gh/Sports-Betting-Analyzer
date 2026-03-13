@@ -6,7 +6,7 @@ Auto-incrementing version via DB counter + git SHA dedup.
 import logging
 from typing import Dict, Any
 from fastapi import APIRouter, HTTPException, Query
-from src.version import GIT_SHA, ENVIRONMENT
+from src.version import GIT_SHA, ENVIRONMENT, BUILD_TIME
 from src.database import get_connection
 
 logger = logging.getLogger(__name__)
@@ -21,14 +21,19 @@ async def register_current_version() -> Dict[str, Any]:
     """
     Register the current build on startup.
     - Same git SHA as last deploy → reuse that version (restart-safe).
-    - New git SHA → bump the patch number from whatever the latest version is.
+    - New git SHA (or new build when SHA is unknown) → bump the patch number.
     """
     try:
+        # When GIT_SHA is "unknown" (Docker without git), use BUILD_TIME as the
+        # unique key so that each `docker compose up --build` gets a new version,
+        # but a simple container restart (same image) reuses the existing one.
+        dedup_key = GIT_SHA if GIT_SHA != "unknown" else BUILD_TIME
+
         async with get_connection() as conn:
             # Already registered this exact build?
             existing = await conn.fetchrow(
                 "SELECT id, version FROM system_versions WHERE git_sha = $1 LIMIT 1",
-                GIT_SHA
+                dedup_key
             )
             if existing:
                 version = existing["version"]
@@ -54,7 +59,7 @@ async def register_current_version() -> Dict[str, Any]:
 
             await conn.execute(
                 "INSERT INTO system_versions (version, git_sha, environment) VALUES ($1, $2, $3)",
-                version, GIT_SHA, ENVIRONMENT
+                version, dedup_key, ENVIRONMENT
             )
             logger.info(f"Registered new version: {version}")
             return {"success": True, "version": version, "git_sha": GIT_SHA, "environment": ENVIRONMENT}
