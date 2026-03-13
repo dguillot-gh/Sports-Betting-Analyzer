@@ -90,6 +90,8 @@ async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, sta
     count = 0
     inserted_count = 0
     updated_count = 0
+    error_count = 0
+    skipped_count = 0
     batch_size = 500
     
     # We use a set of team names for lookup
@@ -107,6 +109,7 @@ async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, sta
             game_date = row.get('gameDate')
             
             if pd.isna(team_name) or pd.isna(game_id):
+                skipped_count += 1
                 continue
             
             # Skip seasons before start_year
@@ -115,6 +118,7 @@ async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, sta
             except:
                 parsed_season = 0
             if parsed_season < start_year:
+                skipped_count += 1
                 continue
                 
             # Create Team Entity if not exists (using content hash for uniqueness)
@@ -138,8 +142,16 @@ async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, sta
             # Result Mapping (MoneyPuck uses exhaustive stats)
             # We store the full row as metadata for future model training
             metadata = row.to_dict()
-            # Clean up NaN for JSON
-            metadata = {k: (None if pd.isna(v) else v) for k, v in metadata.items()}
+            # Clean up NaN and convert numpy types for JSON serialization
+            clean = {}
+            for k, v in metadata.items():
+                if pd.isna(v):
+                    clean[k] = None
+                elif hasattr(v, 'item'):  # numpy int64, float64, etc.
+                    clean[k] = v.item()
+                else:
+                    clean[k] = v
+            metadata = clean
             
             result_hash = compute_hash({
                 "sport": "nhl",
@@ -173,17 +185,23 @@ async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, sta
                     updated_count += 1
                 count += 1
             except Exception as e:
-                logger.error(f"Row skip error for game {game_id} (Team: {team_name}): {e}")
+                error_count += 1
+                if error_count <= 3:
+                    logger.error(f"Row skip error for game {game_id} (Team: {team_name}): {e}")
+                elif error_count == 4:
+                    logger.error("Suppressing further per-row errors...")
 
         if limit and count >= limit:
             break
             
         if progress_callback:
-            progress_callback(f"Imported {count} games...")
-        elif count % 5000 == 0:
+            progress_callback(f"Imported {count} games (skipped: {skipped_count}, errors: {error_count})...")
+        elif count > 0 and count % 5000 == 0:
             logger.info(f"Progress: {count} results imported.")
 
-    logger.info(f"Finished MoneyPuck import. Total: {count} (New: {inserted_count}, Updated: {updated_count})")
+    if count == 0:
+        logger.warning(f"NHL import produced 0 results. Skipped: {skipped_count}, Errors: {error_count}. Check season filter (start_year={start_year}) and data format.")
+    logger.info(f"Finished MoneyPuck import. Total: {count} (New: {inserted_count}, Updated: {updated_count}, Errors: {error_count})")
     return {"total": count, "new": inserted_count, "updated": updated_count}
 
 async def import_player_bios(conn, sport_id: int) -> dict:
