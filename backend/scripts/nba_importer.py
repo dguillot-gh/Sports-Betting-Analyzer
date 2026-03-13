@@ -1073,9 +1073,12 @@ async def import_schedules_via_nba_api(conn, sport_id: int, progress_callback=No
         def safe_val(val):
             if pd.isna(val):
                 return None
+            if hasattr(val, 'item'):  # numpy int64, float64, etc.
+                return val.item()
             if isinstance(val, float):
                 return int(val) if val == int(val) else round(val, 2)
             return val
+
         
         for game_id in game_ids:
             game_rows = games_df[games_df['GAME_ID'] == game_id]
