@@ -1,5 +1,6 @@
 @page "/"
 @using System.Text.Json
+@using System.Text.Json.Serialization
 @inject HttpClient Http
 @inject SportsBettingAnalyzer.Shared.Services.IServerConfigService ServerConfig
 
@@ -52,6 +53,27 @@
             <span class="home-stat-lbl">Upcoming</span>
         </div>
     </div>
+}
+
+<!-- Data Freshness Widget -->
+@if (_freshness.Any())
+{
+    <a href="/data-health" class="freshness-widget">
+        <div class="fw-header">
+            <span class="fw-title">📊 Data Freshness</span>
+            <span class="fw-link">View all ›</span>
+        </div>
+        <div class="fw-dots">
+            @foreach (var f in _freshness)
+            {
+                var dotClass = f.FreshnessStatus == "fresh" ? "fwd-green" : f.FreshnessStatus == "stale" ? "fwd-amber" : f.FreshnessStatus == "very_stale" ? "fwd-red" : "fwd-gray";
+                <div class="fw-dot-item">
+                    <span class="fw-dot @dotClass"></span>
+                    <span class="fw-sport">@f.Sport.ToUpper()</span>
+                </div>
+            }
+        </div>
+    </a>
 }
 
 <div class="dashboard-section px-4">
@@ -214,6 +236,13 @@
                 <p>System Health</p>
             </div>
         </a>
+        <a class="feature-card compact" href="/data-health">
+            <div class="feature-icon" style="background: rgba(6,182,212,0.15); color: #06b6d4;">📊</div>
+            <div class="feature-text">
+                <h3>Data Health</h3>
+                <p>Import Freshness</p>
+            </div>
+        </a>
         <a class="feature-card compact" href="/paper-trading">
             <div class="feature-icon feature-icon-green">💸</div>
             <div class="feature-text">
@@ -357,6 +386,31 @@
     .status-dot { width: 8px; height: 8px; border-radius: 50%; }
     .mini-status.online .status-dot { background: #10b981; box-shadow: 0 0 8px #10b981; }
     .mini-status.offline .status-dot { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+
+    /* Freshness Widget */
+    .freshness-widget {
+        display: block;
+        margin: 8px 16px 0;
+        padding: 12px 14px;
+        background: var(--surface, #1e1e2e);
+        border: 1px solid var(--border, #2e2e44);
+        border-radius: 12px;
+        text-decoration: none;
+        color: inherit;
+        transition: border-color 0.2s;
+    }
+    .freshness-widget:hover { border-color: #06b6d4; text-decoration: none; color: inherit; }
+    .fw-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .fw-title { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-secondary, #94a3b8); }
+    .fw-link { font-size: 11px; color: #06b6d4; font-weight: 700; }
+    .fw-dots { display: flex; gap: 12px; flex-wrap: wrap; }
+    .fw-dot-item { display: flex; align-items: center; gap: 5px; }
+    .fw-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+    .fwd-green { background: #10b981; box-shadow: 0 0 6px rgba(16,185,129,0.5); }
+    .fwd-amber { background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,0.5); }
+    .fwd-red   { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.5); }
+    .fwd-gray  { background: #475569; }
+    .fw-sport  { font-size: 11px; font-weight: 700; color: var(--text-primary, #e2e8f0); }
 </style>
 
 @code {
@@ -366,11 +420,30 @@
     private int _upcomingGames = 0;
     private int _sportCount = 0;
     private bool _isHealthy = false;
+    private List<FreshnessItem> _freshness = new();
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadGameCounts();
-        await CheckHealth();
+        await Task.WhenAll(LoadGameCounts(), CheckHealth(), LoadFreshness());
+    }
+
+    private async Task LoadFreshness()
+    {
+        try
+        {
+            var baseUrl = ServerConfig.GetBaseUrl();
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+            var items = await http.GetFromJsonAsync<List<FreshnessItem>>($"{baseUrl}/admin/data-freshness");
+            if (items != null) _freshness = items;
+        }
+        catch { }
+    }
+
+    private class FreshnessItem
+    {
+        [JsonPropertyName("sport")]               public string Sport           { get; set; } = "";
+        [JsonPropertyName("total_records")]        public long   TotalRecords    { get; set; }
+        [JsonPropertyName("freshness_status")]     public string FreshnessStatus { get; set; } = "never";
     }
     
     private async Task CheckHealth()

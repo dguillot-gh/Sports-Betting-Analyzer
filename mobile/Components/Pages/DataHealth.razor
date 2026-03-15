@@ -1,0 +1,235 @@
+@page "/data-health"
+@using SportsBettingAnalyzer.Shared.Services
+@using System.Net.Http.Json
+@using System.Text.Json.Serialization
+@inject IServerConfigService ConfigService
+
+<div class="page-header">
+    <h1>&#128202; Data Health</h1>
+    <p>Import freshness &amp; run history</p>
+    <button class="app-btn app-btn-secondary btn-sm" @onclick="Refresh" disabled="@_loading">
+        @(_loading ? "Loading..." : "&#8635; Refresh")
+    </button>
+</div>
+
+<!-- Freshness Cards -->
+@if (_freshness.Any())
+{
+    <div class="section-title">Data Freshness</div>
+    <div class="freshness-grid">
+        @foreach (var f in _freshness)
+        {
+            var status = f.FreshnessStatus;
+            var dotClass = status == "fresh" ? "dot-green" : status == "stale" ? "dot-amber" : status == "very_stale" ? "dot-red" : "dot-gray";
+            var badge = status == "fresh" ? "Fresh" : status == "stale" ? "Stale" : status == "very_stale" ? "Old" : "Never";
+            var badgeClass = status == "fresh" ? "badge-green" : status == "stale" ? "badge-amber" : status == "very_stale" ? "badge-red" : "badge-gray";
+            <div class="freshness-card @(status == "fresh" ? "card-green" : status == "stale" ? "card-amber" : status == "very_stale" ? "card-red" : "")">
+                <div class="freshness-top">
+                    <div class="sport-row">
+                        <span class="dot @dotClass"></span>
+                        <span class="sport-name">@f.Sport.ToUpper()</span>
+                    </div>
+                    <span class="badge @badgeClass">@badge</span>
+                </div>
+                <div class="freshness-count">@f.TotalRecords.ToString("N0") rows</div>
+                @if (f.LatestSeason.HasValue)
+                {
+                    <div class="freshness-season">Season @f.LatestSeason</div>
+                }
+                @if (f.DaysSinceImport.HasValue)
+                {
+                    <div class="freshness-age">
+                        @(f.DaysSinceImport == 0 ? "Imported today" : f.DaysSinceImport == 1 ? "Yesterday" : $"{f.DaysSinceImport}d ago")
+                        &nbsp;·&nbsp; +@f.LastImportNewRows new
+                    </div>
+                }
+                else
+                {
+                    <div class="freshness-age muted">No imports yet</div>
+                }
+            </div>
+        }
+    </div>
+}
+else if (_loading)
+{
+    <div class="loading-row"><div class="loading-spinner"></div><span>Loading freshness...</span></div>
+}
+
+<!-- Import Log Table -->
+@if (_logs.Any())
+{
+    <div class="section-title mt-section">Recent Import Runs</div>
+    <div class="app-card">
+        <div class="log-table">
+            @foreach (var log in _logs.Take(20))
+            {
+                var isOk = log.Status == "SUCCESS";
+                var isFail = log.Status == "FAILED";
+                <div class="log-row">
+                    <div class="log-left">
+                        <span class="log-sport">@log.Sport.ToUpper()</span>
+                        <span class="log-when">@log.StartTime.ToLocalTime().ToString("MMM d HH:mm")</span>
+                    </div>
+                    <div class="log-right">
+                        <span class="log-status @(isOk ? "status-ok" : isFail ? "status-fail" : "status-pending")">
+                            @(isOk ? "✓" : isFail ? "✗" : "⟳")
+                        </span>
+                        @if (isOk)
+                        {
+                            <span class="log-new">+@log.NewRowsImported.ToString("N0")</span>
+                            <span class="log-total">@log.RowsImported.ToString("N0")</span>
+                        }
+                        else if (isFail)
+                        {
+                            <span class="log-error">FAILED</span>
+                        }
+                        @if (log.DurationSeconds.HasValue)
+                        {
+                            <span class="log-dur">@log.DurationSeconds.Value.ToString("F0")s</span>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+else if (!_loading && !string.IsNullOrEmpty(_error))
+{
+    <div class="app-alert app-alert-error mt-section">&#9888; @_error</div>
+}
+else if (!_loading)
+{
+    <div class="muted-center mt-section">No import runs recorded yet.</div>
+}
+
+<style>
+    .page-header { padding: 16px 0 8px; }
+    .page-header h1 { font-size: 22px; font-weight: 900; color: var(--text-primary); margin: 0 0 4px; }
+    .page-header p { font-size: 12px; color: var(--text-secondary); margin: 0 0 10px; }
+    .btn-sm { padding: 6px 14px; font-size: 12px; }
+
+    .section-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-secondary); margin: 16px 0 8px; }
+    .mt-section { margin-top: 24px; }
+
+    .freshness-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+
+    .freshness-card {
+        background: var(--surface-raised);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+    }
+    .freshness-card.card-green { border-color: rgba(16,185,129,0.35); background: rgba(16,185,129,0.07); }
+    .freshness-card.card-amber { border-color: rgba(245,158,11,0.35); background: rgba(245,158,11,0.07); }
+    .freshness-card.card-red   { border-color: rgba(239,68,68,0.35);  background: rgba(239,68,68,0.07);  }
+
+    .freshness-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .sport-row { display: flex; align-items: center; gap: 6px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .dot-green { background: #10b981; }
+    .dot-amber { background: #f59e0b; }
+    .dot-red   { background: #ef4444; }
+    .dot-gray  { background: #475569; }
+
+    .sport-name { font-size: 13px; font-weight: 800; color: var(--text-primary); }
+
+    .badge { font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; }
+    .badge-green { background: rgba(16,185,129,0.2);  color: #10b981; }
+    .badge-amber { background: rgba(245,158,11,0.2);  color: #f59e0b; }
+    .badge-red   { background: rgba(239,68,68,0.2);   color: #ef4444; }
+    .badge-gray  { background: rgba(71,85,105,0.2);   color: #94a3b8; }
+
+    .freshness-count  { font-size: 13px; font-weight: 700; color: var(--text-primary); font-family: monospace; }
+    .freshness-season { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+    .freshness-age    { font-size: 10px; color: var(--text-secondary); margin-top: 4px; }
+    .freshness-age.muted { color: var(--text-tertiary, #475569); }
+
+    .log-table { display: flex; flex-direction: column; gap: 0; }
+    .log-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border-light);
+    }
+    .log-row:last-child { border-bottom: none; }
+    .log-left { display: flex; flex-direction: column; gap: 2px; }
+    .log-sport { font-size: 13px; font-weight: 800; color: var(--text-primary); }
+    .log-when  { font-size: 10px; color: var(--text-secondary); }
+    .log-right { display: flex; align-items: center; gap: 8px; }
+    .log-status { font-size: 16px; font-weight: 900; }
+    .status-ok      { color: #10b981; }
+    .status-fail    { color: #ef4444; }
+    .status-pending { color: #f59e0b; }
+    .log-new   { font-size: 11px; font-weight: 700; color: #10b981; font-family: monospace; }
+    .log-total { font-size: 11px; color: var(--text-secondary); font-family: monospace; }
+    .log-error { font-size: 11px; font-weight: 700; color: #ef4444; }
+    .log-dur   { font-size: 10px; color: var(--text-tertiary, #475569); font-family: monospace; }
+
+    .loading-row { display: flex; align-items: center; gap: 8px; padding: 20px 0; color: var(--text-secondary); font-size: 13px; }
+    .loading-spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; }
+    @@keyframes spin { to { transform: rotate(360deg); } }
+
+    .muted { color: var(--text-secondary); }
+    .muted-center { text-align: center; padding: 24px; color: var(--text-secondary); font-size: 13px; }
+</style>
+
+@code {
+    private List<FreshnessItem> _freshness = new();
+    private List<ImportLogItem> _logs = new();
+    private bool _loading = false;
+    private string _error = "";
+
+    protected override async Task OnInitializedAsync() => await Refresh();
+
+    private async Task Refresh()
+    {
+        _loading = true;
+        _error = "";
+        StateHasChanged();
+        try
+        {
+            using var http = new HttpClient();
+            http.BaseAddress = new Uri(ConfigService.GetBaseUrl());
+            http.Timeout = TimeSpan.FromSeconds(15);
+
+            var freshTask = http.GetFromJsonAsync<List<FreshnessItem>>("/admin/data-freshness");
+            var logTask   = http.GetFromJsonAsync<List<ImportLogItem>>("/admin/import-logs?limit=30");
+            await Task.WhenAll(freshTask, logTask);
+
+            _freshness = freshTask.Result ?? new();
+            _logs      = logTask.Result   ?? new();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not connect: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private class FreshnessItem
+    {
+        [JsonPropertyName("sport")]               public string Sport             { get; set; } = "";
+        [JsonPropertyName("total_records")]        public long   TotalRecords      { get; set; }
+        [JsonPropertyName("latest_season")]        public int?   LatestSeason      { get; set; }
+        [JsonPropertyName("days_since_import")]    public int?   DaysSinceImport   { get; set; }
+        [JsonPropertyName("last_import_new_rows")] public int    LastImportNewRows  { get; set; }
+        [JsonPropertyName("freshness_status")]     public string FreshnessStatus   { get; set; } = "never";
+    }
+
+    private class ImportLogItem
+    {
+        [JsonPropertyName("sport")]                public string  Sport               { get; set; } = "";
+        [JsonPropertyName("status")]               public string  Status              { get; set; } = "";
+        [JsonPropertyName("start_time")]           public DateTime StartTime          { get; set; }
+        [JsonPropertyName("duration_seconds")]     public double? DurationSeconds     { get; set; }
+        [JsonPropertyName("rows_imported")]        public int     RowsImported        { get; set; }
+        [JsonPropertyName("new_rows_imported")]    public int     NewRowsImported     { get; set; }
+        [JsonPropertyName("updated_rows_imported")] public int    UpdatedRowsImported  { get; set; }
+    }
+}

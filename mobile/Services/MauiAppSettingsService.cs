@@ -23,6 +23,7 @@ public class MauiAppSettingsService : IAppSettingsService
             new() { Label = "Bets", Icon = "📋", Url = "bet-tracker" },
             new() { Label = "Trade", Icon = "💸", Url = "paper-trading" },
             new() { Label = "Weather", Icon = "☁️", Url = "weather" },
+            new() { Label = "Data Health", Icon = "📊", Url = "data-health" },
             new() { Label = "Settings", Icon = "⚙️", Url = "settings" }
         };
     }

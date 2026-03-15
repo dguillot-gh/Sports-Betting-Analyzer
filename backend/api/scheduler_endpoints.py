@@ -51,6 +51,100 @@ async def get_import_logs(limit: int = 50):
     finally:
         await conn.close()
 
+
+@router.get("/import-summary")
+async def get_import_summary():
+    """
+    Most recent completed import run per sport.
+    Shows new vs updated at a glance for dashboards and mobile app.
+    """
+    import asyncpg
+    from src.config import DATABASE_URL
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        rows = await conn.fetch("""
+            SELECT DISTINCT ON (sport)
+                sport, status, start_time, end_time, duration_seconds,
+                rows_imported, new_rows_imported, updated_rows_imported, error_message
+            FROM import_logs
+            WHERE status IN ('SUCCESS', 'FAILED')
+            ORDER BY sport, start_time DESC
+        """)
+        return [dict(r) for r in rows]
+    finally:
+        await conn.close()
+
+
+@router.get("/data-freshness")
+async def get_data_freshness():
+    """
+    Freshness check per sport. Returns:
+    - total_records, latest_season, last_import_time, days_since_import
+    - freshness_status: fresh (<2d) | stale (2-7d) | very_stale (>7d) | never
+    Accessible by web and mobile clients.
+    """
+    import asyncpg
+    from src.config import DATABASE_URL
+    from datetime import timezone
+
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        counts = await conn.fetch("""
+            SELECT s.name AS sport,
+                   COUNT(r.id) AS total_records,
+                   MAX(r.season) AS latest_season
+            FROM sports s
+            LEFT JOIN results r ON r.sport_id = s.id
+            GROUP BY s.name
+            ORDER BY s.name
+        """)
+
+        last_imports = await conn.fetch("""
+            SELECT DISTINCT ON (sport)
+                sport, status, start_time, new_rows_imported, rows_imported
+            FROM import_logs
+            WHERE status = 'SUCCESS'
+            ORDER BY sport, start_time DESC
+        """)
+        import_map = {r["sport"]: dict(r) for r in last_imports}
+
+        now = datetime.now(timezone.utc)
+        result = []
+        for row in counts:
+            sport = row["sport"]
+            imp = import_map.get(sport)
+
+            last_import_time = None
+            days_since_import = None
+            freshness_status = "never"
+
+            if imp and imp["start_time"]:
+                last_import_time = imp["start_time"]
+                if last_import_time.tzinfo is None:
+                    last_import_time = last_import_time.replace(tzinfo=timezone.utc)
+                days_since_import = (now - last_import_time).days
+                if days_since_import <= 1:
+                    freshness_status = "fresh"
+                elif days_since_import <= 7:
+                    freshness_status = "stale"
+                else:
+                    freshness_status = "very_stale"
+
+            result.append({
+                "sport": sport,
+                "total_records": row["total_records"],
+                "latest_season": row["latest_season"],
+                "last_import_time": last_import_time.isoformat() if last_import_time else None,
+                "days_since_import": days_since_import,
+                "last_import_new_rows": imp["new_rows_imported"] if imp else 0,
+                "last_import_total_rows": imp["rows_imported"] if imp else 0,
+                "freshness_status": freshness_status,
+            })
+
+        return result
+    finally:
+        await conn.close()
+
 @router.post("/run-cbb-backfill")
 async def trigger_cbb_backfill(background_tasks: BackgroundTasks, years: str = "2024,2025"):
     """
