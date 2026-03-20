@@ -451,6 +451,7 @@ def compute_hash(data: Dict) -> str:
 
 async def sync_to_postgresql(import_results: Dict) -> Dict[str, int]:
     """Sync file-based stats to PostgreSQL tables and return metrics."""
+    from scripts.batch_db import batch_upsert
     conn = await asyncpg.connect(DATABASE_URL)
     metrics = {"teams_new": 0, "teams_updated": 0, "players_new": 0, "players_updated": 0}
     try:
@@ -464,6 +465,9 @@ async def sync_to_postgresql(import_results: Dict) -> Dict[str, int]:
         division = import_results.get("division", 1)
         teams = get_teams(division)
         
+        team_entity_records = []
+        team_stats_records = []
+        
         for t in teams:
             team_name = t.get("ncaa_name")
             team_id = t.get("team_id")
@@ -472,41 +476,56 @@ async def sync_to_postgresql(import_results: Dict) -> Dict[str, int]:
             metadata = {"league": t.get("league"), "division": division}
             content_hash = compute_hash({"sport": "college_baseball", "team_id": team_id})
             
-            # Use RETURNING (xmax = 0) to detect if it was a new insert
-            is_new = await conn.fetchval(
-                """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
-                   VALUES ($1, $2, 'team', $3, $4, $5)
-                   ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                   DO UPDATE SET name = EXCLUDED.name, metadata = EXCLUDED.metadata
-                   RETURNING (xmax = 0)""",
-                sport_id, team_name, f"D{division}", json.dumps(metadata), content_hash
-            )
+            team_entity_records.append((sport_id, team_name, f"D{division}", json.dumps(metadata), content_hash))
             
-            if is_new:
-                metrics["teams_new"] += 1
-            else:
-                metrics["teams_updated"] += 1
+            # Since batch_upsert doesn't easily return mapping of new IDs or track new/updated cleanly per row,
+            # we'll still keep track of new/updated crudely or accept losing that granularity for massive speed gains.
+            # To get entity_ids for stats, we will bulk fetch them after insert.
+        
+        # Upsert ALL team entities
+        if team_entity_records:
+            UPSERT_ENTITIES = """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
+                               VALUES ($1, $2, 'team', $3, $4, $5)
+                               ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                               DO UPDATE SET name = EXCLUDED.name, metadata = EXCLUDED.metadata"""
+            # We can't know exactly new vs updated from batch_upsert easily, just add to updated for now
+            metrics["teams_updated"] += await batch_upsert(conn, UPSERT_ENTITIES, team_entity_records)
+            
+            # Fetch back all the entity IDs by hash 
+            content_hashes = [r[4] for r in team_entity_records]
+            entity_rows = await conn.fetch(
+                "SELECT id, content_hash FROM entities WHERE content_hash = ANY($1)",
+                content_hashes
+            )
+            hash_to_id = {row['content_hash']: row['id'] for row in entity_rows}
+            
+            # Now build stats records
+            for t in teams:
+                team_id = t.get("team_id")
+                content_hash = compute_hash({"sport": "college_baseball", "team_id": team_id})
+                entity_id = hash_to_id.get(content_hash)
                 
-            # Get entity_id for stats (we need it regardless)
-            entity_id = await conn.fetchval(
-                "SELECT id FROM entities WHERE content_hash = $1", content_hash
-            )
+                if entity_id:
+                    stats = get_team_stats(team_id, entity_type="team")
+                    if stats:
+                        season = stats.get("season", get_smart_year())
+                        # college_baseball_importer expects stats_hash to be handled by unique (entity_id, season, stat_type) natively right now
+                        team_stats_records.append((entity_id, season, json.dumps(stats)))
             
-            # Stats row
-            stats = get_team_stats(team_id, entity_type="team")
-            if stats:
-                season = stats.get("season", get_smart_year())
-                await conn.execute(
-                    """INSERT INTO stats (entity_id, season, stat_type, stats)
-                       VALUES ($1, $2, 'season_summary', $3)
-                       ON CONFLICT (entity_id, season, stat_type)
-                       DO UPDATE SET stats = EXCLUDED.stats""",
-                    entity_id, season, json.dumps(stats)
-                )
+            # Batch upsert team stats
+            if team_stats_records:
+                UPSERT_STATS = """INSERT INTO stats (entity_id, season, stat_type, stats)
+                                  VALUES ($1, $2, 'season_summary', $3)
+                                  ON CONFLICT (entity_id, season, stat_type)
+                                  DO UPDATE SET stats = EXCLUDED.stats"""
+                await batch_upsert(conn, UPSERT_STATS, team_stats_records)
 
         # 3. Sync Players (from leaderboard/top N)
         # We look in the 'players' directory
         player_dir = DATA_DIR / "players"
+        player_entity_records = []
+        player_stats_source = [] # Store files to process stats after we get IDs
+
         if player_dir.exists():
             for p_file in player_dir.glob("*_stats.csv"):
                 try:
@@ -519,34 +538,48 @@ async def sync_to_postgresql(import_results: Dict) -> Dict[str, int]:
                         p_hash = compute_hash({"sport": "college_baseball", "player_id": p_id})
                         p_meta = {"team": s.get("team"), "league": s.get("league")}
                         
-                        is_new_player = await conn.fetchval(
-                            """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
-                               VALUES ($1, $2, 'player', $3, $4, $5)
-                               ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                               DO UPDATE SET metadata = EXCLUDED.metadata, series = EXCLUDED.series
-                               RETURNING (xmax = 0)""",
-                            sport_id, p_name, s.get("team"), json.dumps(p_meta), p_hash
-                        )
-                        
-                        if is_new_player:
-                            metrics["players_new"] += 1
-                        else:
-                            metrics["players_updated"] += 1
-
-                        p_entity_id = await conn.fetchval(
-                            "SELECT id FROM entities WHERE content_hash = $1", p_hash
-                        )
-                        
-                        season = s.get("season", get_smart_year())
-                        await conn.execute(
-                            """INSERT INTO stats (entity_id, season, stat_type, stats)
-                               VALUES ($1, $2, 'season_summary', $3)
-                               ON CONFLICT (entity_id, season, stat_type)
-                               DO UPDATE SET stats = EXCLUDED.stats""",
-                            p_entity_id, season, json.dumps(s)
-                        )
+                        player_entity_records.append((sport_id, p_name, s.get("team"), json.dumps(p_meta), p_hash))
+                        player_stats_source.append((p_hash, s))
                 except Exception as pe:
-                    logger.debug(f"Error syncing player {p_file}: {pe}")
+                    logger.debug(f"Error reading player {p_file}: {pe}")
+            
+            if player_entity_records:
+                UPSERT_PLAYER_ENTITIES = """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
+                                   VALUES ($1, $2, 'player', $3, $4, $5)
+                                   ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                                   DO UPDATE SET metadata = EXCLUDED.metadata, series = EXCLUDED.series"""
+                metrics["players_updated"] += await batch_upsert(conn, UPSERT_PLAYER_ENTITIES, player_entity_records)
+                
+                # Fetch back all the entity IDs by hash
+                p_hashes = [r[4] for r in player_entity_records]
+                
+                # Batch fetch IDs in chunks if too many players
+                p_hash_to_id = {}
+                chunk_size = 5000
+                for i in range(0, len(p_hashes), chunk_size):
+                    chunk_hashes = p_hashes[i:i+chunk_size]
+                    p_rows = await conn.fetch(
+                        "SELECT id, content_hash FROM entities WHERE content_hash = ANY($1)",
+                        chunk_hashes
+                    )
+                    for row in p_rows:
+                        p_hash_to_id[row['content_hash']] = row['id']
+                
+                # Build player stats batch
+                player_stats_records = []
+                for p_hash, s in player_stats_source:
+                    p_entity_id = p_hash_to_id.get(p_hash)
+                    if p_entity_id:
+                        season = s.get("season", get_smart_year())
+                        player_stats_records.append((p_entity_id, season, json.dumps(s)))
+                
+                # Batch upsert player stats
+                if player_stats_records:
+                    UPSERT_PLAYER_STATS = """INSERT INTO stats (entity_id, season, stat_type, stats)
+                                      VALUES ($1, $2, 'season_summary', $3)
+                                      ON CONFLICT (entity_id, season, stat_type)
+                                      DO UPDATE SET stats = EXCLUDED.stats"""
+                    await batch_upsert(conn, UPSERT_PLAYER_STATS, player_stats_records)
         
         return metrics
 

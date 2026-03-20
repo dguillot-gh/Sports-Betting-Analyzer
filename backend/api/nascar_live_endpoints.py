@@ -4,7 +4,7 @@ Provides specific data format for the RaceDash live dashboard.
 Isolates deep logic (laps led, deltas, sponsors) from the main API to ensure stability.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 import httpx
 from datetime import timedelta
 import time
@@ -98,7 +98,7 @@ class RacingDashboardLogic:
 _logic = RacingDashboardLogic()
 
 @router.get("/dashboard-data")
-async def get_dashboard_data():
+async def get_dashboard_data(request: Request):
     """
     Endpoint dedicated to the Live Dashboard page.
     """

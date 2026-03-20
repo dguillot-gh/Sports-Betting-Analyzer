@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
+from fastapi import APIRouter, Request, HTTPException, BackgroundTasks, Query
 from typing import List, Dict, Optional, Any
 import logging
 from scripts.college_baseball_importer import (
@@ -30,7 +30,7 @@ def list_teams(division: int = 1):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/import")
-async def trigger_import(background_tasks: BackgroundTasks):
+async def trigger_import(request: Request, background_tasks: BackgroundTasks):
     """
     Trigger the 'one-click' import for all divisions.
     """

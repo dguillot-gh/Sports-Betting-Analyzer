@@ -2,7 +2,7 @@
 NHL API Endpoints
 """
 
-from fastapi import APIRouter, Query, BackgroundTasks
+from fastapi import APIRouter, Request, Query, BackgroundTasks
 from typing import Optional, Dict, Any
 import logging
 from scripts.nhl_odds import get_todays_nhl_odds, SPORTSBOOKS
@@ -22,7 +22,7 @@ async def get_nhl_odds(
     return await get_todays_nhl_odds(sportsbook)
 
 @router.get("/sportsbooks")
-async def list_nhl_sportsbooks():
+async def list_nhl_sportsbooks(request: Request):
     """List all supported NHL sportsbooks."""
     return {"sportsbooks": SPORTSBOOKS}
 

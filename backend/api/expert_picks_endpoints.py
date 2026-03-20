@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Request, HTTPException, Query
 from typing import List, Optional
 from datetime import datetime
 import asyncpg
@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/expert-picks", tags=["Expert Picks"])
+from api.db_endpoints import get_db_connection
 
 class ExpertPick(BaseModel):
     id: int
@@ -38,8 +39,10 @@ async def get_expert_picks(
         # Defaults to most recent picks (usually today)
         target_date = datetime.utcnow().date()
 
-    conn = await asyncpg.connect(DATABASE_URL)
+
+    conn = None
     try:
+        conn = await get_db_connection(request)
         rows = await conn.fetch("""
             SELECT id, created_at, sport, game_date, away_team, home_team, expert_name, 
                    spread_pick_team, spread_value, total_pick, total_value, source_url
@@ -53,10 +56,14 @@ async def get_expert_picks(
         logger.error(f"Error fetching expert picks: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        await conn.close()
+        if conn:
+            if hasattr(request.app.state, 'pool') and request.app.state.pool:
+                await request.app.state.pool.release(conn)
+            else:
+                await conn.close()
 
 @router.post("/trigger/{sport}")
-async def trigger_cbs_scraper(sport: str):
+async def trigger_cbs_scraper(request: Request, sport: str):
     """Manually trigger the CBS Expert Picks scraper."""
     import asyncio
     import os

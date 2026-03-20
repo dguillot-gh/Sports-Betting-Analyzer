@@ -5,7 +5,7 @@ Fetches predictions from ESPN's hidden API for NBA (BPI) and NFL (FPI).
 These endpoints are unofficial and may change without notice.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Request, HTTPException
 from typing import Optional
 import httpx
 import asyncio
@@ -47,7 +47,7 @@ async def fetch_espn_probabilities(sport: str, league: str, event_id: str) -> di
 
 
 @router.get("/nba")
-async def get_espn_nba_predictions():
+async def get_espn_nba_predictions(request: Request):
     """
     Get ESPN BPI predictions for today's NBA games.
     
@@ -130,7 +130,7 @@ async def get_espn_nba_predictions():
 
 
 @router.get("/nfl")
-async def get_espn_nfl_predictions():
+async def get_espn_nfl_predictions(request: Request):
     """
     Get ESPN FPI predictions for current NFL games.
     
@@ -219,7 +219,7 @@ async def get_espn_nfl_predictions():
         raise HTTPException(status_code=500, detail=f"Error fetching ESPN data: {str(e)}")
 
 @router.get("/ncaab")
-async def get_espn_ncaab_predictions():
+async def get_espn_ncaab_predictions(request: Request):
     """
     Get ESPN BPI predictions for today's NCAAB games.
     """
@@ -309,7 +309,7 @@ async def get_espn_ncaab_predictions():
 
 
 @router.get("/nhl")
-async def get_espn_nhl_scoreboard():
+async def get_espn_nhl_scoreboard(request: Request):
     """
     Get ESPN NHL scoreboard for today's games with scores and status.
     """

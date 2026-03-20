@@ -1,6 +1,8 @@
 ﻿@inherits LayoutComponentBase
 
 <div class="page">
+    <NotificationToastHost />
+
     <div class="sidebar">
         <NavMenu />
     </div>
@@ -10,7 +12,9 @@
             <article class="content px-4">
                 <ErrorBoundary>
                     <ChildContent>
-                        @Body
+                        <div class="mobile-page-safe">
+                            @Body
+                        </div>
                     </ChildContent>
                     <ErrorContent Context="ex">
                         <div class="blazor-error-boundary">
@@ -20,6 +24,8 @@
                     </ErrorContent>
                 </ErrorBoundary>
             </article>
+
+            <div class="mobile-bottom-spacer" aria-hidden="true"></div>
             
             @* Version Display *@
             <div class="version-container">

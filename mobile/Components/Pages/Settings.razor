@@ -1,4 +1,5 @@
 @page "/settings"
+@page "/mobile-settings"
 @using SportsBettingAnalyzer.Shared.Services
 @using SportsBettingAnalyzer.Shared.Models
 @using SportsBettingAnalyzer.Mobile.Models
@@ -6,6 +7,7 @@
 @inject IServerConfigService ConfigService
 @inject IAppSettingsService AppSettings
 @inject NavigationManager Nav
+@inject HttpClient Http
 
 <div class="app-card settings-card">
     <div class="app-card-header">
@@ -311,14 +313,9 @@
         try
         {
             isLoadingVersion = true;
-            StateHasChanged();
             
-            // Create HTTP client to call backend
-            using var httpClient = new HttpClient();
-            httpClient.BaseAddress = new Uri(ConfigService.GetBaseUrl());
-            httpClient.Timeout = TimeSpan.FromSeconds(10);
-            
-            var response = await httpClient.GetFromJsonAsync<DeploymentVersionInfo>("/deployments/current");
+            var baseUrl = ConfigService.GetBaseUrl();
+            var response = await Http.GetFromJsonAsync<DeploymentVersionInfo>($"{baseUrl}/deployments/current");
             versionInfo = response;
         }
         catch (Exception ex)

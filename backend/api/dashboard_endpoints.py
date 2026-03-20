@@ -1,5 +1,5 @@
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Request, HTTPException
 from typing import Dict, Any, List, Optional
 import json
 import os
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 REPO_ROOT = Path(__file__).parent.parent
 
 @router.get("/model-summary")
-async def get_model_summary():
+async def get_model_summary(request: Request):
     """
     Scans the models/ directory and returns an aggregated summary of all 
     trained models and their metrics.

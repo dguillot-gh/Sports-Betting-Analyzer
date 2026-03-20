@@ -5,12 +5,17 @@
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
-# Copy csproj and restore
-COPY SportsBettingAnalyzer.csproj ./
+# Copy csproj files and restore
+COPY frontend/SportsBettingAnalyzer.csproj frontend/
+COPY shared/SportsBettingAnalyzer.Shared.csproj shared/
+WORKDIR /src/frontend
 RUN dotnet restore SportsBettingAnalyzer.csproj
 
 # Copy everything else and build
-COPY . ./
+WORKDIR /src
+COPY frontend/ frontend/
+COPY shared/ shared/
+WORKDIR /src/frontend
 RUN dotnet publish SportsBettingAnalyzer.csproj -c Release -o /app/publish
 
 # Runtime stage

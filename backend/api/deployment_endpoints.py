@@ -5,7 +5,7 @@ Auto-incrementing version via DB counter + git SHA dedup.
 
 import logging
 from typing import Dict, Any
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Request, HTTPException, Query
 from src.version import GIT_SHA, ENVIRONMENT, BUILD_TIME
 from src.database import get_connection
 
@@ -94,7 +94,7 @@ async def create_release(major: int = Query(..., description="Major version numb
 
 
 @router.get("/deployments")
-async def get_deployments(limit: int = Query(default=50, le=100)):
+async def get_deployments(request: Request, limit: int = Query(default=50, le=100)):
     """Get version history (newest first)."""
     try:
         async with get_connection() as conn:
@@ -109,7 +109,7 @@ async def get_deployments(limit: int = Query(default=50, le=100)):
 
 
 @router.get("/deployments/current")
-async def get_current_deployment():
+async def get_current_deployment(request: Request):
     """Get the latest deployed version."""
     try:
         async with get_connection() as conn:

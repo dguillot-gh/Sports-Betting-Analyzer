@@ -1,11 +1,12 @@
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Request, HTTPException, BackgroundTasks
 from services.scheduler import SchedulerService
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 
 router = APIRouter(prefix="/admin", tags=["Scheduler"])
+from api.db_endpoints import get_db_connection
 
 class ImportLogResponse(BaseModel):
     id: int
@@ -21,7 +22,7 @@ class ImportLogResponse(BaseModel):
     error_message: Optional[str] = None
 
 @router.post("/run-imports")
-async def trigger_manual_import(background_tasks: BackgroundTasks):
+async def trigger_manual_import(request: Request, background_tasks: BackgroundTasks):
     """
     Manually trigger the full import pipeline.
     Runs in background to avoid timeout.
@@ -32,27 +33,143 @@ async def trigger_manual_import(background_tasks: BackgroundTasks):
     return {"status": "accepted", "message": "Import job queued (check logs for progress)"}
 
 @router.get("/import-logs", response_model=List[ImportLogResponse])
-async def get_import_logs(limit: int = 50):
+async def get_import_logs(request: Request, limit: int = 50):
     """
     Get historical import logs.
     """
     import asyncpg
     from src.config import DATABASE_URL
     
-    conn = await asyncpg.connect(DATABASE_URL)
+    conn = None # Initialize conn to None
     try:
+        conn = await get_db_connection(request)
         rows = await conn.fetch("""
             SELECT * FROM import_logs 
             ORDER BY start_time DESC 
             LIMIT $1
         """, limit)
         
-        return [dict(row) for row in rows]
+        return [ImportLogResponse(**dict(r)) for r in rows]
+    except Exception as e:
+        logger.error(f"Error fetching import logs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
-        await conn.close()
+        if conn: # Only try to release/close if conn was successfully established
+            if hasattr(request.app.state, 'pool') and request.app.state.pool:
+                await request.app.state.pool.release(conn)
+            else:
+                await conn.close()
+
+
+@router.get("/import-summary")
+async def get_import_summary(request: Request):
+    """
+    Most recent completed import run per sport.
+    Shows new vs updated at a glance for dashboards and mobile app.
+    """
+    import asyncpg
+    from src.config import DATABASE_URL
+
+    conn = None # Initialize conn to None
+    try:
+        conn = await get_db_connection(request)
+        rows = await conn.fetch("""
+            SELECT DISTINCT ON (sport)
+                sport, status, start_time, end_time, duration_seconds,
+                rows_imported, new_rows_imported, updated_rows_imported, error_message
+            FROM import_logs
+            WHERE status IN ('SUCCESS', 'FAILED')
+            ORDER BY sport, start_time DESC
+        """)
+        return [dict(r) for r in rows]
+    except Exception as e:
+        logger.error(f"Error fetching import summary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn: # Only try to release/close if conn was successfully established
+            if hasattr(request.app.state, 'pool') and request.app.state.pool:
+                await request.app.state.pool.release(conn)
+            else:
+                await conn.close()
+
+
+@router.get("/data-freshness")
+async def get_data_freshness(request: Request):
+    """
+    Freshness check per sport. Returns:
+    - total_records, latest_season, last_import_time, days_since_import
+    - freshness_status: fresh (<2d) | stale (2-7d) | very_stale (>7d) | never
+    Accessible by web and mobile clients.
+    """
+    import asyncpg
+    from src.config import DATABASE_URL
+    from datetime import timezone
+
+
+    conn = None # Initialize conn to None
+    try:
+        conn = await get_db_connection(request)
+        counts = await conn.fetch("""
+            SELECT s.name AS sport,
+                   COUNT(r.id) AS total_records,
+                   MAX(r.season) AS latest_season
+            FROM sports s
+            LEFT JOIN results r ON r.sport_id = s.id
+            GROUP BY s.name
+            ORDER BY s.name
+        """)
+
+        last_imports = await conn.fetch("""
+            SELECT DISTINCT ON (sport)
+                sport, status, start_time, new_rows_imported, rows_imported
+            FROM import_logs
+            WHERE status = 'SUCCESS'
+            ORDER BY sport, start_time DESC
+        """)
+        import_map = {r["sport"]: dict(r) for r in last_imports}
+
+        now = datetime.now(timezone.utc)
+        result = []
+        for row in counts:
+            sport = row["sport"]
+            imp = import_map.get(sport)
+
+            last_import_time = None
+            days_since_import = None
+            freshness_status = "never"
+
+            if imp and imp["start_time"]:
+                last_import_time = imp["start_time"]
+                if last_import_time.tzinfo is None:
+                    last_import_time = last_import_time.replace(tzinfo=timezone.utc)
+                days_since_import = (now - last_import_time).days
+                if days_since_import <= 1:
+                    freshness_status = "fresh"
+                elif days_since_import <= 7:
+                    freshness_status = "stale"
+                else:
+                    freshness_status = "very_stale"
+
+            result.append({
+                "sport": sport,
+                "total_records": row["total_records"],
+                "latest_season": row["latest_season"],
+                "last_import_time": last_import_time.isoformat() if last_import_time else None,
+                "days_since_import": days_since_import,
+                "last_import_new_rows": imp["new_rows_imported"] if imp else 0,
+                "last_import_total_rows": imp["rows_imported"] if imp else 0,
+                "freshness_status": freshness_status,
+            })
+
+        return result
+    finally:
+        if hasattr(request.app.state, 'pool') and request.app.state.pool:
+            await request.app.state.pool.release(conn)
+        else:
+            await conn.close()
 
 @router.post("/run-cbb-backfill")
-async def trigger_cbb_backfill(background_tasks: BackgroundTasks, years: str = "2024,2025"):
+async def trigger_cbb_backfill(request: Request, background_tasks: BackgroundTasks, years: str = "2024,2025"):
     """
     Trigger backfill of College Baseball game results.
     """

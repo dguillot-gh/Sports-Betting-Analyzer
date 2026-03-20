@@ -1,5 +1,6 @@
 @page "/"
 @using System.Text.Json
+@using System.Text.Json.Serialization
 @inject HttpClient Http
 @inject SportsBettingAnalyzer.Shared.Services.IServerConfigService ServerConfig
 
@@ -7,7 +8,7 @@
     <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
         <div>
             <h1>Sports Betting Analyzer</h1>
-            <p>@DateTime.Now.ToString("dddd, MMMM d")</p>
+            <p>@_todayLabel</p>
         </div>
         <div class="mini-status @(_isHealthy ? "online" : "offline")">
             <span class="status-dot"></span>
@@ -16,7 +17,7 @@
 </div>
 
 <!-- Live Slate Banner -->
-<a class="slate-banner" href="/todays-slate">
+<a class="slate-banner" href="/mobile-todays-slate">
     <div class="slate-banner-icon">📅</div>
     <div class="slate-banner-text">
         <h3>Today's Slate</h3>
@@ -54,31 +55,52 @@
     </div>
 }
 
+<!-- Data Freshness Widget -->
+@if (_freshness.Any())
+{
+    <a href="/mobile-data-health" class="freshness-widget">
+        <div class="fw-header">
+            <span class="fw-title">📊 Data Freshness</span>
+            <span class="fw-link">View all ›</span>
+        </div>
+        <div class="fw-dots">
+            @foreach (var f in _freshness)
+            {
+                var dotClass = f.FreshnessStatus == "fresh" ? "fwd-green" : f.FreshnessStatus == "stale" ? "fwd-amber" : f.FreshnessStatus == "very_stale" ? "fwd-red" : "fwd-gray";
+                <div class="fw-dot-item">
+                    <span class="fw-dot @dotClass"></span>
+                    <span class="fw-sport">@f.Sport.ToUpper()</span>
+                </div>
+            }
+        </div>
+    </a>
+}
+
 <div class="dashboard-section px-4">
     <h2 class="section-title">Analysis & Models</h2>
     <div class="dashboard-grid">
-        <a class="feature-card compact" href="/predict/nba">
+        <a class="feature-card compact" href="/mobile-predict/nba">
             <div class="feature-icon feature-icon-purple">⚡</div>
             <div class="feature-text">
                 <h3>NBA Predictor</h3>
                 <p>ML Outcome Models</p>
             </div>
         </a>
-        <a class="feature-card compact" href="/all-sports">
+        <a class="feature-card compact" href="/mobile-all-sports">
             <div class="feature-icon feature-icon-blue">🌐</div>
             <div class="feature-text">
                 <h3>All Sports Scan</h3>
                 <p>Cross-Market Values</p>
             </div>
         </a>
-        <a class="feature-card compact" href="/hit-rates">
+        <a class="feature-card compact" href="/mobile-hit-rates">
             <div class="feature-icon" style="background:rgba(249,115,22,0.15);color:#f97316;">📊</div>
             <div class="feature-text">
                 <h3>Hit Rates</h3>
                 <p>Prop Consistency</p>
             </div>
         </a>
-        <a class="feature-card compact" href="/power-rankings">
+        <a class="feature-card compact" href="/mobile-power-rankings">
             <div class="feature-icon" style="background:rgba(34,197,94,0.15);color:#22c55e;">🏆</div>
             <div class="feature-text">
                 <h3>Power Rankings</h3>
@@ -91,42 +113,42 @@
 <div class="dashboard-section px-4 mt-4">
     <h2 class="section-title">Live Odds Monitors</h2>
     <div class="dashboard-grid">
-        <a class="feature-card compact" href="/odds/nfl">
+        <a class="feature-card compact" href="/mobile-odds/nfl">
             <div class="feature-icon feature-icon-purple">🏈</div>
             <div class="feature-text">
                 <h3>NFL Odds</h3>
                 <p>Spreads & Totals</p>
             </div>
         </a>
-        <a class="feature-card compact" href="/odds/ncaab">
+        <a class="feature-card compact" href="/mobile-odds/ncaab">
             <div class="feature-icon feature-icon-green">🏀</div>
             <div class="feature-text">
                 <h3>NCAAB Odds</h3>
                 <p>College Hoops</p>
             </div>
         </a>
-        <a class="feature-card compact" href="/odds/nba">
+        <a class="feature-card compact" href="/mobile-odds/nba">
             <div class="feature-icon feature-icon-green">🏀</div>
             <div class="feature-text">
                 <h3>NBA Odds</h3>
                 <p>Pro Basketball</p>
             </div>
         </a>
-        <a class="feature-card compact" href="/odds/nhl">
+        <a class="feature-card compact" href="/mobile-odds/nhl">
             <div class="feature-icon feature-icon-blue">🏒</div>
             <div class="feature-text">
                 <h3>NHL Odds</h3>
                 <p>Pro Hockey</p>
             </div>
         </a>
-        <a class="feature-card compact" href="/odds/cfb">
+        <a class="feature-card compact" href="/mobile-odds/cfb">
             <div class="feature-icon feature-icon-purple">🏈</div>
             <div class="feature-text">
                 <h3>CFB Odds</h3>
                 <p>College Football</p>
             </div>
         </a>
-        <a class="feature-card compact" href="/odds/college-baseball">
+        <a class="feature-card compact" href="/mobile-odds/college-baseball">
             <div class="feature-icon feature-icon-green">⚾</div>
             <div class="feature-text">
                 <h3>College Baseball</h3>
@@ -139,21 +161,21 @@
 <div class="dashboard-section px-4 mt-4">
     <h2 class="section-title">Game & Race Results</h2>
     <div class="dashboard-grid">
-        <a class="feature-card compact" href="/nfl/scores">
+        <a class="feature-card compact" href="/mobile-nfl/scores">
             <div class="feature-icon feature-icon-purple">🏈</div>
             <div class="feature-text">
                 <h3>NFL Results</h3>
                 <p>Recent Scores</p>
             </div>
         </a>
-        <a class="feature-card compact" href="/nba/scores">
+        <a class="feature-card compact" href="/mobile-nba/scores">
             <div class="feature-icon feature-icon-green">🏀</div>
             <div class="feature-text">
                 <h3>NBA Results</h3>
                 <p>Recent Scores</p>
             </div>
         </a>
-        <a class="feature-card compact" href="/nascar/results">
+        <a class="feature-card compact" href="/mobile-nascar/results">
             <div class="feature-icon">🏁</div>
             <div class="feature-text">
                 <h3>NASCAR Results</h3>
@@ -166,28 +188,28 @@
 <div class="dashboard-section px-4 mt-4">
     <h2 class="section-title">Professional Standings</h2>
     <div class="dashboard-grid">
-        <a class="feature-card compact" href="/standings/nfl">
+        <a class="feature-card compact" href="/mobile-standings/nfl">
             <div class="feature-icon feature-icon-purple">🏈</div>
             <div class="feature-text">
                 <h3>NFL Standings</h3>
                 <p>Records & ATS</p>
             </div>
         </a>
-        <a class="feature-card compact" href="/standings/nba">
+        <a class="feature-card compact" href="/mobile-standings/nba">
             <div class="feature-icon feature-icon-green">🏀</div>
             <div class="feature-text">
                 <h3>NBA Standings</h3>
                 <p>Conference Rank</p>
             </div>
         </a>
-        <a class="feature-card compact" href="/standings/nhl">
+        <a class="feature-card compact" href="/mobile-standings/nhl">
             <div class="feature-icon feature-icon-blue">🏒</div>
             <div class="feature-text">
                 <h3>NHL Standings</h3>
                 <p>League Points</p>
             </div>
         </a>
-        <a class="feature-card compact" href="/nascar/standings">
+        <a class="feature-card compact" href="/mobile-nascar/standings">
             <div class="feature-icon">🏆</div>
             <div class="feature-text">
                 <h3>NASCAR Points</h3>
@@ -200,28 +222,50 @@
 <div class="dashboard-section px-4 mt-4 mb-4">
     <h2 class="section-title">Tools & Tracking</h2>
     <div class="dashboard-grid">
-        <a class="feature-card compact" href="/bet-tracker">
+        <a class="feature-card compact" href="/mobile-notifications">
+            <div class="feature-icon" style="background: rgba(20, 184, 166, 0.15); color: #14b8a6;">🔔</div>
+            <div class="feature-text">
+                <h3>Notifications</h3>
+                <p>
+                    Alerts & incidents
+                    @if (_unreadNotifications > 0)
+                    {
+                        <span style="margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: rgba(239,68,68,0.18); color: #f87171; font-weight: 800;">
+                            @_unreadNotifications
+                        </span>
+                    }
+                </p>
+            </div>
+        </a>
+        <a class="feature-card compact" href="/mobile-bet-tracker">
             <div class="feature-icon" style="background: rgba(255,165,0,0.15); color: #FFA500;">📋</div>
             <div class="feature-text">
                 <h3>Bet Tracker</h3>
                 <p>Bankroll Logs</p>
             </div>
         </a>
-        <a class="feature-card compact" href="/data-center">
+        <a class="feature-card compact" href="/mobile-data-center">
             <div class="feature-icon" style="background: rgba(30, 58, 138, 0.15); color: #1e3a8a;">🖥️</div>
             <div class="feature-text">
                 <h3>Data Center</h3>
                 <p>System Health</p>
             </div>
         </a>
-        <a class="feature-card compact" href="/paper-trading">
+        <a class="feature-card compact" href="/mobile-data-health">
+            <div class="feature-icon" style="background: rgba(6,182,212,0.15); color: #06b6d4;">📊</div>
+            <div class="feature-text">
+                <h3>Data Health</h3>
+                <p>Import Freshness</p>
+            </div>
+        </a>
+        <a class="feature-card compact" href="/mobile-paper-trading">
             <div class="feature-icon feature-icon-green">💸</div>
             <div class="feature-text">
                 <h3>Paper Trading</h3>
                 <p>Simulate Bets</p>
             </div>
         </a>
-        <a class="feature-card compact" href="/settings">
+        <a class="feature-card compact" href="/mobile-settings">
             <div class="feature-icon feature-icon-blue">⚙️</div>
             <div class="feature-text">
                 <h3>Settings</h3>
@@ -234,7 +278,7 @@
 <div class="dashboard-section px-4 mt-4 mb-8">
     <h2 class="section-title">Information</h2>
     <div class="dashboard-grid">
-        <a class="feature-card compact" href="/about">
+        <a class="feature-card compact" href="/mobile-about">
             <div class="feature-icon feature-icon-blue">ℹ️</div>
             <div class="feature-text">
                 <h3>About App</h3>
@@ -357,20 +401,118 @@
     .status-dot { width: 8px; height: 8px; border-radius: 50%; }
     .mini-status.online .status-dot { background: #10b981; box-shadow: 0 0 8px #10b981; }
     .mini-status.offline .status-dot { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+
+    /* Freshness Widget */
+    .freshness-widget {
+        display: block;
+        margin: 8px 16px 0;
+        padding: 12px 14px;
+        background: var(--surface, #1e1e2e);
+        border: 1px solid var(--border, #2e2e44);
+        border-radius: 12px;
+        text-decoration: none;
+        color: inherit;
+        transition: border-color 0.2s;
+    }
+    .freshness-widget:hover { border-color: #06b6d4; text-decoration: none; color: inherit; }
+    .fw-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .fw-title { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-secondary, #94a3b8); }
+    .fw-link { font-size: 11px; color: #06b6d4; font-weight: 700; }
+    .fw-dots { display: flex; gap: 12px; flex-wrap: wrap; }
+    .fw-dot-item { display: flex; align-items: center; gap: 5px; }
+    .fw-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+    .fwd-green { background: #10b981; box-shadow: 0 0 6px rgba(16,185,129,0.5); }
+    .fwd-amber { background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,0.5); }
+    .fwd-red   { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.5); }
+    .fwd-gray  { background: #475569; }
+    .fw-sport  { font-size: 11px; font-weight: 700; color: var(--text-primary, #e2e8f0); }
 </style>
 
 @code {
+    private string _todayLabel = DateTime.Now.ToString("dddd, MMMM d");
     private int _totalGames = 0;
     private int _liveGames = 0;
     private int _finalGames = 0;
     private int _upcomingGames = 0;
     private int _sportCount = 0;
     private bool _isHealthy = false;
+    private int _unreadNotifications = 0;
+    private List<FreshnessItem> _freshness = new();
+
+    // 60-second static cache to prevent API spam on mobile tab switching
+    private static DateTime _lastLoadTime = DateTime.MinValue;
+    private static int _cachedTotalGames = 0;
+    private static int _cachedLiveGames = 0;
+    private static int _cachedFinalGames = 0;
+    private static int _cachedUpcomingGames = 0;
+    private static int _cachedSportCount = 0;
+    private static bool _cachedIsHealthy = false;
+    private static int _cachedUnreadNotifications = 0;
+    private static List<FreshnessItem> _cachedFreshness = new();
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadGameCounts();
-        await CheckHealth();
+        if (DateTime.Now - _lastLoadTime < TimeSpan.FromSeconds(60))
+        {
+            _totalGames = _cachedTotalGames;
+            _liveGames = _cachedLiveGames;
+            _finalGames = _cachedFinalGames;
+            _upcomingGames = _cachedUpcomingGames;
+            _sportCount = _cachedSportCount;
+            _isHealthy = _cachedIsHealthy;
+            _unreadNotifications = _cachedUnreadNotifications;
+            _freshness = _cachedFreshness;
+            return;
+        }
+
+        await Task.WhenAll(LoadGameCounts(), CheckHealth(), LoadFreshness(), LoadUnreadNotifications());
+
+        _cachedTotalGames = _totalGames;
+        _cachedLiveGames = _liveGames;
+        _cachedFinalGames = _finalGames;
+        _cachedUpcomingGames = _upcomingGames;
+        _cachedSportCount = _sportCount;
+        _cachedIsHealthy = _isHealthy;
+        _cachedUnreadNotifications = _unreadNotifications;
+        _cachedFreshness = _freshness;
+        _lastLoadTime = DateTime.Now;
+    }
+
+    private async Task LoadFreshness()
+    {
+        try
+        {
+            var baseUrl = ServerConfig.GetBaseUrl();
+            var items = await Http.GetFromJsonAsync<List<FreshnessItem>>($"{baseUrl}/admin/data-freshness");
+            if (items != null) _freshness = items;
+        }
+        catch { }
+    }
+
+    private async Task LoadUnreadNotifications()
+    {
+        try
+        {
+            var baseUrl = ServerConfig.GetBaseUrl();
+            var countResponse = await Http.GetFromJsonAsync<UnreadCount>($"{baseUrl}/admin/notifications/unread-count");
+            _unreadNotifications = countResponse?.Count ?? 0;
+        }
+        catch
+        {
+            _unreadNotifications = 0;
+        }
+    }
+
+    private class FreshnessItem
+    {
+        [JsonPropertyName("sport")]               public string Sport           { get; set; } = "";
+        [JsonPropertyName("total_records")]        public long   TotalRecords    { get; set; }
+        [JsonPropertyName("freshness_status")]     public string FreshnessStatus { get; set; } = "never";
+    }
+
+    private class UnreadCount
+    {
+        [JsonPropertyName("count")] public int Count { get; set; }
     }
     
     private async Task CheckHealth()

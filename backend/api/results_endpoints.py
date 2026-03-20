@@ -3,7 +3,7 @@ Results API Endpoints
 Fetches completed game results for result syncing
 """
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Request, Query
 from datetime import date
 import logging
 
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/results", tags=["results"])
 
 
 @router.get("/nba/today")
-async def get_nba_results_today():
+async def get_nba_results_today(request: Request):
     """
     Get today's NBA game results (final scores).
     Uses sbrscrape to get live/completed game data.
@@ -60,7 +60,7 @@ async def get_nba_results_today():
 
 
 @router.get("/nfl/today")
-async def get_nfl_results_today():
+async def get_nfl_results_today(request: Request):
     """
     Get today's NFL game results (final scores).
     """
@@ -100,7 +100,7 @@ async def get_nfl_results_today():
         logger.error(f"Error fetching NFL results: {e}")
         return {"error": str(e), "games": []}
 @router.get("/nhl/today")
-async def get_nhl_results_today():
+async def get_nhl_results_today(request: Request):
     """
     Get today's NHL game results (final scores).
     """

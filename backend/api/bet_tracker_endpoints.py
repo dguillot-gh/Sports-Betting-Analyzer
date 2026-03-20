@@ -12,7 +12,8 @@ from decimal import Decimal
 from typing import Optional, List, Union
 from pydantic import BaseModel, Field
 
-from fastapi import APIRouter, HTTPException, Query, File, UploadFile
+from fastapi import APIRouter, Request, HTTPException, Query, File, UploadFile
+from api.db_endpoints import get_db_connection
 import io
 import csv
 
@@ -222,7 +223,7 @@ def calculate_parlay_odds(legs: List[BetLeg]) -> int:
         return int(-100 / (decimal_odds - 1))
 
 
-async def ensure_tables():
+async def ensure_tables(request: Request):
     """Create tables if they don't exist."""
     global _tables_initialized
     if _tables_initialized:
@@ -230,7 +231,7 @@ async def ensure_tables():
     
     try:
         logger.info(f"Connecting to database: {DATABASE_URL[:50]}...")
-        conn = await asyncpg.connect(DATABASE_URL)
+        conn = await get_db_connection(request)
         await conn.execute(CREATE_TABLES_SQL)
         
         # Check and add new columns if they don't exist (migrations)
@@ -349,7 +350,10 @@ async def ensure_tables():
         except Exception as e:
             logger.error(f"Schema migration error: {e}")
             
-        await conn.close()
+        if hasattr(request.app.state, 'pool') and request.app.state.pool:
+            await request.app.state.pool.release(conn)
+        else:
+            await conn.close()
         _tables_initialized = True
         logger.info("Bet tracker tables initialized successfully")
     except Exception as e:
@@ -364,14 +368,14 @@ async def ensure_tables():
 # ==================== Endpoints ====================
 
 @router.post("/init")
-async def init_bet_tables():
+async def init_bet_tables(request: Request):
     """Initialize bet tracker tables."""
-    await ensure_tables()
+    await ensure_tables(request)
     return {"status": "ok", "message": "Bet tracker tables ready"}
 
 
 @router.post("/resolve-pending")
-async def resolve_pending_bets():
+async def resolve_pending_bets(request: Request):
     """
     Manually trigger resolution of pending mock bets.
     Fetches game results and updates bet outcomes.
@@ -404,19 +408,24 @@ async def resolve_pending_bets():
 
 
 @router.get("/health")
-async def bet_tracker_health():
+async def bet_tracker_health(request: Request):
     """Check bet tracker database connectivity."""
     try:
         import asyncpg
-        conn = await asyncpg.connect(DATABASE_URL)
-        result = await conn.fetchval("SELECT COUNT(*) FROM bets")
-        await conn.close()
-        return {
-            "status": "healthy",
-            "database": "connected",
-            "bet_count": result,
-            "database_url": DATABASE_URL[:50] + "..."
-        }
+        conn = await get_db_connection(request)
+        try:
+            result = await conn.fetchval("SELECT COUNT(*) FROM bets")
+            return {
+                "status": "healthy",
+                "database": "connected",
+                "bet_count": result,
+                "database_url": DATABASE_URL[:50] + "..."
+            }
+        finally:
+            if hasattr(request.app.state, 'pool') and request.app.state.pool:
+                await request.app.state.pool.release(conn)
+            else:
+                await conn.close()
     except Exception as e:
         return {
             "status": "unhealthy",
@@ -425,52 +434,52 @@ async def bet_tracker_health():
             "database_url": DATABASE_URL[:50] + "..."
         }
 
-
 @router.post("", response_model=BetResponse)
-async def create_bet(request: CreateBetRequest):
+async def create_bet(request: Request, bet_request: CreateBetRequest):
     """Create a new bet."""
     import asyncpg
     
-    await ensure_tables()
+    await ensure_tables(request)
     
     # Calculate odds for parlays
-    if request.bet_type == "parlay" and request.legs:
-        combined_odds = calculate_parlay_odds(request.legs)
+    if bet_request.bet_type == "parlay" and bet_request.legs:
+        combined_odds = calculate_parlay_odds(bet_request.legs)
     else:
-        combined_odds = request.odds or 0
+        combined_odds = bet_request.odds or 0
     
-    potential_payout = calculate_potential_payout(request.stake, combined_odds) if combined_odds else None
+    potential_payout = calculate_potential_payout(bet_request.stake, combined_odds) if combined_odds else None
     
     # Build description
-    if request.description:
-        description = request.description
-    elif request.bet_type == "parlay" and request.legs:
-        description = f"{len(request.legs)}-leg parlay"
+    if bet_request.description:
+        description = bet_request.description
+    elif bet_request.bet_type == "parlay" and bet_request.legs:
+        description = f"{len(bet_request.legs)}-leg parlay"
     else:
         description = None
     
-    conn = await asyncpg.connect(DATABASE_URL)
+
+    conn = await get_db_connection(request)
     try:
         row = await conn.fetchrow("""
             INSERT INTO bets (sport, bet_type, sportsbook, stake, odds, potential_payout, game_id, game_name, description, source, notes,
                              expected_value, recommendation, confidence_score, team1, team2, player_name, game_date, clv_percent, is_mock, bet_metadata)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
             RETURNING *
-        """, request.sport, request.bet_type, request.sportsbook, 
-            request.stake, combined_odds, potential_payout, 
-            request.game_id, request.game_name, description, request.source, request.notes,
-            request.expected_value, request.recommendation, request.confidence_score,
-            request.team1, request.team2, request.player_name, 
-            datetime.fromisoformat(request.game_date.replace("Z", "+00:00")) if request.game_date else None,
-            request.clv_percent, request.is_mock,
-            json.dumps(request.bet_metadata) if request.bet_metadata else None)
+        """, bet_request.sport, bet_request.bet_type, bet_request.sportsbook,
+            bet_request.stake, combined_odds, potential_payout,
+            bet_request.game_id, bet_request.game_name, description, bet_request.source, bet_request.notes,
+            bet_request.expected_value, bet_request.recommendation, bet_request.confidence_score,
+            bet_request.team1, bet_request.team2, bet_request.player_name,
+            datetime.fromisoformat(bet_request.game_date.replace("Z", "+00:00")) if bet_request.game_date else None,
+            bet_request.clv_percent, bet_request.is_mock,
+            json.dumps(bet_request.bet_metadata) if bet_request.bet_metadata else None)
         
         bet_id = row["id"]
         
         # Insert legs for parlays
         legs_data = []
-        if request.bet_type == "parlay" and request.legs:
-            for leg in request.legs:
+        if bet_request.bet_type == "parlay" and bet_request.legs:
+            for leg in bet_request.legs:
                 await conn.execute("""
                     INSERT INTO bet_legs (bet_id, game_id, description, odds)
                     VALUES ($1, $2, $3, $4)
@@ -510,11 +519,15 @@ async def create_bet(request: CreateBetRequest):
             bet_metadata=json.loads(row["bet_metadata"]) if row["bet_metadata"] else None
         )
     finally:
-        await conn.close()
+        if hasattr(request.app.state, 'pool') and request.app.state.pool:
+            await request.app.state.pool.release(conn)
+        else:
+            await conn.close()
 
 
 @router.get("")
 async def list_bets(
+    request: Request,
     sport: Optional[str] = Query(None, description="Filter by sport"),
     outcome: Optional[str] = Query(None, description="Filter by outcome"),
     is_mock: Optional[bool] = Query(None, description="Filter by paper trading status"),
@@ -522,13 +535,8 @@ async def list_bets(
     offset: int = Query(0, ge=0, description="Offset for pagination")
 ):
     """List bets with optional filters."""
-    try:
-        await ensure_tables()
-        conn = await asyncpg.connect(DATABASE_URL)
-    except Exception as e:
-        logger.error(f"Database connection error in list_bets: {e}\n{traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
-        
+    await ensure_tables(request)
+    conn = await get_db_connection(request)
     try:
         # Build query
         conditions = []
@@ -549,19 +557,20 @@ async def list_bets(
             conditions.append(f"is_mock = ${param_idx}")
             params.append(is_mock)
             param_idx += 1
-        
-        where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
-        
+
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        limit_idx = param_idx
+        offset_idx = param_idx + 1
+        params.extend([limit, offset])
         query = f"""
-            SELECT * FROM bets 
+            SELECT * FROM bets
             {where_clause}
             ORDER BY created_at DESC
-            LIMIT ${param_idx} OFFSET ${param_idx + 1}
+            LIMIT ${limit_idx}
+            OFFSET ${offset_idx}
         """
-        params.extend([limit, offset])
-        
         rows = await conn.fetch(query, *params)
-        
+
         bets = []
         for row in rows:
             # Get legs if parlay
@@ -613,15 +622,19 @@ async def list_bets(
         logger.error(f"Query error in list_bets: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
     finally:
-        await conn.close()
+        if hasattr(request.app.state, 'pool') and request.app.state.pool:
+            await request.app.state.pool.release(conn)
+        else:
+            await conn.close()
 
 
 @router.get("/{bet_id}")
-async def get_bet(bet_id: int):
+async def get_bet(request: Request, bet_id: int):
     """Get a single bet by ID."""
-    await ensure_tables()
+    await ensure_tables(request)
     
-    conn = await asyncpg.connect(DATABASE_URL)
+
+    conn = await get_db_connection(request)
     try:
         row = await conn.fetchrow("SELECT * FROM bets WHERE id = $1", bet_id)
         if not row:
@@ -659,21 +672,25 @@ async def get_bet(bet_id: int):
             "closing_odds_captured_at": row["closing_odds_captured_at"].isoformat() if row["closing_odds_captured_at"] else None
         }
     finally:
-        await conn.close()
+        if hasattr(request.app.state, 'pool') and request.app.state.pool:
+            await request.app.state.pool.release(conn)
+        else:
+            await conn.close()
 
 
 @router.patch("/{bet_id}/outcome")
-async def update_bet_outcome(bet_id: int, request: UpdateOutcomeRequest):
+async def update_bet_outcome(request: Request, bet_id: int, outcome_update: UpdateOutcomeRequest):
     """Update bet outcome (win/loss/cashout/pending)."""
-    if request.outcome not in ["win", "loss", "cashout", "pending"]:
+    if outcome_update.outcome not in ["win", "loss", "cashout", "pending"]:
         raise HTTPException(status_code=400, detail="Invalid outcome. Use: win, loss, cashout, pending")
     
-    if request.outcome == "cashout" and request.cashout_amount is None:
+    if outcome_update.outcome == "cashout" and outcome_update.cashout_amount is None:
         raise HTTPException(status_code=400, detail="Cash out amount required for cashout outcome")
     
-    await ensure_tables()
+    await ensure_tables(request)
     
-    conn = await asyncpg.connect(DATABASE_URL)
+
+    conn = await get_db_connection(request)
     try:
         # Get existing bet
         row = await conn.fetchrow("SELECT * FROM bets WHERE id = $1", bet_id)
@@ -684,23 +701,26 @@ async def update_bet_outcome(bet_id: int, request: UpdateOutcomeRequest):
         odds = row["odds"] or 0
         
         # Calculate profit (converts to float internally)
-        profit = calculate_profit(stake, odds, request.outcome, request.cashout_amount)
+        profit = calculate_profit(stake, odds, outcome_update.outcome, outcome_update.cashout_amount)
         
         # Update bet
         await conn.execute("""
             UPDATE bets 
             SET outcome = $1, cashout_amount = $2, profit = $3
             WHERE id = $4
-        """, request.outcome, request.cashout_amount, profit, bet_id)
+        """, outcome_update.outcome, outcome_update.cashout_amount, profit, bet_id)
         
         return {
             "id": bet_id,
-            "outcome": request.outcome,
+            "outcome": outcome_update.outcome,
             "profit": profit,
-            "cashout_amount": request.cashout_amount
+            "cashout_amount": outcome_update.cashout_amount
         }
     finally:
-        await conn.close()
+        if hasattr(request.app.state, 'pool') and request.app.state.pool:
+            await request.app.state.pool.release(conn)
+        else:
+            await conn.close()
 
 
 class UpdateBetRequest(BaseModel):
@@ -713,11 +733,12 @@ class UpdateBetRequest(BaseModel):
 
 
 @router.put("/{bet_id}")
-async def update_bet(bet_id: int, request: UpdateBetRequest):
+async def update_bet(request: Request, bet_id: int, bet_update: UpdateBetRequest):
     """Update bet details (stake, odds, description, etc.)."""
-    await ensure_tables()
+    await ensure_tables(request)
     
-    conn = await asyncpg.connect(DATABASE_URL)
+
+    conn = await get_db_connection(request)
     try:
         # Check bet exists
         row = await conn.fetchrow("SELECT * FROM bets WHERE id = $1", bet_id)
@@ -729,37 +750,37 @@ async def update_bet(bet_id: int, request: UpdateBetRequest):
         params = []
         param_idx = 1
         
-        if request.stake is not None:
+        if bet_update.stake is not None:
             updates.append(f"stake = ${param_idx}")
-            params.append(request.stake)
+            params.append(bet_update.stake)
             param_idx += 1
         
-        if request.odds is not None:
+        if bet_update.odds is not None:
             updates.append(f"odds = ${param_idx}")
-            params.append(request.odds)
+            params.append(bet_update.odds)
             param_idx += 1
             
-        if request.description is not None:
+        if bet_update.description is not None:
             updates.append(f"description = ${param_idx}")
-            params.append(request.description)
+            params.append(bet_update.description)
             param_idx += 1
             
-        if request.sportsbook is not None:
+        if bet_update.sportsbook is not None:
             updates.append(f"sportsbook = ${param_idx}")
-            params.append(request.sportsbook)
+            params.append(bet_update.sportsbook)
             param_idx += 1
             
-        if request.notes is not None:
+        if bet_update.notes is not None:
             updates.append(f"notes = ${param_idx}")
-            params.append(request.notes)
+            params.append(bet_update.notes)
             param_idx += 1
         
         if not updates:
             return {"id": bet_id, "message": "No changes provided"}
         
         # Recalculate potential payout if stake or odds changed
-        new_stake = request.stake if request.stake is not None else to_float(row["stake"])
-        new_odds = request.odds if request.odds is not None else (int(row["odds"]) if row["odds"] else 0)
+        new_stake = bet_update.stake if bet_update.stake is not None else to_float(row["stake"])
+        new_odds = bet_update.odds if bet_update.odds is not None else (int(row["odds"]) if row["odds"] else 0)
         
         if new_odds != 0:
             potential_payout = calculate_potential_payout(new_stake, new_odds)
@@ -778,46 +799,58 @@ async def update_bet(bet_id: int, request: UpdateBetRequest):
             "updated_fields": [u.split(" = ")[0] for u in updates]
         }
     finally:
-        await conn.close()
+        if hasattr(request.app.state, 'pool') and request.app.state.pool:
+            await request.app.state.pool.release(conn)
+        else:
+            await conn.close()
 
 
 @router.delete("/all")
-async def clear_all_bets():
+async def clear_all_bets(request: Request):
     """Wipe all bet data."""
-    conn = await asyncpg.connect(DATABASE_URL)
+
+    conn = await get_db_connection(request)
     try:
         await conn.execute("TRUNCATE TABLE bet_legs RESTART IDENTITY CASCADE;")
         await conn.execute("TRUNCATE TABLE bets RESTART IDENTITY CASCADE;")
         return {"status": "success", "message": "All bet history cleared"}
     finally:
-        await conn.close()
+        if hasattr(request.app.state, 'pool') and request.app.state.pool:
+            await request.app.state.pool.release(conn)
+        else:
+            await conn.close()
 
 
 @router.delete("/{bet_id}")
-async def delete_bet(bet_id: int):
+async def delete_bet(request: Request, bet_id: int):
     """Delete a bet."""
-    await ensure_tables()
+    await ensure_tables(request)
     
-    conn = await asyncpg.connect(DATABASE_URL)
+
+    conn = await get_db_connection(request)
     try:
         result = await conn.execute("DELETE FROM bets WHERE id = $1", bet_id)
         if result == "DELETE 0":
             raise HTTPException(status_code=404, detail="Bet not found")
         return {"status": "deleted", "id": bet_id}
     finally:
-        await conn.close()
+        if hasattr(request.app.state, 'pool') and request.app.state.pool:
+            await request.app.state.pool.release(conn)
+        else:
+            await conn.close()
 
 
 @router.get("/stats/summary")
 async def get_bet_stats(
+    request: Request,
     sport: Optional[str] = Query(None, description="Filter by sport"),
     is_mock: Optional[bool] = Query(False, description="Stats for real vs mock bets"),
     days: int = Query(30, description="Stats for last N days")
 ):
     """Get betting statistics summary."""
     try:
-        await ensure_tables()
-        conn = await asyncpg.connect(DATABASE_URL)
+        await ensure_tables(request)
+        conn = await get_db_connection(request)
     except Exception as e:
         logger.error(f"Database connection error in /stats/summary: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
@@ -882,11 +915,15 @@ async def get_bet_stats(
         logger.error(f"Query error in /stats/summary: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
     finally:
-        await conn.close()
+        if hasattr(request.app.state, 'pool') and request.app.state.pool:
+            await request.app.state.pool.release(conn)
+        else:
+            await conn.close()
 
 
 @router.get("/stats/chart-data")
 async def get_chart_data(
+    request: Request,
     sport: Optional[str] = Query(None, description="Filter by sport"),
     days: int = Query(30, description="Data for last N days")
 ):
@@ -895,8 +932,8 @@ async def get_chart_data(
     Returns: daily profits, cumulative ROI trend, outcome distribution.
     """
     try:
-        await ensure_tables()
-        conn = await asyncpg.connect(DATABASE_URL)
+        await ensure_tables(request)
+        conn = await get_db_connection(request)
     except Exception as e:
         logger.error(f"Database connection error in get_chart_data: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
@@ -1009,11 +1046,14 @@ async def get_chart_data(
         logger.error(f"Query error in get_chart_data: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
     finally:
-        await conn.close()
+        if hasattr(request.app.state, 'pool') and request.app.state.pool:
+            await request.app.state.pool.release(conn)
+        else:
+            await conn.close()
 
 
 @router.post("/import-csv")
-async def import_bets_csv(file: UploadFile = File(...)):
+async def import_bets_csv(request: Request, file: UploadFile = File(...)):
     """Import bets from Juice Reel CSV (Legacy/Direct)."""
     # ... (keeping existing logic for compatibility but can redirect to the new universal logic later)
     # Actually, let's keep it as is for now and add the new one below.
@@ -1033,8 +1073,9 @@ async def import_bets_csv(file: UploadFile = File(...)):
     for row in reader:
         bets_map[row.get('juice_bet_id', 'unknown')].append(row)
     
-    await ensure_tables()
-    conn = await asyncpg.connect(DATABASE_URL)
+    await ensure_tables(request)
+
+    conn = await get_db_connection(request)
     
     imported_count = 0
     errors = []
@@ -1098,7 +1139,10 @@ async def import_bets_csv(file: UploadFile = File(...)):
         
         return {"status": "success", "imported_count": imported_count, "error_count": len(errors), "errors": errors[:10]}
     finally:
-        await conn.close()
+        if hasattr(request.app.state, 'pool') and request.app.state.pool:
+            await request.app.state.pool.release(conn)
+        else:
+            await conn.close()
 
 
 # ==================== Universal Importer ====================
@@ -1151,7 +1195,7 @@ def sanitize_value(val, type_to):
     return s_val
 
 @router.post("/preview-import")
-async def preview_import(file: UploadFile = File(...)):
+async def preview_import(request: Request, file: UploadFile = File(...)):
     """Preview a bet import from CSV or Excel."""
     import pandas as pd
     import io
@@ -1222,10 +1266,11 @@ async def preview_import(file: UploadFile = File(...)):
     return {"bets": preview_bets, "total_count": len(preview_bets)}
 
 @router.post("/confirm-import")
-async def confirm_import(bets: List[dict]):
+async def confirm_import(request: Request, bets: List[dict]):
     """Save finalized bets to database."""
-    await ensure_tables()
-    conn = await asyncpg.connect(DATABASE_URL)
+    await ensure_tables(request)
+
+    conn = await get_db_connection(request)
     
     imported_count = 0
     try:
@@ -1261,4 +1306,7 @@ async def confirm_import(bets: List[dict]):
                 imported_count += 1
         return {"status": "success", "imported": imported_count}
     finally:
-        await conn.close()
+        if hasattr(request.app.state, 'pool') and request.app.state.pool:
+            await request.app.state.pool.release(conn)
+        else:
+            await conn.close()

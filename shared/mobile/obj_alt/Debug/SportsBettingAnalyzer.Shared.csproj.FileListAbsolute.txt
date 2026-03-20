@@ -1,0 +1,7 @@
+C:\Users\dguil\Documents\repo\Sports-Betting-Analyzer\shared\mobile\obj_alt\Debug\SportsBettingAnalyzer.Shared.csproj.AssemblyReference.cache
+C:\Users\dguil\Documents\repo\Sports-Betting-Analyzer\shared\mobile\obj_alt\Debug\rpswa.dswa.cache.json
+C:\Users\dguil\Documents\repo\Sports-Betting-Analyzer\shared\mobile\obj_alt\Debug\SportsBettingAnalyzer.Shared.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\dguil\Documents\repo\Sports-Betting-Analyzer\shared\mobile\obj_alt\Debug\SportsBettingAnalyzer.Shared.AssemblyInfoInputs.cache
+C:\Users\dguil\Documents\repo\Sports-Betting-Analyzer\shared\mobile\obj_alt\Debug\SportsBettingAnalyzer.Shared.AssemblyInfo.cs
+C:\Users\dguil\Documents\repo\Sports-Betting-Analyzer\shared\mobile\obj_alt\Debug\SportsBettingAnalyzer.Shared.csproj.CoreCompileInputs.cache
+C:\Users\dguil\Documents\repo\Sports-Betting-Analyzer\shared\mobile\obj_alt\Debug\SportsBettingAnalyzer.Shared.sourcelink.json

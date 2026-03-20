@@ -1,0 +1,172 @@
+@page "/mobile-notifications"
+@page "/notifications"
+@using System.Net.Http.Json
+@using SportsBettingAnalyzer.Shared.Models
+@inject HttpClient Http
+@inject SportsBettingAnalyzer.Shared.Services.IServerConfigService ServerConfig
+
+<div class="app-card">
+    <div class="app-card-header" style="background: linear-gradient(135deg, #0f766e, #0ea5a6) !important;">
+        <h2>🔔 Notifications</h2>
+        <p>Operational alerts and system events</p>
+    </div>
+
+    <div class="app-card-body">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 14px; gap: 8px;">
+            <div class="results-meta" style="margin:0;">
+                Unread: @_unreadCount
+            </div>
+            <button class="app-btn app-btn-secondary" @onclick="MarkAllRead" disabled="@(!_notifications.Any(n => n.ReadAt is null))">
+                Mark All Read
+            </button>
+        </div>
+
+        @if (_isLoading)
+        {
+            <div class="loading-state">
+                <div class="loading-orb"></div>
+                <p>Loading notifications...</p>
+            </div>
+        }
+        else if (!_notifications.Any())
+        {
+            <div class="app-alert app-alert-info">No notifications yet.</div>
+        }
+        else
+        {
+            <div class="scores-list">
+                @foreach (var group in GroupedNotifications)
+                {
+                    <div class="notif-group-header">
+                        <span class="notif-category-pill">@FormatCategory(group.Key)</span>
+                        <span class="results-meta">@(group.Count(n => n.ReadAt is null)) unread</span>
+                    </div>
+                    @foreach (var item in group)
+                    {
+                        <div class="score-card @(item.ReadAt is null ? "notif-unread" : "notif-read")">
+                            <div class="score-card-header">
+                                <span class="score-week">@item.CreatedAt.ToLocalTime().ToString("MMM d, h:mm tt")</span>
+                                <span class="score-status @GetSeverityClass(item.Severity)">@item.Severity.ToUpperInvariant()</span>
+                            </div>
+                            <div style="font-weight: 800; margin-bottom: 6px;">@item.Title</div>
+                            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 10px;">@item.Message</div>
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <span style="font-size:10px; color:var(--text-muted);">@FormatCategory(item.Category)</span>
+                                @if (item.ReadAt is null)
+                                {
+                                    <button class="app-btn app-btn-secondary" @onclick="() => MarkRead(item.Id)">Mark Read</button>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .notif-group-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin: 6px 4px 10px;
+    }
+    .notif-category-pill {
+        display: inline-block;
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 700;
+        background: rgba(15, 118, 110, 0.16);
+        color: #2dd4bf;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .notif-unread { border-left: 4px solid #06b6d4; }
+    .notif-read { opacity: 0.85; }
+    .score-status.error { background: rgba(239,68,68,0.15); color: #f87171; }
+    .score-status.warning { background: rgba(245,158,11,0.15); color: #fbbf24; }
+    .score-status.info { background: rgba(59,130,246,0.15); color: #60a5fa; }
+    .score-status.success { background: rgba(16,185,129,0.15); color: #34d399; }
+</style>
+
+@code {
+    private bool _isLoading = true;
+    private int _unreadCount = 0;
+    private List<AppNotification> _notifications = new();
+    private IEnumerable<IGrouping<string, AppNotification>> GroupedNotifications =>
+        _notifications
+            .GroupBy(n => NormalizeCategory(n.Category))
+            .OrderByDescending(g => g.Count(n => n.ReadAt is null))
+            .ThenBy(g => g.Key);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadNotifications();
+    }
+
+    private async Task LoadNotifications()
+    {
+        _isLoading = true;
+        try
+        {
+            var baseUrl = ServerConfig.GetBaseUrl();
+            var response = await Http.GetFromJsonAsync<NotificationsResponse>($"{baseUrl}/admin/notifications?limit=100");
+            _notifications = response?.Items ?? new List<AppNotification>();
+            _unreadCount = _notifications.Count(n => n.ReadAt is null);
+        }
+        catch
+        {
+            _notifications = new List<AppNotification>();
+            _unreadCount = 0;
+        }
+        _isLoading = false;
+    }
+
+    private async Task MarkRead(long id)
+    {
+        try
+        {
+            var baseUrl = ServerConfig.GetBaseUrl();
+            await Http.PostAsync($"{baseUrl}/admin/notifications/{id}/read", null);
+        }
+        catch
+        {
+            // Keep UX resilient even if call fails.
+        }
+        await LoadNotifications();
+    }
+
+    private async Task MarkAllRead()
+    {
+        try
+        {
+            var baseUrl = ServerConfig.GetBaseUrl();
+            await Http.PostAsync($"{baseUrl}/admin/notifications/read-all", null);
+        }
+        catch
+        {
+            // Keep UX resilient even if call fails.
+        }
+        await LoadNotifications();
+    }
+
+    private static string GetSeverityClass(string severity) =>
+        severity?.ToLowerInvariant() switch
+        {
+            "error" => "error",
+            "warning" => "warning",
+            "success" => "success",
+            _ => "info",
+        };
+
+    private static string NormalizeCategory(string? category) =>
+        string.IsNullOrWhiteSpace(category) ? "general" : category.Trim().ToLowerInvariant();
+
+    private static string FormatCategory(string? category)
+    {
+        var normalized = NormalizeCategory(category);
+        return normalized.Replace("_", " ");
+    }
+}

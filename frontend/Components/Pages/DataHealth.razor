@@ -50,6 +50,114 @@
             </TwCard>
         }
 
+        <!-- Data Freshness Panel -->
+        <TwCard Class="p-6 bg-slate-900 border-slate-800">
+            <div class="flex items-center gap-3 mb-5">
+                <TwIcon Icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-6 h-6 text-cyan-400" />
+                <h2 class="text-xl font-bold text-white">Data Freshness</h2>
+                @if (_freshnessLoading)
+                {
+                    <div class="w-4 h-4 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin ml-2"></div>
+                }
+            </div>
+            @if (_freshnessData.Any())
+            {
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                    @foreach (var f in _freshnessData)
+                    {
+                        var (bg, border, dot, label) = f.FreshnessStatus switch {
+                            "fresh"      => ("bg-emerald-900/30", "border-emerald-700/50", "bg-emerald-400", "Fresh"),
+                            "stale"      => ("bg-amber-900/30",   "border-amber-700/50",   "bg-amber-400",   "Stale"),
+                            "very_stale" => ("bg-red-900/30",     "border-red-700/50",     "bg-red-400",     "Old"),
+                            _            => ("bg-slate-800/50",   "border-slate-700",      "bg-slate-500",   "Never")
+                        };
+                        <div class="p-4 rounded-xl border @bg @border flex flex-col gap-1">
+                            <div class="flex items-center gap-2">
+                                <div class="w-2.5 h-2.5 rounded-full @dot"></div>
+                                <span class="text-white font-bold text-sm uppercase">@f.Sport</span>
+                                <span class="ml-auto text-[10px] font-bold @(f.FreshnessStatus == "fresh" ? "text-emerald-400" : f.FreshnessStatus == "stale" ? "text-amber-400" : f.FreshnessStatus == "very_stale" ? "text-red-400" : "text-slate-500")">@label</span>
+                            </div>
+                            <div class="text-slate-300 text-xs font-mono">@f.TotalRecords.ToString("N0") rows</div>
+                            @if (f.LatestSeason.HasValue)
+                            {
+                                <div class="text-slate-500 text-xs">Season @f.LatestSeason</div>
+                            }
+                            @if (f.LastImportTime.HasValue)
+                            {
+                                <div class="text-slate-500 text-[10px] mt-1">
+                                    @if (f.DaysSinceImport == 0) { <span>Today</span> }
+                                    else if (f.DaysSinceImport == 1) { <span>Yesterday</span> }
+                                    else { <span>@f.DaysSinceImport days ago</span> }
+                                </div>
+                                <div class="text-slate-600 text-[10px]">+@f.LastImportNewRows new rows last run</div>
+                            }
+                            else
+                            {
+                                <div class="text-slate-600 text-[10px] mt-1">No imports yet</div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+            else if (!_freshnessLoading)
+            {
+                <p class="text-slate-500 text-sm">No data available yet.</p>
+            }
+        </TwCard>
+
+        <!-- Recent Import Runs -->
+        <TwCard Class="p-6 bg-slate-900 border-slate-800">
+            <div class="flex items-center justify-between mb-5">
+                <div class="flex items-center gap-3">
+                    <TwIcon Icon="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" Class="w-6 h-6 text-indigo-400" />
+                    <h2 class="text-xl font-bold text-white">Recent Import Runs</h2>
+                </div>
+            </div>
+            @if (_importLogs.Any())
+            {
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-slate-500 text-xs uppercase tracking-wider border-b border-slate-800">
+                                <th class="text-left py-2 pr-4">Sport</th>
+                                <th class="text-left py-2 pr-4">Status</th>
+                                <th class="text-right py-2 pr-4">Total</th>
+                                <th class="text-right py-2 pr-4 text-emerald-400">New</th>
+                                <th class="text-right py-2 pr-4 text-blue-400">Updated</th>
+                                <th class="text-right py-2 pr-4">Duration</th>
+                                <th class="text-left py-2">When</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var log in _importLogs.Take(30))
+                            {
+                                <tr class="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
+                                    <td class="py-2 pr-4 font-bold text-white uppercase">@log.Sport</td>
+                                    <td class="py-2 pr-4">
+                                        @if (log.Status == "SUCCESS")
+                                        { <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-900/50 text-emerald-400 border border-emerald-800">✓ OK</span> }
+                                        else if (log.Status == "FAILED")
+                                        { <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-900/50 text-red-400 border border-red-800">✗ FAIL</span> }
+                                        else
+                                        { <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-900/50 text-amber-400 border border-amber-800">⟳ @log.Status</span> }
+                                    </td>
+                                    <td class="py-2 pr-4 text-right text-slate-300 font-mono text-xs">@log.RowsImported.ToString("N0")</td>
+                                    <td class="py-2 pr-4 text-right font-mono text-xs @(log.NewRowsImported > 0 ? "text-emerald-400 font-bold" : "text-slate-600")">+@log.NewRowsImported.ToString("N0")</td>
+                                    <td class="py-2 pr-4 text-right font-mono text-xs text-blue-400">~@log.UpdatedRowsImported.ToString("N0")</td>
+                                    <td class="py-2 pr-4 text-right text-slate-500 text-xs">@(log.DurationSeconds.HasValue ? $"{log.DurationSeconds.Value:F0}s" : "-")</td>
+                                    <td class="py-2 text-slate-400 text-xs">@log.StartTime.ToLocalTime().ToString("MMM d HH:mm")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else if (!_importLogsLoading)
+            {
+                <p class="text-slate-500 text-sm italic">No import runs recorded yet. Run an import to see history here.</p>
+            }
+        </TwCard>
+
         <!-- Sport Tabs -->
         <TwTabs HeaderClass="px-6">
             @foreach (var sport in _sports)
@@ -391,6 +499,12 @@
     private string _currentLoadingSport = "";
     private DbStats? _dbStats;
 
+    // Freshness + import logs
+    private List<FreshnessData> _freshnessData = new();
+    private List<ImportLogEntry> _importLogs = new();
+    private bool _freshnessLoading = false;
+    private bool _importLogsLoading = false;
+
     private List<SportInfo> _sports = new()
     {
         new SportInfo { Key = "nfl", DisplayName = "NFL", Icon = "M13 10V3L4 14h7v7l9-11h-7z" },
@@ -405,8 +519,36 @@
             _sportLoading[sport.Key] = false;
             _sportLoadingStatus[sport.Key] = "";
         }
-        await LoadDbStats();
+        await Task.WhenAll(
+            LoadDbStats(),
+            LoadFreshnessData(),
+            LoadImportLogs()
+        );
         await LoadSportData(_sports[0].Key);
+    }
+
+    private async Task LoadFreshnessData()
+    {
+        _freshnessLoading = true;
+        try
+        {
+            var items = await Http.GetFromJsonAsync<List<FreshnessData>>("http://backend:8000/admin/data-freshness");
+            if (items != null) _freshnessData = items;
+        }
+        catch { }
+        finally { _freshnessLoading = false; }
+    }
+
+    private async Task LoadImportLogs()
+    {
+        _importLogsLoading = true;
+        try
+        {
+            var items = await Http.GetFromJsonAsync<List<ImportLogEntry>>("http://backend:8000/admin/import-logs?limit=30");
+            if (items != null) _importLogs = items;
+        }
+        catch { }
+        finally { _importLogsLoading = false; }
     }
     
     private async Task LoadDbStats()
@@ -435,6 +577,7 @@
         if (_disposed) return;
         _loading = true;
         StateHasChanged();
+        await Task.WhenAll(LoadFreshnessData(), LoadImportLogs());
         foreach (var sport in _sports)
         {
             if (_disposed) return;
@@ -598,4 +741,24 @@
     private class RecommendationInfo { public string Issue { get; set; } = ""; public string Suggestion { get; set; } = ""; public string Impact { get; set; } = ""; }
     private class FeatureImpactInfo { public string Feature { get; set; } = ""; public double Impact { get; set; } }
     private class DbStats { public int Results { get; set; } public int Entities { get; set; } public int Stats { get; set; } public int Predictions { get; set; } public int Models { get; set; } public int Sports { get; set; } }
+
+    // Freshness + import log models (matches backend JSON)
+    private class FreshnessData {
+        [System.Text.Json.Serialization.JsonPropertyName("sport")] public string Sport { get; set; } = "";
+        [System.Text.Json.Serialization.JsonPropertyName("total_records")] public long TotalRecords { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("latest_season")] public int? LatestSeason { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("last_import_time")] public DateTime? LastImportTime { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("days_since_import")] public int? DaysSinceImport { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("last_import_new_rows")] public int LastImportNewRows { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("freshness_status")] public string FreshnessStatus { get; set; } = "never";
+    }
+    private class ImportLogEntry {
+        [System.Text.Json.Serialization.JsonPropertyName("sport")] public string Sport { get; set; } = "";
+        [System.Text.Json.Serialization.JsonPropertyName("status")] public string Status { get; set; } = "";
+        [System.Text.Json.Serialization.JsonPropertyName("start_time")] public DateTime StartTime { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("duration_seconds")] public double? DurationSeconds { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("rows_imported")] public int RowsImported { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("new_rows_imported")] public int NewRowsImported { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("updated_rows_imported")] public int UpdatedRowsImported { get; set; }
+    }
 }

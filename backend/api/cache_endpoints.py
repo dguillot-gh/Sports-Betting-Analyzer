@@ -4,7 +4,7 @@ Odds Cache API Endpoints
 Endpoints for caching and retrieving odds data so late night games persist on refresh.
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Request, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import logging
@@ -12,6 +12,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/cache", tags=["odds-cache"])
+from api.db_endpoints import get_db_connection
 
 
 # Import cache service lazily to avoid circular imports
@@ -33,7 +34,7 @@ class CacheAnalysisRequest(BaseModel):
 
 
 @router.post("/init")
-async def init_cache_table():
+async def init_cache_table(request: Request):
     """Initialize the cache table (run once)."""
     try:
         cache = get_cache()
@@ -45,7 +46,7 @@ async def init_cache_table():
 
 
 @router.post("/games")
-async def cache_games(request: CacheGamesRequest):
+async def cache_games(request: Request):
     """
     Cache games with their odds data.
     Call this after fetching fresh odds from the API.
@@ -60,7 +61,7 @@ async def cache_games(request: CacheGamesRequest):
 
 
 @router.post("/analysis")
-async def cache_analysis(request: CacheAnalysisRequest):
+async def cache_analysis(request: Request):
     """
     Cache analysis/predictions for a specific game.
     Call this after running predictions.
@@ -101,7 +102,7 @@ async def get_cached_games(
 
 
 @router.get("/game/{game_id}")
-async def get_cached_game(game_id: str):
+async def get_cached_game(request: Request, game_id: str):
     """Get a specific game from cache."""
     try:
         cache = get_cache()
@@ -117,7 +118,7 @@ async def get_cached_game(game_id: str):
 
 
 @router.delete("/cleanup")
-async def cleanup_expired():
+async def cleanup_expired(request: Request):
     """Remove games expired more than 24 hours ago."""
     try:
         cache = get_cache()
@@ -129,13 +130,13 @@ async def cleanup_expired():
 
 
 @router.get("/stats")
-async def cache_stats():
+async def cache_stats(request: Request):
     """Get cache statistics."""
     try:
         import asyncpg
         from src.odds_cache import DATABASE_URL
         
-        conn = await asyncpg.connect(DATABASE_URL)
+        conn = await get_db_connection(request)
         try:
             stats = {}
             
@@ -159,7 +160,10 @@ async def cache_stats():
             
             return stats
         finally:
-            await conn.close()
+            if hasattr(request.app.state, 'pool') and request.app.state.pool:
+                await request.app.state.pool.release(conn)
+            else:
+                await conn.close()
     except Exception as e:
         logger.error(f"Failed to get cache stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))

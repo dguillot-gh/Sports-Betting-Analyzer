@@ -66,3 +66,5 @@ node_modules/
 /backend/scripts/nba_ml_reference/Models/XGBoost_Models
 /backend/scripts/models/nfl
 .windsurf/plans/mobile-enhancement-plan-ae54a8.md
+/.dotnet/TelemetryStorageService
+/.dotnet

@@ -63,6 +63,7 @@ async def ensure_sport_exists(conn) -> int:
 
 async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, start_year: int = 2023, progress_callback=None) -> dict:
     """Import team game-by-game data from MoneyPuck."""
+    from scripts.batch_db import batch_upsert
     logger.info("Starting MoneyPuck game-level import...")
     
     # Download file (always re-download to ensure fresh data)
@@ -88,17 +89,18 @@ async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, sta
 
     # Process CSV in chunks to save memory
     count = 0
-    inserted_count = 0
     updated_count = 0
-    error_count = 0
     skipped_count = 0
-    batch_size = 500
+    batch_size = 5000
     
     # We use a set of team names for lookup
     team_map = {} 
 
     logger.info("Ingesting game data into 'results' table...")
     for chunk in pd.read_csv(local_file, chunksize=batch_size):
+        entity_records = []
+        result_records = []
+        
         for _, row in chunk.iterrows():
             if limit and count >= limit:
                 break
@@ -124,20 +126,8 @@ async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, sta
             # Create Team Entity if not exists (using content hash for uniqueness)
             if team_name not in team_map:
                 team_hash = compute_hash({"sport": "nhl", "team_name": team_name})
-                try:
-                    ent_id = await conn.fetchval(
-                        """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
-                           VALUES ($1, $2, 'team', 'nhl', $3, $4)
-                           ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL DO UPDATE SET name = EXCLUDED.name
-                           RETURNING id""",
-                        sport_id, team_name, json.dumps({"is_nhl": True}), team_hash
-                    )
-                    team_map[team_name] = ent_id
-                except Exception as e:
-                    logger.error(f"Error creating team entity {team_name}: {e}")
-                    # Try to fetch existing if insertion fails
-                    ent_id = await conn.fetchval("SELECT id FROM entities WHERE content_hash = $1", team_hash)
-                    team_map[team_name] = ent_id
+                entity_records.append((sport_id, team_name, 'team', 'nhl', json.dumps({"is_nhl": True}), team_hash))
+                team_map[team_name] = team_hash # Temporary mapping
 
             # Result Mapping (MoneyPuck uses exhaustive stats)
             # We store the full row as metadata for future model training
@@ -169,43 +159,40 @@ async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, sta
                 clean_season = 0
 
             # Results: Track new vs updated
-            try:
-                # Use RETURNING (xmax = 0) to distinguish INSERT vs UPDATE
-                is_insert = await conn.fetchval(
-                    """INSERT INTO results (sport_id, season, series, metadata, content_hash)
-                       VALUES ($1, $2, 'nhl', $3, $4)
-                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL 
-                       DO UPDATE SET metadata = EXCLUDED.metadata
-                       RETURNING (xmax = 0) AS is_insert""",
-                    sport_id, clean_season, json.dumps(metadata), result_hash
-                )
-                if is_insert:
-                    inserted_count += 1
-                else:
-                    updated_count += 1
-                count += 1
-            except Exception as e:
-                error_count += 1
-                if error_count <= 3:
-                    logger.error(f"Row skip error for game {game_id} (Team: {team_name}): {e}")
-                elif error_count == 4:
-                    logger.error("Suppressing further per-row errors...")
+            result_records.append((sport_id, clean_season, 'nhl', json.dumps(metadata), result_hash))
+            count += 1
+
+        if entity_records:
+            UPSERT_ENTITIES = """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
+                               VALUES ($1, $2, $3, $4, $5, $6)
+                               ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL 
+                               DO UPDATE SET name = EXCLUDED.name"""
+            await batch_upsert(conn, UPSERT_ENTITIES, entity_records)
+
+        if result_records:
+            UPSERT_RESULTS = """INSERT INTO results (sport_id, season, series, metadata, content_hash)
+                               VALUES ($1, $2, $3, $4, $5)
+                               ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL 
+                               DO UPDATE SET metadata = EXCLUDED.metadata"""
+            updated_count += await batch_upsert(conn, UPSERT_RESULTS, result_records)
 
         if limit and count >= limit:
             break
             
         if progress_callback:
-            progress_callback(f"Imported {count} games (skipped: {skipped_count}, errors: {error_count})...")
+            progress_callback(f"Imported {count} games (skipped: {skipped_count})...")
         elif count > 0 and count % 5000 == 0:
             logger.info(f"Progress: {count} results imported.")
 
     if count == 0:
-        logger.warning(f"NHL import produced 0 results. Skipped: {skipped_count}, Errors: {error_count}. Check season filter (start_year={start_year}) and data format.")
-    logger.info(f"Finished MoneyPuck import. Total: {count} (New: {inserted_count}, Updated: {updated_count}, Errors: {error_count})")
-    return {"total": count, "new": inserted_count, "updated": updated_count}
+        logger.warning(f"NHL import produced 0 results. Skipped: {skipped_count}. Check season filter (start_year={start_year}) and data format.")
+    logger.info(f"Finished MoneyPuck import. Total: {count} (Upserted: {updated_count})")
+    # For large batch updates, exact new vs updated is less critical than speed; we label all as updated/upserted for simplicity here.
+    return {"total": count, "new": 0, "updated": updated_count}
 
 async def import_player_bios(conn, sport_id: int) -> dict:
     """Import player metadata from MoneyPuck."""
+    from scripts.batch_db import batch_upsert
     logger.info("Importing player bios...")
     local_file = DATA_DIR / "player_bios.csv"
     
@@ -231,8 +218,10 @@ async def import_player_bios(conn, sport_id: int) -> dict:
     
     df = pd.read_csv(local_file)
     count = 0
-    inserted_count = 0
     updated_count = 0
+    
+    player_records = []
+    
     for _, row in df.iterrows():
         name = row.get('name')
         player_id = row.get('playerId')
@@ -244,23 +233,22 @@ async def import_player_bios(conn, sport_id: int) -> dict:
         
         player_hash = compute_hash({"sport": "nhl", "player_id": str(player_id)})
         
-        # Use RETURNING (xmax = 0) to distinguish INSERT vs UPDATE
-        is_insert = await conn.fetchval(
-            """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
-               VALUES ($1, $2, 'player', 'nhl', $3, $4)
-               ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL 
-               DO UPDATE SET metadata = EXCLUDED.metadata
-               RETURNING (xmax = 0) AS is_insert""",
-            sport_id, name, json.dumps(metadata), player_hash
-        )
-        if is_insert:
-            inserted_count += 1
-        else:
-            updated_count += 1
+        player_records.append((sport_id, name, 'player', 'nhl', json.dumps(metadata), player_hash))
         count += 1
         
-    logger.info(f"Imported {count} NHL players (New: {inserted_count}, Updated: {updated_count}).")
-    return {"total": count, "new": inserted_count, "updated": updated_count}
+    if player_records:
+        # Use chunking if the CSV gets huge, though player bios usually aren't millions of rows
+        chunk_size = 5000
+        for i in range(0, len(player_records), chunk_size):
+            chunk = player_records[i:i+chunk_size]
+            UPSERT_PLAYER_BIOS = """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
+                                   VALUES ($1, $2, $3, $4, $5, $6)
+                                   ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL 
+                                   DO UPDATE SET metadata = EXCLUDED.metadata"""
+            updated_count += await batch_upsert(conn, UPSERT_PLAYER_BIOS, chunk)
+        
+    logger.info(f"Imported {count} NHL players (Upserted: {updated_count}).")
+    return {"total": count, "new": 0, "updated": updated_count}
 
 async def sync_live_standings(conn, sport_id: int):
     """Fetch current standings from NHL API."""

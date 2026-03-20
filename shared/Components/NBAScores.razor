@@ -1,4 +1,4 @@
-@page "/nba/scores"
+@page "/mobile-nba/scores"
 @using System.Net.Http.Json
 @inject HttpClient Http
 @inject SportsBettingAnalyzer.Shared.Services.IServerConfigService ServerConfig
@@ -19,7 +19,7 @@
                     <select class="app-select" @bind="_selectedSeason">
                         @foreach (var season in _availableSeasons)
                         {
-                            <option value="@season">@season</option>
+                            <option value="@season">@GetSeasonLabel(season)@(IsCurrentSeason(season) ? " (Current)" : "")</option>
                         }
                     </select>
                 </div>
@@ -47,6 +47,14 @@
                         <span>🔍 Search Games</span>
                     }
                 </button>
+            </div>
+
+            <div class="quick-filters">
+                <button class='chip @GetChipClass("all")' @onclick='() => SetQuickFilter("all")'>All</button>
+                <button class='chip @GetChipClass("yesterday")' @onclick='() => SetQuickFilter("yesterday")'>Yesterday</button>
+                <button class='chip @GetChipClass("last7")' @onclick='() => SetQuickFilter("last7")'>Last 7 Days</button>
+                <button class='chip @GetChipClass("thisweek")' @onclick='() => SetQuickFilter("thisweek")'>This Week</button>
+                <button class='chip @GetChipClass("playoffs")' @onclick='() => SetQuickFilter("playoffs")'>Playoffs</button>
             </div>
         </div>
 
@@ -112,6 +120,21 @@
     .filter-row { display: flex; gap: 10px; }
     .filter-col { flex: 1; }
     .mt-3 { margin-top: 12px; }
+    .quick-filters { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .chip {
+        border: 1px solid var(--border);
+        background: var(--surface-raised);
+        color: var(--text-secondary);
+        font-size: 11px;
+        font-weight: 700;
+        border-radius: 999px;
+        padding: 6px 10px;
+    }
+    .chip.active {
+        border-color: #f97316;
+        color: #fff;
+        background: linear-gradient(135deg, #ea580c, #f97316);
+    }
 
     .results-meta { text-align: center; font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 12px; letter-spacing: 1px; }
 
@@ -139,6 +162,7 @@
     private string? _selectedTeam;
     private bool _isLoading = false;
     private bool _hasSearched = false;
+    private string _quickFilter = "all";
     
     private List<int> _availableSeasons = new();
     private List<NBAGame> _games = new();
@@ -157,9 +181,34 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _availableSeasons = Enumerable.Range(2020, 6).Reverse().ToList();
+        await LoadAvailableSeasons();
         _selectedSeason = _availableSeasons.FirstOrDefault();
         await LoadResults();
+    }
+
+    private async Task LoadAvailableSeasons()
+    {
+        try
+        {
+            var baseUrl = ServerConfig.GetBaseUrl();
+            var response = await Http.GetFromJsonAsync<SeasonsResponse>($"{baseUrl}/db/games/nba/seasons");
+            _availableSeasons = (response?.Seasons ?? new List<int>())
+                .Distinct()
+                .OrderByDescending(s => s)
+                .ToList();
+        }
+        catch
+        {
+            _availableSeasons = new List<int>();
+        }
+
+        if (!_availableSeasons.Any())
+        {
+            var currentYear = DateTime.Now.Year;
+            _availableSeasons = Enumerable.Range(currentYear - 5, 7)
+                .OrderByDescending(s => s)
+                .ToList();
+        }
     }
     
     private string FormatDate(string dateStr)
@@ -178,7 +227,8 @@
         try
         {
             var baseUrl = ServerConfig.GetBaseUrl();
-            var url = $"{baseUrl}/db/games/nba/schedule?limit=50";
+            var limit = _quickFilter == "all" ? 50 : 250;
+            var url = $"{baseUrl}/db/games/nba/schedule?limit={limit}";
             
             if (_selectedSeason.HasValue)
                 url += $"&season={_selectedSeason.Value}";
@@ -196,9 +246,11 @@
                     HomeScore = g.HomeScore ?? 0,
                     AwayScore = g.AwayScore ?? 0,
                     IsCompleted = g.IsCompleted ?? (g.HomeScore > 0 || g.AwayScore > 0),
+                    GameType = g.GameType,
                     TopScorer = g.TopScorer,
                     TopScorerPoints = g.TopScorerPoints ?? 0
                 })
+                .Where(PassesQuickFilter)
                 .OrderByDescending(g => g.GameDate)
                 .ToList();
         }
@@ -219,10 +271,19 @@
         public List<NBAGameItem> Games { get; set; } = new();
     }
 
+    private class SeasonsResponse
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("seasons")]
+        public List<int> Seasons { get; set; } = new();
+    }
+
     private class NBAGameItem
     {
         [System.Text.Json.Serialization.JsonPropertyName("game_date")]
         public string? GameDate { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("game_type")]
+        public string? GameType { get; set; }
         
         [System.Text.Json.Serialization.JsonPropertyName("home_team")]
         public string? HomeTeam { get; set; }
@@ -251,10 +312,57 @@
         public string GameDate { get; set; } = "";
         public string HomeTeam { get; set; } = "";
         public string AwayTeam { get; set; } = "";
+        public string? GameType { get; set; }
         public int HomeScore { get; set; }
         public int AwayScore { get; set; }
         public bool IsCompleted { get; set; }
         public string? TopScorer { get; set; }
         public int TopScorerPoints { get; set; }
+    }
+
+    private string GetSeasonLabel(int season)
+    {
+        return $"{season}-{((season + 1) % 100):00}";
+    }
+
+    private static bool IsCurrentSeason(int season)
+    {
+        var now = DateTime.Now;
+        var currentStartYear = now.Month >= 10 ? now.Year : now.Year - 1;
+        return season == currentStartYear;
+    }
+
+    private void SetQuickFilter(string filter)
+    {
+        _quickFilter = filter;
+        _ = LoadResults();
+    }
+
+    private string GetChipClass(string filter) => _quickFilter == filter ? "active" : "";
+
+    private bool PassesQuickFilter(NBAGame game)
+    {
+        if (_quickFilter == "all")
+            return true;
+        if (!DateTime.TryParse(game.GameDate, out var gameDate))
+            return false;
+
+        var today = DateTime.Today;
+        if (_quickFilter == "yesterday")
+            return gameDate.Date == today.AddDays(-1);
+        if (_quickFilter == "last7")
+            return gameDate.Date >= today.AddDays(-7) && gameDate.Date <= today;
+        if (_quickFilter == "thisweek")
+        {
+            int diff = (7 + (today.DayOfWeek - DayOfWeek.Monday)) % 7;
+            var weekStart = today.AddDays(-diff);
+            return gameDate.Date >= weekStart && gameDate.Date <= today;
+        }
+        if (_quickFilter == "playoffs")
+        {
+            var t = (game.GameType ?? string.Empty).ToLowerInvariant();
+            return t.Contains("playoff") || t.Contains("postseason");
+        }
+        return true;
     }
 }
