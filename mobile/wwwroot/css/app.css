@@ -208,6 +208,8 @@ body {
 .content {
     padding: 16px;
     flex: 1;
+    /* Global safety space so fixed bottom nav never covers page content */
+    padding-bottom: calc(110px + env(safe-area-inset-bottom)) !important;
 }
 
 /* --- Cards --- */

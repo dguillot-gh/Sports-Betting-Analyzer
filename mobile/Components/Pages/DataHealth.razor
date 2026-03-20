@@ -1,8 +1,10 @@
 @page "/data-health"
+@page "/mobile-data-health"
 @using SportsBettingAnalyzer.Shared.Services
 @using System.Net.Http.Json
 @using System.Text.Json.Serialization
 @inject IServerConfigService ConfigService
+@inject HttpClient Http
 
 <div class="page-header">
     <h1>&#128202; Data Health</h1>
@@ -187,15 +189,11 @@ else if (!_loading)
     {
         _loading = true;
         _error = "";
-        StateHasChanged();
         try
         {
-            using var http = new HttpClient();
-            http.BaseAddress = new Uri(ConfigService.GetBaseUrl());
-            http.Timeout = TimeSpan.FromSeconds(15);
-
-            var freshTask = http.GetFromJsonAsync<List<FreshnessItem>>("/admin/data-freshness");
-            var logTask   = http.GetFromJsonAsync<List<ImportLogItem>>("/admin/import-logs?limit=30");
+            var baseUrl = ConfigService.GetBaseUrl();
+            var freshTask = Http.GetFromJsonAsync<List<FreshnessItem>>($"{baseUrl}/admin/data-freshness");
+            var logTask   = Http.GetFromJsonAsync<List<ImportLogItem>>($"{baseUrl}/admin/import-logs?limit=30");
             await Task.WhenAll(freshTask, logTask);
 
             _freshness = freshTask.Result ?? new();

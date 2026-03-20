@@ -403,6 +403,8 @@ async def import_season_stats_via_basketball_reference(conn, sport_id: int, play
 
 async def import_from_hoopdata(conn, sport_id: int, progress_callback=None) -> dict:
     """Import NBA data from downloaded sportsdataverse parquet files."""
+    from scripts.batch_db import batch_upsert
+    
     results = {"players": 0, "games": 0}
     
     # Find all player_box_YYYY.parquet files
@@ -428,9 +430,11 @@ async def import_from_hoopdata(conn, sport_id: int, progress_callback=None) -> d
             logger.info(f"Loaded {len(df)} rows from {pq_file.name}")
             
             # Process in batches
-            batch_size = 100
+            batch_size = 5000
             for start_idx in range(0, len(df), batch_size):
                 batch = df.iloc[start_idx:start_idx + batch_size]
+                
+                game_records = []
                 
                 for _, row in batch.iterrows():
                     # Get player info
@@ -519,17 +523,16 @@ async def import_from_hoopdata(conn, sport_id: int, progress_callback=None) -> d
                         'game_date': str(game_date)
                     })
                     
-                    try:
-                        await conn.execute(
-                            """INSERT INTO results (sport_id, season, series, metadata, content_hash)
-                               VALUES ($1, $2, 'nba', $3, $4)
-                               ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                               DO UPDATE SET metadata = EXCLUDED.metadata""",
-                            sport_id, int(season), json.dumps(game_metadata), game_hash
-                        )
-                        results["games"] += 1
-                    except Exception as e:
-                        logger.debug(f"Error importing game: {e}")
+                    game_records.append((sport_id, int(season), json.dumps(game_metadata), game_hash))
+                
+                # Execute batch insert for the chunk
+                if game_records:
+                    UPSERT_RESULTS = """INSERT INTO results (sport_id, season, series, metadata, content_hash)
+                                        VALUES ($1, $2, 'nba', $3, $4)
+                                        ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                                        DO UPDATE SET metadata = EXCLUDED.metadata"""
+                    await batch_upsert(conn, UPSERT_RESULTS, game_records)
+                    results["games"] += len(game_records)
                 
                 # Free memory periodically
                 gc.collect()
@@ -581,6 +584,7 @@ BATCH_SIZE = 50
 
 async def import_from_kaggle(conn, sport_id: int, progress_callback=None) -> dict:
     """Import NBA data from existing Kaggle files with batching."""
+    from scripts.batch_db import batch_upsert
     results = {"players": 0, "games": 0}
     
     # Check for Player Per Game.csv
@@ -594,7 +598,7 @@ async def import_from_kaggle(conn, sport_id: int, progress_callback=None) -> dic
             player_map = {}
             batch_count = 0
             
-            for chunk in pd.read_csv(player_file, low_memory=False, chunksize=BATCH_SIZE):
+            for chunk in pd.read_csv(player_file, low_memory=False, chunksize=5000):
                 batch_count += 1
                 if progress_callback and batch_count % 5 == 0:
                     progress_callback(f"Processing player batch {batch_count} ({results['players']} players imported)...")
@@ -652,11 +656,12 @@ async def import_from_kaggle(conn, sport_id: int, progress_callback=None) -> dic
                 progress_callback("Importing player season stats...")
             
             stats_batch_count = 0
-            for chunk in pd.read_csv(player_file, low_memory=False, chunksize=BATCH_SIZE):
+            for chunk in pd.read_csv(player_file, low_memory=False, chunksize=5000):
                 stats_batch_count += 1
                 if progress_callback and stats_batch_count % 10 == 0:
                     progress_callback(f"Processing stats batch {stats_batch_count} ({results['games']} stats imported)...")
                 
+                stats_records = []
                 for _, row in chunk.iterrows():
                     player_id = row.get('player_id')
                     season = row.get('season')
@@ -715,22 +720,18 @@ async def import_from_kaggle(conn, sport_id: int, progress_callback=None) -> dic
                         'sport': 'nba'
                     })
                     
-                    try:
-                        is_insert = await conn.fetchval(
-                            """INSERT INTO stats (entity_id, season, series, stat_type, stats, content_hash)
-                               VALUES ($1, $2, 'nba', 'season_per_game', $3, $4)
-                               ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                               DO UPDATE SET stats = EXCLUDED.stats
-                               RETURNING (xmax = 0)""",
-                            int(entity_id), int(season), json.dumps(stats), stats_hash
-                        )
-                        results["games"] += 1
-                        if is_insert:
-                            results["games_new"] = results.get("games_new", 0) + 1
-                        else:
-                            results["games_updated"] = results.get("games_updated", 0) + 1
-                    except Exception as e:
-                        logger.debug(f"Error importing season stats: {e}")
+                    stats_records.append((int(entity_id), int(season), json.dumps(stats), stats_hash))
+                
+                # Bulk UPSERT
+                if stats_records:
+                    UPSERT_STATS = """INSERT INTO stats (entity_id, season, series, stat_type, stats, content_hash)
+                                      VALUES ($1, $2, 'nba', 'season_per_game', $3, $4)
+                                      ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                                      DO UPDATE SET stats = EXCLUDED.stats"""
+                    # We can't track new vs updated individually per row easily out of a bulk insert
+                    # but we can track total games inserted via the return value of batch_upsert.
+                    num_inserted = await batch_upsert(conn, UPSERT_STATS, stats_records, label="NBA player season stats")
+                    results["games"] += num_inserted
                 
                 # Free memory after each batch
                 gc.collect()
@@ -1034,7 +1035,11 @@ async def import_schedules_via_nba_api(conn, sport_id: int, progress_callback=No
                     DO UPDATE SET metadata = EXCLUDED.metadata"""
     
     try:
-        seasons_to_load = ["2020-21", "2021-22", "2022-23", "2023-24", "2024-25"]
+        # Keep historical coverage, and include the active NBA season.
+        # NBA seasons start in Oct, so before Oct we should load previous start year.
+        now = datetime.now()
+        latest_start_year = now.year if now.month >= 10 else now.year - 1
+        seasons_to_load = [f"{y}-{str((y + 1) % 100).zfill(2)}" for y in range(2020, latest_start_year + 1)]
         all_games = []
         
         for season in seasons_to_load:

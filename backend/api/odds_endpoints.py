@@ -7,6 +7,7 @@ from fastapi import APIRouter, Query, UploadFile, File
 from typing import Optional
 import logging
 from datetime import datetime
+from src.ops_alerts import OpsAlertService
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +199,7 @@ async def analyze_all_games(
     
     # Get today's odds
     odds_data = await get_todays_nba_odds(sportsbook)
+    OpsAlertService.maybe_alert_low_odds_quota("nba/analyze-all", odds_data)
     
     if odds_data.get("error") or not odds_data.get("games"):
         return odds_data
@@ -334,6 +336,7 @@ async def analyze_all_nfl_games(
     from scripts.nfl_predictor import get_todays_nfl_odds, analyze_nfl_matchup_dual
     
     odds_data = await get_todays_nfl_odds(sportsbook)
+    OpsAlertService.maybe_alert_low_odds_quota("nfl/analyze-all", odds_data)
     
     if odds_data.get("error") or not odds_data.get("games"):
         return odds_data
@@ -410,6 +413,7 @@ async def analyze_nfl_with_cache(
     
     # Step 1: Get fresh odds
     odds_data = await get_todays_nfl_odds(sportsbook)
+    OpsAlertService.maybe_alert_low_odds_quota("nfl/analyze-cached", odds_data)
     
     analyzed_games = []
     fresh_game_ids = []
@@ -533,6 +537,7 @@ async def analyze_nba_with_cache(
     
     # Step 1: Get fresh odds
     odds_data = await get_todays_nba_odds(sportsbook)
+    OpsAlertService.maybe_alert_low_odds_quota("nba/analyze-cached", odds_data)
     
     analyzed_games = []
     fresh_game_ids = []
@@ -681,6 +686,7 @@ async def analyze_all_ncaab_games(
     from scripts.ncaab_predictor import get_todays_ncaab_odds, analyze_ncaab_matchup
     
     odds_data = await get_todays_ncaab_odds(sportsbook)
+    OpsAlertService.maybe_alert_low_odds_quota("ncaab/analyze-all", odds_data)
     
     if odds_data.get("error") or not odds_data.get("games"):
         return odds_data
@@ -751,6 +757,7 @@ async def analyze_all_college_baseball_games(
     from scripts.college_baseball_predictor import get_todays_college_baseball_odds, analyze_college_baseball_matchup
     
     odds_data = await get_todays_college_baseball_odds(sportsbook)
+    OpsAlertService.maybe_alert_low_odds_quota("college-baseball/analyze-all", odds_data)
     
     if odds_data.get("error") or not odds_data.get("games"):
         return odds_data
@@ -931,6 +938,7 @@ async def analyze_all_cfb_games(
     
     # 1. Fetch Odds
     odds_data = await get_todays_cfb_odds(sportsbook)
+    OpsAlertService.maybe_alert_low_odds_quota("cfb/analyze-all", odds_data)
     
     if odds_data.get("error") or not odds_data.get("games"):
         return odds_data

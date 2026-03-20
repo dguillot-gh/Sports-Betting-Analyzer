@@ -3,7 +3,7 @@ College Football API Endpoints
 Provides REST API access to CFB data from CollegeFootballData.com
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Request, HTTPException, Query
 from typing import Optional, List
 import logging
 
@@ -20,7 +20,7 @@ from scripts.college_football_importer import (
 
 
 @router.get("/status")
-async def cfb_status():
+async def cfb_status(request: Request):
     """Check if CFB features are available (API key configured)."""
     from src.config import COLLEGE_FOOTBALL_API_KEY
     return {
@@ -64,7 +64,7 @@ async def list_cfb_teams(
 
 
 @router.get("/teams/{team_id}")
-async def get_cfb_team(team_id: str, year: Optional[int] = Query(None)):
+async def get_cfb_team(request: Request, team_id: str, year: Optional[int] = Query(None)):
     """Get details for a specific team."""
     teams = await get_cfb_teams(year=year)
     
@@ -130,7 +130,7 @@ async def list_cfb_player_stats(
 
 
 @router.get("/conferences")
-async def list_cfb_conferences(year: Optional[int] = Query(None)):
+async def list_cfb_conferences(request: Request, year: Optional[int] = Query(None)):
     """Get list of unique conferences."""
     teams = await get_cfb_teams(year=year)
     

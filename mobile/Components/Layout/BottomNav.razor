@@ -21,9 +21,9 @@
         left: 0;
         right: 0;
         height: 65px;
-        background: rgba(15, 23, 42, 0.85);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
+        background: rgba(15, 23, 42, 0.95);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
         border-top: 1px solid rgba(255, 255, 255, 0.1);
         display: flex;
         justify-content: space-around;
@@ -88,21 +88,26 @@
     private bool IsActive(string url)
     {
         if (url == "MENU_TOGGLE") return false;
-        var relative = Nav.ToBaseRelativePath(Nav.Uri);
-        if (string.IsNullOrEmpty(url)) return string.IsNullOrEmpty(relative);
-        return relative.StartsWith(url, StringComparison.OrdinalIgnoreCase);
+        var current = Nav.ToBaseRelativePath(Nav.Uri).Trim('/').ToLowerInvariant();
+        var target = url.Trim('/').ToLowerInvariant();
+        if (string.IsNullOrEmpty(target)) return string.IsNullOrEmpty(current);
+        return current == target || current.StartsWith(target + "/", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task HandleNavigation(NavItem item)
     {
         if (item.Url == "MENU_TOGGLE")
         {
-            await JS.InvokeVoidAsync("eval", 
-                "var cb = document.querySelector('.navbar-toggler'); if(cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); }");
+            await JS.InvokeVoidAsync("toggleNavbar");
         }
         else
         {
-            Nav.NavigateTo(item.Url);
+            var target = string.IsNullOrWhiteSpace(item.Url) ? "/" : item.Url;
+            if (!target.StartsWith("/", StringComparison.Ordinal))
+            {
+                target = "/" + target;
+            }
+            Nav.NavigateTo(target);
         }
     }
 }

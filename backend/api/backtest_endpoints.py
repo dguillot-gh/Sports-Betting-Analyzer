@@ -3,7 +3,7 @@ Backtesting API Endpoints
 Test betting strategies on historical data
 """
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Request, Query
 from scripts.backtesting import BacktestRequest, BacktestResult, run_backtest
 import logging
 
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/backtest", tags=["backtest"])
 
 
 @router.post("", response_model=BacktestResult)
-async def run_backtest_endpoint(request: BacktestRequest):
+async def run_backtest_endpoint(request: Request):
     """
     Run a backtest on historical data for the specified sport.
     
@@ -112,7 +112,7 @@ async def run_nascar_backtest(
 
 
 @router.get("/seasons/{sport}")
-async def get_available_seasons(sport: str):
+async def get_available_seasons(request: Request, sport: str):
     """
     Get available seasons for backtesting a sport.
     """
@@ -129,7 +129,7 @@ async def get_available_seasons(sport: str):
 
 
 @router.get("/bet-types/{sport}")
-async def get_bet_types(sport: str):
+async def get_bet_types(request: Request, sport: str):
     """
     Get available bet types for backtesting a sport.
     """
@@ -146,7 +146,7 @@ async def get_bet_types(sport: str):
 
 
 @router.get("/metrics/{sport}")
-async def get_model_metrics(sport: str):
+async def get_model_metrics(request: Request, sport: str):
     """
     Get latest performance metrics for a model.
     Reads from saved backtest results.

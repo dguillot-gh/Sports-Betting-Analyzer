@@ -1,4 +1,4 @@
-@page "/nfl/scores"
+@page "/mobile-nfl/scores"
 @using System.Net.Http.Json
 @inject HttpClient Http
 @inject SportsBettingAnalyzer.Shared.Services.IServerConfigService ServerConfig
@@ -19,7 +19,7 @@
                     <select class="app-select" @bind="_selectedSeason">
                         @foreach (var season in _availableSeasons)
                         {
-                            <option value="@season">@season</option>
+                            <option value="@season">@GetSeasonLabel(season)@(IsCurrentSeason(season) ? " (Current)" : "")</option>
                         }
                     </select>
                 </div>
@@ -167,9 +167,34 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _availableSeasons = Enumerable.Range(2020, 6).Reverse().ToList();
+        await LoadAvailableSeasons();
         _selectedSeason = _availableSeasons.FirstOrDefault();
         await LoadResults();
+    }
+
+    private async Task LoadAvailableSeasons()
+    {
+        try
+        {
+            var baseUrl = ServerConfig.GetBaseUrl();
+            var response = await Http.GetFromJsonAsync<SeasonsResponse>($"{baseUrl}/db/games/nfl/seasons");
+            _availableSeasons = (response?.Seasons ?? new List<int>())
+                .Distinct()
+                .OrderByDescending(s => s)
+                .ToList();
+        }
+        catch
+        {
+            _availableSeasons = new List<int>();
+        }
+
+        if (!_availableSeasons.Any())
+        {
+            var currentYear = DateTime.Now.Year;
+            _availableSeasons = Enumerable.Range(currentYear - 5, 7)
+                .OrderByDescending(s => s)
+                .ToList();
+        }
     }
 
     private async Task LoadResults()
@@ -224,6 +249,12 @@
         public List<NFLGameItem> Games { get; set; } = new();
     }
 
+    private class SeasonsResponse
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("seasons")]
+        public List<int> Seasons { get; set; } = new();
+    }
+
     private class NFLGameItem
     {
         [System.Text.Json.Serialization.JsonPropertyName("week")]
@@ -261,5 +292,17 @@
         public int AwayScore { get; set; }
         public bool IsCompleted { get; set; }
         public string? TopPerformer { get; set; }
+    }
+
+    private string GetSeasonLabel(int season)
+    {
+        return $"{season}-{((season + 1) % 100):00}";
+    }
+
+    private static bool IsCurrentSeason(int season)
+    {
+        var now = DateTime.Now;
+        var currentStartYear = now.Month >= 10 ? now.Year : now.Year - 1;
+        return season == currentStartYear;
     }
 }

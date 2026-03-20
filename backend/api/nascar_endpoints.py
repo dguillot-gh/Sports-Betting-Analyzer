@@ -3,7 +3,7 @@ NASCAR API Endpoints
 Fetches live race data, schedules, and results from NASCAR's official API
 """
 
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks, UploadFile, File
+from fastapi import APIRouter, Request, HTTPException, Query, BackgroundTasks, UploadFile, File
 from typing import Optional
 import httpx
 import asyncio
@@ -39,7 +39,7 @@ async def fetch_json(url: str, timeout: float = 10.0) -> dict:
 
 
 @router.get("/odds")
-async def get_nascar_odds():
+async def get_nascar_odds(request: Request):
     """
     Get live NASCAR odds from DraftKings (via Apify or The Odds API).
     """
@@ -80,7 +80,7 @@ async def get_nascar_odds():
     }
 
 @router.post("/upload-odds")
-async def upload_odds_image(file: UploadFile = File(...)):
+async def upload_odds_image(request: Request, file: UploadFile = File(...)):
     """
     Upload a screenshot of betting odds.
     Uses OCR to extract driver names and odds.
@@ -104,7 +104,7 @@ async def upload_odds_image(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/analyze-race")
-async def analyze_race(data: dict):
+async def analyze_race(request: Request, data: dict):
     """
     Perform a full field AI analysis based on XGBoost predictions and odds.
     Expects: {"race_details": {...}, "drivers": [...]}
@@ -124,7 +124,7 @@ async def analyze_race(data: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/manual-odds")
-async def submit_manual_odds(data: dict):
+async def submit_manual_odds(request: Request, data: dict):
     """
     Receive manually entered odds from the frontend.
     Expected format: {"drivers": [{"driver_name": "Kyle Larson", "market_odds": "+500"}, ...]}
@@ -227,7 +227,7 @@ async def get_schedule(
 
 
 @router.get("/race/{race_id}")
-async def get_race_details(race_id: int, year: int = 2026, series: int = 1):
+async def get_race_details(request: Request, race_id: int, year: int = 2026, series: int = 1):
     """
     Get detailed information for a specific race.
     Includes weekend schedule, qualifying, and race data.
@@ -237,7 +237,7 @@ async def get_race_details(race_id: int, year: int = 2026, series: int = 1):
 
 
 @router.get("/status")
-async def get_status():
+async def get_status(request: Request):
     """
     Check if NASCAR API is accessible and if a race is currently live.
     """
@@ -279,7 +279,7 @@ _capture_interval = 5  # seconds between captures
 
 
 @router.post("/capture/start")
-async def start_capture(interval: int = Query(5, description="Capture interval in seconds")):
+async def start_capture(request: Request, interval: int = Query(5, description="Capture interval in seconds")):
     """
     Start capturing live feed data during a race.
     Stores snapshots every N seconds with lap-by-lap position data.
@@ -304,7 +304,7 @@ async def start_capture(interval: int = Query(5, description="Capture interval i
 
 
 @router.post("/capture/stop")
-async def stop_capture():
+async def stop_capture(request: Request):
     """Stop the live feed capture."""
     global _capture_active, _capture_task
     
@@ -317,7 +317,7 @@ async def stop_capture():
 
 
 @router.get("/capture/status")
-async def get_capture_status():
+async def get_capture_status(request: Request):
     """Get current capture status and stored data summary."""
     files = list(DATA_DIR.glob("*.json"))
     
@@ -587,7 +587,7 @@ async def consolidate_to_parquet(
 
 
 @router.get("/ml/datasets")
-async def list_ml_datasets():
+async def list_ml_datasets(request: Request):
     """List all available ML datasets (consolidated Parquet files)."""
     parquet_files = list(ML_DATA_DIR.glob("*.parquet"))
     
@@ -719,7 +719,7 @@ from services.nascar_odds_service import NascarOddsService
 _odds_service = NascarOddsService()
 
 @router.get("/predictions/{race_id}")
-async def get_race_predictions(race_id: int):
+async def get_race_predictions(request: Request, race_id: int):
     """
     Get live AI predictions for ALL drivers in a race.
     Returns: Sorted list of drivers by Win Probability.
@@ -801,7 +801,7 @@ import sys
 from pathlib import Path
 
 @router.post("/train")
-async def train_nascar_models(background_tasks: BackgroundTasks):
+async def train_nascar_models(request: Request, background_tasks: BackgroundTasks):
     """
     Trigger the full NASCAR Data Pipeline:
     1. Fetch new data (R)

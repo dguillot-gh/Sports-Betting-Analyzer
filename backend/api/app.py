@@ -32,14 +32,19 @@ from api.ai_endpoints import router as ai_router
 from api.ncaab_endpoints import router as ncaab_router
 from api.scheduler_endpoints import router as scheduler_router
 from api.analysis_cache_endpoints import router as analysis_cache_router
+from api.notification_endpoints import router as notification_router
 from api.cfb_endpoints import router as cfb_router
 from api.nascar_live_endpoints import router as nascar_live_router
 from api.nhl_endpoints import router as nhl_router
 from api.expert_picks_endpoints import router as expert_picks_router
 from api.baseball_endpoints import router as baseball_router
 from api.deployment_endpoints import router as deployment_router
-from fastapi import FastAPI, HTTPException, UploadFile, File, Query, BackgroundTasks
+from fastapi import FastAPI, HTTPException, UploadFile, File, Query, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
+import asyncpg
 # import pandas as pd  <-- Moved to local function scope
 # import joblib     <-- Moved to local function scope
 import yaml
@@ -63,14 +68,70 @@ from services.scheduler import SchedulerService
 
 # Import version management
 from src.version import get_version, get_version_info
+from src.error_notifier import install_error_email_handler
+from src.ops_alerts import OpsAlertService
+from src.notification_store import ensure_notifications_schema
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+install_error_email_handler()
+
+from src.config import DATABASE_URL
+
+# Global database pool instance
+db_pool: asyncpg.Pool = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global db_pool
+    # Initialize the database connection pool on startup
+    logger.info("Initializing asyncpg connection pool...")
+    try:
+        db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=20)
+        # Store it on app.state so routers can access it safely
+        app.state.pool = db_pool
+        # Ensure notifications schema exists even when legacy startup hooks are skipped.
+        await ensure_notifications_schema(DATABASE_URL)
+        logger.info("Connection pool created successfully")
+    except Exception as e:
+        logger.error(f"Failed to create connection pool: {e}")
+    
+    yield
+    
+    # Close pool on shutdown
+    if db_pool:
+        logger.info("Closing asyncpg connection pool...")
+        await db_pool.close()
 
 # Version — updated to DB-backed value after startup
 current_version = get_version()
-app = FastAPI(title='Sports ML API', version=current_version)
+app = FastAPI(title='Sports ML API', version=current_version, lifespan=lifespan)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.error(
+        "Unhandled exception on %s %s",
+        request.method,
+        request.url.path,
+        exc_info=exc,
+    )
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+
+@app.middleware("http")
+async def ops_monitoring_middleware(request: Request, call_next):
+    try:
+        response = await call_next(request)
+    except Exception:
+        OpsAlertService.record_response(request.url.path, request.method, 500)
+        raise
+    OpsAlertService.record_response(request.url.path, request.method, response.status_code)
+    return response
+
+# Add Gzip Compression Middleware (High-priority for mobile bandwidth)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 setup_log_capture()  # Enable log capture for /logs endpoint
 app.include_router(db_router)  # Database endpoints
@@ -89,6 +150,7 @@ app.include_router(ai_router)  # Unified AI Advisor (Multi-engine + LLM)
 app.include_router(ncaab_router)  # NCAAB Trends
 app.include_router(scheduler_router)  # Import Scheduler & Logs
 app.include_router(analysis_cache_router) # Manual Analysis Cache
+app.include_router(notification_router)  # In-app notification inbox
 app.include_router(cfb_router)  # College Football Data
 app.include_router(nascar_live_router)  # NASCAR Live Dashboard Logic
 app.include_router(nhl_router)  # NHL Data and Predictions
@@ -96,13 +158,15 @@ app.include_router(expert_picks_router)  # CBS Expert Picks scraper data
 app.include_router(baseball_router)  # College Baseball Data
 app.include_router(deployment_router)  # Deployment tracking
 
-# Dev CORS. Tighten for production.
+# Configure CORS with restricted origins for higher security
+allowed_origins = os.environ.get("CORS_ORIGINS", "http://localhost:5000,http://localhost:5174,http://localhost:3000,*").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['*'],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=['*'],
-    allow_headers=['*'],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
 )
 
 CFG_DIR = REPO_ROOT / 'configs'
@@ -4354,6 +4418,8 @@ async def startup_event():
         # 1. Ensure version schema exists
         from src.database import ensure_version_schema
         await ensure_version_schema()
+        await ensure_notifications_schema(DATABASE_URL)
+        await OpsAlertService.record_startup_and_check_loop(DATABASE_URL)
         
         # 2. Initialize Scheduler
         await SchedulerService.init_db()

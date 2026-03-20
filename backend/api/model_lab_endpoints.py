@@ -1,5 +1,5 @@
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Request, HTTPException, BackgroundTasks
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 
@@ -14,20 +14,20 @@ class TrainingConfig(BaseModel):
     features: List[str] = []
 
 @router.post("/train/{sport}")
-async def start_training(sport: str, config: TrainingConfig):
+async def start_training(request: Request, sport: str, config: TrainingConfig):
     """Start a new isolated training job."""
     orchestrator = get_orchestrator()
     job_id = orchestrator.start_job(sport, config.model_type, config.dict())
     return {"job_id": job_id, "status": "started"}
 
 @router.get("/jobs")
-async def list_jobs():
+async def list_jobs(request: Request):
     """List all training jobs."""
     orchestrator = get_orchestrator()
     return orchestrator.list_jobs()
 
 @router.get("/jobs/{job_id}")
-async def get_job_details(job_id: str):
+async def get_job_details(request: Request, job_id: str):
     """Get detailed status, logs, and metrics for a job."""
     orchestrator = get_orchestrator()
     job = orchestrator.get_job(job_id)
@@ -48,7 +48,7 @@ async def get_job_details(job_id: str):
     }
 
 @router.post("/promote/{job_id}")
-async def promote_job(job_id: str):
+async def promote_job(request: Request, job_id: str):
     """Promote a job's trained model to the active 'Experimental' slot."""
     orchestrator = get_orchestrator()
     job = orchestrator.get_job(job_id)

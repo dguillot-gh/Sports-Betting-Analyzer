@@ -26,7 +26,15 @@
     </div>
 
     <script src="_framework/blazor.webview.js" autostart="false"></script>
-
+    <script>
+        window.toggleNavbar = function() {
+            var cb = document.querySelector('.navbar-toggler');
+            if (cb) {
+                cb.checked = !cb.checked;
+                cb.dispatchEvent(new Event('change'));
+            }
+        };
+    </script>
 </body>
 
 </html>

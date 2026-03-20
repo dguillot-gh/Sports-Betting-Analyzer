@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Request, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import Optional, List
 import logging
@@ -7,6 +7,7 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/bugs", tags=["Bug Tracker"])
+from api.db_endpoints import get_db_connection
 
 from src.config import DATABASE_URL
 
@@ -53,21 +54,27 @@ async def ensure_table():
     if _initialized: return
     try:
         import asyncpg
-        conn = await asyncpg.connect(DATABASE_URL)
-        await conn.execute(CREATE_BUGS_TABLE_SQL)
-        await conn.close()
-        _initialized = True
-        logger.info("Bug tracker table initialized")
+        conn = await get_db_connection(request)
+        try:
+            await conn.execute(CREATE_BUGS_TABLE_SQL)
+            _initialized = True
+            logger.info("Bug tracker table initialized")
+        finally:
+            if hasattr(request.app.state, 'pool') and request.app.state.pool:
+                await request.app.state.pool.release(conn)
+            else:
+                await conn.close()
     except Exception as e:
         logger.error(f"Failed to init bug table: {e}")
 
 # ==================== Endpoints ====================
 
 @router.get("")
-async def list_bugs():
+async def list_bugs(request: Request):
     import asyncpg
     await ensure_table()
-    conn = await asyncpg.connect(DATABASE_URL)
+
+    conn = await get_db_connection(request)
     try:
         rows = await conn.fetch("SELECT * FROM bugs ORDER BY created_at DESC")
         bugs = []
@@ -83,13 +90,17 @@ async def list_bugs():
             })
         return {"bugs": bugs}
     finally:
-        await conn.close()
+        if hasattr(request.app.state, 'pool') and request.app.state.pool:
+            await request.app.state.pool.release(conn)
+        else:
+            await conn.close()
 
 @router.post("")
-async def create_bug(bug: BugCreate):
+async def create_bug(request: Request, bug: BugCreate):
     import asyncpg
     await ensure_table()
-    conn = await asyncpg.connect(DATABASE_URL)
+
+    conn = await get_db_connection(request)
     try:
         row = await conn.fetchrow("""
             INSERT INTO bugs (title, description, severity, type, status)
@@ -98,13 +109,17 @@ async def create_bug(bug: BugCreate):
         """, bug.title, bug.description, bug.severity, bug.type, bug.status)
         return {"status": "created", "id": row["id"]}
     finally:
-        await conn.close()
+        if hasattr(request.app.state, 'pool') and request.app.state.pool:
+            await request.app.state.pool.release(conn)
+        else:
+            await conn.close()
 
 @router.put("/{bug_id}")
-async def update_bug(bug_id: int, bug: BugUpdate):
+async def update_bug(request: Request, bug_id: int, bug: BugUpdate):
     import asyncpg
     await ensure_table()
-    conn = await asyncpg.connect(DATABASE_URL)
+
+    conn = await get_db_connection(request)
     try:
         # Dynamic update
         fields = []
@@ -122,26 +137,37 @@ async def update_bug(bug_id: int, bug: BugUpdate):
         await conn.execute(query, *params)
         return {"status": "updated"}
     finally:
-        await conn.close()
+        if hasattr(request.app.state, 'pool') and request.app.state.pool:
+            await request.app.state.pool.release(conn)
+        else:
+            await conn.close()
 
 @router.patch("/{bug_id}/status")
-async def update_bug_status(bug_id: int, req: BugStatusUpdate):
+async def update_bug_status(request: Request, bug_id: int, req: BugStatusUpdate):
     import asyncpg
     await ensure_table()
-    conn = await asyncpg.connect(DATABASE_URL)
+
+    conn = await get_db_connection(request)
     try:
         await conn.execute("UPDATE bugs SET status = $1 WHERE id = $2", req.status, bug_id)
         return {"status": "updated", "id": bug_id}
     finally:
-        await conn.close()
+        if hasattr(request.app.state, 'pool') and request.app.state.pool:
+            await request.app.state.pool.release(conn)
+        else:
+            await conn.close()
 
 @router.delete("/{bug_id}")
-async def delete_bug(bug_id: int):
+async def delete_bug(request: Request, bug_id: int):
     import asyncpg
     await ensure_table()
-    conn = await asyncpg.connect(DATABASE_URL)
+
+    conn = await get_db_connection(request)
     try:
         await conn.execute("DELETE FROM bugs WHERE id = $1", bug_id)
         return {"status": "deleted"}
     finally:
-        await conn.close()
+        if hasattr(request.app.state, 'pool') and request.app.state.pool:
+            await request.app.state.pool.release(conn)
+        else:
+            await conn.close()

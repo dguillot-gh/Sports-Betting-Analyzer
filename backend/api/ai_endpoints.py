@@ -1,5 +1,5 @@
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Request, HTTPException, Query
 from typing import Dict, Any, Optional
 from scripts.ai_advisor import get_ai_advisor
 from scripts.gemini_predictor import get_quota_status
@@ -7,7 +7,7 @@ from scripts.gemini_predictor import get_quota_status
 router = APIRouter(prefix="/ai", tags=["ai_advisor"])
 
 @router.get("/quota")
-async def get_ai_quota():
+async def get_ai_quota(request: Request):
     """Returns the current usage status of the Gemini API."""
     return get_quota_status()
 

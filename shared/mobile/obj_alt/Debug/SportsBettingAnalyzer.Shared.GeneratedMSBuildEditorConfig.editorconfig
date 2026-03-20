@@ -1,0 +1,119 @@
+is_global = true
+build_property.TargetFramework = net9.0
+build_property.TargetFrameworkIdentifier = .NETCoreApp
+build_property.TargetFrameworkVersion = v9.0
+build_property.TargetPlatformMinVersion = 
+build_property.UsingMicrosoftNETSdkWeb = 
+build_property.ProjectTypeGuids = 
+build_property.InvariantGlobalization = 
+build_property.PlatformNeutralAssembly = 
+build_property.EnforceExtendedAnalyzerRules = 
+build_property._SupportedPlatformList = Linux,macOS,Windows,browser
+build_property.RootNamespace = SportsBettingAnalyzer.Shared
+build_property.RootNamespace = SportsBettingAnalyzer.Shared
+build_property.ProjectDir = C:\Users\dguil\Documents\repo\Sports-Betting-Analyzer\shared\
+build_property.EnableComHosting = 
+build_property.EnableGeneratedComInterfaceComImportInterop = 
+build_property.RazorLangVersion = 9.0
+build_property.SupportLocalizedComponentNames = 
+build_property.GenerateRazorMetadataSourceChecksumAttributes = 
+build_property.MSBuildProjectDirectory = C:\Users\dguil\Documents\repo\Sports-Betting-Analyzer\shared
+build_property._RazorSourceGeneratorDebug = 
+build_property.EffectiveAnalysisLevelStyle = 9.0
+build_property.EnableCodeStyleSeverity = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/About.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xBYm91dC5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/AllSports.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xBbGxTcG9ydHMucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/Betting101.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xCZXR0aW5nMTAxLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/BetTracker.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xCZXRUcmFja2VyLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/CFBLiveOdds.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xDRkJMaXZlT2Rkcy5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/CollegeBaseballLiveOdds.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xDb2xsZWdlQmFzZWJhbGxMaXZlT2Rkcy5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/DataCenter.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xEYXRhQ2VudGVyLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/HitRates.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xIaXRSYXRlcy5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/LeagueStandings.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xMZWFndWVTdGFuZGluZ3MucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/NascarResults.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xOYXNjYXJSZXN1bHRzLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/NascarStandings.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xOYXNjYXJTdGFuZGluZ3MucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/NbaOdds.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xOYmFPZGRzLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/NBAScores.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xOQkFTY29yZXMucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/NcaabOdds.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xOY2FhYk9kZHMucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/NflOdds.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xOZmxPZGRzLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/NFLScores.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xORkxTY29yZXMucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/NhlOdds.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xOaGxPZGRzLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/PaperTrader.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYXBlclRyYWRlci5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/PowerRankings.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQb3dlclJhbmtpbmdzLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/PredictionDemo.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQcmVkaWN0aW9uRGVtby5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/TodaysSlate.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xUb2RheXNTbGF0ZS5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Components/VersionDisplay.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xWZXJzaW9uRGlzcGxheS5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/_Imports.razor]
+build_metadata.AdditionalFiles.TargetPath = X0ltcG9ydHMucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/dguil/Documents/repo/Sports-Betting-Analyzer/shared/Component1.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50MS5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = b-5p2is9fo8n

@@ -1536,6 +1536,9 @@ async def get_game_schedule(
         limit: Max results
         offset: Pagination offset
     """
+    if sport not in ["nfl", "nba", "nhl", "ncaab", "ncaaf"]:
+        raise HTTPException(status_code=400, detail=f"Schedule not supported for: {sport}")
+
     conn = await get_db_connection()
     try:
         sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
@@ -1555,7 +1558,15 @@ async def get_game_schedule(
         
         if season:
             param_count += 1
-            query += f" AND r.season = ${param_count}"
+            if sport == "nba":
+                # NBA data is often stored by season start year (e.g. 2024 for 2024-25).
+                # Support filtering by either stored season OR calendar year in game_date.
+                query += f""" AND (
+                    r.season = ${param_count}
+                    OR NULLIF(SUBSTRING(COALESCE(r.metadata->>'game_date', r.metadata->>'gameday', '') FROM 1 FOR 4), '')::int = ${param_count}
+                )"""
+            else:
+                query += f" AND r.season = ${param_count}"
             params.append(season)
         
         if week:
@@ -1568,8 +1579,11 @@ async def get_game_schedule(
             query += f" AND (LOWER(r.metadata->>'home_team') = LOWER(${param_count}) OR LOWER(r.metadata->>'away_team') = LOWER(${param_count}))"
             params.append(team)
         
-        # Order by date/week
-        query += " ORDER BY r.season DESC, (r.metadata->>'week')::int DESC NULLS LAST"
+        # Order by date first for NBA, week/season for others.
+        if sport == "nba":
+            query += " ORDER BY COALESCE(r.metadata->>'game_date', r.metadata->>'gameday') DESC NULLS LAST, r.season DESC"
+        else:
+            query += " ORDER BY r.season DESC, (r.metadata->>'week')::int DESC NULLS LAST"
         param_count += 1
         query += f" LIMIT ${param_count}"
         params.append(limit)
@@ -1587,7 +1601,7 @@ async def get_game_schedule(
                 "game_id": meta.get("game_id"),
                 "season": row["season"],
                 "week": meta.get("week"),
-                "game_date": meta.get("gameday"),
+                "game_date": meta.get("game_date") or meta.get("gameday"),
                 "game_type": meta.get("game_type"),
                 "home_team": meta.get("home_team"),
                 "away_team": meta.get("away_team"),
@@ -2136,14 +2150,32 @@ async def get_game_seasons(sport: str, series: str = None):
         
         # Check schedule table first
         schedule_series = f"{sport}_schedule"
-        rows = await conn.fetch(
-            """SELECT DISTINCT season FROM results 
-               WHERE sport_id = $1 AND series = $2 AND season IS NOT NULL 
-               ORDER BY season DESC""",
-            sport_id, schedule_series
-        )
+        if sport == "nba":
+            rows = await conn.fetch(
+                """SELECT DISTINCT s FROM (
+                       SELECT season::int AS s
+                       FROM results
+                       WHERE sport_id = $1 AND series = $2 AND season IS NOT NULL
+                       UNION
+                       SELECT NULLIF(SUBSTRING(COALESCE(metadata->>'game_date', metadata->>'gameday', '') FROM 1 FOR 4), '')::int AS s
+                       FROM results
+                       WHERE sport_id = $1 AND series = $2
+                   ) x
+                   WHERE s IS NOT NULL
+                   ORDER BY s DESC""",
+                sport_id, schedule_series
+            )
+        else:
+            rows = await conn.fetch(
+                """SELECT DISTINCT season FROM results 
+                   WHERE sport_id = $1 AND series = $2 AND season IS NOT NULL 
+                   ORDER BY season DESC""",
+                sport_id, schedule_series
+            )
         
         if rows:
+            if sport == "nba":
+                return {"seasons": [row["s"] for row in rows]}
             return {"seasons": [row["season"] for row in rows]}
         
         # Fallback to stats table
@@ -2827,26 +2859,6 @@ async def get_game_results(
             ],
             "count": len(rows)
         }
-    finally:
-        await conn.close()
-
-
-@router.get("/games/{sport}/seasons")
-async def get_available_seasons(sport: str):
-    """Get list of available seasons for a sport."""
-    conn = await get_db_connection()
-    try:
-        sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", sport)
-        if not sport_id:
-            return {"seasons": []}
-        
-        rows = await conn.fetch(
-            """SELECT DISTINCT season FROM results 
-               WHERE sport_id = $1 AND season IS NOT NULL
-               ORDER BY season DESC""",
-            sport_id
-        )
-        return {"seasons": [row["season"] for row in rows]}
     finally:
         await conn.close()
 

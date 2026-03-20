@@ -1,0 +1,244 @@
+@using System.Net.Http.Json
+@using SportsBettingAnalyzer.Shared.Models
+@inject HttpClient Http
+@inject SportsBettingAnalyzer.Shared.Services.IServerConfigService ServerConfig
+@implements IDisposable
+
+@if (_toasts.Any())
+{
+    <div class="notif-toast-host">
+        @foreach (var toast in _toasts.OrderByDescending(t => t.CreatedAt))
+        {
+            <div class="notif-toast @GetSeverityClass(toast.Severity)">
+                <div class="notif-toast-head">
+                    <span class="notif-toast-title">@toast.Title</span>
+                    <button class="notif-toast-close" @onclick="() => Dismiss(toast.Id)">x</button>
+                </div>
+                <div class="notif-toast-msg">@toast.Message</div>
+                <div class="notif-toast-meta">
+                    <span>@(string.IsNullOrWhiteSpace(toast.Category) ? "general" : toast.Category)</span>
+                    <span>@toast.CreatedAt.ToLocalTime().ToString("h:mm tt")</span>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<style>
+    .notif-toast-host {
+        position: fixed;
+        top: 76px;
+        left: 12px;
+        right: 12px;
+        z-index: 2500;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        pointer-events: none;
+    }
+
+    .notif-toast {
+        pointer-events: auto;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        background: rgba(15, 23, 42, 0.97);
+        box-shadow: 0 12px 32px rgba(2, 6, 23, 0.55);
+        padding: 10px 12px;
+    }
+
+    .notif-toast.error {
+        border-left: 4px solid #ef4444;
+    }
+
+    .notif-toast.warning {
+        border-left: 4px solid #f59e0b;
+    }
+
+    .notif-toast-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 6px;
+    }
+
+    .notif-toast-title {
+        font-size: 13px;
+        font-weight: 800;
+        color: #e2e8f0;
+    }
+
+    .notif-toast-close {
+        border: 0;
+        background: transparent;
+        color: #94a3b8;
+        font-weight: 700;
+        cursor: pointer;
+        line-height: 1;
+    }
+
+    .notif-toast-msg {
+        font-size: 12px;
+        color: #cbd5e1;
+        margin-bottom: 6px;
+    }
+
+    .notif-toast-meta {
+        display: flex;
+        justify-content: space-between;
+        font-size: 10px;
+        color: #94a3b8;
+    }
+
+    @@media (min-width: 768px) {
+        .notif-toast-host {
+            left: auto;
+            right: 16px;
+            width: 360px;
+            top: 16px;
+        }
+    }
+</style>
+
+@code {
+    private readonly List<AppNotification> _toasts = new();
+    private readonly HashSet<long> _seenNotificationIds = new();
+    private CancellationTokenSource? _cts;
+    private bool _isPrimed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await PrimeSeenNotifications();
+    }
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _cts = new CancellationTokenSource();
+            _ = Task.Run(() => PollLoop(_cts.Token));
+        }
+        return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+
+    private async Task PrimeSeenNotifications()
+    {
+        try
+        {
+            var baseUrl = ServerConfig.GetBaseUrl();
+            var response = await Http.GetFromJsonAsync<NotificationsResponse>(
+                $"{baseUrl}/admin/notifications?limit=30&unread_only=true"
+            );
+            foreach (var n in response?.Items ?? new List<AppNotification>())
+            {
+                _seenNotificationIds.Add(n.Id);
+            }
+            _isPrimed = true;
+        }
+        catch
+        {
+            _isPrimed = true;
+        }
+    }
+
+    private async Task PollLoop(CancellationToken token)
+    {
+        while (!token.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(20), token);
+                if (!_isPrimed)
+                {
+                    continue;
+                }
+
+                var baseUrl = ServerConfig.GetBaseUrl();
+                var response = await Http.GetFromJsonAsync<NotificationsResponse>(
+                    $"{baseUrl}/admin/notifications?limit=20&unread_only=true",
+                    token
+                );
+                var items = response?.Items ?? new List<AppNotification>();
+                var newItems = items
+                    .Where(n => !_seenNotificationIds.Contains(n.Id))
+                    .OrderBy(n => n.CreatedAt)
+                    .ToList();
+
+                foreach (var item in items)
+                {
+                    _seenNotificationIds.Add(item.Id);
+                }
+
+                foreach (var n in newItems)
+                {
+                    if (!ShouldToast(n))
+                    {
+                        continue;
+                    }
+
+                    await InvokeAsync(() =>
+                    {
+                        _toasts.Add(n);
+                        while (_toasts.Count > 4)
+                        {
+                            _toasts.RemoveAt(0);
+                        }
+                        StateHasChanged();
+                    });
+                    _ = AutoDismiss(n.Id, n.Severity, token);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch
+            {
+                // Keep toast polling resilient even if backend is temporarily unavailable.
+            }
+        }
+    }
+
+    private async Task AutoDismiss(long id, string severity, CancellationToken token)
+    {
+        var seconds = string.Equals(severity, "error", StringComparison.OrdinalIgnoreCase) ? 12 : 8;
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(seconds), token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        await InvokeAsync(() => Dismiss(id));
+    }
+
+    private void Dismiss(long id)
+    {
+        _toasts.RemoveAll(t => t.Id == id);
+        StateHasChanged();
+    }
+
+    private static bool ShouldToast(AppNotification n)
+    {
+        var sev = (n.Severity ?? "info").ToLowerInvariant();
+        return sev == "error" || sev == "warning";
+    }
+
+    private static string GetSeverityClass(string severity)
+    {
+        var sev = (severity ?? "info").ToLowerInvariant();
+        return sev switch
+        {
+            "error" => "error",
+            "warning" => "warning",
+            _ => "info",
+        };
+    }
+}

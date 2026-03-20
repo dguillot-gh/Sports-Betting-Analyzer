@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, Request, HTTPException, Body
 from typing import Dict, Any, List
 import logging
 from src.odds_storage import get_odds_storage
@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/cache", tags=["cache"])
 
 @router.post("/analysis")
-async def save_manual_analysis(data: Dict[str, Any] = Body(...)):
+async def save_manual_analysis(request: Request, data: Dict[str, Any] = Body(...)):
     """
     Save a manual analysis result. 
     Expects format: { "sport": "nba", "home_team": "...", "away_team": "...", "analysis": { ... } }
@@ -29,7 +29,7 @@ async def save_manual_analysis(data: Dict[str, Any] = Body(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/analysis/today")
-async def get_todays_analyses():
+async def get_todays_analyses(request: Request):
     """Get all analysis results stored today."""
     try:
         storage = get_odds_storage()

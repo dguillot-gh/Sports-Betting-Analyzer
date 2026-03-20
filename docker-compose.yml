@@ -66,8 +66,8 @@ services:
   # ============================================
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
     container_name: sports-betting-frontend
     ports:
       - "80:8080"

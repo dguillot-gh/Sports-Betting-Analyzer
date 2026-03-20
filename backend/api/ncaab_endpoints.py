@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Request, HTTPException, Query, BackgroundTasks
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import pandas as pd
@@ -24,7 +24,7 @@ router = APIRouter(prefix="/trends/ncaab", tags=["NCAAB Trends"])
 
 
 @router.post("/train")
-async def train_model(background_tasks: BackgroundTasks):
+async def train_model(request: Request, background_tasks: BackgroundTasks):
     """
     Trigger retraining of the NCAAB XGBoost model.
     Runs in the background.
@@ -37,7 +37,7 @@ async def train_model(background_tasks: BackgroundTasks):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/backtest")
-async def run_backtest_endpoint():
+async def run_backtest_endpoint(request: Request):
     """
     Run a quick backtest on recent data and return the report.
     For this version, we run it synchronously as it's fast (~1-2s for 1 season).

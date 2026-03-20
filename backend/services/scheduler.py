@@ -14,6 +14,7 @@ from apscheduler.triggers.cron import CronTrigger
 from typing import Optional, Dict, Any, List
 
 from src.config import DATABASE_URL
+from src.ops_alerts import OpsAlertService
 from services.notifications import NotificationService
 
 #Script imports
@@ -157,6 +158,9 @@ class SchedulerService:
             
             # --- 10. Fetch Performance Summary ---
             perf_summary = await cls._get_performance_summary()
+
+            # Alert on any failed import jobs in the run.
+            OpsAlertService.report_import_failures(results, trigger_source)
             
             # --- Send Notification ---
             await NotificationService.send_summary_report(results, perf_summary)

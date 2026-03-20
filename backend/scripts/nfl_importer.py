@@ -719,18 +719,17 @@ async def import_stats_via_nflreadpy(conn, sport_id: int, player_map: dict, prog
     - Includes current (2025) season data
     """
     try:
+        from scripts.batch_db import batch_upsert
         import nflreadpy as nfl
     except ImportError:
-        logger.error("nflreadpy not installed. Run: pip install nflreadpy")
-        return {"error": "nflreadpy not installed", "imported": 0}
+        logger.error("nflreadpy or batch_db not configured properly.")
+        return {"error": "import error", "imported": 0}
     
     if progress_callback:
         progress_callback("Loading player stats from nflverse (2020-2025)...")
     
-    imported = 0
-    stats_computed = 0
-    inserted_count = 0
-    updated_count = 0
+    results_records = []
+    stats_records = []
     
     try:
         # Get season-level aggregates for all modern years
@@ -817,21 +816,10 @@ async def import_stats_via_nflreadpy(conn, sport_id: int, player_map: dict, prog
             })
             
             try:
-                # Insert into results table
-                is_insert = await conn.fetchval(
-                    """INSERT INTO results (sport_id, season, series, metadata, content_hash)
-                       VALUES ($1, $2, 'nfl', $3, $4)
-                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                       DO UPDATE SET metadata = EXCLUDED.metadata
-                       RETURNING (xmax = 0)""",
-                    sport_id, int(season), json.dumps(metadata), content_hash
-                )
-                if is_insert:
-                    inserted_count += 1
-                else:
-                    updated_count += 1
+                # Accumulate for results table
+                results_records.append((sport_id, int(season), json.dumps(metadata), content_hash))
                 
-                # ALSO insert into stats table (for profile queries)
+                # ALSO prepare stats table (for profile queries)
                 entity_id = player_map.get(str(player_id))
                 
                 # If not in player_map, try name-based lookup
@@ -844,6 +832,8 @@ async def import_stats_via_nflreadpy(conn, sport_id: int, player_map: dict, prog
                                LIMIT 1""",
                             sport_id, f"%{player_name}%"
                         )
+                        if entity_id:
+                            player_map[str(player_id)] = entity_id # Cache it for next time
                 
                 if entity_id:
                     stats_dict = {k: v for k, v in metadata.items() 
@@ -856,28 +846,44 @@ async def import_stats_via_nflreadpy(conn, sport_id: int, player_map: dict, prog
                         'stat_type': 'season'
                     })
                     
-                    await conn.execute(
-                        """INSERT INTO stats (entity_id, season, stat_type, stats, content_hash)
-                           VALUES ($1, $2, 'season', $3, $4)
-                           ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                           DO UPDATE SET stats = EXCLUDED.stats""",
-                        entity_id, int(season), json.dumps(stats_dict), stats_hash
-                    )
-                    stats_computed += 1
+                    stats_records.append((entity_id, int(season), json.dumps(stats_dict), stats_hash))
                 else:
                     logger.debug(f"Could not find entity_id for player {metadata.get('player_name')} ({player_id}) - skipping stats table")
                 
-                imported += 1
-                
             except Exception as e:
-                logger.debug(f"Error importing stat row: {e}")
+                logger.debug(f"Error preparing stat row: {e}")
             
             # Periodic garbage collection
-            if i % 1000 == 0:
+            if i % 5000 == 0:
                 gc.collect()
+
+        UPSERT_RESULTS = """INSERT INTO results (sport_id, season, series, metadata, content_hash)
+                            VALUES ($1, $2, 'nfl', $3, $4)
+                            ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                            DO UPDATE SET metadata = EXCLUDED.metadata"""
         
-        logger.info(f"Imported {imported} player stats via nflreadpy, {stats_computed} stats table entries (New: {inserted_count}, Updated: {updated_count})")
-        return {"imported": imported, "stats_computed": stats_computed, "new": inserted_count, "updated": updated_count}
+        UPSERT_STATS = """INSERT INTO stats (entity_id, season, stat_type, stats, content_hash)
+                          VALUES ($1, $2, 'season', $3, $4)
+                          ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                          DO UPDATE SET stats = EXCLUDED.stats"""
+        
+        if progress_callback:
+            progress_callback("Executing batched database inserts for season stats...")
+
+        imported = await batch_upsert(
+            conn, UPSERT_RESULTS, results_records,
+            progress_callback=progress_callback,
+            label="NFL player season results"
+        )
+        
+        stats_computed = await batch_upsert(
+            conn, UPSERT_STATS, stats_records,
+            progress_callback=progress_callback,
+            label="NFL player season stats"
+        )
+        
+        logger.info(f"Imported {imported} player stats via nflreadpy, {stats_computed} stats table entries")
+        return {"imported": imported, "stats_computed": stats_computed, "new": 0, "updated": 0}
         
     except Exception as e:
         logger.error(f"Error loading stats via nflreadpy: {e}")
@@ -1137,6 +1143,7 @@ async def import_player_stats(conn, sport_id: int, player_map: dict, progress_ca
         except:
             return None
     
+    from scripts.batch_db import batch_upsert
     imported = 0
     
     for stats_file in stats_files:
@@ -1145,7 +1152,10 @@ async def import_player_stats(conn, sport_id: int, player_map: dict, progress_ca
         
         try:
             # Read CSV in chunks for memory efficiency
-            for chunk in pd.read_csv(stats_file, low_memory=False, chunksize=500):
+            for chunk in pd.read_csv(stats_file, low_memory=False, chunksize=5000):
+                results_records = []
+                stats_records = []
+                
                 for _, row in chunk.iterrows():
                     player_id = row.get('player_id')
                     if pd.isna(player_id):
@@ -1201,42 +1211,40 @@ async def import_player_stats(conn, sport_id: int, player_map: dict, progress_ca
                         'type': 'season_stats'
                     })
                     
-                    try:
-                        # Insert into results table (for game history queries)
-                        await conn.execute(
-                            """INSERT INTO results (sport_id, season, series, metadata, content_hash)
-                               VALUES ($1, $2, 'nfl', $3, $4)
-                               ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                               DO UPDATE SET metadata = EXCLUDED.metadata""",
-                            sport_id, int(season), json.dumps(metadata), content_hash
-                        )
+                    results_records.append((sport_id, int(season), json.dumps(metadata), content_hash))
+                    
+                    # ALSO prepare stats table (for profile queries)
+                    # Look up entity_id from player_map
+                    entity_id = player_map.get(str(player_id))
+                    if entity_id:
+                        # Build stats dict (exclude identifier fields)
+                        stats_dict = {k: v for k, v in metadata.items() 
+                                     if k not in ['player_id', 'player_name', 'player_display_name']}
                         
-                        # ALSO insert into stats table (for profile queries)
-                        # Look up entity_id from player_map
-                        entity_id = player_map.get(str(player_id))
-                        if entity_id:
-                            # Build stats dict (exclude identifier fields)
-                            stats_dict = {k: v for k, v in metadata.items() 
-                                         if k not in ['player_id', 'player_name', 'player_display_name']}
-                            
-                            stats_hash = compute_hash({
-                                'entity_id': entity_id,
-                                'season': int(season),
-                                'sport': 'nfl',
-                                'stat_type': 'season'
-                            })
-                            
-                            await conn.execute(
-                                """INSERT INTO stats (entity_id, season, stat_type, stats, content_hash)
-                                   VALUES ($1, $2, 'season', $3, $4)
-                                   ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                                   DO UPDATE SET stats = EXCLUDED.stats""",
-                                entity_id, int(season), json.dumps(stats_dict), stats_hash
-                            )
+                        stats_hash = compute_hash({
+                            'entity_id': entity_id,
+                            'season': int(season),
+                            'sport': 'nfl',
+                            'stat_type': 'season'
+                        })
                         
-                        imported += 1
-                    except Exception as e:
-                        logger.debug(f"Error importing stat row: {e}")
+                        stats_records.append((entity_id, int(season), json.dumps(stats_dict), stats_hash))
+                
+                # Execute batch insert for the chunk
+                if results_records:
+                    UPSERT_RESULTS = """INSERT INTO results (sport_id, season, series, metadata, content_hash)
+                                        VALUES ($1, $2, 'nfl', $3, $4)
+                                        ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                                        DO UPDATE SET metadata = EXCLUDED.metadata"""
+                    await batch_upsert(conn, UPSERT_RESULTS, results_records)
+                    imported += len(results_records)
+                
+                if stats_records:
+                    UPSERT_STATS = """INSERT INTO stats (entity_id, season, stat_type, stats, content_hash)
+                                      VALUES ($1, $2, 'season', $3, $4)
+                                      ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                                      DO UPDATE SET stats = EXCLUDED.stats"""
+                    await batch_upsert(conn, UPSERT_STATS, stats_records)
                 
                 # Memory cleanup after each chunk
                 gc.collect()

@@ -3,7 +3,7 @@ Player Stats API Endpoints
 Provides player stats, game logs, and hit rate data for NBA and NFL
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Request, HTTPException, Query
 from typing import Optional, List, Dict, Any
 import pandas as pd
 import logging
@@ -430,7 +430,7 @@ NASCAR_TEAMS = {
 
 
 @router.get("/nascar/teams")
-async def get_nascar_teams(series: Optional[str] = None):
+async def get_nascar_teams(request: Request, series: Optional[str] = None):
     """
     Get NASCAR teams, optionally filtered by series.
     Shows which series each team participates in.
@@ -706,7 +706,7 @@ async def get_nascar_driver_races(
 
 
 @router.get("/nascar/tracks")
-async def get_nascar_tracks():
+async def get_nascar_tracks(request: Request):
     """Get list of NASCAR tracks with their types."""
     return [
         {"name": "Daytona International Speedway", "type": "superspeedway"},

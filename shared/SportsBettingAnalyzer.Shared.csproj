@@ -15,4 +15,12 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="9.0.0" />
   </ItemGroup>
 
+  <!-- Guard against accidental generated artifacts being placed under shared/mobile -->
+  <ItemGroup>
+    <Compile Remove="mobile\**\*.cs" />
+    <EmbeddedResource Remove="mobile\**\*" />
+    <None Remove="mobile\**\*" />
+    <Content Remove="mobile\**\*" />
+  </ItemGroup>
+
 </Project>
