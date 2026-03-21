@@ -51,7 +51,6 @@ services:
     volumes:
       - ./backend/data:/app/data
       - ./backend/scripts/models:/app/models
-      - ./sportsbettinganalyzer-93893-firebase-adminsdk-fbsvc-5766e148f6.json:/app/firebase-service-account.json
     depends_on:
       postgres:
         condition: service_healthy
