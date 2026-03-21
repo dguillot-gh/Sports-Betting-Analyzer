@@ -114,7 +114,7 @@ async def insert_notification(
         except RuntimeError:
             pass  # No running loop (script context)
     except Exception as exc:
-        logger.warning("Failed to insert notification: %s", exc)
+        logger.error("Failed to insert notification: %s", exc, exc_info=True)
     finally:
         if conn:
             await conn.close()
