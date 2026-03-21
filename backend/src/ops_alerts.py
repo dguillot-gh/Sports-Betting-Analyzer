@@ -29,6 +29,54 @@ class OpsAlertService:
     _restart_window_minutes = int(os.getenv("OPS_RESTART_WINDOW_MINUTES", "15"))
     _restart_loop_threshold = int(os.getenv("OPS_RESTART_LOOP_THRESHOLD", "3"))
 
+    _db_size_warn_gb = float(os.getenv("OPS_DB_SIZE_WARN_GB", "10.0"))
+    _db_size_critical_gb = float(os.getenv("OPS_DB_SIZE_CRITICAL_GB", "20.0"))
+
+    @classmethod
+    async def check_database_health(cls, database_url: str) -> None:
+        """
+        Check database size and alert if it exceeds thresholds.
+        Called typically after the daily import pipeline.
+        """
+        conn = None
+        try:
+            conn = await asyncpg.connect(database_url)
+            size_bytes = await conn.fetchval("SELECT pg_database_size(current_database())")
+            if not size_bytes:
+                return
+
+            size_gb = size_bytes / (1024 ** 3)
+            
+            if size_gb >= cls._db_size_critical_gb:
+                msg = f"Critical Database Size: {size_gb:.2f} GB (Threshold: {cls._db_size_critical_gb} GB)"
+                logger.error(msg)
+                await insert_notification(
+                    DATABASE_URL,
+                    severity="error",
+                    category="database_health",
+                    title="Database Storage Critical",
+                    message=msg,
+                    source="ops_alerts.check_database_health",
+                    metadata={"size_gb": round(size_gb, 2), "threshold_gb": cls._db_size_critical_gb},
+                )
+            elif size_gb >= cls._db_size_warn_gb:
+                msg = f"High Database Size: {size_gb:.2f} GB (Threshold: {cls._db_size_warn_gb} GB)"
+                logger.warning(msg)
+                await insert_notification(
+                    DATABASE_URL,
+                    severity="warning",
+                    category="database_health",
+                    title="Database Storage Warning",
+                    message=msg,
+                    source="ops_alerts.check_database_health",
+                    metadata={"size_gb": round(size_gb, 2), "threshold_gb": cls._db_size_warn_gb},
+                )
+        except Exception as exc:
+            logger.warning("Failed to check database health: %s", exc)
+        finally:
+            if conn:
+                await conn.close()
+
     @classmethod
     def _queue_notification(
         cls,

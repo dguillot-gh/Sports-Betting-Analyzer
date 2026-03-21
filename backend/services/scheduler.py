@@ -165,6 +165,9 @@ class SchedulerService:
             # --- Send Notification ---
             await NotificationService.send_summary_report(results, perf_summary)
             
+            # --- Check Database Health ---
+            await OpsAlertService.check_database_health(DATABASE_URL)
+
             # Explicitly log completion
             logger.info("Pipeline Execution Finished.")
             

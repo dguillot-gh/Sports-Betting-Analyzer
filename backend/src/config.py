@@ -42,3 +42,11 @@ if not COLLEGE_FOOTBALL_API_KEY:
     import logging
     logging.warning("COLLEGE_FOOTBALL_API_KEY not set - College Football features will be disabled")
 
+# Web Push (VAPID) — generate keys with: python -m scripts.generate_vapid_keys
+VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "")
+VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "")
+VAPID_CLAIMS_EMAIL = os.getenv("VAPID_CLAIMS_EMAIL", "")
+
+# Firebase Cloud Messaging — path to the service account JSON file
+FIREBASE_SERVICE_ACCOUNT_JSON = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "")
+

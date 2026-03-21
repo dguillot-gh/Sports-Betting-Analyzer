@@ -33,6 +33,8 @@ from api.ncaab_endpoints import router as ncaab_router
 from api.scheduler_endpoints import router as scheduler_router
 from api.analysis_cache_endpoints import router as analysis_cache_router
 from api.notification_endpoints import router as notification_router
+from api.push_endpoints import router as push_router
+from api.fcm_endpoints import router as fcm_router
 from api.cfb_endpoints import router as cfb_router
 from api.nascar_live_endpoints import router as nascar_live_router
 from api.nhl_endpoints import router as nhl_router
@@ -71,6 +73,8 @@ from src.version import get_version, get_version_info
 from src.error_notifier import install_error_email_handler
 from src.ops_alerts import OpsAlertService
 from src.notification_store import ensure_notifications_schema
+from src.push_store import ensure_push_schema
+from src.fcm_store import ensure_fcm_schema
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -93,6 +97,8 @@ async def lifespan(app: FastAPI):
         app.state.pool = db_pool
         # Ensure notifications schema exists even when legacy startup hooks are skipped.
         await ensure_notifications_schema(DATABASE_URL)
+        await ensure_push_schema(DATABASE_URL)
+        await ensure_fcm_schema(DATABASE_URL)
         logger.info("Connection pool created successfully")
     except Exception as e:
         logger.error(f"Failed to create connection pool: {e}")
@@ -151,6 +157,8 @@ app.include_router(ncaab_router)  # NCAAB Trends
 app.include_router(scheduler_router)  # Import Scheduler & Logs
 app.include_router(analysis_cache_router) # Manual Analysis Cache
 app.include_router(notification_router)  # In-app notification inbox
+app.include_router(push_router)  # Web Push subscriptions
+app.include_router(fcm_router)  # FCM native push (Android)
 app.include_router(cfb_router)  # College Football Data
 app.include_router(nascar_live_router)  # NASCAR Live Dashboard Logic
 app.include_router(nhl_router)  # NHL Data and Predictions

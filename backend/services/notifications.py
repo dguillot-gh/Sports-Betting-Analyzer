@@ -1,6 +1,6 @@
 """
 Notification Service
-Handles sending alerts via Pushover and detailed HTML email reports.
+Handles sending alerts via Pushover, in-app notifications, and HTML email reports.
 """
 
 import logging
@@ -11,6 +11,9 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from typing import Optional, List, Dict, Any
+
+from src.config import DATABASE_URL
+from src.notification_store import insert_notification
 
 logger = logging.getLogger(__name__)
 
@@ -126,13 +129,48 @@ class NotificationService:
             "cfb": "College Football",
         }
 
-        # 1. PUSHOVER - Legacy behavior maintained
+        # 1. PUSHOVER - Legacy (will be removed once Web Push is validated)
         push_lines = [f"{'✅' if r.get('success') else '❌'} {sport_names.get(r['sport'], r['sport'].upper())}" for r in results]
         push_msg = "\n".join(push_lines) + f"\n\n⏱ {total_duration:.0f}s | Score: {health_score}%"
         push_title = f"{'✅' if overall_success else '⚠️'} Import Report"
         await NotificationService.send_pushover_notification(push_title, push_msg, 0 if overall_success else 1)
 
-        # 2. PREMIUM EMAIL
+        # 2. IN-APP NOTIFICATION — always write to app_notifications DB
+        await insert_notification(
+            DATABASE_URL,
+            severity="success" if overall_success else "warning",
+            category="import",
+            title=push_title,
+            message=push_msg,
+            source="scheduler.send_summary_report",
+            metadata={
+                "health_score": health_score,
+                "total_duration": round(total_duration, 1),
+                "total_rows": total_rows,
+                "success_count": success_count,
+                "fail_count": fail_count,
+                "sports": [
+                    {
+                        "sport": r.get("sport"),
+                        "success": r.get("success"),
+                        "rows": r.get("rows", 0),
+                        "duration": round(r.get("duration", 0), 1),
+                    }
+                    for r in results
+                ],
+            },
+        )
+
+        # 3. PREMIUM EMAIL — only on failure
+        if not overall_success:
+            NotificationService._send_failure_email(results, health_score, health_color, perf_summary, sport_names)
+
+    @staticmethod
+    def _send_failure_email(results, health_score, health_color, perf_summary, sport_names):
+        """Send the detailed HTML email report. Only called when imports fail."""
+        success_count = sum(1 for r in results if r.get('success'))
+        fail_count = len(results) - success_count
+        total_rows = sum(r.get('rows', 0) for r in results)
         timestamp = datetime.now().strftime("%B %d, %Y")
         time_str = datetime.now().strftime("%I:%M %p %Z")
         
@@ -263,5 +301,5 @@ class NotificationService:
         </html>
         """
 
-        email_subject = f"{'✅' if overall_success else '⚠️'} Daily Report: {health_score}% Success"
+        email_subject = f"⚠️ Import Failure Report: {health_score}% Success"
         NotificationService.send_email_report(email_subject, html)

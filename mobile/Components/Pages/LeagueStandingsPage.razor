@@ -74,7 +74,7 @@
     [Parameter] public string? Sport { get; set; }
     
     private string SelectedSport => (Sport ?? "nfl").ToLower();
-    private int? _selectedSeason;
+    private int? _selectedSeason = null;
 
     [Inject] private NavigationManager Nav { get; set; } = default!;
 
@@ -83,3 +83,4 @@
         Nav.NavigateTo($"/standings/{sport}");
     }
 }
+

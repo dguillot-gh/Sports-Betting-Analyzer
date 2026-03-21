@@ -78,6 +78,33 @@ async def insert_notification(
             json.dumps(metadata or {}),
             expires_at,
         )
+        # Fire-and-forget push broadcasts for error/warning/success notifications
+        sev_lower = (severity or "info").lower()
+        if sev_lower in ("error", "warning", "success"):
+            try:
+                import asyncio
+                from src.push_store import send_web_push_to_all
+                from src.fcm_store import send_fcm_to_all
+
+                loop = asyncio.get_running_loop()
+                loop.create_task(
+                    send_web_push_to_all(
+                        database_url,
+                        title=title,
+                        message=message,
+                        severity=sev_lower,
+                    )
+                )
+                loop.create_task(
+                    send_fcm_to_all(
+                        database_url,
+                        title=title,
+                        message=message,
+                        severity=sev_lower,
+                    )
+                )
+            except RuntimeError:
+                pass  # No running loop (script context)
     except Exception as exc:
         logger.warning("Failed to insert notification: %s", exc)
     finally:
