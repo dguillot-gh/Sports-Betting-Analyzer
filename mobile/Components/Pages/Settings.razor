@@ -293,7 +293,7 @@
     private List<NavItem> _allAvailable = new();
     private List<NavItem> _selectedItems = new();
     private DeploymentVersionInfo? versionInfo;
-    private bool isLoadingVersion = true;
+    
 
     protected override async Task OnInitializedAsync()
     {
@@ -312,13 +312,13 @@
     {
         try
         {
-            isLoadingVersion = true;
+            
             
             var baseUrl = ConfigService.GetBaseUrl();
             var response = await Http.GetFromJsonAsync<DeploymentVersionInfo>($"{baseUrl}/deployments/current");
             versionInfo = response;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // Handle error gracefully - show default info
             versionInfo = new DeploymentVersionInfo 
@@ -340,7 +340,7 @@
         }
         finally
         {
-            isLoadingVersion = false;
+            
             StateHasChanged();
         }
     }
@@ -377,3 +377,4 @@
         Nav.NavigateTo(Nav.Uri, forceLoad: true);
     }
 }
+

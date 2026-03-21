@@ -33,3 +33,5 @@ pytest
 APScheduler>=3.10.4
 openpyxl
 beautifulsoup4
+pywebpush
+firebase-admin

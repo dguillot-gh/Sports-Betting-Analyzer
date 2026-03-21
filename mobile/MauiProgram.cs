@@ -1,6 +1,9 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using SportsBettingAnalyzer.Shared.Services;
 using SportsBettingAnalyzer.Mobile.Services;
+#if ANDROID
+using Plugin.Firebase.CloudMessaging;
+#endif
 
 namespace SportsBettingAnalyzer.Mobile;
 
@@ -28,6 +31,8 @@ public static class MauiProgram
 			var baseUrl = configService.GetBaseUrl();
 			return new HttpClient { BaseAddress = new Uri(baseUrl) };
 		});
+
+		builder.Services.AddSingleton<PushNotificationService>();
 
 #if DEBUG
 		builder.Services.AddBlazorWebViewDeveloperTools();
