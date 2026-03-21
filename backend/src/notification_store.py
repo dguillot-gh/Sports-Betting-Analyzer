@@ -78,33 +78,41 @@ async def insert_notification(
             json.dumps(metadata or {}),
             expires_at,
         )
-        # Fire-and-forget push broadcasts for error/warning/success notifications
+        # Fire-and-forget push + email broadcasts for ALL notifications
         sev_lower = (severity or "info").lower()
-        if sev_lower in ("error", "warning", "success"):
-            try:
-                import asyncio
-                from src.push_store import send_web_push_to_all
-                from src.fcm_store import send_fcm_to_all
+        try:
+            import asyncio
+            from src.push_store import send_web_push_to_all
+            from src.fcm_store import send_fcm_to_all
 
-                loop = asyncio.get_running_loop()
-                loop.create_task(
-                    send_web_push_to_all(
-                        database_url,
-                        title=title,
-                        message=message,
-                        severity=sev_lower,
-                    )
+            loop = asyncio.get_running_loop()
+            loop.create_task(
+                send_web_push_to_all(
+                    database_url,
+                    title=title,
+                    message=message,
+                    severity=sev_lower,
                 )
-                loop.create_task(
-                    send_fcm_to_all(
-                        database_url,
-                        title=title,
-                        message=message,
-                        severity=sev_lower,
-                    )
+            )
+            loop.create_task(
+                send_fcm_to_all(
+                    database_url,
+                    title=title,
+                    message=message,
+                    severity=sev_lower,
                 )
-            except RuntimeError:
-                pass  # No running loop (script context)
+            )
+            # Also fire-and-forget a simple email for every notification
+            loop.run_in_executor(
+                None,
+                _send_notification_email,
+                title,
+                message,
+                sev_lower,
+                category,
+            )
+        except RuntimeError:
+            pass  # No running loop (script context)
     except Exception as exc:
         logger.warning("Failed to insert notification: %s", exc)
     finally:
@@ -181,3 +189,54 @@ def _default_ttl_hours(severity: str) -> int | None:
     if severity == "info":
         return INFO_TTL_HOURS
     return None
+
+
+def _send_notification_email(title: str, message: str, severity: str, category: str) -> None:
+    """
+    Fire-and-forget email for every notification.
+    Uses the same SMTP config as the main email reports.
+    Runs synchronously in a thread-safe callback.
+    """
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_pass = os.getenv("SMTP_PASS")
+    report_to = os.getenv("REPORT_EMAIL_TO")
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+
+    if not smtp_user or not smtp_pass or not report_to:
+        return
+
+    severity_emoji = {"error": "🔴", "warning": "🟡", "success": "🟢", "info": "🔵"}.get(severity, "📬")
+    subject = f"{severity_emoji} [{severity.upper()}] {title}"
+
+    html_body = f"""
+    <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: #0f172a; color: white; padding: 16px 20px; border-radius: 12px 12px 0 0;">
+            <h2 style="margin: 0; font-size: 16px;">{severity_emoji} {title}</h2>
+            <p style="margin: 4px 0 0; font-size: 12px; color: #94a3b8;">{category} • {severity.upper()}</p>
+        </div>
+        <div style="background: white; padding: 20px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
+            <p style="white-space: pre-wrap; color: #334155; font-size: 14px; line-height: 1.6;">{message}</p>
+        </div>
+    </div>
+    """
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"Sports Betting Analyzer <{smtp_user}>"
+        msg["To"] = report_to
+        msg.attach(MIMEText(html_body, "html"))
+
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(smtp_user, report_to, msg.as_string())
+
+        logger.info("Notification email sent: %s", title)
+    except Exception as exc:
+        logger.warning("Failed to send notification email: %s", exc)

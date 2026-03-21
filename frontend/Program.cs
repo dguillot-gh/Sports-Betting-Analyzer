@@ -72,6 +72,7 @@ builder.Services.AddScoped<BetSlipOCRService>();
 builder.Services.AddScoped<SportsDataService>();
 builder.Services.AddScoped<HistoricalDataImportService>();
 builder.Services.AddScoped<SportsBettingAnalyzer.Shared.Services.IServerConfigService, WebServerConfigService>();
+builder.Services.AddScoped<SportsBettingAnalyzer.Shared.Services.IVersionService, SportsBettingAnalyzer.Shared.Services.VersionService>();
 
 // (Data Protection config moved to top of file)
 
