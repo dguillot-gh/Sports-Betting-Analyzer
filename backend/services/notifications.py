@@ -1,10 +1,9 @@
 """
 Notification Service
-Handles sending alerts via Pushover, in-app notifications, and HTML email reports.
+Handles sending alerts via in-app notifications, push (FCM/Web Push), and HTML email reports.
 """
 
 import logging
-import aiohttp
 import os
 import smtplib
 from email.mime.text import MIMEText
@@ -17,11 +16,6 @@ from src.notification_store import insert_notification
 
 logger = logging.getLogger(__name__)
 
-# Pushover Config
-PUSHOVER_API_URL = "https://api.pushover.net/1/messages.json"
-PUSHOVER_USER_KEY = os.getenv("PUSHOVER_USER_KEY")
-PUSHOVER_API_TOKEN = os.getenv("PUSHOVER_API_TOKEN")
-
 # Email Config (optional — skips if not set)
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
@@ -32,39 +26,6 @@ PUBLIC_URL = os.getenv("PUBLIC_URL", "http://localhost")  # Base URL for mobile 
 
 
 class NotificationService:
-    
-    @staticmethod
-    async def send_pushover_notification(title: str, message: str, priority: int = 0) -> bool:
-        """
-        Send a notification via Pushover.
-        Priority: -1 (Low), 0 (Normal), 1 (High)
-        """
-        if not PUSHOVER_USER_KEY or not PUSHOVER_API_TOKEN:
-            return False
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                payload = {
-                    "token": PUSHOVER_API_TOKEN,
-                    "user": PUSHOVER_USER_KEY,
-                    "title": title,
-                    "message": message,
-                    "priority": priority,
-                    "html": 1
-                }
-                
-                async with session.post(PUSHOVER_API_URL, data=payload) as response:
-                    if response.status == 200:
-                        logger.info(f"Pushover notification sent: {title}")
-                        return True
-                    else:
-                        resp_text = await response.text()
-                        logger.error(f"Pushover failed ({response.status}): {resp_text}")
-                        return False
-                        
-        except Exception as e:
-            logger.error(f"Error sending Pushover notification: {e}")
-            return False
 
     @staticmethod
     def send_email_report(subject: str, html_body: str) -> bool:
@@ -99,9 +60,9 @@ class NotificationService:
     @staticmethod
     async def send_summary_report(results: list, perf_summary: dict = None):
         """
-        Send BOTH:
-        1. Short Pushover notification
-        2. Premium HTML email report with Performance Metrics
+        Send import report via:
+        1. In-app notification (DB + push via FCM/Web Push + email)
+        2. Premium HTML email report with full details
         """
         if not results:
             return
@@ -129,11 +90,10 @@ class NotificationService:
             "cfb": "College Football",
         }
 
-        # 1. PUSHOVER - Legacy (will be removed once Web Push is validated)
-        push_lines = [f"{'✅' if r.get('success') else '❌'} {sport_names.get(r['sport'], r['sport'].upper())}" for r in results]
-        push_msg = "\n".join(push_lines) + f"\n\n⏱ {total_duration:.0f}s | Score: {health_score}%"
-        push_title = f"{'✅' if overall_success else '⚠️'} Import Report"
-        await NotificationService.send_pushover_notification(push_title, push_msg, 0 if overall_success else 1)
+        # Build rich notification message matching email detail level
+        push_lines = [f"{'✅' if r.get('success') else '❌'} {sport_names.get(r['sport'], r['sport'].upper())}: {r.get('rows', 0):,} rows ({r.get('duration', 0):.0f}s)" for r in results]
+        push_msg = "\n".join(push_lines) + f"\n\n📊 Health: {health_score}% | ⏱ {total_duration:.0f}s | 📦 {total_rows:,} total rows"
+        push_title = f"{'✅' if overall_success else '⚠️'} Import Report — {success_count}/{len(results)} Passed"
 
         # 2. IN-APP NOTIFICATION — always write to app_notifications DB
         await insert_notification(
@@ -161,12 +121,11 @@ class NotificationService:
             },
         )
 
-        # 3. PREMIUM EMAIL — only on failure
-        if not overall_success:
-            NotificationService._send_failure_email(results, health_score, health_color, perf_summary, sport_names)
+        # 3. PREMIUM EMAIL — always send the full report
+        NotificationService._send_import_email(results, health_score, health_color, perf_summary, sport_names, overall_success)
 
     @staticmethod
-    def _send_failure_email(results, health_score, health_color, perf_summary, sport_names):
+    def _send_import_email(results, health_score, health_color, perf_summary, sport_names, overall_success):
         """Send the detailed HTML email report. Only called when imports fail."""
         success_count = sum(1 for r in results if r.get('success'))
         fail_count = len(results) - success_count
@@ -301,5 +260,5 @@ class NotificationService:
         </html>
         """
 
-        email_subject = f"⚠️ Import Failure Report: {health_score}% Success"
+        email_subject = f"{'✅' if overall_success else '⚠️'} Import Report: {health_score}% Health"
         NotificationService.send_email_report(email_subject, html)

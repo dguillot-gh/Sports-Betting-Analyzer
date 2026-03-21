@@ -64,8 +64,12 @@
                             <span class="text-slate-300">Scheduler Service: <span class="text-emerald-400 font-bold">Active</span></span>
                         </div>
                         <div class="flex items-center gap-3 text-sm">
-                            <TwIcon Icon="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" Class="w-4 h-4 text-slate-500" />
-                            <span class="text-slate-400 italic">Pushover: Checked via .env</span>
+                            <TwIcon Icon="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" Class="w-4 h-4 text-emerald-500" />
+                            <span class="text-slate-300">Push Notifications: <span class="text-emerald-400 font-bold">Active</span></span>
+                        </div>
+                        <div class="flex items-center gap-3 text-sm">
+                            <TwIcon Icon="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" Class="w-4 h-4 text-emerald-500" />
+                            <span class="text-slate-300">Email Alerts: <span class="text-emerald-400 font-bold">Active</span></span>
                         </div>
                     </div>
                 </div>
@@ -76,49 +80,53 @@
             </TwCard>
         </div>
         
-        <!-- Notifications Setup Guide -->
+        <!-- Notification Channels Overview -->
         <div class="md:col-span-8 h-full">
             <TwCard Class="p-6 h-full flex flex-col bg-slate-900 border-slate-800">
                 <div class="flex items-center gap-2 mb-6">
                     <div class="p-2 bg-indigo-500/10 rounded-lg">
                         <TwIcon Icon="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" Class="w-5 h-5 text-indigo-400" />
                     </div>
-                    <h3 class="text-lg font-bold text-white">Setup Push Notifications</h3>
+                    <h3 class="text-lg font-bold text-white">Notification Channels</h3>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div>
-                        <p class="text-slate-400 text-sm mb-4">To receive alerts on your phone during auto-imports:</p>
-                        <ul class="space-y-3">
-                            <li class="flex items-start gap-3">
-                                <span class="flex-shrink-0 w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] text-blue-400 font-bold">1</span>
-                                <span class="text-sm text-slate-300">Create account at <a href="https://pushover.net" target="_blank" class="text-blue-400 hover:underline">Pushover.net</a></span>
-                            </li>
-                            <li class="flex items-start gap-3">
-                                <span class="flex-shrink-0 w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] text-blue-400 font-bold">2</span>
-                                <span class="text-sm text-slate-300">Get <span class="font-bold text-white">User Key</span> from dashboard</span>
-                            </li>
-                            <li class="flex items-start gap-3">
-                                <span class="flex-shrink-0 w-5 h-5 rounded-full bg-slate-800 border border-slate-800 flex items-center justify-center text-[10px] text-blue-400 font-bold">3</span>
-                                <span class="text-sm text-slate-300">Create Application for <span class="font-bold text-white">API Token</span></span>
-                            </li>
-                            <li class="flex items-start gap-3">
-                                <span class="flex-shrink-0 w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] text-blue-400 font-bold">4</span>
-                                <span class="text-sm text-slate-300">Add credentials to <code class="bg-slate-800 px-1 rounded text-pink-400">backend/.env</code></span>
-                            </li>
-                        </ul>
-                    </div>
-
-                    <div class="bg-slate-950/80 rounded-2xl p-5 border border-slate-800 font-mono text-xs shadow-inner">
-                        <div class="flex items-center gap-2 mb-3">
-                            <div class="w-2.5 h-2.5 rounded-full bg-red-500/50"></div>
-                            <div class="w-2.5 h-2.5 rounded-full bg-amber-500/50"></div>
-                            <div class="w-2.5 h-2.5 rounded-full bg-emerald-500/50"></div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-slate-950/60 rounded-xl p-4 border border-slate-800">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-lg">📱</span>
+                            <span class="text-sm font-bold text-white">FCM Push</span>
                         </div>
-                        <p class="text-emerald-400/80 mb-1"># backend/.env</p>
-                        <p class="text-slate-300"><span class="text-blue-400">PUSHOVER_USER_KEY</span>=<span class="text-amber-300">"your_user_key"</span></p>
-                        <p class="text-slate-300"><span class="text-blue-400">PUSHOVER_API_TOKEN</span>=<span class="text-amber-300">"your_api_token"</span></p>
+                        <p class="text-xs text-slate-400">Native Android push via Firebase Cloud Messaging</p>
+                        <span class="inline-block mt-2 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">ACTIVE</span>
                     </div>
+                    <div class="bg-slate-950/60 rounded-xl p-4 border border-slate-800">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-lg">🌐</span>
+                            <span class="text-sm font-bold text-white">Web Push</span>
+                        </div>
+                        <p class="text-xs text-slate-400">Browser notifications via VAPID/Service Worker</p>
+                        <span class="inline-block mt-2 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">ACTIVE</span>
+                    </div>
+                    <div class="bg-slate-950/60 rounded-xl p-4 border border-slate-800">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-lg">📧</span>
+                            <span class="text-sm font-bold text-white">Email</span>
+                        </div>
+                        <p class="text-xs text-slate-400">HTML reports for every import run</p>
+                        <span class="inline-block mt-2 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">ACTIVE</span>
+                    </div>
+                </div>
+
+                <div class="mt-6 bg-slate-950/80 rounded-2xl p-5 border border-slate-800 font-mono text-xs shadow-inner">
+                    <div class="flex items-center gap-2 mb-3">
+                        <div class="w-2.5 h-2.5 rounded-full bg-red-500/50"></div>
+                        <div class="w-2.5 h-2.5 rounded-full bg-amber-500/50"></div>
+                        <div class="w-2.5 h-2.5 rounded-full bg-emerald-500/50"></div>
+                    </div>
+                    <p class="text-emerald-400/80 mb-1"># All notifications broadcast to every channel</p>
+                    <p class="text-slate-300">✅ Import success/failure → <span class="text-blue-400">Push + Email + In-App</span></p>
+                    <p class="text-slate-300">✅ DB health alerts → <span class="text-blue-400">Push + Email + In-App</span></p>
+                    <p class="text-slate-300">✅ API quota warnings → <span class="text-blue-400">Push + Email + In-App</span></p>
                 </div>
             </TwCard>
         </div>

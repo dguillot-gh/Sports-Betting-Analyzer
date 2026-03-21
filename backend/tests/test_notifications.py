@@ -3,8 +3,7 @@ Unit tests for NotificationService.send_summary_report.
 
 Validates:
   1. In-app notification is always inserted (via insert_notification).
-  2. Email is sent ONLY when at least one import fails.
-  3. Pushover fires for every run (success and failure).
+  2. Email report is ALWAYS sent (success and failure).
 """
 
 import asyncio
@@ -40,39 +39,33 @@ class TestSendSummaryReport(unittest.TestCase):
     # ---- tests ---------------------------------------------------
 
     @patch("services.notifications.insert_notification", new_callable=AsyncMock)
-    @patch.object(NotificationService, "send_pushover_notification", new_callable=AsyncMock)
-    @patch.object(NotificationService, "_send_failure_email")
-    def test_all_success__no_email(self, mock_email, mock_pushover, mock_insert):
-        """When all imports succeed, email should NOT be sent."""
+    @patch.object(NotificationService, "_send_import_email")
+    def test_all_success__email_still_sent(self, mock_email, mock_insert):
+        """Email should be sent even when all imports succeed."""
         self._run(NotificationService.send_summary_report(
             self._success_results(), perf_summary=self._perf_summary()
         ))
 
-        # Pushover always fires
-        mock_pushover.assert_called_once()
         # In-app notification always inserted
         mock_insert.assert_called_once()
-        # Email should NOT fire (all success)
-        mock_email.assert_not_called()
+        # Email always fires now
+        mock_email.assert_called_once()
 
         # Verify severity is "success"
         call_kwargs = mock_insert.call_args
         self.assertEqual(call_kwargs.kwargs.get("severity") or call_kwargs[1].get("severity", call_kwargs[0][1] if len(call_kwargs[0]) > 1 else None), "success")
 
     @patch("services.notifications.insert_notification", new_callable=AsyncMock)
-    @patch.object(NotificationService, "send_pushover_notification", new_callable=AsyncMock)
-    @patch.object(NotificationService, "_send_failure_email")
-    def test_has_failure__sends_email(self, mock_email, mock_pushover, mock_insert):
+    @patch.object(NotificationService, "_send_import_email")
+    def test_has_failure__sends_email(self, mock_email, mock_insert):
         """When any import fails, email SHOULD be sent."""
         self._run(NotificationService.send_summary_report(
             self._failure_results(), perf_summary=self._perf_summary()
         ))
 
-        # Pushover fires
-        mock_pushover.assert_called_once()
         # In-app notification inserted
         mock_insert.assert_called_once()
-        # Email SHOULD fire (has failure)
+        # Email fires
         mock_email.assert_called_once()
 
         # Verify severity is "warning"
@@ -80,9 +73,8 @@ class TestSendSummaryReport(unittest.TestCase):
         self.assertEqual(call_kwargs.kwargs.get("severity") or call_kwargs[1].get("severity", call_kwargs[0][1] if len(call_kwargs[0]) > 1 else None), "warning")
 
     @patch("services.notifications.insert_notification", new_callable=AsyncMock)
-    @patch.object(NotificationService, "send_pushover_notification", new_callable=AsyncMock)
-    @patch.object(NotificationService, "_send_failure_email")
-    def test_metadata_contains_sports(self, mock_email, mock_pushover, mock_insert):
+    @patch.object(NotificationService, "_send_import_email")
+    def test_metadata_contains_sports(self, mock_email, mock_insert):
         """Metadata in the inserted notification should include per-sport breakdown."""
         self._run(NotificationService.send_summary_report(
             self._success_results(), perf_summary=self._perf_summary()
@@ -98,3 +90,4 @@ class TestSendSummaryReport(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

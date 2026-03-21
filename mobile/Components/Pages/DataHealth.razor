@@ -105,6 +105,37 @@ else if (!_loading)
     <div class="muted-center mt-section">No import runs recorded yet.</div>
 }
 
+<!-- Notification Testing -->
+<div class="section-title mt-section">🧪 Notification Testing</div>
+<div class="app-card">
+    <div class="app-card-body" style="padding: 12px;">
+        <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">
+            Tap a button to fire a test notification to that channel.
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+            <button class="app-btn test-btn test-btn-green" @onclick='() => TestChannel("in-app")' disabled="@(_testBusy.ContainsKey("in-app") && _testBusy["in-app"])">
+                @(_testBusy.ContainsKey("in-app") && _testBusy["in-app"] ? "Sending..." : "🔔 In-App (DB + Push + Email)")
+            </button>
+            <button class="app-btn test-btn test-btn-blue" @onclick='() => TestChannel("web-push")' disabled="@(_testBusy.ContainsKey("web-push") && _testBusy["web-push"])">
+                @(_testBusy.ContainsKey("web-push") && _testBusy["web-push"] ? "Sending..." : "🌐 Web Push Only")
+            </button>
+            <button class="app-btn test-btn test-btn-amber" @onclick='() => TestChannel("fcm")' disabled="@(_testBusy.ContainsKey("fcm") && _testBusy["fcm"])">
+                @(_testBusy.ContainsKey("fcm") && _testBusy["fcm"] ? "Sending..." : "📱 FCM Push Only")
+            </button>
+            <button class="app-btn test-btn test-btn-purple" @onclick='() => TestChannel("email")' disabled="@(_testBusy.ContainsKey("email") && _testBusy["email"])">
+                @(_testBusy.ContainsKey("email") && _testBusy["email"] ? "Sending..." : "📧 Email Only")
+            </button>
+            <button class="app-btn test-btn test-btn-gradient" @onclick='() => TestChannel("all")' disabled="@(_testBusy.ContainsKey("all") && _testBusy["all"])">
+                @(_testBusy.ContainsKey("all") && _testBusy["all"] ? "Sending..." : "🚀 Fire All Channels")
+            </button>
+        </div>
+        @if (!string.IsNullOrEmpty(_testResult))
+        {
+            <div class="test-result @(_testIsSuccess ? "test-ok" : "test-fail")">@_testResult</div>
+        }
+    </div>
+</div>
+
 <style>
     .page-header { padding: 16px 0 8px; }
     .page-header h1 { font-size: 22px; font-weight: 900; color: var(--text-primary); margin: 0 0 4px; }
@@ -175,6 +206,18 @@ else if (!_loading)
 
     .muted { color: var(--text-secondary); }
     .muted-center { text-align: center; padding: 24px; color: var(--text-secondary); font-size: 13px; }
+
+    /* Notification test buttons */
+    .test-btn { width: 100%; padding: 12px; font-size: 13px; font-weight: 700; border-radius: 10px; border: none; color: white; cursor: pointer; transition: opacity 0.2s; }
+    .test-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .test-btn-green    { background: #10b981; }
+    .test-btn-blue     { background: #3b82f6; }
+    .test-btn-amber    { background: #f59e0b; }
+    .test-btn-purple   { background: #8b5cf6; }
+    .test-btn-gradient { background: linear-gradient(135deg, #3b82f6, #8b5cf6); }
+    .test-result { margin-top: 10px; padding: 8px 12px; border-radius: 8px; font-size: 11px; font-family: monospace; }
+    .test-ok   { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); color: #10b981; }
+    .test-fail { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; }
 </style>
 
 @code {
@@ -182,6 +225,11 @@ else if (!_loading)
     private List<ImportLogItem> _logs = new();
     private bool _loading = false;
     private string _error = "";
+
+    // Notification test state
+    private Dictionary<string, bool> _testBusy = new();
+    private string _testResult = "";
+    private bool _testIsSuccess = false;
 
     protected override async Task OnInitializedAsync() => await Refresh();
 
@@ -210,6 +258,41 @@ else if (!_loading)
         }
     }
 
+    private async Task TestChannel(string channel)
+    {
+        _testBusy[channel] = true;
+        _testResult = "";
+        StateHasChanged();
+
+        try
+        {
+            var baseUrl = ConfigService.GetBaseUrl();
+            var response = await Http.PostAsync($"{baseUrl}/admin/notifications/test/{channel}", null);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                _testResult = $"✅ {channel.ToUpper()} — sent successfully";
+                _testIsSuccess = true;
+            }
+            else
+            {
+                _testResult = $"❌ {channel.ToUpper()} — HTTP {(int)response.StatusCode}: {body}";
+                _testIsSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _testResult = $"❌ {channel.ToUpper()} — {ex.Message}";
+            _testIsSuccess = false;
+        }
+        finally
+        {
+            _testBusy[channel] = false;
+            StateHasChanged();
+        }
+    }
+
     private class FreshnessItem
     {
         [JsonPropertyName("sport")]               public string Sport             { get; set; } = "";
@@ -231,3 +314,4 @@ else if (!_loading)
         [JsonPropertyName("updated_rows_imported")] public int    UpdatedRowsImported  { get; set; }
     }
 }
+

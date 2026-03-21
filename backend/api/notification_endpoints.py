@@ -121,3 +121,86 @@ async def mark_read_all(request: Request):
     finally:
         if conn:
             await _release_db_connection(request, conn)
+
+
+@router.post("/test/{channel}")
+async def test_notification_channel(channel: str):
+    """
+    Fire a test notification to a specific channel.
+    Channels: in-app, web-push, fcm, email, all
+    """
+    from datetime import datetime
+
+    valid_channels = ("in-app", "web-push", "fcm", "email", "all")
+    if channel not in valid_channels:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid channel '{channel}'. Valid: {', '.join(valid_channels)}",
+        )
+
+    timestamp = datetime.now().strftime("%I:%M:%S %p")
+    title = f"🧪 Test — {channel.upper()}"
+    message = f"This is a test notification sent at {timestamp}. If you're reading this, the {channel} channel is working!"
+
+    results = {}
+
+    # In-App (writes to DB, which also triggers push+email via insert_notification)
+    if channel in ("in-app", "all"):
+        try:
+            from src.notification_store import insert_notification
+
+            await insert_notification(
+                DATABASE_URL,
+                severity="info",
+                category="test",
+                title=title if channel != "all" else "🧪 Test — ALL CHANNELS",
+                message=message,
+                source="admin.test_notification",
+                metadata={"test": True, "channel": channel},
+            )
+            results["in-app"] = {"success": True, "detail": "Notification inserted (also triggers push+email)"}
+        except Exception as exc:
+            results["in-app"] = {"success": False, "detail": str(exc)}
+
+    # Web Push (direct, bypasses insert_notification)
+    if channel == "web-push" or (channel == "all" and False):  # 'all' handled by in-app
+        try:
+            from src.push_store import send_web_push_to_all
+
+            sent = await send_web_push_to_all(
+                DATABASE_URL,
+                title=title,
+                message=message,
+                severity="info",
+            )
+            results["web-push"] = {"success": True, "sent": sent}
+        except Exception as exc:
+            results["web-push"] = {"success": False, "detail": str(exc)}
+
+    # FCM (direct, bypasses insert_notification)
+    if channel == "fcm" or (channel == "all" and False):  # 'all' handled by in-app
+        try:
+            from src.fcm_store import send_fcm_to_all
+
+            sent = await send_fcm_to_all(
+                DATABASE_URL,
+                title=title,
+                message=message,
+                severity="info",
+            )
+            results["fcm"] = {"success": True, "sent": sent}
+        except Exception as exc:
+            results["fcm"] = {"success": False, "detail": str(exc)}
+
+    # Email (direct, bypasses insert_notification)
+    if channel == "email" or (channel == "all" and False):  # 'all' handled by in-app
+        try:
+            from src.notification_store import _send_notification_email
+
+            _send_notification_email(title, message, "info", "test")
+            results["email"] = {"success": True, "detail": "Email sent"}
+        except Exception as exc:
+            results["email"] = {"success": False, "detail": str(exc)}
+
+    return {"channel": channel, "results": results}
+

@@ -145,7 +145,8 @@
             </div>
             <p class="text-slate-300 text-lg leading-relaxed max-w-3xl">
                 A full-stack application that uses machine learning to analyze sports data and generate predictions 
-                for NASCAR, NFL, and NBA. Built with Blazor, Python, and modern ML frameworks.
+                for NASCAR, NFL, and NBA. Built with Blazor, Python, and modern ML frameworks. Features real-time 
+                push notifications, automated data imports, and multi-channel alerting.
             </p>
         </TwCard>
 
@@ -230,6 +231,60 @@
             </div>
         </TwCard>
 
+        <!-- Notification & Alerting Infrastructure -->
+        <TwCard Class="p-8 bg-slate-900 border-slate-800">
+            <div class="flex items-center gap-3 mb-8">
+                <TwIcon Icon="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" Class="w-6 h-6 text-rose-400" />
+                <h2 class="text-2xl font-bold text-white">Notification & Alerting</h2>
+            </div>
+
+            <TwGrid Columns="1" ColumnsMd="2" ColumnsLg="4" Gap="6">
+                <div class="p-6 rounded-xl border border-slate-800 bg-slate-950/50">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="text-2xl">📱</span>
+                        <h3 class="text-lg font-bold text-rose-400">FCM Push</h3>
+                    </div>
+                    <p class="text-slate-400 text-sm leading-relaxed">Native Android push notifications via Firebase Cloud Messaging with automatic device token management.</p>
+                </div>
+
+                <div class="p-6 rounded-xl border border-slate-800 bg-slate-950/50">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="text-2xl">🌐</span>
+                        <h3 class="text-lg font-bold text-blue-400">Web Push</h3>
+                    </div>
+                    <p class="text-slate-400 text-sm leading-relaxed">Browser push notifications using VAPID keys and Service Workers for real-time desktop alerts.</p>
+                </div>
+
+                <div class="p-6 rounded-xl border border-slate-800 bg-slate-950/50">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="text-2xl">📧</span>
+                        <h3 class="text-lg font-bold text-amber-400">Email Reports</h3>
+                    </div>
+                    <p class="text-slate-400 text-sm leading-relaxed">Premium HTML email reports with per-sport breakdowns, health scores, and performance metrics via SMTP.</p>
+                </div>
+
+                <div class="p-6 rounded-xl border border-slate-800 bg-slate-950/50">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="text-2xl">🔔</span>
+                        <h3 class="text-lg font-bold text-emerald-400">In-App</h3>
+                    </div>
+                    <p class="text-slate-400 text-sm leading-relaxed">Real-time notification bell with toast popups, unread counts, and polling from PostgreSQL.</p>
+                </div>
+            </TwGrid>
+
+            <div class="mt-8">
+                <p class="text-sm font-semibold text-slate-500 uppercase tracking-widest mb-4 text-center">Alert Triggers</p>
+                <div class="flex flex-wrap justify-center gap-3">
+                    <TwChip Color="emerald" Variant="outline">Import Success</TwChip>
+                    <TwChip Color="red" Variant="outline">Import Failure</TwChip>
+                    <TwChip Color="amber" Variant="outline">DB Health Warning</TwChip>
+                    <TwChip Color="blue" Variant="outline">API Quota Alerts</TwChip>
+                    <TwChip Color="purple" Variant="outline">Endpoint Degradation</TwChip>
+                    <TwChip Color="red" Variant="outline">Restart Loop Detection</TwChip>
+                </div>
+            </div>
+        </TwCard>
+
         <!-- ML Models -->
         <TwGrid Columns="1" ColumnsMd="2" Gap="8">
             <TwCard Class="p-8 bg-slate-900 border-slate-800">
@@ -281,6 +336,10 @@
                 <TwChip Color="amber" Variant="outline">XGBoost</TwChip>
                 <TwChip Color="blue" Variant="outline">Pandas</TwChip>
                 <TwChip Color="slate" Variant="outline">Tailwind CSS</TwChip>
+                <TwChip Color="amber" Variant="outline">Firebase (FCM)</TwChip>
+                <TwChip Color="blue" Variant="outline">PostgreSQL</TwChip>
+                <TwChip Color="slate" Variant="outline">Docker</TwChip>
+                <TwChip Color="purple" Variant="outline">Web Push (VAPID)</TwChip>
             </div>
         </TwCard>
 
