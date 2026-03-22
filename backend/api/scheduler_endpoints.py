@@ -1,9 +1,12 @@
 
+import logging
 from fastapi import APIRouter, Request, HTTPException, BackgroundTasks
 from services.scheduler import SchedulerService
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["Scheduler"])
 from api.db_endpoints import get_db_connection
@@ -37,12 +40,9 @@ async def get_import_logs(request: Request, limit: int = 50):
     """
     Get historical import logs.
     """
-    import asyncpg
-    from src.config import DATABASE_URL
-    
-    conn = None # Initialize conn to None
+    conn = None
     try:
-        conn = await get_db_connection(request)
+        conn = await get_db_connection()
         rows = await conn.fetch("""
             SELECT * FROM import_logs 
             ORDER BY start_time DESC 
@@ -54,11 +54,8 @@ async def get_import_logs(request: Request, limit: int = 50):
         logger.error(f"Error fetching import logs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        if conn: # Only try to release/close if conn was successfully established
-            if hasattr(request.app.state, 'pool') and request.app.state.pool:
-                await request.app.state.pool.release(conn)
-            else:
-                await conn.close()
+        if conn:
+            await conn.close()
 
 
 @router.get("/import-summary")
@@ -67,12 +64,9 @@ async def get_import_summary(request: Request):
     Most recent completed import run per sport.
     Shows new vs updated at a glance for dashboards and mobile app.
     """
-    import asyncpg
-    from src.config import DATABASE_URL
-
-    conn = None # Initialize conn to None
+    conn = None
     try:
-        conn = await get_db_connection(request)
+        conn = await get_db_connection()
         rows = await conn.fetch("""
             SELECT DISTINCT ON (sport)
                 sport, status, start_time, end_time, duration_seconds,
@@ -86,11 +80,8 @@ async def get_import_summary(request: Request):
         logger.error(f"Error fetching import summary: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        if conn: # Only try to release/close if conn was successfully established
-            if hasattr(request.app.state, 'pool') and request.app.state.pool:
-                await request.app.state.pool.release(conn)
-            else:
-                await conn.close()
+        if conn:
+            await conn.close()
 
 
 @router.get("/data-freshness")
@@ -101,14 +92,11 @@ async def get_data_freshness(request: Request):
     - freshness_status: fresh (<2d) | stale (2-7d) | very_stale (>7d) | never
     Accessible by web and mobile clients.
     """
-    import asyncpg
-    from src.config import DATABASE_URL
     from datetime import timezone
 
-
-    conn = None # Initialize conn to None
+    conn = None
     try:
-        conn = await get_db_connection(request)
+        conn = await get_db_connection()
         counts = await conn.fetch("""
             SELECT s.name AS sport,
                    COUNT(r.id) AS total_records,
@@ -162,10 +150,11 @@ async def get_data_freshness(request: Request):
             })
 
         return result
+    except Exception as e:
+        logger.error(f"Error fetching data freshness: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
-        if hasattr(request.app.state, 'pool') and request.app.state.pool:
-            await request.app.state.pool.release(conn)
-        else:
+        if conn:
             await conn.close()
 
 @router.post("/run-cbb-backfill")
