@@ -99,9 +99,34 @@ async def lifespan(app: FastAPI):
         await ensure_notifications_schema(DATABASE_URL)
         await ensure_push_schema(DATABASE_URL)
         await ensure_fcm_schema(DATABASE_URL)
+        
+        # 2. Initialize Scheduler (MUST be in lifespan, startup_event is ignored)
+        from services.scheduler import SchedulerService
+        await SchedulerService.init_db()
+        SchedulerService.start_scheduler()
+        
         logger.info("Connection pool created successfully")
+        
+        # 3. Ensure more schemas and record startup
+        from src.database import ensure_version_schema
+        await ensure_version_schema()
+        from src.ops_alerts import OpsAlertService
+        await OpsAlertService.record_startup_and_check_loop(DATABASE_URL)
+        
+        # 4. Register current version (auto-increments build number)
+        from api.deployment_endpoints import register_current_version
+        result = await register_current_version()
+        if result.get("success"):
+            global current_version
+            current_version = result["version"]
+            app.version = current_version
+            logger.info(f"Version registered: {current_version}")
+        else:
+            logger.warning(f"Failed to register version: {result.get('error')}")
+            
+        logger.info("Connection pool and lifecycle initialized successfully")
     except Exception as e:
-        logger.error(f"Failed to create connection pool: {e}")
+        logger.error(f"Startup initialization failed: {e}")
     
     yield
     
@@ -110,7 +135,7 @@ async def lifespan(app: FastAPI):
         logger.info("Closing asyncpg connection pool...")
         await db_pool.close()
 
-# Version — updated to DB-backed value after startup
+# Version â€” updated to DB-backed value after startup
 current_version = get_version()
 app = FastAPI(title='Sports ML API', version=current_version, lifespan=lifespan)
 
@@ -209,7 +234,7 @@ def health():
 # ---------- Version Information ----------
 @app.get('/version')
 def get_version_endpoint():
-    """Get version information — includes auto-incremented build number"""
+    """Get version information â€” includes auto-incremented build number"""
     global current_version
     info = get_version_info()
     info["version"] = current_version  # override with DB-backed version
@@ -2941,19 +2966,19 @@ def get_player_edge_scores(
             
             # Determine trend
             if edge_score > 1:
-                trend = "🔥 Hot"
+                trend = "ðŸ”¥ Hot"
                 trend_color = "success"
             elif edge_score > 0.5:
-                trend = "📈 Warming"
+                trend = "ðŸ“ˆ Warming"
                 trend_color = "info"
             elif edge_score < -1:
-                trend = "❄️ Cold"
+                trend = "â„ï¸ Cold"
                 trend_color = "error"
             elif edge_score < -0.5:
-                trend = "📉 Cooling"
+                trend = "ðŸ“‰ Cooling"
                 trend_color = "warning"
             else:
-                trend = "➡️ Steady"
+                trend = "âž¡ï¸ Steady"
                 trend_color = "default"
             
             # Get team if available
@@ -4418,33 +4443,7 @@ async def import_ncaab_root(background_tasks: BackgroundTasks, start_year: int =
     return {'status': 'started', 'message': f'Started NCAAB import {start_year}-{end_year}'}
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize all backend services on startup."""
-    global current_version
-    try:
-        # 1. Ensure version schema exists
-        from src.database import ensure_version_schema
-        await ensure_version_schema()
-        await ensure_notifications_schema(DATABASE_URL)
-        await OpsAlertService.record_startup_and_check_loop(DATABASE_URL)
-        
-        # 2. Initialize Scheduler
-        await SchedulerService.init_db()
-        SchedulerService.start_scheduler()
-        
-        # 3. Register current version (auto-increments build number)
-        from api.deployment_endpoints import register_current_version
-        result = await register_current_version()
-        if result.get("success"):
-            current_version = result["version"]
-            app.version = current_version
-            logger.info(f"Version registered: {current_version}")
-        else:
-            logger.warning(f"Failed to register version: {result.get('error')}")
-            
-    except Exception as e:
-        logger.error(f"Startup error: {e}")
+# 3. Startup logic moved to lifespan
 
 
 # Standings endpoints to fix 404 errors for mobile app
