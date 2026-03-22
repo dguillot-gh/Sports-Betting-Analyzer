@@ -117,8 +117,52 @@ class ErrorEmailHandler(logging.Handler):
 
             message.set_content("\n".join(body_parts))
             self._send(message)
+
+            # Also fire in-app + FCM + Web Push via insert_notification
+            self._queue_app_notification(record, formatted_line)
         except Exception as exc:
             print(f"ErrorEmailHandler failed to send email: {exc}", file=sys.stderr)
+
+    def _queue_app_notification(self, record: logging.LogRecord, formatted_line: str) -> None:
+        """Fire insert_notification so errors also go to FCM, Web Push, and in-app bell."""
+        import asyncio
+
+        try:
+            from src.config import DATABASE_URL
+            from src.notification_store import insert_notification
+
+            title = f"🔴 {record.name}"
+            msg = record.getMessage()[:500]
+
+            async def _insert():
+                try:
+                    await insert_notification(
+                        DATABASE_URL,
+                        severity="error",
+                        category="system_error",
+                        title=title,
+                        message=msg,
+                        source=f"error_notifier.{record.name}",
+                        metadata={
+                            "logger": record.name,
+                            "level": record.levelname,
+                            "hostname": self._hostname,
+                        },
+                    )
+                except Exception:
+                    pass  # Don't recurse into error logging
+
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(_insert())
+            except RuntimeError:
+                # No running loop — run synchronously in a new loop
+                try:
+                    asyncio.run(_insert())
+                except Exception:
+                    pass
+        except Exception:
+            pass  # Never let notification failures break error logging
 
     def _send(self, message: EmailMessage) -> None:
         with smtplib.SMTP(self.settings.smtp_host, self.settings.smtp_port, timeout=10) as smtp:
