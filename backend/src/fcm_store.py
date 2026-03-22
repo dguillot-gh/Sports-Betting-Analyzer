@@ -174,10 +174,32 @@ async def send_fcm_to_all(
 
     for i in range(0, len(tokens), 500):
         batch = tokens[i : i + 500]
+        # Create the message with priority and platform-specific settings
+        android_config = messaging.AndroidConfig(
+            priority="high",
+            notification=messaging.AndroidNotification(
+                tag=title,
+                sound="default",
+            )
+        )
+        
+        apns_config = messaging.APNSConfig(
+            payload=messaging.APNSPayload(
+                aps=messaging.Aps(
+                    alert=messaging.ApsAlert(title=title, body=message),
+                    sound="default",
+                    badge=1,
+                ),
+            ),
+            headers={"apns-priority": "10"}  # 10 is high, 5 is normal
+        )
+
         multicast = messaging.MulticastMessage(
             notification=notification,
             data=data,
             tokens=batch,
+            android=android_config,
+            apns=apns_config,
         )
 
         try:
