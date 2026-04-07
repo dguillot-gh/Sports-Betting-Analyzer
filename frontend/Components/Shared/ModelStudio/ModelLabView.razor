@@ -331,7 +331,8 @@
     private string GetHeaderGradient(string sport) => sport switch
     {
         "nba" => "from-indigo-900 via-purple-900 to-fuchsia-900",
-        "nfl" => "from-green-900 via-emerald-900 to-teal-900", // NFL Green
+        "nfl" => "from-green-900 via-emerald-900 to-teal-900",
+        "ncaab" => "from-purple-900 via-violet-900 to-indigo-900",
         "nascar" => "from-yellow-900 via-amber-900 to-orange-900",
         _ => "from-slate-900 to-slate-800"
     };
@@ -340,6 +341,7 @@
     {
          "nba" => "bg-fuchsia-500/20",
          "nfl" => "bg-emerald-500/20",
+         "ncaab" => "bg-purple-500/20",
          "nascar" => "bg-yellow-500/20",
          _ => "bg-blue-500/20"
     };

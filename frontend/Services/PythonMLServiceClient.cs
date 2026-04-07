@@ -855,7 +855,7 @@ public class PythonMLServiceClient
 
     public Task<List<string>> GetAvailableSportsAsync()
     {
-        return Task.FromResult(new List<string> { "nascar", "nfl", "nhl" });
+        return Task.FromResult(new List<string> { "nascar", "nfl", "nhl", "ncaab" });
     }
 
     public Task<List<string>> GetNASCARSeriesAsync()

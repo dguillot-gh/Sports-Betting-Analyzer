@@ -115,7 +115,7 @@ async def fetch_college_baseball_scores(
     return all_games
 
 
-async def store_game_results(games: List[Dict[str, Any]], db_url: str = None) -> int:
+async def store_game_results(games: List[Dict[str, Any]], db_url: str = None) -> Dict[str, int]:
     """
     Store game results in the PostgreSQL results table.
     
@@ -124,10 +124,10 @@ async def store_game_results(games: List[Dict[str, Any]], db_url: str = None) ->
         db_url: Database connection URL
     
     Returns:
-        Number of games inserted
+        Summary counts with keys: rows, new, updated
     """
     if not games:
-        return 0
+        return {"rows": 0, "new": 0, "updated": 0}
     
     if db_url is None:
         try:

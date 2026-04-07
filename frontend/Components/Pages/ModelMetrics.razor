@@ -211,7 +211,8 @@
                         OUMAE = GetDoubleOrDefault(data, "ou_mae", 1.0),
                         SamplesCount = GetIntOrDefault(data, "samples", 2000),
                         CVFolds = 5,
-                        BySeason = ParseSeasonData(data)
+                        BySeason = ParseSeasonData(data),
+                        BetHistory = ParseBetHistoryData(data)
                     };
                 }
             }
@@ -256,6 +257,19 @@
                 seasons.Add(season);
             }
             return seasons;
+        }
+        return null;
+    }
+
+    private List<BetHistoryRecord>? ParseBetHistoryData(Dictionary<string, JsonElement> data)
+    {
+        if (data.TryGetValue("bet_history", out var element) && element.ValueKind == JsonValueKind.Array)
+        {
+            try {
+                return JsonSerializer.Deserialize<List<BetHistoryRecord>>(element.GetRawText(), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            } catch {
+                return null;
+            }
         }
         return null;
     }
@@ -529,6 +543,57 @@
         builder.CloseElement();
     }
 
+    private Func<BetHistoryRecord, object> _getBankrollX => e => e.GameDate;
+    private Func<BetHistoryRecord, decimal?> _getBankrollY => e => (decimal?)e.Bankroll;
+
+    private ApexCharts.ApexChartOptions<BetHistoryRecord> GetBankrollChartOptions(string colorName)
+    {
+        string hexColor = colorName switch {
+            "purple" => "#a855f7",
+            "orange" => "#f97316",
+            "green" => "#22c55e",
+            "red" => "#ef4444",
+            "emerald" => "#10b981",
+            "amber" => "#f59e0b",
+            _ => "#3b82f6" // blue
+        };
+
+        return new ApexCharts.ApexChartOptions<BetHistoryRecord>
+        {
+            Chart = new ApexCharts.Chart
+            {
+                Toolbar = new ApexCharts.Toolbar { Show = false },
+                Background = "transparent",
+                ForeColor = "#94a3b8" // slate-400
+            },
+            Theme = new ApexCharts.Theme { Mode = ApexCharts.Mode.Dark },
+            Stroke = new ApexCharts.Stroke { Curve = ApexCharts.Curve.Smooth, Width = 3 },
+            Markers = new ApexCharts.Markers { Size = 0, StrokeWidth = 0 },
+            Xaxis = new ApexCharts.XAxis 
+            { 
+                Title = new ApexCharts.AxisTitle { Text = "" },
+                AxisBorder = new ApexCharts.AxisBorder { Show = false },
+                AxisTicks = new ApexCharts.AxisTicks { Show = false },
+                Labels = new ApexCharts.XAxisLabels { Show = false }
+            },
+            Yaxis = new List<ApexCharts.YAxis> 
+            { 
+                new ApexCharts.YAxis 
+                { 
+                    Title = new ApexCharts.AxisTitle { Text = "Bankroll ($)" },
+                    Labels = new ApexCharts.YAxisLabels { Style = new ApexCharts.AxisLabelStyle { Colors = "#64748b" } },
+                    DecimalsInFloat = 0
+                } 
+            },
+            Grid = new ApexCharts.Grid 
+            { 
+                BorderColor = "#334155", // slate-700
+                StrokeDashArray = 4 
+            },
+            Colors = new List<string> { hexColor }
+        };
+    }
+
     // Default metrics generators
     private ModelMetricsData GetDefaultNHLMetrics() => new()
     {
@@ -607,6 +672,7 @@
         public int SamplesCount { get; set; }
         public int CVFolds { get; set; }
         public List<SeasonMetrics>? BySeason { get; set; }
+        public List<BetHistoryRecord>? BetHistory { get; set; }
     }
 
     private class SeasonMetrics
@@ -617,5 +683,29 @@
         public double WinRate { get; set; }
         public double Profit { get; set; }
         public double ROI { get; set; }
+    }
+
+    public class BetHistoryRecord
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("game_date")] 
+        public string GameDate { get; set; } = "";
+        
+        [System.Text.Json.Serialization.JsonPropertyName("home_team")] 
+        public string HomeTeam { get; set; } = "";
+        
+        [System.Text.Json.Serialization.JsonPropertyName("away_team")] 
+        public string AwayTeam { get; set; } = "";
+        
+        [System.Text.Json.Serialization.JsonPropertyName("bet_on")] 
+        public string BetOn { get; set; } = "";
+        
+        [System.Text.Json.Serialization.JsonPropertyName("profit")] 
+        public double Profit { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("bankroll")] 
+        public double Bankroll { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("won")] 
+        public bool Won { get; set; }
     }
 }

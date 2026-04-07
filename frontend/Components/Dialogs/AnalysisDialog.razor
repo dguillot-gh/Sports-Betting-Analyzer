@@ -134,26 +134,30 @@
                             <span class="text-[9px] text-slate-600 bg-slate-900 px-2 py-1 rounded">Feature Attribution</span>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            @foreach (var factor in Factors)
-                            {
-                                <div class="p-3 bg-slate-900/50 border border-slate-800 rounded-xl flex items-center gap-4">
-                                    <div class="@(factor.Impact > 0 ? "bg-emerald-500/20 text-emerald-500" : "bg-rose-500/20 text-rose-500") p-2 rounded-lg">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            @if(factor.Impact > 0) { <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path> }
-                                            else { <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path> }
-                                        </svg>
-                                    </div>
-                                    <div class="flex-1 min-w-0">
-                                        <div class="flex justify-between items-center mb-1.5">
-                                            <span class="text-[10px] font-bold text-white truncate pr-2">@factor.Label.Replace("_", " ").ToUpper()</span>
-                                            <span class="text-[9px] font-mono text-slate-500">@Math.Abs(factor.Impact).ToString("F2")</span>
+                                @foreach (var factor in Factors)
+                                {
+                                    var isPos = factor.Direction == "Positive" || (string.IsNullOrEmpty(factor.Direction) && factor.Impact > 0);
+                                    var bgColor = isPos ? "bg-emerald-500/20 text-emerald-500" : "bg-rose-500/20 text-rose-500";
+                                    var pbColor = isPos ? "success" : "error";
+                                    
+                                    <div class="p-3 bg-slate-900/50 border border-slate-800 rounded-xl flex items-center gap-4">
+                                        <div class="@bgColor p-2 rounded-lg">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                @if(isPos) { <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path> }
+                                                else { <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path> }
+                                            </svg>
                                         </div>
-                                        <TwProgressBar Value="@((int)Math.Min(100, Math.Abs(factor.Impact) * 20))" 
-                                                      Color="@(factor.Impact > 0 ? "success" : "error")" 
-                                                      Size="sm" />
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex justify-between items-center mb-1.5">
+                                                <span class="text-[10px] font-bold text-white truncate pr-2">@factor.Label.Replace("_", " ").ToUpper()</span>
+                                                <span class="text-[9px] font-mono text-slate-500" title="@factor.Direction">@Math.Abs(factor.Impact).ToString("F2")</span>
+                                            </div>
+                                            <TwProgressBar Value="@((int)Math.Min(100, Math.Abs(factor.Impact) * 20))" 
+                                                          Color="@pbColor" 
+                                                          Size="sm" />
+                                        </div>
                                     </div>
-                                </div>
-                            }
+                                }
                         </div>
                     </div>
                 }
@@ -257,7 +261,18 @@
 
     private void ParseFactors()
     {
-        if (FullGameData.TryGetProperty("v2_factors", out var fList) && fList.ValueKind == JsonValueKind.Array)
+        if (FullGameData.TryGetProperty("factors", out var factorsArray) && factorsArray.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in factorsArray.EnumerateArray())
+            {
+                Factors.Add(new FactorItem { 
+                    Label = item.TryGetProperty("label", out var l) ? l.GetString() ?? "" : "", 
+                    Impact = item.TryGetProperty("impact", out var i) ? i.GetDouble() : 0,
+                    Direction = item.TryGetProperty("direction", out var d) ? d.GetString() ?? "" : ""
+                });
+            }
+        }
+        else if (FullGameData.TryGetProperty("v2_factors", out var fList) && fList.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in fList.EnumerateArray())
             {
@@ -342,5 +357,6 @@
     private class FactorItem {
         public string Label { get; set; } = "";
         public double Impact { get; set; }
+        public string Direction { get; set; } = "";
     }
 }

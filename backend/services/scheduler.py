@@ -128,6 +128,10 @@ class SchedulerService:
             res_nba = await cls._run_job_wrapper("nba", cls._import_nba_task)
             results.append(res_nba)
             
+            # --- 2b. NBA Backtest ---
+            res_nba_bt = await cls._run_job_wrapper("nba_backtest", cls._backtest_nba_task)
+            results.append(res_nba_bt)
+            
             # --- 3. NFL ---
             res_nfl = await cls._run_job_wrapper("nfl", cls._import_nfl_task)
             results.append(res_nfl)
@@ -292,6 +296,18 @@ class SchedulerService:
             "new": res.get("games_new", 0) + res.get("players_new", 0),
             "updated": res.get("games_updated", 0) + res.get("players_updated", 0),
             "files": len(res.get("downloaded", []))
+        }
+
+    @staticmethod
+    async def _backtest_nba_task():
+        """Worker for Nightly NBA Backtest."""
+        from scripts.nba_backtesting import run_nba_backtest
+        res = await run_nba_backtest(min_edge=0.04, stake=100.0, use_kelly=False)
+        return {
+            "rows": res.get("total_bets", 0),
+            "new": res.get("wins", 0),  # Tracking wins just to populate the DB fields somewhat relevantly
+            "updated": 0,
+            "detail": f"ROI: {res.get('roi', 0):.1f}%"
         }
 
     @staticmethod

@@ -139,7 +139,7 @@
                                                 @(currentPrediction.PredictedWinner ?? "—")
                                             </div>
                                             <div class="pt-col-val val-green">
-                                                —
+                                                @(currentPrediction.V2Available ? (currentPrediction.V2Winner ?? "—") : "—")
                                             </div>
                                         </div>
 
@@ -152,6 +152,27 @@
                                             <div class="pt-col-val">
                                                 @(currentPrediction.V2Available ? $"{currentPrediction.V2Total:F1}" : "—")
                                             </div>
+                                        </div>
+                                    </div>
+
+                                    @* Model Impact Factors *@
+                                    <div class="impact-factors">
+                                        <div class="factors-header">Model Impact Factors</div>
+                                        <div class="factors-list">
+                                            @if (currentPrediction.V2Factors.Any())
+                                            {
+                                                @foreach (var factor in currentPrediction.V2Factors)
+                                                {
+                                                    var isPos = factor.Impact > 0;
+                                                    <span class="factor-chip @(isPos ? "factor-pos" : "factor-neg")">
+                                                        @(isPos ? "+" : "")@factor.Label
+                                                    </span>
+                                                }
+                                            }
+                                            else
+                                            {
+                                                <span class="factors-empty">No analysis data available</span>
+                                            }
                                         </div>
                                     </div>
 
@@ -219,6 +240,13 @@
     .val-pos { color: var(--success); }
     .val-neg { color: var(--danger); }
     .signal-banner { margin-top: 16px; background: var(--success-bg); border: 1px solid var(--success-border); color: var(--success); padding: 10px; border-radius: 20px; text-align: center; font-size: 11px; font-weight: 800; letter-spacing: 1px; }
+    .impact-factors { margin-top: 14px; padding: 10px; background: var(--surface-overlay); border-radius: var(--radius-sm); border: 1px solid var(--border); }
+    .factors-header { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .factors-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .factor-chip { display: inline-block; font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 12px; border: 1px solid; }
+    .factor-pos { color: var(--success, #22c55e); border-color: var(--success-border, rgba(34,197,94,0.3)); background: var(--success-bg, rgba(34,197,94,0.08)); }
+    .factor-neg { color: var(--danger, #ef4444); border-color: var(--danger-border, rgba(239,68,68,0.3)); background: var(--danger-bg, rgba(239,68,68,0.08)); }
+    .factors-empty { font-size: 10px; color: var(--text-muted); font-style: italic; }
     @@keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 
@@ -320,7 +348,7 @@
 
     private PredictionInfo ParsePredictionInfo(JsonElement el)
     {
-        return new PredictionInfo
+        var info = new PredictionInfo
         {
             HomeWinProb = el.TryGetProperty("home_win_probability", out var hw) && hw.ValueKind != JsonValueKind.Null ? hw.GetDouble() : null,
             PredictedWinner = el.TryGetProperty("predicted_winner", out var pw) && pw.ValueKind != JsonValueKind.Null ? pw.GetString() : null,
@@ -328,7 +356,34 @@
             V2Available = el.TryGetProperty("v2_available", out var v2a) && v2a.ValueKind != JsonValueKind.Null && v2a.GetBoolean(),
             V2WinProb = el.TryGetProperty("v2_win_prob", out var v2w) && v2w.ValueKind != JsonValueKind.Null ? v2w.GetDouble() : null,
             V2Total = el.TryGetProperty("v2_total", out var v2t) && v2t.ValueKind != JsonValueKind.Null ? v2t.GetDouble() : null,
+            V2Winner = el.TryGetProperty("v2_winner", out var v2wn) && v2wn.ValueKind != JsonValueKind.Null ? v2wn.GetString() : null,
         };
+
+        // Parse V2 factors: try universal "factors" key first, then legacy "v2_factors"
+        if (el.TryGetProperty("factors", out var fArray) && fArray.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var f in fArray.EnumerateArray())
+            {
+                info.V2Factors.Add(new FactorInfo
+                {
+                    Label = f.TryGetProperty("label", out var l) ? l.GetString() ?? "" : "",
+                    Impact = f.TryGetProperty("impact", out var i) ? i.GetDouble() : 0
+                });
+            }
+        }
+        else if (el.TryGetProperty("v2_factors", out var v2fArray) && v2fArray.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var f in v2fArray.EnumerateArray())
+            {
+                info.V2Factors.Add(new FactorInfo
+                {
+                    Label = f.TryGetProperty("label", out var l) ? l.GetString() ?? "" : "",
+                    Impact = f.TryGetProperty("impact", out var i) ? i.GetDouble() : 0
+                });
+            }
+        }
+
+        return info;
     }
 
     private string FormatML(int ml) => ml > 0 ? $"+{ml}" : ml.ToString();
@@ -375,5 +430,13 @@
         public bool V2Available { get; set; }
         public double? V2WinProb { get; set; }
         public double? V2Total { get; set; }
+        public string? V2Winner { get; set; }
+        public List<FactorInfo> V2Factors { get; set; } = new();
+    }
+
+    private class FactorInfo
+    {
+        public string Label { get; set; } = "";
+        public double Impact { get; set; }
     }
 }

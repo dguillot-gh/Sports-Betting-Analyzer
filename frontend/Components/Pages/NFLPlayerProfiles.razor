@@ -108,7 +108,7 @@
                                 <HeaderContent>
                                     <div class="flex items-center justify-between w-full">
                                         <span class="font-bold text-white">Recent Games</span>
-                                        <TwLink Href="@($"/nfl-results?player={Uri.EscapeDataString(_profile.Name ?? "")}")">
+                                        <TwLink Href="@($"/nfl/scores?player={Uri.EscapeDataString(_profile.Name ?? "")}")">
                                             View All Results →
                                         </TwLink>
                                     </div>
@@ -164,7 +164,7 @@
                             <TwAlert Severity="info">
                                 No recent games found.
                                 <div class="mt-2">
-                                    <TwLink Href="@($"/nfl-results?player={Uri.EscapeDataString(_profile.Name ?? "")}")">
+                                    <TwLink Href="@($"/nfl/scores?player={Uri.EscapeDataString(_profile.Name ?? "")}")">
                                         Search in Game Results
                                     </TwLink>
                                 </div>

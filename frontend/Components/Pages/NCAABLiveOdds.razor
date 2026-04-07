@@ -1,11 +1,14 @@
 @page "/ncaab-live-odds"
 @using System.Text.Json
+@using System.Text.Json.Serialization
 @using SportsBettingAnalyzer.Components.Shared.Tailwind
+@using SportsBettingAnalyzer.Shared.Services
 @implements IDisposable
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject ILogger<NCAABLiveOdds> Logger
 @inject PythonMLServiceClient MLServiceClient
+@inject IServerConfigService ServerConfig
 @rendermode InteractiveServer
 
 <PageTitle>NCAAB Live Odds</PageTitle>
@@ -53,8 +56,8 @@
                                OnClick="@SaveAllToCache" IsLoading="@_isSavingAll" Disabled="@(!_games.Any() || _isSavingAll)">
                         Snapshot Results
                     </TwButton>
-                    <TwButton Variant="secondary" Href="/daily-analysis" StartIcon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z">
-                        Daily Cache
+                    <TwButton Variant="secondary" Href="/data-center" StartIcon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z">
+                        Data Center
                     </TwButton>
                 </div>
             </div>
@@ -236,8 +239,10 @@
                                     {
                                         @foreach (var factor in game.Prediction.V2Factors)
                                         {
-                                            var isPos = factor.Impact > 0;
-                                            <TwChip Color="@(isPos ? "emerald" : "red")" Variant="outline" Size="xs" title="@($"Impact: {factor.Impact:F4}")">
+                                            var isPos = factor.Direction == "Positive" || (string.IsNullOrEmpty(factor.Direction) && factor.Impact > 0);
+                                            var color = factor.Direction == "Positive" ? "emerald" : factor.Direction == "Negative" ? "red" : (factor.Impact > 0 ? "emerald" : "red");
+                                            
+                                            <TwChip Color="@color" Variant="outline" Size="xs" title="@($"Impact: {factor.Impact:F4} / Direction: {factor.Direction}")">
                                                 @(isPos ? "+" : "")@factor.Label
                                             </TwChip>
                                         }
@@ -382,8 +387,11 @@
         return points;
     }
 
+    private string _apiBaseUrl = "http://backend:8000";
+
     protected override async Task OnInitializedAsync()
     {
+        _apiBaseUrl = ServerConfig.GetBaseUrl();
         // Load ESPN BPI data in background
         await LoadEspnPredictions();
     }
@@ -399,7 +407,7 @@
         try
         {
             var response = await Http.PostAsync(
-                $"http://backend:8000/odds/ncaab/analyze-all?sportsbook={_selectedSportsbook}", 
+                $"{_apiBaseUrl}/odds/ncaab/analyze-all?sportsbook={_selectedSportsbook}", 
                 null);
             
             if (response.IsSuccessStatusCode)
@@ -579,7 +587,19 @@
                 }
             }
 
-            if (pred.TryGetProperty("v2_factors", out var factors) && factors.ValueKind == JsonValueKind.Array)
+            if (pred.TryGetProperty("factors", out var fArray) && fArray.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var f in fArray.EnumerateArray())
+                {
+                    game.Prediction.V2Factors.Add(new XgbFactor
+                    {
+                        Label = f.TryGetProperty("label", out var l) ? l.GetString() ?? "" : "",
+                        Impact = f.TryGetProperty("impact", out var i) ? i.GetDouble() : 0,
+                        Direction = f.TryGetProperty("direction", out var d) ? d.GetString() ?? "" : ""
+                    });
+                }
+            }
+            else if (pred.TryGetProperty("v2_factors", out var factors) && factors.ValueKind == JsonValueKind.Array)
             {
                 foreach (var f in factors.EnumerateArray())
                 {
@@ -648,6 +668,7 @@
     {
         public string Label { get; set; } = "";
         public double Impact { get; set; }
+        public string Direction { get; set; } = "";
     }
 
 

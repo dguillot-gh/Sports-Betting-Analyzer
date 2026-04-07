@@ -149,11 +149,40 @@ async def get_bet_types(request: Request, sport: str):
 async def get_model_metrics(request: Request, sport: str):
     """
     Get latest performance metrics for a model.
-    Reads from saved backtest results.
+    Reads from Postgres model_performance.
     """
     import os
     import json
     
+    try:
+        from src.database import get_pool
+        pool = await get_pool()
+        
+        # Determine sport_id
+        sport_id_lookup = {"nfl": 1, "ncaab": 2, "nba": 3, "nhl": 4, "nascar": 5}
+        sport_id = sport_id_lookup.get(sport.lower())
+        
+        if sport_id:
+            async with pool.acquire() as conn:
+                row = await conn.fetchrow('''
+                    SELECT * FROM model_performance
+                    WHERE sport_id = $1
+                    ORDER BY id DESC LIMIT 1
+                ''', sport_id)
+                
+                if row:
+                    result = dict(row)
+                    # Convert jsonb/string fields back to python objects
+                    if isinstance(result.get('by_season'), str):
+                        result['by_season'] = json.loads(result['by_season'])
+                    if isinstance(result.get('bet_history'), str):
+                        result['bet_history'] = json.loads(result['bet_history'])
+                    
+                    return result
+    except Exception as e:
+        logger.error(f"Error fetching model performance from Postgres: {e}")
+
+    # Fallback to file JSON
     models_dir = f"models/{sport.lower()}"
     results_file = f"{models_dir}/backtest_results.json"
     

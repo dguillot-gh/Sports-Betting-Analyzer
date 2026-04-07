@@ -5,16 +5,22 @@
     return;
 }
 
-<svg class="@ComputedClass" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    @if (Icon.Trim().StartsWith("<"))
-    {
+@if (Icon.Trim().StartsWith("<"))
+{
+    <svg class="@ComputedClass" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         @((MarkupString)Icon)
-    }
-    else
-    {
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="@Icon"></path>
-    }
-</svg>
+    </svg>
+}
+else if (Icon.Trim().StartsWith("M", StringComparison.OrdinalIgnoreCase))
+{
+    <svg class="@ComputedClass" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="@Icon"></path>
+    </svg>
+}
+else
+{
+    <span class="material-symbols-outlined @Class" style="font-size: 20px;">@Icon</span>
+}
 
 @code {
     [Parameter] public string? Icon { get; set; }

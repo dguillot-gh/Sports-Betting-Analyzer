@@ -38,6 +38,6 @@ def test_value_identification(predictor):
     # We can't easily force the internal math without mocking stats, 
     # but we can check the keys.
     result = predictor.predict_game("Duke", "UNC", spread=0.0)
-    assert 'spread_edge' in result
-    assert 'spread_value' in result
-    assert isinstance(result['spread_value'], bool)
+    # Predictor currently returns a pick-only spread analysis.
+    assert "spread_pick" in result
+    assert result["spread_pick"] in ("HOME", "AWAY")

@@ -106,12 +106,13 @@ class GeminiPredictor:
             
             # Robust JSON parsing (strip markdown backticks if present)
             text = response.text.strip()
-            if text.startswith("```"):
-                # Find first { and last }
-                start = text.find("{")
-                end = text.rfind("}")
-                if start != -1 and end != -1:
-                    text = text[start:end+1]
+            # Robust JSON extraction: find first { and last }
+            start = text.find("{")
+            end = text.rfind("}")
+            if start != -1 and end != -1:
+                text = text[start:end+1]
+            else:
+                raise ValueError("No JSON object found in response")
             
             result = json.loads(text)
             

@@ -36,6 +36,10 @@
                             class="px-4 py-2 rounded-lg text-sm font-bold transition-all @(Sport == "nba" ? "bg-orange-600 text-white shadow-lg shadow-orange-500/25" : "text-slate-400 hover:text-white")">
                         NBA
                     </button>
+                    <button @onclick="@(() => NavigateTo("ncaab"))" 
+                            class="px-4 py-2 rounded-lg text-sm font-bold transition-all @(Sport == "ncaab" ? "bg-purple-600 text-white shadow-lg shadow-purple-500/25" : "text-slate-400 hover:text-white")">
+                        NCAAB
+                    </button>
                     <button @onclick="@(() => NavigateTo("nascar"))" 
                             class="px-4 py-2 rounded-lg text-sm font-bold transition-all @(Sport == "nascar" ? "bg-yellow-600 text-white shadow-lg shadow-yellow-500/25" : "text-slate-400 hover:text-white")">
                         NASCAR
@@ -77,7 +81,17 @@
         else
         {
             <!-- Landing State -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
+            <div class="flex justify-center mb-8">
+                <button @onclick="TrainAllModels" disabled="@_trainAllFired"
+                        class="px-8 py-3 rounded-2xl text-sm font-black uppercase tracking-widest transition-all shadow-lg
+                               @(_trainAllFired 
+                                   ? "bg-slate-700 text-slate-400 cursor-not-allowed" 
+                                   : "bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:shadow-xl hover:shadow-purple-500/20 hover:-translate-y-0.5")">
+                    @if (_trainAllFired) { <span>✓ Training Dispatched</span> } else { <span>🧠 Train All Models</span> }
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
                 <div class="col-span-1 md:col-span-3 text-center mb-8">
                     <h2 class="text-2xl font-bold text-white mb-2">Select a Sport to Begin</h2>
                     <p class="text-slate-400">Enter the laboratory to train custom models, analyze live odds, and verify performance.</p>
@@ -114,6 +128,14 @@
                         <p class="text-slate-400 text-sm mt-2">XGBoost Predictions, Rolling Stats, and Value Bets</p>
                     </div>
                 </TwCard>
+
+                <TwCard Hoverable="true" OnClick="@(() => NavigateTo("ncaab"))" Class="cursor-pointer group border-purple-500/30">
+                    <div class="flex flex-col items-center py-8">
+                        <TwIcon Icon="sports_basketball" Class="w-16 h-16 text-purple-500 mb-4 group-hover:scale-110 transition-transform" />
+                        <h3 class="text-xl font-bold text-white">NCAAB Studio</h3>
+                        <p class="text-slate-400 text-sm mt-2">XGBoost V2 Predictions, Trends, and Model Impact Factors</p>
+                    </div>
+                </TwCard>
             </div>
         }
     </TwContainer>
@@ -121,6 +143,11 @@
 
 @code {
     [Parameter] public string? Sport { get; set; }
+
+    [Inject] private HttpClient Http { get; set; } = default!;
+    [Inject] private ISnackbar Snackbar { get; set; } = default!;
+
+    private bool _trainAllFired = false;
 
     protected override void OnInitialized()
     {
@@ -131,5 +158,29 @@
     private void NavigateTo(string sport)
     {
         Navigation.NavigateTo($"/model-studio/{sport}");
+    }
+
+    private async Task TrainAllModels()
+    {
+        _trainAllFired = true;
+        StateHasChanged();
+        try
+        {
+            var response = await Http.PostAsync("http://backend:8000/models/train-all", null);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Training dispatched! You'll receive a notification when complete.", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to start training", Severity.Error);
+                _trainAllFired = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            _trainAllFired = false;
+        }
     }
 }
