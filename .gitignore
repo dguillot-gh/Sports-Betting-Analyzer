@@ -69,3 +69,4 @@ node_modules/
 .windsurf/plans/mobile-enhancement-plan-ae54a8.md
 /.dotnet/TelemetryStorageService
 /.dotnet
+/docs/production-readiness-checklist.md
