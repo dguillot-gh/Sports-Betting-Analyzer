@@ -1,5 +1,6 @@
 @page "/college-baseball-live-odds"
 @using System.Text.Json
+@using SportsBettingAnalyzer.Shared.Services
 @using SportsBettingAnalyzer.Components.Shared.Tailwind
 @inject HttpClient Http
 @inject ISnackbar Snackbar
@@ -192,7 +193,7 @@
         try
         {
             var response = await Http.PostAsync(
-                $"http://backend:8000/odds/college-baseball/analyze-all?sportsbook={_selectedSportsbook}", 
+                PredictionApiRoutes.CollegeBaseballAnalyzeAll(_selectedSportsbook), 
                 null);
             
             if (response.IsSuccessStatusCode)

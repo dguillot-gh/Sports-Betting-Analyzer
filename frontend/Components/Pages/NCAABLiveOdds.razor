@@ -8,7 +8,6 @@
 @inject ISnackbar Snackbar
 @inject ILogger<NCAABLiveOdds> Logger
 @inject PythonMLServiceClient MLServiceClient
-@inject IServerConfigService ServerConfig
 @rendermode InteractiveServer
 
 <PageTitle>NCAAB Live Odds</PageTitle>
@@ -387,11 +386,8 @@
         return points;
     }
 
-    private string _apiBaseUrl = "http://backend:8000";
-
     protected override async Task OnInitializedAsync()
     {
-        _apiBaseUrl = ServerConfig.GetBaseUrl();
         // Load ESPN BPI data in background
         await LoadEspnPredictions();
     }
@@ -407,7 +403,7 @@
         try
         {
             var response = await Http.PostAsync(
-                $"{_apiBaseUrl}/odds/ncaab/analyze-all?sportsbook={_selectedSportsbook}", 
+                PredictionApiRoutes.NcaabAnalyzeAll(_selectedSportsbook), 
                 null);
             
             if (response.IsSuccessStatusCode)

@@ -3,6 +3,7 @@
 @using System.Text.Json
 @using SportsBettingAnalyzer.Services
 @using SportsBettingAnalyzer.Models
+@using SportsBettingAnalyzer.Shared.Services
 @using SportsBettingAnalyzer.Components.Shared.Tailwind
 @inject HttpClient Http
 @inject ISnackbar Snackbar
@@ -395,7 +396,6 @@
 @code {
     private bool _isLoading = false;
     private bool _isSavingAll = false;
-    private bool _isTraining = false;
     private string? _error = null;
     private string _selectedSportsbook = "fanduel";
     private string _date = "";
@@ -423,7 +423,7 @@
         try
         {
             var response = await Http.PostAsync(
-                $"http://backend:8000/model-testing/nfl/predictions?sportsbook={_selectedSportsbook}", 
+                PredictionApiRoutes.NflPredictions(_selectedSportsbook),
                 null
             );
             

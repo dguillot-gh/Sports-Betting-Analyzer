@@ -1,6 +1,7 @@
 @page "/mobile-odds/nhl"
 @inject HttpClient Http
 @using System.Text.Json
+@using SportsBettingAnalyzer.Shared.Services
 
 <div class="app-card">
     <div class="app-card-header">
@@ -235,7 +236,7 @@
         try
         {
             // Connect to the backend using the relative path so HttpClient uses the configured BaseAddress
-            var response = await Http.PostAsync("nhl/analyze-all?sportsbook=fanduel", null);
+            var response = await Http.PostAsync(PredictionApiRoutes.NhlAnalyzeAll("fanduel"), null);
 
             if (response.IsSuccessStatusCode)
             {

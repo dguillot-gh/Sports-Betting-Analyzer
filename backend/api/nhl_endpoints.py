@@ -9,6 +9,7 @@ from scripts.nhl_odds import get_todays_nhl_odds, SPORTSBOOKS
 from scripts.nhl_predictor import analyze_matchup_dual
 from scripts.nhl_xgb_trainer import train_nhl_model, get_trainer
 from scripts.nhl_backtesting import run_nhl_backtest
+from api.json_utils import sanitize_for_json
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ async def predict_nhl_game(
     away_ml: int = Query(None, description="Away team moneyline")
 ):
     """Predict NHL game outcome."""
-    return await analyze_matchup_dual(home_team, away_team, spread, over_under, home_ml, away_ml)
+    return sanitize_for_json(await analyze_matchup_dual(home_team, away_team, spread, over_under, home_ml, away_ml))
 
 @router.post("/analyze-all")
 async def analyze_all_nhl_games(
@@ -65,13 +66,13 @@ async def analyze_all_nhl_games(
             logger.error(f"Error analyzing all matchups: {e}")
             analyzed_games.append({**game, "prediction_error": str(e)}) # Keep original error handling for individual games
             
-    return {
+    return sanitize_for_json({
         "date": odds_data.get("date"),
         "sportsbook": sportsbook,
         "games": analyzed_games,
         "count": len(analyzed_games),
         "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False))
-    }
+    })
 
 
 @router.post("/train")
@@ -85,7 +86,7 @@ async def train_xgb_model(
     try:
         logger.info(f"Starting NHL XGBoost training with {epochs} epochs...")
         result = await train_nhl_model(epochs=epochs)
-        return result
+        return sanitize_for_json(result)
     except Exception as e:
         logger.error(f"Error training NHL model: {e}")
         return {"error": str(e)}
@@ -108,7 +109,7 @@ async def backtest_model(
             stake=stake,
             use_kelly=use_kelly
         )
-        return result
+        return sanitize_for_json(result)
     except Exception as e:
         logger.error(f"Error running NHL backtest: {e}")
         return {"error": str(e)}
@@ -138,7 +139,7 @@ async def predict_with_xgb_endpoint(
         result = await xgb_predict(home_team, away_team, home_stats, away_stats)
         
         if result:
-            return result
+            return sanitize_for_json(result)
         else:
             return {"error": "XGBoost model not available. Train the model first using /nhl/train"}
             

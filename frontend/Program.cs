@@ -1,6 +1,7 @@
 using SportsBettingAnalyzer.Components;
 using SportsBettingAnalyzer.Services;
 using SportsBettingAnalyzer.Data;
+using SportsBettingAnalyzer.Shared.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Components.Server;
 using Microsoft.AspNetCore.DataProtection;
@@ -34,6 +35,12 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddHttpClient();
 builder.Services.AddHttpClient<ESPNDataProvider>().ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5));
 builder.Services.AddHttpClient<WebScrapingDataProvider>().ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5));
+var backendBaseUrl = ApiUrlHelper.NormalizeBaseUrl(builder.Configuration["PythonMLService:BaseUrl"], "http://localhost:8000");
+builder.Services.AddScoped(_ => new HttpClient
+{
+    BaseAddress = new Uri($"{backendBaseUrl}/"),
+    Timeout = TimeSpan.FromMinutes(10)
+});
 
 // Configure Python ML Service client with extended timeout
 builder.Services.Configure<PythonMLOptions>(builder.Configuration.GetSection("PythonMLService"));
@@ -44,10 +51,10 @@ builder.Services.AddHttpClient<PythonMLServiceClient>()
     });
 
 // Named HttpClient for direct usage in Blazor pages
-var pythonServiceUrl = builder.Configuration["PythonMLService:BaseUrl"] ?? "http://localhost:8000";
+var pythonServiceUrl = ApiUrlHelper.NormalizeBaseUrl(builder.Configuration["PythonMLService:BaseUrl"], "http://localhost:8000");
 builder.Services.AddHttpClient("PythonML", client =>
 {
-    client.BaseAddress = new Uri(pythonServiceUrl);
+    client.BaseAddress = new Uri($"{pythonServiceUrl}/");
     client.Timeout = TimeSpan.FromMinutes(10);
 });
 

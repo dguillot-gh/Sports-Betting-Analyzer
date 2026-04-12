@@ -25,6 +25,7 @@ nba_api
 sbrscrape
 pynascar
 joblib
+lightgbm
 ncaa-bbStats
 google-genai
 shap
@@ -35,3 +36,6 @@ openpyxl
 beautifulsoup4
 pywebpush
 firebase-admin
+pytz
+tqdm
+regex

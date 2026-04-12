@@ -1,6 +1,7 @@
 @page "/mobile-odds/ncaab"
 @inject HttpClient Http
 @using System.Text.Json
+@using SportsBettingAnalyzer.Shared.Services
 
 <div class="app-card">
     <div class="app-card-header">
@@ -275,7 +276,7 @@
 
         try
         {
-            var url = "odds/ncaab/analyze-all?sportsbook=fanduel";
+            var url = PredictionApiRoutes.NcaabAnalyzeAll("fanduel");
             var response = await Http.PostAsync(url, null);
 
             if (response.IsSuccessStatusCode)
@@ -366,8 +367,8 @@
             {
                 info.V2Factors.Add(new FactorInfo
                 {
-                    Label = f.TryGetProperty("label", out var l) ? l.GetString() ?? "" : "",
-                    Impact = f.TryGetProperty("impact", out var i) ? i.GetDouble() : 0
+                    Label = f.TryGetProperty("label", out var l) && l.ValueKind != JsonValueKind.Null ? l.GetString() ?? "" : "",
+                    Impact = f.TryGetProperty("impact", out var i) && i.ValueKind == JsonValueKind.Number ? i.GetDouble() : 0
                 });
             }
         }
@@ -377,8 +378,8 @@
             {
                 info.V2Factors.Add(new FactorInfo
                 {
-                    Label = f.TryGetProperty("label", out var l) ? l.GetString() ?? "" : "",
-                    Impact = f.TryGetProperty("impact", out var i) ? i.GetDouble() : 0
+                    Label = f.TryGetProperty("label", out var l) && l.ValueKind != JsonValueKind.Null ? l.GetString() ?? "" : "",
+                    Impact = f.TryGetProperty("impact", out var i) && i.ValueKind == JsonValueKind.Number ? i.GetDouble() : 0
                 });
             }
         }

@@ -100,7 +100,7 @@ class SchedulerService:
             id="capture_closing_lines",
             replace_existing=True
         )
-        
+
         cls._scheduler.start()
         logger.info("APScheduler started. Job 'daily_import' scheduled for 03:00.")
 
@@ -159,8 +159,16 @@ class SchedulerService:
             # --- 9. College Football ---
             res_cfb = await cls._run_job_wrapper("cfb", cls._import_cfb_task)
             results.append(res_cfb)
+
+            # --- 10. MLB Stats Collection ---
+            res_mlb = await cls._run_job_wrapper("mlb_stats", cls._mlb_stats_collection_task)
+            results.append(res_mlb)
+
+            # --- 11. MLB Model Training ---
+            res_mlb_train = await cls._run_job_wrapper("mlb_training", cls._mlb_model_training_task)
+            results.append(res_mlb_train)
             
-            # --- 10. Fetch Performance Summary ---
+            # --- 12. Fetch Performance Summary ---
             perf_summary = await cls._get_performance_summary()
 
             # Alert on any failed import jobs in the run.
@@ -452,6 +460,35 @@ class SchedulerService:
         except Exception as e:
             logger.error(f"Closing line capture failed: {e}")
             return {"rows": 0, "error": str(e)}
+
+    @staticmethod
+    async def _mlb_stats_collection_task():
+        """Nightly MLB data collection — team stats, pitcher stats."""
+        try:
+            from scripts.mlb_stats_collector import run_full_collection
+            result = await run_full_collection()
+            logger.info(f"MLB stats collection finished: {result.get('team_rows_saved', 0)} teams, {result.get('pitcher_rows_saved', 0)} pitchers")
+            return result
+        except Exception as e:
+            logger.error(f"MLB stats collection failed: {e}")
+            return {"error": str(e)}
+
+    @staticmethod
+    async def _mlb_model_training_task():
+        """Scheduled MLB model retraining."""
+        try:
+            from scripts.mlb_train_models import train_all_models
+            from scripts.mlb_predictor import reload_models
+            result = await train_all_models()
+            if result.get("success"):
+                reload_models()
+                logger.info(f"MLB model training completed successfully")
+            else:
+                logger.warning(f"MLB model training completed with issues: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"MLB model training failed: {e}")
+            return {"error": str(e)}
 
     @staticmethod
     async def _get_performance_summary() -> Dict[str, Any]:

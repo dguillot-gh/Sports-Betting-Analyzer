@@ -2,6 +2,7 @@
 @using SportsBettingAnalyzer.Components.Shared.Tailwind
 @inject HttpClient Http
 @inject ISnackbar Snackbar
+@inject ILogger<DataQualityView> Logger
 
 <div class="space-y-8 pb-12">
     <!-- Header -->
@@ -226,7 +227,10 @@
                 };
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to load DB stats for data quality view");
+        }
     }
 
     private async Task RefreshAllSports()

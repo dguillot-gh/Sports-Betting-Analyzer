@@ -816,7 +816,10 @@
                 });
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "RDA import status polling failed");
+        }
     }
 
     private async Task StartRdaImport()
@@ -890,9 +893,19 @@
     {
          try
         {
+            if (string.IsNullOrEmpty(_sportImportTarget))
+            {
+                return;
+            }
+
             var status = await MLClient.GetImportStatusAsync(_sportImportTarget);
             await InvokeAsync(() =>
             {
+                if (status == null)
+                {
+                    return;
+                }
+
                 _sportStatus = status;
                 if (_sportStatus.Status == "completed" || _sportStatus.Status == "failed")
                 {
@@ -907,7 +920,10 @@
                 StateHasChanged();
             });
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Sport import status polling failed for {Sport}", _sportImportTarget);
+        }
     }
 
     private async Task StartSportImport()
@@ -944,7 +960,10 @@
         {
             _baseballSummary = await MLClient.GetBaseballImportSummaryAsync();
         }
-        catch {}
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed loading baseball import summary");
+        }
     }
 
     private void ViewBaseballTeams()
@@ -975,6 +994,11 @@
             var status = await MLClient.GetBaseballImportStatusAsync();
             await InvokeAsync(() =>
             {
+                if (status == null)
+                {
+                    return;
+                }
+
                 _baseballStatus = status;
                 if (_baseballStatus.Status == "completed" || _baseballStatus.Status == "error" || _baseballStatus.Status == "failed")
                 {
@@ -989,7 +1013,10 @@
                 StateHasChanged();
             });
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Baseball import status polling failed");
+        }
     }
 
     private async Task StartBaseballImport()

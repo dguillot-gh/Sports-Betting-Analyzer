@@ -84,10 +84,6 @@ async def get_todays_nba_odds(sportsbook: str = "fanduel") -> Dict[str, Any]:
                 logger.warning(f"Error parsing game: {e}")
                 continue
         
-            except Exception as e:
-                logger.warning(f"Error parsing game: {e}")
-                continue
-        
         # -------------------------------------------------------------------------
         # [EXPERIMENTAL] Add Experimental Neural Net predictions if model exists
         # This is purely additive and does not affect existing odds/data

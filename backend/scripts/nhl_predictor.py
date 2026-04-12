@@ -48,15 +48,22 @@ async def get_team_advanced_stats(team_name: str) -> Dict[str, Any]:
             FROM results 
             WHERE series = 'nhl' 
             AND (metadata->>'team' = $1 OR metadata->>'name' = $1 OR metadata->>'team' = $2 OR metadata->>'name' = $2)
-            ORDER BY season DESC, (metadata->>'gameDate')::int DESC
+            ORDER BY season DESC, NULLIF(metadata->>'gameDate', '')::int DESC NULLS LAST
             LIMIT 82
         """
         rows = await fetch(query, team_name, norm_name)
         
         if not rows:
+            logger.info(f"No NHL results data found for {team_name} / {norm_name}")
             return {}
 
-        df = pd.DataFrame([json.loads(row['metadata']) for row in rows])
+        def _parse_meta(row):
+            val = row['metadata']
+            if isinstance(val, dict):
+                return val
+            return json.loads(val)
+
+        df = pd.DataFrame([_parse_meta(row) for row in rows])
         
         # L10 Stats
         l10_df = df.head(10)
@@ -69,7 +76,7 @@ async def get_team_advanced_stats(team_name: str) -> Dict[str, Any]:
         # Assuming gameDate is YYYYMMDD string or similar
         rest_days = 3 # Default
         if len(rows) > 0:
-            last_game_date_str = json.loads(rows[0]['metadata']).get('gameDate')
+            last_game_date_str = _parse_meta(rows[0]).get('gameDate')
             if last_game_date_str:
                 try:
                     last_date = datetime.strptime(str(last_game_date_str), "%Y%m%d")
@@ -87,7 +94,7 @@ async def get_team_advanced_stats(team_name: str) -> Dict[str, Any]:
             "is_b2b": rest_days <= 1
         }
     except Exception as e:
-        logger.error(f"Error fetching advanced stats for {team_name}: {e}")
+        logger.error(f"Error fetching advanced stats for {team_name}: {type(e).__name__}: {e}")
         return {}
 
 async def analyze_nhl_matchup(

@@ -5,6 +5,7 @@
 @inject BetAnalysisService BetAnalysisService
 @inject DataCollectionService DataCollectionService
 @inject PythonMLServiceClient MLServiceClient
+@inject ILogger<Home> Logger
 @inject IJSRuntime JSRuntime
 @rendermode InteractiveServer
 
@@ -50,7 +51,7 @@
                 <span>NFL Live Odds</span>
             </TwButton>
             <TwButton Variant="primary" Color="orange" Href="/live-nba-odds" Class="py-3 flex flex-col items-center justify-center h-auto gap-2 rounded-2xl">
-                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8-8-8 8s8 3.59 8 8-3.59 8-8 8zm4.59-12.42L10 14.17l-1.59-1.59L7 14l3 3 8-8-1.41-1.42z"></path></svg>
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                 <span>NBA Live Odds</span>
             </TwButton>
             <TwButton Variant="primary" Color="purple" Href="/model-metrics" Class="py-3 flex flex-col items-center justify-center h-auto gap-2 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 border-none">
@@ -91,7 +92,7 @@
                                                     <div class="text-xs text-slate-500 mt-1">Win Prob: @pick.Probability.ToString("P1") | Edge: @pick.Edge.ToString("P1")</div>
                                                 </div>
                                                 <TwButton Variant="text" Color="blue" Class="p-0 text-sm" 
-                                                          Href="@(pick.Sport == "NBA" ? "/live-nba-odds" : "/live-nfl-odds")">
+                                                          Href="@(pick.Sport == "NBA" ? "/live-nba-odds" : "/nfl-live-odds")">
                                                     View Details →
                                                 </TwButton>
                                             </TwCard>
@@ -397,16 +398,19 @@
     private async Task AnalyzeHomeTopPick()
     {
         if (!_topPicks.Any()) return;
+        var pick = _topPicks.First();
         
         _isAiProcessing = true;
         StateHasChanged();
         
         try
         {
-            var pick = _topPicks.First();
             _latestInsight = await MLServiceClient.GetAiAnalysisAsync(pick.Sport.ToLower(), pick.HomeTeam, pick.AwayTeam);
         }
-        catch (Exception) { }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to fetch AI insight for {Sport} {Away} @ {Home}", pick.Sport, pick.AwayTeam, pick.HomeTeam);
+        }
         finally
         {
             _isAiProcessing = false;
@@ -421,7 +425,11 @@
         {
             _modelSummary = await MLServiceClient.GetModelSummaryAsync();
         }
-        catch (Exception) { }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to load dashboard model summary");
+            _modelSummary = new List<DashboardModelSummary>();
+        }
         finally { _isModelsLoading = false; }
     }
 
@@ -441,7 +449,7 @@
         {
             // Snackbar.Add("Failed to load analytics data", Severity.Warning); 
             // TwToast/Snackbar not implemented yet, just log or ignore
-            Console.WriteLine("Failed to load analytics data");
+            Logger.LogWarning(ex, "Failed to load analytics data");
         }
     }
 
@@ -450,16 +458,28 @@
         _isPicksLoading = true;
         try
         {
-            // In a real app, we'd fetch these from a dedicated 'Best Bets' endpoint.
-            // For now, we'll simulate a few high-value opportunities.
-            _topPicks = new List<TopPick>
-            {
-                new() { Sport = "NBA", HomeTeam = "Lakers", AwayTeam = "Bucks", GameTime = "7:30 PM", Probability = 0.582, Winner = "Lakers ML", ValueScore = 8.4, Edge = 0.045 },
-                new() { Sport = "NFL", HomeTeam = "Chiefs", AwayTeam = "Bills", GameTime = "Sun 4:25 PM", Probability = 0.541, Winner = "Chiefs -2.5", ValueScore = 6.2, Edge = 0.031 }
-            };
-            _activePicksCount = 12; // Example
+            var picks = await MLServiceClient.GetDashboardTopPicksAsync(limit: 8, sportsbook: "fanduel");
+            _topPicks = picks
+                .Select(p => new TopPick
+                {
+                    Sport = p.Sport,
+                    HomeTeam = p.HomeTeam,
+                    AwayTeam = p.AwayTeam,
+                    GameTime = string.IsNullOrWhiteSpace(p.GameTime) ? "TBD" : p.GameTime,
+                    Probability = p.Probability,
+                    Winner = p.Winner,
+                    ValueScore = p.ValueScore,
+                    Edge = p.Edge
+                })
+                .ToList();
+            _activePicksCount = _topPicks.Count;
         }
-        catch (Exception) { }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to load dashboard top picks");
+            _topPicks = new List<TopPick>();
+            _activePicksCount = 0;
+        }
         finally { _isPicksLoading = false; }
     }
 
@@ -512,6 +532,7 @@
         catch (Exception ex)
         {
             // Snackbar.Add("Save failed", Severity.Error);
+            Logger.LogWarning(ex, "Failed to save analysis");
         }
     }
 

@@ -48,6 +48,39 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
+import numpy as np
+
+
+class NumpySafeEncoder(json.JSONEncoder):
+    """JSON encoder that converts numpy types to native Python types."""
+    def default(self, obj):
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, (np.float32, np.float64)):
+            return float(obj)
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
+
+
+class NumpySafeResponse(JSONResponse):
+    """JSONResponse subclass that uses NumpySafeEncoder."""
+    def render(self, content) -> bytes:
+        return json.dumps(
+            content,
+            cls=NumpySafeEncoder,
+            ensure_ascii=False,
+            allow_nan=False,
+            indent=None,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
 import asyncpg
 # import pandas as pd  <-- Moved to local function scope
 # import joblib     <-- Moved to local function scope
@@ -75,6 +108,7 @@ from src.version import get_version, get_version_info
 from src.error_notifier import install_error_email_handler
 from src.ops_alerts import OpsAlertService
 from src.notification_store import ensure_notifications_schema
+from api.json_utils import sanitize_for_json
 from src.push_store import ensure_push_schema
 from src.fcm_store import ensure_fcm_schema
 
@@ -139,7 +173,12 @@ async def lifespan(app: FastAPI):
 
 # Version â€” updated to DB-backed value after startup
 current_version = get_version()
-app = FastAPI(title='Sports ML API', version=current_version, lifespan=lifespan)
+app = FastAPI(
+    title='Sports ML API',
+    version=current_version,
+    lifespan=lifespan,
+    default_response_class=NumpySafeResponse,
+)
 
 
 @app.exception_handler(Exception)
@@ -322,14 +361,14 @@ def make_prediction(sport: str, task: str, request: PredictRequestBody, series: 
             'task': task
         }
         
-        return {
+        return sanitize_for_json({
             'predictions': predictions,
             'model_info': {
                 'type': 'heuristic',
                 'version': '1.0',
                 'note': 'Based on historical starting position patterns'
             }
-        }
+        })
     except Exception as e:
         logger.error(f"Error predicting for {sport}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -810,7 +849,7 @@ def predict(sport: str, task: str, payload: dict, series: Optional[str] = None):
         except Exception as e:
             logger.debug(f"Could not extract XAI factors: {e}")
         
-        return resp
+        return sanitize_for_json(resp)
         
     except HTTPException:
         raise
@@ -3455,14 +3494,14 @@ async def get_nba_model_testing_predictions(
                 "away_stats": away_stats,
             })
         
-        return {
+        return sanitize_for_json({
             "date": odds_data.get("date"),
             "sportsbook": sportsbook,
             "games": analyzed_games,
             "count": len(analyzed_games),
             "xgb_model_source": "kyleskom/NBA-Machine-Learning-Sports-Betting",
             "xgb_model_accuracy": "68.9%",
-        }
+        })
         
     except Exception as e:
         logger.error(f"Model testing NBA error: {e}")
@@ -3523,14 +3562,14 @@ async def get_nfl_model_testing_predictions(
                 "away_stats": away_stats,
             })
         
-        return {
+        return sanitize_for_json({
             "date": odds_data.get("date"),
             "sportsbook": sportsbook,
             "games": analyzed_games,
             "count": len(analyzed_games),
             "data_source": odds_data.get("source", "nflverse"),
             "api_quota": odds_data.get("api_quota"),
-        }
+        })
         
     except Exception as e:
         logger.error(f"Model testing NFL error: {e}")

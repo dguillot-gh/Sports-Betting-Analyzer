@@ -18,8 +18,8 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         
-        <!-- Fix for MSB4018 Error: DOTNET_HOST_PATH is not set -->
-        <DotNetHostPath Condition="'$(DotNetHostPath)' == ''">C:\Program Files\dotnet\dotnet.exe</DotNetHostPath>
+        <!-- Fix for MSB4018 BrotliCompress: DOTNET_HOST_PATH is not set (.NET SDK 10.0) -->
+        <CompressionEnabled>false</CompressionEnabled>
 
         <!-- Display name -->
         <ApplicationTitle>SportsBettingAnalyzer.Mobile</ApplicationTitle>

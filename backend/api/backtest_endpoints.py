@@ -5,6 +5,7 @@ Test betting strategies on historical data
 
 from fastapi import APIRouter, Request, Query
 from scripts.backtesting import BacktestRequest, BacktestResult, run_backtest
+from api.json_utils import sanitize_for_json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ async def run_backtest_endpoint(request: Request):
     """
     try:
         result = await run_backtest(request)
-        return result
+        return sanitize_for_json(result)
     except Exception as e:
         logger.error(f"Backtest error: {e}")
         raise
@@ -50,7 +51,7 @@ async def run_nba_backtest(
         from scripts.nba_backtesting import run_nba_backtest as nba_backtest
         logger.info(f"Running NBA backtest (min_edge={min_edge}, stake={stake})...")
         result = await nba_backtest(min_edge=min_edge, stake=stake, use_kelly=use_kelly)
-        return result
+        return sanitize_for_json(result)
     except Exception as e:
         logger.error(f"Error running NBA backtest: {e}")
         return {"error": str(e)}
@@ -70,7 +71,7 @@ async def run_nfl_backtest(
         from scripts.nfl_backtesting import run_nfl_backtest as nfl_backtest
         logger.info(f"Running NFL backtest (min_edge={min_edge}, stake={stake})...")
         result = await nfl_backtest(min_edge=min_edge, stake=stake, use_kelly=use_kelly)
-        return result
+        return sanitize_for_json(result)
     except Exception as e:
         logger.error(f"Error running NFL backtest: {e}")
         return {"error": str(e)}

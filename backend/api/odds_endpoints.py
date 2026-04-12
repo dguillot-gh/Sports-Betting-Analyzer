@@ -3,11 +3,12 @@ Live Odds API Endpoints
 Fetches real-time betting lines from sportsbooks
 """
 
-from fastapi import APIRouter, Query, UploadFile, File
+from fastapi import APIRouter, Query, Request, UploadFile, File
 from typing import Optional
 import logging
 from datetime import datetime
 from src.ops_alerts import OpsAlertService
+from api.json_utils import sanitize_for_json
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +158,7 @@ async def predict_game(
     Predict game outcome with value bet detection.
     """
     from scripts.nba_predictor import analyze_matchup
-    return await analyze_matchup(home_team, away_team, spread, over_under, home_ml, away_ml)
+    return sanitize_for_json(await analyze_matchup(home_team, away_team, spread, over_under, home_ml, away_ml))
 
 
 @router.post("/nba/predict-dual")
@@ -173,7 +174,7 @@ async def predict_game_dual(
     Predict with BOTH simple and XGBoost models for comparison.
     """
     from scripts.nba_predictor import analyze_matchup_dual
-    return await analyze_matchup_dual(home_team, away_team, spread, over_under, home_ml, away_ml)
+    return sanitize_for_json(await analyze_matchup_dual(home_team, away_team, spread, over_under, home_ml, away_ml))
 
 
 @router.post("/nba/train")
@@ -225,14 +226,14 @@ async def analyze_all_games(
             logger.error(f"Error analyzing game: {e}")
             analyzed_games.append({**game, "prediction_error": str(e)})
     
-    return {
+    return sanitize_for_json({
         "date": odds_data.get("date"),
         "sportsbook": sportsbook,
         "games": analyzed_games,
         "count": len(analyzed_games),
         "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False)),
         "xgb_available": any(g.get("xgboost_model") and not g.get("xgboost_model", {}).get("error") for g in analyzed_games)
-    }
+    })
 
 
 # =========== NFL ENDPOINTS ===========
@@ -322,7 +323,7 @@ async def predict_nfl_game(
     Predict NFL game outcome with value bet detection.
     """
     from scripts.nfl_predictor import analyze_nfl_matchup
-    return await analyze_nfl_matchup(home_team, away_team, spread, over_under, home_ml, away_ml)
+    return sanitize_for_json(await analyze_nfl_matchup(home_team, away_team, spread, over_under, home_ml, away_ml))
 
 
 @router.post("/nfl/analyze-all")
@@ -359,7 +360,7 @@ async def analyze_all_nfl_games(
             logger.error(f"Error analyzing NFL game: {e}")
             analyzed_games.append({**game, "prediction_error": str(e)})
     
-    return {
+    return sanitize_for_json({
         "date": odds_data.get("date"),
         "sportsbook": sportsbook,
         "games": analyzed_games,
@@ -367,7 +368,7 @@ async def analyze_all_nfl_games(
         "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False)),
         "xgb_available": any(g.get("xgboost_model") and not g.get("xgboost_model", {}).get("error") for g in analyzed_games),
         "epa_loaded": True
-    }
+    })
 
 
 @router.post("/nfl/train")
@@ -392,7 +393,7 @@ async def predict_nfl_game_dual(
     Predict NFL game with BOTH simple and XGBoost models.
     """
     from scripts.nfl_predictor import analyze_nfl_matchup_dual
-    return await analyze_nfl_matchup_dual(home_team, away_team, spread, over_under, home_ml, away_ml)
+    return sanitize_for_json(await analyze_nfl_matchup_dual(home_team, away_team, spread, over_under, home_ml, away_ml))
 
 
 # =========== CACHE-INTEGRATED ENDPOINTS ===========
@@ -452,20 +453,16 @@ async def analyze_nfl_with_cache(
             for g in analyzed_games:
                 games_to_cache.append({
                     "id": g.get("id"),
-                    "game_date": g.get("game_time"),
+                    "game_time": g.get("game_time"),
                     "home_team": g.get("home_team"),
                     "away_team": g.get("away_team"),
-                    "odds": {
-                        "spread": g.get("spread"),
-                        "over_under": g.get("over_under"),
-                        "home_moneyline": g.get("home_moneyline"),
-                        "away_moneyline": g.get("away_moneyline"),
-                    },
-                    "analysis": {
-                        "simple_model": g.get("simple_model"),
-                        "xgboost_model": g.get("xgboost_model"),
-                        "has_value": g.get("has_value", False),
-                    }
+                    "spread": g.get("spread"),
+                    "over_under": g.get("over_under"),
+                    "home_moneyline": g.get("home_moneyline"),
+                    "away_moneyline": g.get("away_moneyline"),
+                    "simple_model": g.get("simple_model"),
+                    "xgboost_model": g.get("xgboost_model"),
+                    "has_value": g.get("has_value", False),
                 })
             
             await cache.store_games("nfl", games_to_cache)
@@ -509,7 +506,7 @@ async def analyze_nfl_with_cache(
         except Exception as e:
             logger.warning(f"Failed to retrieve cached games: {e}")
     
-    return {
+    return sanitize_for_json({
         "date": odds_data.get("date"),
         "sportsbook": sportsbook,
         "games": analyzed_games,
@@ -518,7 +515,7 @@ async def analyze_nfl_with_cache(
         "cached_count": cached_count,
         "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False)),
         "xgb_available": any(g.get("xgboost_model") and not g.get("xgboost_model", {}).get("error") for g in analyzed_games),
-    }
+    })
 
 
 @router.post("/nba/analyze-cached")
@@ -538,6 +535,7 @@ async def analyze_nba_with_cache(
     # Step 1: Get fresh odds
     odds_data = await get_todays_nba_odds(sportsbook)
     OpsAlertService.maybe_alert_low_odds_quota("nba/analyze-cached", odds_data)
+    logger.info(f"NBA odds fetch: {len(odds_data.get('games', []))} games, error={odds_data.get('error')}, message={odds_data.get('message')}")
     
     analyzed_games = []
     fresh_game_ids = []
@@ -575,20 +573,16 @@ async def analyze_nba_with_cache(
             for g in analyzed_games:
                 games_to_cache.append({
                     "id": g.get("id"),
-                    "game_date": g.get("game_time"),
+                    "game_time": g.get("game_time"),
                     "home_team": g.get("home_team"),
                     "away_team": g.get("away_team"),
-                    "odds": {
-                        "spread": g.get("spread"),
-                        "over_under": g.get("over_under"),
-                        "home_moneyline": g.get("home_moneyline"),
-                        "away_moneyline": g.get("away_moneyline"),
-                    },
-                    "analysis": {
-                        "simple_model": g.get("simple_model"),
-                        "xgboost_model": g.get("xgboost_model"),
-                        "has_value": g.get("has_value", False),
-                    }
+                    "spread": g.get("spread"),
+                    "over_under": g.get("over_under"),
+                    "home_moneyline": g.get("home_moneyline"),
+                    "away_moneyline": g.get("away_moneyline"),
+                    "simple_model": g.get("simple_model"),
+                    "xgboost_model": g.get("xgboost_model"),
+                    "has_value": g.get("has_value", False),
                 })
             
             await cache.store_games("nba", games_to_cache)
@@ -631,7 +625,7 @@ async def analyze_nba_with_cache(
         except Exception as e:
             logger.warning(f"Failed to retrieve cached games: {e}")
     
-    return {
+    return sanitize_for_json({
         "date": odds_data.get("date"),
         "sportsbook": sportsbook,
         "games": analyzed_games,
@@ -640,7 +634,7 @@ async def analyze_nba_with_cache(
         "cached_count": cached_count,
         "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False)),
         "xgb_available": any(g.get("xgboost_model") and not g.get("xgboost_model", {}).get("error") for g in analyzed_games),
-    }
+    })
 
 
 # ========================================================
@@ -673,7 +667,7 @@ async def predict_ncaab_game(
     Predict NCAAB game outcome with value bet detection.
     """
     from scripts.ncaab_predictor import analyze_ncaab_matchup
-    return await analyze_ncaab_matchup(home_team, away_team, spread, over_under, home_ml, away_ml)
+    return sanitize_for_json(await analyze_ncaab_matchup(home_team, away_team, spread, over_under, home_ml, away_ml))
 
 
 @router.post("/ncaab/analyze-all")
@@ -721,14 +715,14 @@ async def analyze_all_ncaab_games(
             logger.warning(f"Error analyzing NCAAB game {game.get('home_team')} vs {game.get('away_team')}: {e}")
             analyzed_games.append({**game, "error": str(e)})
     
-    return {
+    return sanitize_for_json({
         "date": odds_data.get("date"),
         "sportsbook": sportsbook,
         "source": odds_data.get("source"),
         "games": analyzed_games,
         "count": len(analyzed_games),
         "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False)),
-    }
+    })
 
 
 
@@ -792,14 +786,14 @@ async def analyze_all_college_baseball_games(
             logger.warning(f"Error analyzing College Baseball game: {e}")
             analyzed_games.append({**game, "error": str(e)})
     
-    return {
+    return sanitize_for_json({
         "date": odds_data.get("date"),
         "sportsbook": sportsbook,
         "source": odds_data.get("source"),
         "games": analyzed_games,
         "count": len(analyzed_games),
         "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False)),
-    }
+    })
 
 
 @router.post("/college-baseball/scrape-results")
@@ -964,7 +958,7 @@ async def analyze_all_cfb_games(
             analyzed_games.append({**game, "prediction_error": str(e)})
             
     # 3. Return Response (including quota)
-    return {
+    return sanitize_for_json({
         "date": odds_data.get("date"),
         "sportsbook": sportsbook,
         "games": analyzed_games,
@@ -972,7 +966,7 @@ async def analyze_all_cfb_games(
         "source": odds_data.get("source"),
         "api_quota": odds_data.get("api_quota"), # Pass through quota info
         "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False)),
-    }
+    })
 
 @router.post("/cfb/predict-dual")
 async def predict_cfb_dual(
@@ -987,7 +981,183 @@ async def predict_cfb_dual(
     Predict CFB game with simple model (XGB placeholder).
     """
     from scripts.cfb_predictor import analyze_cfb_matchup_dual
-    return await analyze_cfb_matchup_dual(home_team, away_team, spread, over_under, home_ml, away_ml)
+    return sanitize_for_json(await analyze_cfb_matchup_dual(home_team, away_team, spread, over_under, home_ml, away_ml))
+
+
+# ========================================================
+# MLB Endpoints
+# ========================================================
+
+@router.get("/mlb")
+async def get_mlb_odds(
+    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from"),
+):
+    """
+    Get today's MLB betting odds.
+    """
+    from scripts.mlb_odds import get_todays_mlb_odds
+    return await get_todays_mlb_odds(sportsbook)
+
+
+@router.post("/mlb/analyze-all")
+async def analyze_all_mlb_games(
+    request: Request,
+    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from")
+):
+    """
+    Fetch today's MLB games and run ensemble predictions.
+    Includes Pythagorean baseline + XGBoost moneyline/spread/totals when trained.
+    """
+    from scripts.mlb_odds import get_todays_mlb_odds
+    from scripts.mlb_predictor import analyze_mlb_matchup
+
+    odds_data = await get_todays_mlb_odds(sportsbook)
+    OpsAlertService.maybe_alert_low_odds_quota("mlb/analyze-all", odds_data)
+
+    if odds_data.get("error") or not odds_data.get("games"):
+        return odds_data
+
+    # Get DB pool for feature lookups (optional — graceful fallback)
+    pool = getattr(request.app.state, "pool", None)
+
+    # Fetch probable pitchers for today's games
+    probable_pitchers = {}
+    try:
+        from scripts.mlb_stats_collector import fetch_todays_probable_pitchers
+        probable_pitchers = await fetch_todays_probable_pitchers()
+    except Exception as e:
+        logger.warning(f"Could not fetch probable pitchers: {e}")
+
+    analyzed_games = []
+    for game in odds_data["games"]:
+        try:
+            home_team = game.get("home_team", "")
+            away_team = game.get("away_team", "")
+
+            # Match probable pitchers
+            pp_key = f"{home_team}||{away_team}"
+            pp = probable_pitchers.get(pp_key, {})
+
+            prediction = await analyze_mlb_matchup(
+                home_team=home_team,
+                away_team=away_team,
+                spread=game.get("spread"),
+                over_under=game.get("over_under"),
+                home_ml=game.get("home_moneyline"),
+                away_ml=game.get("away_moneyline"),
+                pool=pool,
+                home_sp_id=pp.get("home_sp_id"),
+                away_sp_id=pp.get("away_sp_id"),
+                venue_name=pp.get("venue"),
+                is_day_game=pp.get("day_night") == "day",
+            )
+
+            game_data = {
+                "home_team": home_team,
+                "away_team": away_team,
+                "game_time": game.get("game_time"),
+                "status": game.get("status"),
+                "home_score": game.get("home_score"),
+                "away_score": game.get("away_score"),
+                "spread": game.get("spread"),
+                "over_under": game.get("over_under"),
+                "home_moneyline": game.get("home_moneyline"),
+                "away_moneyline": game.get("away_moneyline"),
+                "simple_model": prediction,
+                "has_value": prediction.get("has_value", False),
+                "value_bets": prediction.get("value_bets", []),
+                # New: context from probable pitchers
+                "home_sp": pp.get("home_sp_name"),
+                "away_sp": pp.get("away_sp_name"),
+                "venue": pp.get("venue"),
+            }
+            analyzed_games.append(game_data)
+        except Exception as e:
+            logger.warning(f"Error analyzing MLB game: {e}")
+            analyzed_games.append({**game, "error": str(e)})
+
+    return sanitize_for_json({
+        "date": odds_data.get("date"),
+        "sportsbook": sportsbook,
+        "games": analyzed_games,
+        "count": len(analyzed_games),
+        "value_bets_found": sum(1 for g in analyzed_games if g.get("has_value", False)),
+    })
+
+
+@router.get("/mlb/team-stats")
+async def get_mlb_team_stats(request: Request):
+    """Get all MLB team stats for the current season."""
+    pool = getattr(request.app.state, "pool", None)
+    if not pool:
+        return {"error": "Database not available"}
+    try:
+        from scripts.mlb_stats_collector import get_all_team_stats
+        from datetime import datetime
+        stats = await get_all_team_stats(pool, datetime.utcnow().year)
+        return {"season": datetime.utcnow().year, "teams": stats, "count": len(stats)}
+    except Exception as e:
+        logger.error(f"Error fetching MLB team stats: {e}")
+        return {"error": str(e)}
+
+
+@router.get("/mlb/model-metrics")
+async def get_mlb_model_metrics(request: Request):
+    """Get latest training metrics for all MLB models."""
+    pool = getattr(request.app.state, "pool", None)
+    if not pool:
+        return {"error": "Database not available"}
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT DISTINCT ON (model_name)
+                    model_name, trained_at, train_size, test_size,
+                    roc_auc, accuracy, brier_score, log_loss
+                FROM mlb_model_runs
+                ORDER BY model_name, trained_at DESC
+            """)
+            models = {dict(r)["model_name"]: dict(r) for r in rows}
+            # Convert datetimes to strings
+            for m in models.values():
+                if m.get("trained_at"):
+                    m["trained_at"] = m["trained_at"].isoformat()
+            return {"models": models}
+    except Exception as e:
+        logger.error(f"Error fetching MLB model metrics: {e}")
+        return {"error": str(e)}
+
+
+@router.post("/mlb/refresh-stats")
+async def refresh_mlb_stats(request: Request):
+    """Trigger on-demand MLB data collection."""
+    pool = getattr(request.app.state, "pool", None)
+    if not pool:
+        return {"error": "Database not available"}
+    try:
+        from scripts.mlb_stats_collector import run_full_collection
+        result = await run_full_collection(pool)
+        return result
+    except Exception as e:
+        logger.error(f"MLB stats refresh failed: {e}")
+        return {"error": str(e)}
+
+
+@router.post("/mlb/train")
+async def train_mlb_models(request: Request):
+    """Trigger MLB model retraining."""
+    pool = getattr(request.app.state, "pool", None)
+    if not pool:
+        return {"error": "Database not available"}
+    try:
+        from scripts.mlb_train_models import train_all_models
+        from scripts.mlb_predictor import reload_models
+        result = await train_all_models(pool)
+        if result.get("success"):
+            reload_models()
+        return result
+    except Exception as e:
+        logger.error(f"MLB model training failed: {e}")
+        return {"error": str(e)}
 
 
 @router.get("/all-sports/analyze")
@@ -1021,7 +1191,8 @@ async def analyze_all_sports(
         safe_analyze("nfl", analyze_all_nfl_games, sportsbook),
         safe_analyze("ncaab", analyze_all_ncaab_games, sportsbook),
         safe_analyze("college-baseball", analyze_all_college_baseball_games, sportsbook),
-        safe_analyze("cfb", analyze_all_cfb_games, sportsbook)
+        safe_analyze("cfb", analyze_all_cfb_games, sportsbook),
+        safe_analyze("mlb", analyze_all_mlb_games, sportsbook)
     ]
     
     results = await asyncio.gather(*tasks)
@@ -1054,4 +1225,4 @@ async def analyze_all_sports(
     except Exception as e:
         logger.error(f"Failed to save historical snapshot: {e}")
 
-    return final_result
+    return sanitize_for_json(final_result)

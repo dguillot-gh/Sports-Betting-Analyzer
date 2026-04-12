@@ -1,8 +1,14 @@
 @using System.Text.Json
 @using SportsBettingAnalyzer.Components.Shared.Tailwind
 @inject HttpClient Http
+@inject ILogger<ModelLabView> Logger
 
 <div class="space-y-6">
+    @if (!string.IsNullOrWhiteSpace(_errorMessage))
+    {
+        <TwAlert Severity="error">@_errorMessage</TwAlert>
+    }
+
     <!-- Header -->
     <div class="relative overflow-hidden rounded-3xl bg-gradient-to-br @GetHeaderGradient(Sport) p-8 shadow-2xl">
         <div class="absolute top-0 right-0 -mt-20 -mr-20 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
@@ -188,6 +194,7 @@
     private bool _undersOnly = false;
     private bool _highConfOnly = false;
     public bool ShowFpi { get; set; } = false;
+    private string _errorMessage = string.Empty;
 
     // Computed Properties
     private IEnumerable<EnhancedGame> _filteredGames => _games
@@ -206,6 +213,7 @@
     {
         _loading = true;
         _games.Clear();
+        _errorMessage = string.Empty;
         StateHasChanged();
 
         try
@@ -244,7 +252,11 @@
                 }
             }
         }
-        catch { /* Ignore errors for demo */ }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to load model lab games for {Sport} from {Sportsbook}", Sport, _sportsbook);
+            _errorMessage = "Unable to load games right now. Please try again.";
+        }
         finally { _loading = false; }
     }
     

@@ -1,26 +1,82 @@
 {
-  "total_bets": 733,
-  "wins": 282,
-  "losses": 451,
-  "win_rate": 38.5,
-  "total_staked": 73300.0,
-  "total_profit": 2596.5,
-  "roi": 3.5,
-  "sharpe_ratio": 0.61,
-  "max_drawdown": 7690.9,
-  "avg_edge": 14.2,
-  "final_bankroll": 12596.5,
+  "total_bets": 726,
+  "wins": 279,
+  "losses": 447,
+  "win_rate": 38.4,
+  "total_staked": 72600.0,
+  "total_profit": 1855.9,
+  "roi": 2.6,
+  "sharpe_ratio": 0.44,
+  "max_drawdown": 6776.2,
+  "avg_edge": 14.1,
+  "final_bankroll": 11855.9,
   "by_season": [
     {
       "season": 2025,
-      "bets": 733,
-      "wins": 282,
-      "win_rate": 38.5,
-      "profit": 2596.5,
-      "roi": 3.5
+      "bets": 726,
+      "wins": 279,
+      "win_rate": 38.4,
+      "profit": 1855.9,
+      "roi": 2.6
     }
   ],
   "bet_history": [
+    {
+      "game_date": "2026-03-16",
+      "season": "2025",
+      "home_team": "Brooklyn Nets",
+      "away_team": "Portland Trail Blazers",
+      "bet_on": "Brooklyn Nets",
+      "stake": 100.0,
+      "odds": 367,
+      "model_prob": 0.27,
+      "edge": 0.056,
+      "won": false,
+      "profit": -100.0,
+      "bankroll": 12328.0
+    },
+    {
+      "game_date": "2026-03-17",
+      "season": "2025",
+      "home_team": "Orlando Magic",
+      "away_team": "Oklahoma City Thunder",
+      "bet_on": "Orlando Magic",
+      "stake": 100.0,
+      "odds": 342,
+      "model_prob": 0.284,
+      "edge": 0.058,
+      "won": false,
+      "profit": -100.0,
+      "bankroll": 12228.0
+    },
+    {
+      "game_date": "2026-03-17",
+      "season": "2025",
+      "home_team": "New York Knicks",
+      "away_team": "Indiana Pacers",
+      "bet_on": "Indiana Pacers",
+      "stake": 100.0,
+      "odds": 615,
+      "model_prob": 0.237,
+      "edge": -0.137,
+      "won": false,
+      "profit": -100.0,
+      "bankroll": 12128.0
+    },
+    {
+      "game_date": "2026-03-17",
+      "season": "2025",
+      "home_team": "Milwaukee Bucks",
+      "away_team": "Cleveland Cavaliers",
+      "bet_on": "Milwaukee Bucks",
+      "stake": 100.0,
+      "odds": 459,
+      "model_prob": 0.288,
+      "edge": 0.109,
+      "won": false,
+      "profit": -100.0,
+      "bankroll": 12028.0
+    },
     {
       "game_date": "2026-03-17",
       "season": "2025",
@@ -29,11 +85,11 @@
       "bet_on": "Sacramento Kings",
       "stake": 100.0,
       "odds": 572,
-      "model_prob": 0.196,
-      "edge": 0.047,
+      "model_prob": 0.201,
+      "edge": 0.053,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12905.0
+      "bankroll": 11928.0
     },
     {
       "game_date": "2026-03-17",
@@ -43,11 +99,11 @@
       "bet_on": "Philadelphia 76ers",
       "stake": 100.0,
       "odds": 861,
-      "model_prob": 0.389,
-      "edge": -0.315,
+      "model_prob": 0.324,
+      "edge": -0.25,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12805.0
+      "bankroll": 11828.0
     },
     {
       "game_date": "2026-03-17",
@@ -57,11 +113,11 @@
       "bet_on": "Washington Wizards",
       "stake": 100.0,
       "odds": 1388,
-      "model_prob": 0.191,
-      "edge": 0.124,
+      "model_prob": 0.193,
+      "edge": 0.126,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12705.0
+      "bankroll": 11728.0
     },
     {
       "game_date": "2026-03-18",
@@ -71,11 +127,11 @@
       "bet_on": "Golden State Warriors",
       "stake": 100.0,
       "odds": 484,
-      "model_prob": 0.337,
-      "edge": -0.199,
+      "model_prob": 0.313,
+      "edge": -0.175,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12605.0
+      "bankroll": 11628.0
     },
     {
       "game_date": "2026-03-18",
@@ -85,11 +141,11 @@
       "bet_on": "Indiana Pacers",
       "stake": 100.0,
       "odds": 553,
-      "model_prob": 0.3,
-      "edge": 0.147,
+      "model_prob": 0.297,
+      "edge": 0.143,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12505.0
+      "bankroll": 11528.0
     },
     {
       "game_date": "2026-03-18",
@@ -99,25 +155,11 @@
       "bet_on": "Brooklyn Nets",
       "stake": 100.0,
       "odds": 1397,
-      "model_prob": 0.171,
+      "model_prob": 0.17,
       "edge": 0.104,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12405.0
-    },
-    {
-      "game_date": "2026-03-18",
-      "season": "2025",
-      "home_team": "Chicago Bulls",
-      "away_team": "Toronto Raptors",
-      "bet_on": "Chicago Bulls",
-      "stake": 100.0,
-      "odds": 269,
-      "model_prob": 0.315,
-      "edge": 0.044,
-      "won": false,
-      "profit": -100.0,
-      "bankroll": 12305.0
+      "bankroll": 11428.0
     },
     {
       "game_date": "2026-03-18",
@@ -127,11 +169,11 @@
       "bet_on": "Utah Jazz",
       "stake": 100.0,
       "odds": 530,
-      "model_prob": 0.198,
-      "edge": -0.071,
+      "model_prob": 0.202,
+      "edge": -0.075,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12205.0
+      "bankroll": 11328.0
     },
     {
       "game_date": "2026-03-18",
@@ -141,11 +183,11 @@
       "bet_on": "Memphis Grizzlies",
       "stake": 100.0,
       "odds": 573,
-      "model_prob": 0.232,
-      "edge": 0.084,
+      "model_prob": 0.225,
+      "edge": 0.077,
       "won": true,
       "profit": 573.0,
-      "bankroll": 12778.0
+      "bankroll": 11901.0
     },
     {
       "game_date": "2026-03-19",
@@ -155,11 +197,25 @@
       "bet_on": "Washington Wizards",
       "stake": 100.0,
       "odds": 757,
-      "model_prob": 0.191,
-      "edge": 0.075,
+      "model_prob": 0.193,
+      "edge": 0.076,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12678.0
+      "bankroll": 11801.0
+    },
+    {
+      "game_date": "2026-03-19",
+      "season": "2025",
+      "home_team": "Charlotte Hornets",
+      "away_team": "Orlando Magic",
+      "bet_on": "Orlando Magic",
+      "stake": 100.0,
+      "odds": 190,
+      "model_prob": 0.385,
+      "edge": -0.068,
+      "won": false,
+      "profit": -100.0,
+      "bankroll": 11701.0
     },
     {
       "game_date": "2026-03-19",
@@ -169,11 +225,11 @@
       "bet_on": "Phoenix Suns",
       "stake": 100.0,
       "odds": 371,
-      "model_prob": 0.357,
-      "edge": -0.176,
+      "model_prob": 0.339,
+      "edge": -0.158,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12578.0
+      "bankroll": 11601.0
     },
     {
       "game_date": "2026-03-19",
@@ -183,11 +239,11 @@
       "bet_on": "Chicago Bulls",
       "stake": 100.0,
       "odds": 359,
-      "model_prob": 0.299,
-      "edge": 0.081,
+      "model_prob": 0.3,
+      "edge": 0.082,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12478.0
+      "bankroll": 11501.0
     },
     {
       "game_date": "2026-03-19",
@@ -197,11 +253,11 @@
       "bet_on": "Philadelphia 76ers",
       "stake": 100.0,
       "odds": -140,
-      "model_prob": 0.746,
-      "edge": -0.19,
+      "model_prob": 0.733,
+      "edge": -0.177,
       "won": true,
       "profit": 71.4,
-      "bankroll": 12549.4
+      "bankroll": 11572.4
     },
     {
       "game_date": "2026-03-19",
@@ -215,7 +271,7 @@
       "edge": -0.146,
       "won": true,
       "profit": 134.0,
-      "bankroll": 12683.4
+      "bankroll": 11706.4
     },
     {
       "game_date": "2026-03-20",
@@ -225,25 +281,11 @@
       "bet_on": "Brooklyn Nets",
       "stake": 100.0,
       "odds": 1157,
-      "model_prob": 0.197,
-      "edge": 0.117,
+      "model_prob": 0.198,
+      "edge": 0.118,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12583.4
-    },
-    {
-      "game_date": "2026-03-20",
-      "season": "2025",
-      "home_team": "Houston Rockets",
-      "away_team": "Atlanta Hawks",
-      "bet_on": "Atlanta Hawks",
-      "stake": 100.0,
-      "odds": 139,
-      "model_prob": 0.436,
-      "edge": -0.043,
-      "won": false,
-      "profit": -100.0,
-      "bankroll": 12483.4
+      "bankroll": 11606.4
     },
     {
       "game_date": "2026-03-20",
@@ -253,11 +295,11 @@
       "bet_on": "Memphis Grizzlies",
       "stake": 100.0,
       "odds": 814,
-      "model_prob": 0.236,
-      "edge": 0.126,
+      "model_prob": 0.249,
+      "edge": 0.14,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12383.4
+      "bankroll": 11506.4
     },
     {
       "game_date": "2026-03-20",
@@ -267,11 +309,11 @@
       "bet_on": "Toronto Raptors",
       "stake": 100.0,
       "odds": 238,
-      "model_prob": 0.383,
-      "edge": -0.116,
+      "model_prob": 0.348,
+      "edge": -0.081,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12283.4
+      "bankroll": 11406.4
     },
     {
       "game_date": "2026-03-20",
@@ -281,11 +323,11 @@
       "bet_on": "Minnesota Timberwolves",
       "stake": 100.0,
       "odds": -102,
-      "model_prob": 0.648,
-      "edge": 0.143,
+      "model_prob": 0.649,
+      "edge": 0.144,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12183.4
+      "bankroll": 11306.4
     },
     {
       "game_date": "2026-03-21",
@@ -295,11 +337,11 @@
       "bet_on": "Memphis Grizzlies",
       "stake": 100.0,
       "odds": 1238,
-      "model_prob": 0.262,
-      "edge": -0.215,
+      "model_prob": 0.25,
+      "edge": -0.203,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12083.4
+      "bankroll": 11206.4
     },
     {
       "game_date": "2026-03-21",
@@ -309,11 +351,11 @@
       "bet_on": "Cleveland Cavaliers",
       "stake": 100.0,
       "odds": -225,
-      "model_prob": 0.705,
-      "edge": -0.04,
+      "model_prob": 0.71,
+      "edge": -0.045,
       "won": true,
       "profit": 44.4,
-      "bankroll": 12127.8
+      "bankroll": 11250.8
     },
     {
       "game_date": "2026-03-21",
@@ -323,11 +365,11 @@
       "bet_on": "Indiana Pacers",
       "stake": 100.0,
       "odds": 1035,
-      "model_prob": 0.214,
-      "edge": -0.161,
+      "model_prob": 0.217,
+      "edge": -0.164,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12027.8
+      "bankroll": 11150.8
     },
     {
       "game_date": "2026-03-21",
@@ -337,11 +379,11 @@
       "bet_on": "Golden State Warriors",
       "stake": 100.0,
       "odds": 267,
-      "model_prob": 0.395,
-      "edge": -0.152,
+      "model_prob": 0.39,
+      "edge": -0.147,
       "won": false,
       "profit": -100.0,
-      "bankroll": 11927.8
+      "bankroll": 11050.8
     },
     {
       "game_date": "2026-03-21",
@@ -351,11 +393,11 @@
       "bet_on": "Houston Rockets",
       "stake": 100.0,
       "odds": -131,
-      "model_prob": 0.631,
-      "edge": 0.064,
+      "model_prob": 0.63,
+      "edge": 0.063,
       "won": true,
       "profit": 76.3,
-      "bankroll": 12004.1
+      "bankroll": 11127.1
     },
     {
       "game_date": "2026-03-21",
@@ -365,11 +407,11 @@
       "bet_on": "Philadelphia 76ers",
       "stake": 100.0,
       "odds": -219,
-      "model_prob": 0.767,
-      "edge": -0.107,
+      "model_prob": 0.753,
+      "edge": -0.093,
       "won": true,
       "profit": 45.6,
-      "bankroll": 12049.7
+      "bankroll": 11172.7
     },
     {
       "game_date": "2026-03-21",
@@ -379,11 +421,11 @@
       "bet_on": "Milwaukee Bucks",
       "stake": 100.0,
       "odds": 428,
-      "model_prob": 0.421,
-      "edge": -0.264,
+      "model_prob": 0.408,
+      "edge": -0.251,
       "won": true,
       "profit": 428.0,
-      "bankroll": 12477.7
+      "bankroll": 11600.7
     },
     {
       "game_date": "2026-03-21",
@@ -393,11 +435,11 @@
       "bet_on": "Washington Wizards",
       "stake": 100.0,
       "odds": 2135,
-      "model_prob": 0.177,
-      "edge": 0.133,
+      "model_prob": 0.176,
+      "edge": 0.132,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12377.7
+      "bankroll": 11500.7
     },
     {
       "game_date": "2026-03-22",
@@ -407,11 +449,11 @@
       "bet_on": "Brooklyn Nets",
       "stake": 100.0,
       "odds": 210,
-      "model_prob": 0.514,
-      "edge": -0.22,
+      "model_prob": 0.509,
+      "edge": -0.215,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12277.7
+      "bankroll": 11400.7
     },
     {
       "game_date": "2026-03-22",
@@ -421,11 +463,11 @@
       "bet_on": "Portland Trail Blazers",
       "stake": 100.0,
       "odds": 278,
-      "model_prob": 0.33,
-      "edge": -0.095,
+      "model_prob": 0.301,
+      "edge": -0.067,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12177.7
+      "bankroll": 11300.7
     },
     {
       "game_date": "2026-03-22",
@@ -435,11 +477,11 @@
       "bet_on": "Washington Wizards",
       "stake": 100.0,
       "odds": 1945,
-      "model_prob": 0.19,
-      "edge": -0.164,
+      "model_prob": 0.192,
+      "edge": -0.167,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12077.7
+      "bankroll": 11200.7
     },
     {
       "game_date": "2026-03-22",
@@ -449,11 +491,11 @@
       "bet_on": "Minnesota Timberwolves",
       "stake": 100.0,
       "odds": 334,
-      "model_prob": 0.428,
-      "edge": -0.229,
+      "model_prob": 0.425,
+      "edge": -0.226,
       "won": true,
       "profit": 335.0,
-      "bankroll": 12412.7
+      "bankroll": 11535.7
     },
     {
       "game_date": "2026-03-22",
@@ -463,11 +505,11 @@
       "bet_on": "Phoenix Suns",
       "stake": 100.0,
       "odds": 146,
-      "model_prob": 0.556,
-      "edge": 0.15,
+      "model_prob": 0.472,
+      "edge": 0.065,
       "won": true,
       "profit": 146.0,
-      "bankroll": 12558.7
+      "bankroll": 11681.7
     },
     {
       "game_date": "2026-03-23",
@@ -477,11 +519,11 @@
       "bet_on": "Philadelphia 76ers",
       "stake": 100.0,
       "odds": 803,
-      "model_prob": 0.287,
-      "edge": 0.176,
+      "model_prob": 0.28,
+      "edge": 0.169,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12458.7
+      "bankroll": 11581.7
     },
     {
       "game_date": "2026-03-23",
@@ -491,11 +533,11 @@
       "bet_on": "Indiana Pacers",
       "stake": 100.0,
       "odds": 533,
-      "model_prob": 0.282,
-      "edge": -0.163,
+      "model_prob": 0.278,
+      "edge": -0.159,
       "won": true,
       "profit": 533.0,
-      "bankroll": 12991.7
+      "bankroll": 12114.7
     },
     {
       "game_date": "2026-03-23",
@@ -505,11 +547,11 @@
       "bet_on": "Memphis Grizzlies",
       "stake": 100.0,
       "odds": 750,
-      "model_prob": 0.295,
-      "edge": -0.209,
+      "model_prob": 0.274,
+      "edge": -0.188,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12891.7
+      "bankroll": 12014.7
     },
     {
       "game_date": "2026-03-23",
@@ -519,11 +561,11 @@
       "bet_on": "Detroit Pistons",
       "stake": 100.0,
       "odds": 106,
-      "model_prob": 0.575,
-      "edge": 0.09,
+      "model_prob": 0.581,
+      "edge": 0.096,
       "won": true,
       "profit": 107.0,
-      "bankroll": 12998.7
+      "bankroll": 12121.7
     },
     {
       "game_date": "2026-03-23",
@@ -533,25 +575,11 @@
       "bet_on": "Chicago Bulls",
       "stake": 100.0,
       "odds": 309,
-      "model_prob": 0.288,
-      "edge": 0.044,
+      "model_prob": 0.293,
+      "edge": 0.049,
       "won": true,
       "profit": 309.0,
-      "bankroll": 13307.7
-    },
-    {
-      "game_date": "2026-03-23",
-      "season": "2025",
-      "home_team": "Utah Jazz",
-      "away_team": "Toronto Raptors",
-      "bet_on": "Utah Jazz",
-      "stake": 100.0,
-      "odds": 419,
-      "model_prob": 0.233,
-      "edge": 0.04,
-      "won": false,
-      "profit": -100.0,
-      "bankroll": 13207.7
+      "bankroll": 12430.7
     },
     {
       "game_date": "2026-03-23",
@@ -561,11 +589,11 @@
       "bet_on": "Golden State Warriors",
       "stake": 100.0,
       "odds": -116,
-      "model_prob": 0.669,
-      "edge": -0.159,
+      "model_prob": 0.675,
+      "edge": -0.165,
       "won": true,
       "profit": 86.2,
-      "bankroll": 13293.9
+      "bankroll": 12516.9
     },
     {
       "game_date": "2026-03-23",
@@ -579,21 +607,7 @@
       "edge": -0.207,
       "won": false,
       "profit": -100.0,
-      "bankroll": 13193.9
-    },
-    {
-      "game_date": "2026-03-23",
-      "season": "2025",
-      "home_team": "Miami Heat",
-      "away_team": "San Antonio Spurs",
-      "bet_on": "San Antonio Spurs",
-      "stake": 100.0,
-      "odds": -157,
-      "model_prob": 0.644,
-      "edge": -0.059,
-      "won": true,
-      "profit": 63.6,
-      "bankroll": 13257.5
+      "bankroll": 12416.9
     },
     {
       "game_date": "2026-03-24",
@@ -603,11 +617,11 @@
       "bet_on": "Sacramento Kings",
       "stake": 100.0,
       "odds": 1019,
-      "model_prob": 0.21,
-      "edge": -0.15,
+      "model_prob": 0.221,
+      "edge": -0.161,
       "won": false,
       "profit": -100.0,
-      "bankroll": 13157.5
+      "bankroll": 12316.9
     },
     {
       "game_date": "2026-03-24",
@@ -617,25 +631,11 @@
       "bet_on": "Orlando Magic",
       "stake": 100.0,
       "odds": 359,
-      "model_prob": 0.375,
-      "edge": -0.188,
+      "model_prob": 0.398,
+      "edge": -0.211,
       "won": false,
       "profit": -100.0,
-      "bankroll": 13057.5
-    },
-    {
-      "game_date": "2026-03-24",
-      "season": "2025",
-      "home_team": "Phoenix Suns",
-      "away_team": "Denver Nuggets",
-      "bet_on": "Phoenix Suns",
-      "stake": 100.0,
-      "odds": 204,
-      "model_prob": 0.428,
-      "edge": 0.099,
-      "won": false,
-      "profit": -100.0,
-      "bankroll": 12957.5
+      "bankroll": 12216.9
     },
     {
       "game_date": "2026-03-25",
@@ -645,11 +645,11 @@
       "bet_on": "Chicago Bulls",
       "stake": 100.0,
       "odds": 210,
-      "model_prob": 0.375,
-      "edge": -0.08,
+      "model_prob": 0.382,
+      "edge": -0.087,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12857.5
+      "bankroll": 12116.9
     },
     {
       "game_date": "2026-03-25",
@@ -659,11 +659,11 @@
       "bet_on": "Memphis Grizzlies",
       "stake": 100.0,
       "odds": 1034,
-      "model_prob": 0.229,
-      "edge": 0.141,
+      "model_prob": 0.225,
+      "edge": 0.136,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12757.5
+      "bankroll": 12016.9
     },
     {
       "game_date": "2026-03-25",
@@ -673,11 +673,11 @@
       "bet_on": "Washington Wizards",
       "stake": 100.0,
       "odds": 139,
-      "model_prob": 0.559,
-      "edge": -0.165,
+      "model_prob": 0.55,
+      "edge": -0.156,
       "won": true,
       "profit": 139.0,
-      "bankroll": 12896.5
+      "bankroll": 12155.9
     },
     {
       "game_date": "2026-03-25",
@@ -687,11 +687,11 @@
       "bet_on": "Brooklyn Nets",
       "stake": 100.0,
       "odds": 472,
-      "model_prob": 0.224,
-      "edge": -0.081,
+      "model_prob": 0.235,
+      "edge": -0.092,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12796.5
+      "bankroll": 12055.9
     },
     {
       "game_date": "2026-03-25",
@@ -701,11 +701,11 @@
       "bet_on": "Dallas Mavericks",
       "stake": 100.0,
       "odds": 475,
-      "model_prob": 0.236,
-      "edge": -0.095,
+      "model_prob": 0.219,
+      "edge": -0.077,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12696.5
+      "bankroll": 11955.9
     },
     {
       "game_date": "2026-03-25",
@@ -715,11 +715,11 @@
       "bet_on": "Milwaukee Bucks",
       "stake": 100.0,
       "odds": 562,
-      "model_prob": 0.45,
-      "edge": -0.331,
+      "model_prob": 0.435,
+      "edge": -0.316,
       "won": false,
       "profit": -100.0,
-      "bankroll": 12596.5
+      "bankroll": 11855.9
     }
   ]
 }

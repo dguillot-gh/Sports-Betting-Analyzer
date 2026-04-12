@@ -2,6 +2,7 @@
 @using SportsBettingAnalyzer.Services
 @inject HttpClient Http
 @inject NavigationManager Navigation
+@inject ILogger<NFLHitRates> Logger
 @rendermode InteractiveServer
 
 <PageTitle>NFL Hit Rates</PageTitle>
@@ -235,7 +236,10 @@
                 _selectedSeason = _availableSeasons.First();
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed loading NFL seasons");
+        }
     }
     
     private void OnStatChanged(string newStat)

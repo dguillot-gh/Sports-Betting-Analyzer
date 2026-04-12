@@ -1,7 +1,7 @@
 @page "/mobile-odds/nba"
-@page "/live-nba-odds"
 @inject HttpClient Http
 @using System.Text.Json
+@using SportsBettingAnalyzer.Shared.Services
 
 <div class="app-card">
     <div class="app-card-header">
@@ -142,14 +142,25 @@
                                             </div>
                                         </div>
 
-                                        <!-- O/U Line -->
+                                        <!-- O/U Pick -->
                                         <div class="pt-row">
-                                            <div class="pt-col-label">Predicted Total</div>
+                                            <div class="pt-col-label">O/U Pick</div>
+                                            <div class="pt-col-val @(currentPrediction.SimpleModel?.OuPick == "OVER" ? "val-green" : "val-neg")">
+                                                @(currentPrediction.SimpleModel?.OuPick ?? "—")
+                                            </div>
+                                            <div class="pt-col-val @(currentPrediction.XgbModel?.OuPick == "OVER" ? "val-green" : "val-neg")">
+                                                @(currentPrediction.XgbModel?.OuPick ?? "—")
+                                            </div>
+                                        </div>
+
+                                        <!-- Pred Total / O/U Confidence -->
+                                        <div class="pt-row">
+                                            <div class="pt-col-label">Pred. Total</div>
                                             <div class="pt-col-val">
                                                 @(currentPrediction.SimpleModel?.PredictedTotal.HasValue == true ? $"{currentPrediction.SimpleModel.PredictedTotal:F1}" : "—")
                                             </div>
                                             <div class="pt-col-val">
-                                                @(currentPrediction.XgbModel?.PredictedTotal.HasValue == true ? $"{currentPrediction.XgbModel.PredictedTotal:F1}" : "—")
+                                                @(currentPrediction.XgbModel?.OuConfidence.HasValue == true ? $"{currentPrediction.XgbModel.OuConfidence:F1}% conf" : "—")
                                             </div>
                                         </div>
                                     </div>
@@ -452,7 +463,7 @@
 
         try
         {
-            var url = "odds/nba/analyze-cached?sportsbook=fanduel&include_cached=true";
+            var url = PredictionApiRoutes.NbaAnalyzeCached("fanduel");
             var response = await Http.PostAsync(url, null);
 
             if (response.IsSuccessStatusCode)
@@ -529,13 +540,15 @@
     {
         return new ModelInfo
         {
-            HomeWinProb = el.TryGetProperty("home_win_probability", out var hw) ? hw.GetDouble() : 0,
-            AwayWinProb = el.TryGetProperty("away_win_probability", out var aw) ? aw.GetDouble() : 0,
-            PredictedWinner = el.TryGetProperty("predicted_winner", out var pw) ? pw.GetString() : null,
-            HomeEv = el.TryGetProperty("home_ev", out var hev) ? hev.GetDouble() : null,
-            AwayEv = el.TryGetProperty("away_ev", out var aev) ? aev.GetDouble() : null,
-            PredictedTotal = el.TryGetProperty("predicted_total", out var pt) ? pt.GetDouble() : null,
-            HasValue = el.TryGetProperty("has_value", out var hv) ? hv.GetBoolean() : false
+            HomeWinProb = el.TryGetProperty("home_win_probability", out var hw) && hw.ValueKind == JsonValueKind.Number ? hw.GetDouble() : 0,
+            AwayWinProb = el.TryGetProperty("away_win_probability", out var aw) && aw.ValueKind == JsonValueKind.Number ? aw.GetDouble() : 0,
+            PredictedWinner = el.TryGetProperty("predicted_winner", out var pw) && pw.ValueKind == JsonValueKind.String ? pw.GetString() : null,
+            HomeEv = el.TryGetProperty("home_ev", out var hev) && hev.ValueKind == JsonValueKind.Number ? hev.GetDouble() : null,
+            AwayEv = el.TryGetProperty("away_ev", out var aev) && aev.ValueKind == JsonValueKind.Number ? aev.GetDouble() : null,
+            PredictedTotal = el.TryGetProperty("predicted_total", out var pt) && pt.ValueKind == JsonValueKind.Number ? pt.GetDouble() : null,
+            OuPick = el.TryGetProperty("ou_pick", out var op) && op.ValueKind == JsonValueKind.String ? op.GetString() : null,
+            OuConfidence = el.TryGetProperty("ou_confidence", out var oc) && oc.ValueKind == JsonValueKind.Number ? oc.GetDouble() : null,
+            HasValue = el.TryGetProperty("has_value", out var hv) && hv.ValueKind is JsonValueKind.True or JsonValueKind.False ? hv.GetBoolean() : false
         };
     }
 
@@ -595,6 +608,8 @@
         public double? HomeEv { get; set; }
         public double? AwayEv { get; set; }
         public double? PredictedTotal { get; set; }
+        public string? OuPick { get; set; }
+        public double? OuConfidence { get; set; }
         public bool HasValue { get; set; }
     }
 }

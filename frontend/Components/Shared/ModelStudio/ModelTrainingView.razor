@@ -179,7 +179,7 @@
     // Dataset Explorer
     private List<string> _availableSports = new();
     private string _selectedSport = "nfl";
-    private DataSchema _dataSchema;
+    private DataSchema? _dataSchema;
     private bool _isLoadingData = false;
     private List<Dictionary<string, object>> _tableItems = new();
     private int _currentPage = 0;
@@ -194,8 +194,7 @@
     private string _trainingTask = "classification";
     private string _selectedModelType = "rf";
     private bool _isTraining = false;
-    private TrainResponse _trainingResult;
-    private bool _showAdvanced = false;
+    private TrainResponse? _trainingResult;
 
     // Model Management
     private List<ModelInfo> _trainedModels = new();
@@ -247,7 +246,11 @@
             var series = sport == "nascar" ? "cup" : null;
             _featureValues = await MLClient.GetFeatureValuesAsync(sport, series);
         }
-        catch { /* Ignore */ }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to load feature values for {Sport}", sport);
+            _featureValues = new Dictionary<string, List<object>>();
+        }
 
         await LoadData();
     }

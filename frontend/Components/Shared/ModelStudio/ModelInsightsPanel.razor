@@ -1,0 +1,84 @@
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
+@using SportsBettingAnalyzer.Services
+@inject PythonMLServiceClient MLClient
+@inject ILogger<ModelInsightsPanel> Logger
+
+<div class="space-y-4">
+    @if (_isLoading)
+    {
+        <TwProgressBar IsIndeterminate="true" Color="blue" Class="w-56" />
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <TwAlert Severity="error">@_error</TwAlert>
+    }
+    else if (!_items.Any())
+    {
+        <TwAlert Severity="info">No trained models found for @Sport.ToUpper(). Train a model to populate insights.</TwAlert>
+    }
+    else
+    {
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <TwStatCard Label="Models" Value="@_items.Count.ToString()" Color="blue" />
+            <TwStatCard Label="Best Accuracy" Value="@($"{(_items.Max(x => x.Accuracy) * 100):F1}%")" Color="emerald" />
+            <TwStatCard Label="Avg Accuracy" Value="@($"{(_items.Average(x => x.Accuracy) * 100):F1}%")" Color="slate" />
+        </div>
+
+        <TwTable TItem="DashboardModelSummary">
+            <HeaderContent>
+                <TwTh>Series</TwTh>
+                <TwTh>Task</TwTh>
+                <TwTh>Accuracy</TwTh>
+                <TwTh>Precision</TwTh>
+                <TwTh>ROI</TwTh>
+            </HeaderContent>
+            <ChildContent>
+                @foreach (var model in _items.OrderByDescending(m => m.Accuracy))
+                {
+                    <TwTr>
+                        <TwTd>@model.Series</TwTd>
+                        <TwTd>@model.Task</TwTd>
+                        <TwTd>@((model.Accuracy * 100).ToString("F1"))%</TwTd>
+                        <TwTd>@((model.Precision * 100).ToString("F1"))%</TwTd>
+                        <TwTd>@model.Roi.ToString("F1")%</TwTd>
+                    </TwTr>
+                }
+            </ChildContent>
+        </TwTable>
+    }
+</div>
+
+@code {
+    [Parameter] public string Sport { get; set; } = "";
+
+    private readonly List<DashboardModelSummary> _items = new();
+    private bool _isLoading = true;
+    private string _error = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadInsights();
+    }
+
+    private async Task LoadInsights()
+    {
+        _isLoading = true;
+        _error = string.Empty;
+
+        try
+        {
+            var all = await MLClient.GetModelSummaryAsync();
+            _items.Clear();
+            _items.AddRange(all.Where(m => string.Equals(m.Sport, Sport, StringComparison.OrdinalIgnoreCase)));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to load model insights for {Sport}", Sport);
+            _error = "Unable to load model insights right now.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}

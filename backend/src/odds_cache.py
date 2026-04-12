@@ -7,6 +7,22 @@ from typing import List, Dict, Any, Optional
 logger = logging.getLogger(__name__)
 
 from src.database import get_pool
+from api.json_utils import sanitize_for_json
+
+
+def _parse_jsonb(val):
+    """Parse a JSONB value that asyncpg may return as a string."""
+    if val is None:
+        return {}
+    if isinstance(val, dict):
+        return val
+    if isinstance(val, str):
+        try:
+            parsed = json.loads(val)
+            return parsed if isinstance(parsed, dict) else {}
+        except (json.JSONDecodeError, TypeError):
+            return {}
+    return {}
 
 CREATE_CACHE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS game_odds_cache (
@@ -96,7 +112,7 @@ class OddsCacheService:
                             expires_at = EXCLUDED.expires_at
                     """, game_id, sport, game.get("home_team"), game.get("away_team"), 
                        self._parse_date(game.get("game_time")), 
-                       json.dumps(odds_data), json.dumps(analysis_data), 
+                       json.dumps(sanitize_for_json(odds_data)), json.dumps(sanitize_for_json(analysis_data)), 
                        expires_at)
                     
                     count += 1
@@ -113,7 +129,7 @@ class OddsCacheService:
                 UPDATE game_odds_cache 
                 SET analysis = $1, fetched_at = NOW()
                 WHERE id = $2
-            """, json.dumps(analysis), game_id)
+            """, json.dumps(sanitize_for_json(analysis)), game_id)
             return True
             
     async def get_cached_games(self, sport: str, exclude_ids: List[str] = None, include_expired: bool = False) -> List[Dict[str, Any]]:
@@ -133,14 +149,25 @@ class OddsCacheService:
             
         async with pool.acquire() as conn:
             rows = await conn.fetch(query, *args)
-            return [dict(row) for row in rows]
+            results = []
+            for row in rows:
+                d = dict(row)
+                d['odds_data'] = _parse_jsonb(d.get('odds_data'))
+                d['analysis'] = _parse_jsonb(d.get('analysis'))
+                results.append(d)
+            return results
 
     async def get_game(self, game_id: str) -> Optional[Dict[str, Any]]:
         """Get a single game by ID."""
         pool = await get_pool()
         async with pool.acquire() as conn:
             row = await conn.fetchrow("SELECT * FROM game_odds_cache WHERE id = $1", game_id)
-            return dict(row) if row else None
+            if not row:
+                return None
+            d = dict(row)
+            d['odds_data'] = _parse_jsonb(d.get('odds_data'))
+            d['analysis'] = _parse_jsonb(d.get('analysis'))
+            return d
 
     async def cleanup_expired(self):
         """Remove expired entries."""
