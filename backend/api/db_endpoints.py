@@ -5,7 +5,7 @@ Database Import API Endpoints
 Add these endpoints to app.py for database import functionality.
 """
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from pydantic import BaseModel
 from typing import Optional, List
 # import asyncpg  <-- Moved to local function scope
@@ -89,10 +89,12 @@ class ImportStatus(BaseModel):
     imported_at: str
 
 
-async def get_db_connection():
-    """Get database connection."""
+async def get_db_connection(request: Request | None = None):
+    """Get database connection (prefers app pool when available)."""
     try:
         import asyncpg
+        if request is not None and hasattr(request.app.state, "pool") and request.app.state.pool:
+            return await request.app.state.pool.acquire()
         return await asyncpg.connect(DATABASE_URL)
     except Exception as e:
         logger.error(f"Database connection failed: {e}")

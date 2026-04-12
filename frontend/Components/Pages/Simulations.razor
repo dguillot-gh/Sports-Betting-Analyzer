@@ -1317,7 +1317,14 @@
             
             // Stop polling
             cts.Cancel();
-            try { await pollingTask; } catch (OperationCanceledException) {}
+            try
+            {
+                await pollingTask;
+            }
+            catch (OperationCanceledException ex)
+            {
+                Logger.LogDebug(ex, "NFL simulation polling canceled after response completion");
+            }
             
             _nflSimStatus = "Processing results...";
             StateHasChanged();

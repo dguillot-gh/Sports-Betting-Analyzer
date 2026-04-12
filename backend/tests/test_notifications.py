@@ -17,7 +17,7 @@ class TestSendSummaryReport(unittest.TestCase):
 
     def _run(self, coro):
         """Helper to run an async coroutine in a sync test."""
-        return asyncio.get_event_loop().run_until_complete(coro)
+        return asyncio.run(coro)
 
     # ---- fixtures ------------------------------------------------
 

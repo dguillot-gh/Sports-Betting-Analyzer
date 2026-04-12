@@ -51,10 +51,9 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // Skip WebSocket, SignalR, and Blazor connections
-    if (event.request.url.includes('_blazor') ||
-        event.request.url.includes('signalr') ||
-        event.request.url.includes('negotiate')) {
+    // Skip non-HTTP schemes (like chrome-extension://)
+    const url = new URL(event.request.url);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
         return;
     }
 

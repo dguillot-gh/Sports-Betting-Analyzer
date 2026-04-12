@@ -46,12 +46,16 @@ NFLVERSE_PBP_BASE = "https://github.com/nflverse/nflverse-pbp/releases/download"
 
 # Years to import - dynamic based on current date
 current_year = datetime.now().year
-# NFL season corresponds to the year it started (e.g., Jan 2026 is still the 2025 season)
-# A new season's data starts appearing around July/August of that year
-active_season = current_year if datetime.now().month >= 4 else current_year - 1 # Adjusted to April for draft/schedule releases
+# NFL player stats only exist once the season starts (September).
+# Before September, the latest season with actual game data is the prior year.
+# e.g., In April 2026 the latest stats season is 2025; in October 2026 it's 2026.
+active_stats_season = current_year if datetime.now().month >= 9 else current_year - 1
 
-IMPORT_YEARS = list(range(2016, active_season + 1))
-IMPORT_YEARS_MODERN = list(range(2020, active_season + 1))
+# Schedules/rosters get released earlier (April/May), so allow the current year from April.
+active_schedule_season = current_year if datetime.now().month >= 4 else current_year - 1
+
+IMPORT_YEARS = list(range(2016, active_schedule_season + 1))
+IMPORT_YEARS_MODERN = list(range(2020, active_stats_season + 1))
 
 # Per-season weekly player stats from nflverse-data releases
 # URL format: https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats_YYYY.csv
@@ -734,29 +738,46 @@ async def import_stats_via_nflreadpy(conn, sport_id: int, player_map: dict, prog
     try:
         # Get season-level aggregates for all modern years
         # summary_level="reg" gives us regular season totals pre-aggregated
+        target_years = list(IMPORT_YEARS_MODERN)  # Copy so we can retry with fewer
+        
         stats_df = nfl.load_player_stats(
-            seasons=IMPORT_YEARS_MODERN,
+            seasons=target_years,
             summary_level="reg"
         )
         if hasattr(stats_df, "to_pandas"):
             stats_df = stats_df.to_pandas()
         
+        # If zero rows returned, retry without the latest year (it may not have data yet)
+        if len(stats_df) == 0 and len(target_years) > 1:
+            dropped_year = target_years.pop()
+            logger.warning(f"nflreadpy returned 0 rows for {target_years + [dropped_year]}. "
+                          f"Retrying without {dropped_year}...")
+            if progress_callback:
+                progress_callback(f"No data for {dropped_year} season yet — retrying with {target_years}...")
+            
+            stats_df = nfl.load_player_stats(
+                seasons=target_years,
+                summary_level="reg"
+            )
+            if hasattr(stats_df, "to_pandas"):
+                stats_df = stats_df.to_pandas()
+        
         if progress_callback:
-            progress_callback(f"Requesting NFL stats for years: {IMPORT_YEARS_MODERN}")
+            progress_callback(f"Requesting NFL stats for years: {target_years}")
             progress_callback(f"Processing {len(stats_df)} player-season records...")
         
-        logger.info(f"Loaded {len(stats_df)} player-season records from nflreadpy (Years: {IMPORT_YEARS_MODERN})")
+        logger.info(f"Loaded {len(stats_df)} player-season records from nflreadpy (Years: {target_years})")
         
         if len(stats_df) == 0:
-            msg = f"nflreadpy returned ZERO player stats for years {IMPORT_YEARS_MODERN}."
+            msg = f"nflreadpy returned ZERO player stats for years {target_years}."
             logger.warning(msg)
             # We don't have results object here, so we'll just log it. 
             # The caller will handle checking the count.
         else:
-            # Check if active season (2025) is actually in the data
-            has_current = not stats_df[stats_df['season'] == active_season].empty if 'season' in stats_df.columns else False
-            if not has_current and active_season in IMPORT_YEARS_MODERN:
-                logger.warning(f"nflreadpy returned data, but NO records for the {active_season} season.")
+            # Check if the latest stats season is actually in the data
+            has_current = not stats_df[stats_df['season'] == active_stats_season].empty if 'season' in stats_df.columns else False
+            if not has_current and active_stats_season in target_years:
+                logger.warning(f"nflreadpy returned data, but NO records for the {active_stats_season} season.")
         
         for i, (_, row) in enumerate(stats_df.iterrows()):
             if progress_callback and i % 500 == 0:
@@ -1432,14 +1453,17 @@ async def import_schedules_via_nflreadpy(conn, sport_id: int, progress_callback=
                     DO UPDATE SET metadata = EXCLUDED.metadata"""
     
     try:
-        schedules_df = nfl.load_schedules(seasons=IMPORT_YEARS_MODERN)
+        # Schedules use the broader IMPORT_YEARS range (includes current year from April)
+        # since the NFL releases schedules in spring, well before player stats exist.
+        schedule_years = list(range(2020, active_schedule_season + 1))
+        schedules_df = nfl.load_schedules(seasons=schedule_years)
         if hasattr(schedules_df, "to_pandas"):
             schedules_df = schedules_df.to_pandas()
         
         if progress_callback:
-            progress_callback(f"Preparing {len(schedules_df)} games for batch insert (Years: {IMPORT_YEARS_MODERN})...")
+            progress_callback(f"Preparing {len(schedules_df)} games for batch insert (Years: {schedule_years})...")
         
-        logger.info(f"Loaded {len(schedules_df)} games from nflreadpy schedules (Years: {IMPORT_YEARS_MODERN})")
+        logger.info(f"Loaded {len(schedules_df)} games from nflreadpy schedules (Years: {schedule_years})")
         
         if len(schedules_df) == 0:
             logger.warning("nflreadpy returned ZERO schedules.")

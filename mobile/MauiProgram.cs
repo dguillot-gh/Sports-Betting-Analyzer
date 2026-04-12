@@ -29,7 +29,7 @@ public static class MauiProgram
 		{
 			var configService = sp.GetRequiredService<IServerConfigService>();
 			var baseUrl = configService.GetBaseUrl();
-			return new HttpClient { BaseAddress = new Uri(baseUrl) };
+			return new HttpClient { BaseAddress = new Uri($"{ApiUrlHelper.NormalizeBaseUrl(baseUrl)}/") };
 		});
 
 		builder.Services.AddSingleton<PushNotificationService>();

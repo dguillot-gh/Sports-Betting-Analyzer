@@ -13,7 +13,8 @@ from app import app
 @pytest.mark.anyio
 async def test_nfl_standings_performance():
     """Verify NFL standings performance and structure"""
-    async with httpx.AsyncClient(app=app, base_url="http://test") as client:
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         start_time = time.time()
         response = await client.get("/standings/nfl?season=2024")
         duration = time.time() - start_time
@@ -34,7 +35,8 @@ async def test_nfl_standings_performance():
 @pytest.mark.anyio
 async def test_nba_standings_structure():
     """Verify NBA standings data integrity"""
-    async with httpx.AsyncClient(app=app, base_url="http://test") as client:
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/standings/nba?season=2024")
         assert response.status_code in [200, 404, 500]
         

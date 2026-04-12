@@ -3,6 +3,7 @@
 @using System.Text.Json
 @using SportsBettingAnalyzer.Services
 @using SportsBettingAnalyzer.Models
+@using SportsBettingAnalyzer.Shared.Services
 @using SportsBettingAnalyzer.Components.Shared.Tailwind
 @inject HttpClient Http
 @inject ISnackbar Snackbar
@@ -40,9 +41,9 @@
                 <TwIcon Icon="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" Class="w-4 h-4 mr-2" />
                 Snapshot Results
             </TwButton>
-             <TwButton Variant="outline" Href="/daily-analysis">
+             <TwButton Variant="outline" Href="/data-center">
                 <TwIcon Icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-4 h-4 mr-2" />
-                View Cache
+                Data Center
             </TwButton>
         </div>
     </div>
@@ -395,7 +396,6 @@
 @code {
     private bool _isLoading = false;
     private bool _isSavingAll = false;
-    private bool _isTraining = false;
     private string? _error = null;
     private string _selectedSportsbook = "fanduel";
     private string _date = "";
@@ -423,7 +423,7 @@
         try
         {
             var response = await Http.PostAsync(
-                $"http://backend:8000/model-testing/nfl/predictions?sportsbook={_selectedSportsbook}", 
+                PredictionApiRoutes.NflPredictions(_selectedSportsbook),
                 null
             );
             

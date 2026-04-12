@@ -306,43 +306,57 @@ async def analyze_matchup_dual(home_team: str, away_team: str,
     # Get simple model prediction
     simple_pred = await analyze_matchup(home_team, away_team, spread, over_under, home_ml, away_ml)
     
-    # Try to get XGBoost prediction
+    # Try to get Kyleskom XGBoost prediction
     xgb_pred = None
     try:
-        from scripts.nba_xgb_trainer import predict_with_xgb
-        predictor = NBAPredictor()
-        home_stats = await predictor.get_team_stats(home_team)
-        away_stats = await predictor.get_team_stats(away_team)
-        
-        xgb_result = await predict_with_xgb(home_team, away_team, home_stats, away_stats)
-        
+        from scripts.kyleskom_adapter import predict_with_kyleskom
+
+        xgb_result = await predict_with_kyleskom(
+            home=home_team,
+            away=away_team,
+            total=over_under,
+            h_ml=home_ml,
+            a_ml=away_ml
+        )
+
         if xgb_result and "error" not in xgb_result:
             xgb_pred = {
-                'model': 'xgboost',
+                'model': 'kyleskom_xgboost',
+                'source': 'kyleskom_adapter',
                 'home_win_probability': xgb_result.get('home_win_probability'),
-                'away_win_probability': xgb_result.get('away_win_probability'),
+                'away_win_probability': xgb_result.get('away_win_probability', 1 - (xgb_result.get('home_win_probability') or 0.5)),
+                # Kyleskom adapter exposes EV as ev_home/ev_away; normalize to app contract.
+                'home_ev': xgb_result.get('ev_home'),
+                'away_ev': xgb_result.get('ev_away'),
+                # Keep original aliases for backward compatibility with any existing consumers.
+                'ev_home': xgb_result.get('ev_home'),
+                'ev_away': xgb_result.get('ev_away'),
+                'kelly_home': xgb_result.get('kelly_home'),
+                'kelly_away': xgb_result.get('kelly_away'),
                 'predicted_total': xgb_result.get('predicted_total'),
+                'ou_pick': xgb_result.get('over_under', {}).get('pick') if isinstance(xgb_result.get('over_under'), dict) else None,
+                'ou_confidence': xgb_result.get('over_under', {}).get('confidence') if isinstance(xgb_result.get('over_under'), dict) else None,
+                'over_under': xgb_result.get('over_under'),
+                'confidence': xgb_result.get('confidence'),
                 'predicted_winner': home_team if xgb_result.get('home_win_probability', 0) > 0.5 else away_team,
+                'xgb_error': xgb_result.get('xgb_error')
             }
-            
-            # Calculate XGBoost value vs odds
-            if home_ml and away_ml:
-                def implied_prob(odds):
-                    if odds > 0:
-                        return 100 / (odds + 100)
-                    else:
-                        return abs(odds) / (abs(odds) + 100)
-                
-                home_implied = implied_prob(home_ml)
-                xgb_home_prob = xgb_result.get('home_win_probability', 0.5)
-                xgb_edge = xgb_home_prob - home_implied
-                xgb_pred['home_ml_edge'] = round(xgb_edge * 100, 1)
-                xgb_pred['ml_value'] = abs(xgb_edge) >= 0.05
-                xgb_pred['ml_pick'] = home_team if xgb_edge > 0 else away_team
-                
+
     except Exception as e:
-        logger.warning(f"XGBoost prediction failed: {e}")
-        xgb_pred = {'model': 'xgboost', 'error': 'Not available - train model first'}
+        logger.warning(f"Kyleskom XGBoost prediction failed: {e}")
+        xgb_pred = {
+            'model': 'kyleskom_xgboost',
+            'source': 'kyleskom_adapter',
+            'error': 'Not available - kyleskom adapter failed'
+        }
+
+    # Merge value signals from both models
+    xgb_has_value = False
+    if xgb_pred and "error" not in xgb_pred:
+        home_ev = xgb_pred.get('home_ev')
+        away_ev = xgb_pred.get('away_ev')
+        xgb_has_value = (home_ev is not None and home_ev > 0) or (away_ev is not None and away_ev > 0)
+    combined_has_value = bool(simple_pred.get('has_value')) or xgb_has_value
     
     # Return combined result
     return {
@@ -355,6 +369,8 @@ async def analyze_matchup_dual(home_team: str, away_team: str,
         'spread': spread,
         'over_under': over_under,
         # Use simple model for main display, XGBoost for comparison
-        **simple_pred
+        **simple_pred,
+        'xgb_model_source': 'kyleskom_adapter',
+        'has_value': combined_has_value
     }
 

@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SportsBettingAnalyzer.Models;
+using SportsBettingAnalyzer.Shared.Services;
 
 namespace SportsBettingAnalyzer.Services;
 
@@ -450,6 +451,93 @@ public class DataUpdateResponse
     public string? UpdatedAt { get; set; }
 }
 
+public class DashboardTopPicksResponse
+{
+    [JsonPropertyName("date")]
+    public string? Date { get; set; }
+
+    [JsonPropertyName("sportsbook")]
+    public string Sportsbook { get; set; } = "";
+
+    [JsonPropertyName("count")]
+    public int Count { get; set; }
+
+    [JsonPropertyName("picks")]
+    public List<DashboardTopPick> Picks { get; set; } = new();
+}
+
+public class DashboardTopPick
+{
+    [JsonPropertyName("sport")]
+    public string Sport { get; set; } = "";
+
+    [JsonPropertyName("home_team")]
+    public string HomeTeam { get; set; } = "";
+
+    [JsonPropertyName("away_team")]
+    public string AwayTeam { get; set; } = "";
+
+    [JsonPropertyName("game_time")]
+    public string GameTime { get; set; } = "";
+
+    [JsonPropertyName("winner")]
+    public string Winner { get; set; } = "";
+
+    [JsonPropertyName("probability")]
+    public double Probability { get; set; }
+
+    [JsonPropertyName("edge")]
+    public double Edge { get; set; }
+
+    [JsonPropertyName("value_score")]
+    public double ValueScore { get; set; }
+}
+
+public class LeagueStandingsResponse
+{
+    [JsonPropertyName("sport")]
+    public string Sport { get; set; } = "";
+
+    [JsonPropertyName("season")]
+    public int Season { get; set; }
+
+    [JsonPropertyName("source")]
+    public string? Source { get; set; }
+
+    [JsonPropertyName("standings")]
+    public List<LeagueStandingEntry> Standings { get; set; } = new();
+}
+
+public class LeagueStandingEntry
+{
+    [JsonPropertyName("team")]
+    public string Team { get; set; } = "";
+
+    [JsonPropertyName("wins")]
+    public int Wins { get; set; }
+
+    [JsonPropertyName("losses")]
+    public int Losses { get; set; }
+
+    [JsonPropertyName("ot_losses")]
+    public int? OtLosses { get; set; }
+
+    [JsonPropertyName("points")]
+    public int? Points { get; set; }
+
+    [JsonPropertyName("points_for")]
+    public int PointsFor { get; set; }
+
+    [JsonPropertyName("points_against")]
+    public int PointsAgainst { get; set; }
+
+    [JsonPropertyName("record")]
+    public string? Record { get; set; }
+
+    [JsonPropertyName("win_pct")]
+    public double? WinPct { get; set; }
+}
+
 /// <summary>
 /// Version information models
 /// </summary>
@@ -590,7 +678,8 @@ public class PythonMLServiceClient
         _logger = logger;
         _options = options.Value;
 
-        _httpClient.BaseAddress = new Uri(_options.BaseUrl);
+        var normalizedBaseUrl = ApiUrlHelper.NormalizeBaseUrl(_options.BaseUrl, "http://localhost:8000");
+        _httpClient.BaseAddress = new Uri($"{normalizedBaseUrl}/");
         _httpClient.Timeout = TimeSpan.FromSeconds(_options.TimeoutSeconds);
     }
 
@@ -855,7 +944,7 @@ public class PythonMLServiceClient
 
     public Task<List<string>> GetAvailableSportsAsync()
     {
-        return Task.FromResult(new List<string> { "nascar", "nfl", "nhl" });
+        return Task.FromResult(new List<string> { "nba", "nfl", "ncaab", "nascar", "college_baseball", "nhl" });
     }
 
     public Task<List<string>> GetNASCARSeriesAsync()
@@ -1419,6 +1508,43 @@ public class PythonMLServiceClient
         {
             _logger.LogError(ex, "Error getting model summary");
             return new List<DashboardModelSummary>();
+        }
+    }
+
+    public async Task<List<DashboardTopPick>> GetDashboardTopPicksAsync(int limit = 8, string sportsbook = "fanduel")
+    {
+        try
+        {
+            if (!await IsHealthyAsync())
+            {
+                return new List<DashboardTopPick>();
+            }
+
+            var response = await _httpClient.GetFromJsonAsync<DashboardTopPicksResponse>($"/dashboard/top-picks?limit={limit}&sportsbook={Uri.EscapeDataString(sportsbook)}");
+            return response?.Picks ?? new List<DashboardTopPick>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting dashboard top picks");
+            return new List<DashboardTopPick>();
+        }
+    }
+
+    public async Task<LeagueStandingsResponse?> GetLeagueStandingsAsync(string sport)
+    {
+        try
+        {
+            if (!await IsHealthyAsync())
+            {
+                return null;
+            }
+
+            return await _httpClient.GetFromJsonAsync<LeagueStandingsResponse>($"/db/standings/{sport}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting league standings for {Sport}", sport);
+            return null;
         }
     }
 

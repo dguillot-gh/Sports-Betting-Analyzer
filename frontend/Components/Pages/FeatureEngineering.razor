@@ -126,8 +126,8 @@
                          </div>
                      </div>
                      
-                     <TwTabs DefaultTab="0">
-                         <TwTabPanel Title="Cup Series" OnClick="@(() => LoadData("cup"))">
+                     <TwTabs ActiveTabId="@_activeSeriesTab" ActiveTabIdChanged="OnSeriesTabChanged">
+                         <TwTabPanel Title="Cup Series" Id="cup">
                              <div class="pt-4">
                                 <TwTable TItem="Dictionary<string, object>" Items="@_cupData" IsLoading="@_isLoadingData">
                                     <HeaderContent>
@@ -139,14 +139,14 @@
                                 </TwTable>
                                 <!-- Simple pagination/limit indicator -->
                                 <div class="flex justify-between items-center mt-4 text-xs text-slate-500 border-t border-slate-800 pt-4">
-                                    <span>Showing top 100 rows. Total: @_totalRows</span>
+                                    <span>Showing top 100 rows. Total: @GetTotalForSeries("cup")</span>
                                 </div>
                              </div>
                          </TwTabPanel>
                          
-                         <TwTabPanel Title="Xfinity Series" OnClick="@(() => LoadData("xfinity"))">
+                         <TwTabPanel Title="Xfinity Series" Id="xfinity">
                              <div class="pt-4">
-                                  <TwTable TItem="Dictionary<string, object>" Items="@_cupData" IsLoading="@_isLoadingData">
+                                  <TwTable TItem="Dictionary<string, object>" Items="@_xfinityData" IsLoading="@_isLoadingData">
                                     <HeaderContent>
                                         @foreach (var col in _displayColumns) { <TwTh>@col</TwTh> }
                                     </HeaderContent>
@@ -155,14 +155,14 @@
                                     </RowTemplate>
                                 </TwTable>
                                  <div class="flex justify-between items-center mt-4 text-xs text-slate-500 border-t border-slate-800 pt-4">
-                                    <span>Showing top 100 rows. Total: @_totalRows</span>
+                                    <span>Showing top 100 rows. Total: @GetTotalForSeries("xfinity")</span>
                                 </div>
                              </div>
                          </TwTabPanel>
                          
-                         <TwTabPanel Title="Truck Series" OnClick="@(() => LoadData("truck"))">
+                         <TwTabPanel Title="Truck Series" Id="truck">
                              <div class="pt-4">
-                                  <TwTable TItem="Dictionary<string, object>" Items="@_cupData" IsLoading="@_isLoadingData">
+                                  <TwTable TItem="Dictionary<string, object>" Items="@_truckData" IsLoading="@_isLoadingData">
                                     <HeaderContent>
                                         @foreach (var col in _displayColumns) { <TwTh>@col</TwTh> }
                                     </HeaderContent>
@@ -171,7 +171,7 @@
                                     </RowTemplate>
                                 </TwTable>
                                  <div class="flex justify-between items-center mt-4 text-xs text-slate-500 border-t border-slate-800 pt-4">
-                                    <span>Showing top 100 rows. Total: @_totalRows</span>
+                                    <span>Showing top 100 rows. Total: @GetTotalForSeries("truck")</span>
                                 </div>
                              </div>
                          </TwTabPanel>
@@ -190,9 +190,14 @@
 
     private bool _isLoadingData = false;
     private List<Dictionary<string, object>> _cupData = new();
+    private List<Dictionary<string, object>> _xfinityData = new();
+    private List<Dictionary<string, object>> _truckData = new();
     private List<string> _displayColumns = new();
-    private int _totalRows = 0;
+    private int _cupTotalRows = 0;
+    private int _xfinityTotalRows = 0;
+    private int _truckTotalRows = 0;
     private string _currentSeries = "cup";
+    private string _activeSeriesTab = "cup";
     private int? _selectedSeason = null;
     private string? _selectedTrackType = null;
     private string? _driverFilter = null;
@@ -201,7 +206,14 @@
 
     protected override async Task OnInitializedAsync()
     {
+        _activeSeriesTab = "cup";
         await LoadData("cup");
+    }
+
+    private async Task OnSeriesTabChanged(string tabId)
+    {
+        _activeSeriesTab = tabId;
+        await LoadData(tabId);
     }
 
     private async Task OnSeasonChanged(int? season)
@@ -282,8 +294,7 @@
             
             if (data != null && data.Rows.Count > 0)
             {
-                _cupData = data.Rows;
-                _totalRows = data.TotalRows;
+                SetSeriesData(series, data.Rows, data.TotalRows);
                 
                 var allCols = data.Columns;
                 var priorityCols = new[] { "year", "race_num", "driver", "finishing_position", "start", "track", "career_wins", "avg_finish_last_5" };
@@ -296,8 +307,7 @@
             }
             else
             {
-                _cupData = new();
-                _totalRows = 0;
+                SetSeriesData(series, new(), 0);
             }
         }
         catch (Exception ex)
@@ -310,4 +320,32 @@
              StateHasChanged();
         }
     }
+
+    private void SetSeriesData(string series, List<Dictionary<string, object>> rows, int totalRows)
+    {
+        switch (series)
+        {
+            case "cup":
+                _cupData = rows;
+                _cupTotalRows = totalRows;
+                break;
+            case "xfinity":
+                _xfinityData = rows;
+                _xfinityTotalRows = totalRows;
+                break;
+            case "truck":
+            case "trucks":
+                _truckData = rows;
+                _truckTotalRows = totalRows;
+                break;
+        }
+    }
+
+    private int GetTotalForSeries(string series) => series switch
+    {
+        "cup" => _cupTotalRows,
+        "xfinity" => _xfinityTotalRows,
+        "truck" or "trucks" => _truckTotalRows,
+        _ => 0
+    };
 }

@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import pandas as pd
 from datetime import datetime
+from api.json_utils import sanitize_for_json
 import logging
 
 # Import predictor to reuse data loading logic
@@ -45,7 +46,7 @@ async def run_backtest_endpoint(request: Request):
     try:
         from scripts.backtest_ncaab import run_backtest
         report = run_backtest(season_filter=True)
-        return report
+        return sanitize_for_json(report)
     except Exception as e:
         logger.error(f"Error running backtest: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -30,6 +30,7 @@ class NBABacktester:
     
     def __init__(self):
         self.models_dir = "models/nba"
+        self.market_odds_lookup = {}
         os.makedirs(self.models_dir, exist_ok=True)
     
     async def run_walk_forward_backtest(
@@ -141,9 +142,14 @@ class NBABacktester:
                     actual_home_win = game['home_score'] > game['away_score']
                     bet_won = (bet_on_home and actual_home_win) or (not bet_on_home and not actual_home_win)
                     
-                    # Calculate profit
+                    # Calculate profit using actual decimal odds if available
+                    bet_dec_odds = market_odds['home_ml_dec'] if bet_on_home else market_odds['away_ml_dec']
+                    
+                    if not bet_dec_odds:
+                        bet_dec_odds = self._odds_to_decimal(bet_odds)
+                        
                     if bet_won:
-                        profit = stake * (self._odds_to_decimal(bet_odds) - 1)
+                        profit = stake * (bet_dec_odds - 1)
                     else:
                         profit = -stake
                     
@@ -230,10 +236,29 @@ class NBABacktester:
         
         logger.info(f"NBA Backtest complete: {total_bets} bets, {win_rate:.1f}% win rate, {roi:.1f}% ROI")
         
-        # Save results
+        # Save results to Postgres and disk
         try:
             with open(f"{self.models_dir}/backtest_results.json", "w") as f:
                 json.dump(results, f, indent=2)
+                
+            from src.database import get_pool
+            pool = await get_pool()
+            async with pool.acquire() as conn:
+                await conn.execute('''
+                    INSERT INTO model_performance (
+                        sport_id, total_bets, wins, losses, win_rate, total_staked, 
+                        total_profit, roi, sharpe_ratio, max_drawdown, avg_edge, 
+                        final_bankroll, by_season, bet_history
+                    ) VALUES (
+                        3, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+                    )
+                ''', 
+                results['total_bets'], results['wins'], results['losses'], results['win_rate'],
+                float(results['total_staked']), float(results['total_profit']), float(results['roi']), float(results['sharpe_ratio']),
+                float(results['max_drawdown']), float(results['avg_edge']), float(results['final_bankroll']),
+                json.dumps(results['by_season']), json.dumps(results['bet_history'])
+                )
+            logger.info("Saved backtest results to model_performance table.")
         except Exception as e:
             logger.error(f"Error saving results: {e}")
         
@@ -242,43 +267,159 @@ class NBABacktester:
     async def _load_historical_games(self) -> List[Dict]:
         """Load historical NBA games from database."""
         try:
-            # Try different import paths that might work
-            try:
-                from src.database import get_pool
-                pool = await get_pool()
-                async with pool.acquire() as conn:
-                    query = """
-                        SELECT game_date, season, home_team, away_team, home_score, away_score
-                        FROM nba_games
-                        WHERE game_date IS NOT NULL AND home_score IS NOT NULL
-                        ORDER BY game_date ASC
-                    """
-                    rows = await conn.fetch(query)
-                    # Convert to list of dicts and ensure date serializability
-                    cleaned_rows = []
-                    for row in rows:
-                        d = dict(row)
-                        if isinstance(d['game_date'], (datetime, date)):
-                             d['game_date'] = d['game_date'].isoformat()
-                        cleaned_rows.append(d)
-                    return cleaned_rows
-            except ImportError:
-                pass
+            from src.database import get_pool
+            pool = await get_pool()
             
-            # Fallback: return empty to use synthetic data
-            logger.info("Using synthetic NBA data for backtesting")
-            return []
+            # Load closing lines from Kaggle odds
+            self.market_odds_lookup = {}
+            async with pool.acquire() as conn:
+                logger.info("Loading Kaggle historical odds from DB...")
+                odds_query = """
+                    SELECT DISTINCT ON (team1, team2, timestamp::date) 
+                        team1 as away_team, team2 as home_team, timestamp::date as game_date, 
+                        team1_moneyline, team2_moneyline, over_total, team1_spread_odds, team2_spread_odds
+                    FROM nba_odds_history
+                    ORDER BY team1, team2, timestamp::date, timestamp DESC
+                """
+                
+                try:
+                    odds_rows = await conn.fetch(odds_query)
+                    for row in odds_rows:
+                        # Convert to pydatetime and then to isoformat to match game_date
+                        date_str = None
+                        if hasattr(row['game_date'], 'isoformat'):
+                            date_str = row['game_date'].isoformat()
+                            
+                        key = (str(row['home_team']).lower(), str(row['away_team']).lower(), date_str)
+                        self.market_odds_lookup[key] = {
+                            'away_ml_dec': row['team1_moneyline'],
+                            'home_ml_dec': row['team2_moneyline'],
+                            'total': row['over_total']
+                        }
+                    logger.info(f"Loaded {len(self.market_odds_lookup)} historical odds lines.")
+                except Exception as e:
+                    logger.error(f"Failed to load historical odds: {e}")
+
+                logger.info("Loading NBA games from DB...")
+                query = """
+                    SELECT r.game_date, r.season, he.name as home_team, ae.name as away_team, r.home_score, r.away_score
+                    FROM results r
+                    JOIN entities he ON r.home_entity_id = he.id
+                    JOIN entities ae ON r.away_entity_id = ae.id
+                    JOIN sports s ON r.sport_id = s.id
+                    WHERE s.name = 'nba'
+                      AND r.game_date IS NOT NULL 
+                      AND r.home_score IS NOT NULL
+                    ORDER BY r.game_date ASC
+                """
+                rows = await conn.fetch(query)
+                # Convert to list of dicts and ensure date serializability
+                cleaned_rows = []
+                games_with_odds = 0
+                for row in rows:
+                    d = dict(row)
+                    date_str = None
+                    if hasattr(d['game_date'], 'date'):
+                        date_str = d['game_date'].date().isoformat()
+                    elif hasattr(d['game_date'], 'isoformat'):
+                        date_str = d['game_date'].isoformat().split('T')[0]
+                    d['game_date'] = date_str
+                    
+                    key = (str(d['home_team']).lower(), str(d['away_team']).lower(), date_str)
+                    if key in self.market_odds_lookup:
+                        games_with_odds += 1
+                        
+                    cleaned_rows.append(d)
+                    
+                logger.info(f"Loaded {len(cleaned_rows)} historical NBA games. {games_with_odds} matched with Kaggle odds.")
+                
+                # Filter down to games with odds if we matched enough of them
+                if games_with_odds > 100:
+                    cleaned_rows = [g for g in cleaned_rows if (str(g['home_team']).lower(), str(g['away_team']).lower(), g['game_date']) in self.market_odds_lookup]
+                    logger.info(f"Filtered DB games to {len(cleaned_rows)} matched with valid odds.")
+                    
+                if len(cleaned_rows) > 100:
+                    return cleaned_rows
+                else:
+                    raise ValueError("Not enough Postgres games matched. Falling back to NBA API.")
+                
         except Exception as e:
-            logger.error(f"Error loading NBA games: {e}")
-            return []
+            logger.error(f"Error loading NBA games from Postgres: {e}")
+            logger.info("Fetching real historical games from NBA API...")
+            try:
+                from nba_api.stats.endpoints import leaguegamelog
+                import time
+                
+                all_games = []
+                seen_games = set()
+                # Fetch 2022-2026 seasons for backtesting to match Kaggle data
+                for season_year in range(2022, 2027):
+                    season_str = f"{season_year}-{str(season_year+1)[-2:]}"
+                    try:
+                        game_log = leaguegamelog.LeagueGameLog(season=season_str, season_type_all_star='Regular Season').get_data_frames()[0]
+                        for game_id in game_log['GAME_ID'].unique():
+                            if game_id in seen_games: continue
+                            seen_games.add(game_id)
+                            game_rows = game_log[game_log['GAME_ID'] == game_id]
+                            if len(game_rows) != 2: continue
+                            
+                            game_d = {'season': season_year}
+                            for _, row in game_rows.iterrows():
+                                matchup = row['MATCHUP']
+                                is_home = '@' not in matchup
+                                if is_home:
+                                    game_d['home_team'] = row['TEAM_NAME']
+                                    game_d['home_score'] = row['PTS']
+                                else:
+                                    game_d['away_team'] = row['TEAM_NAME']
+                                    game_d['away_score'] = row['PTS']
+                                    
+                                if not game_d.get('game_date'):
+                                    game_d['game_date'] = str(row['GAME_DATE'])
+                                    
+                            if 'home_team' in game_d and 'away_team' in game_d:
+                                key = (str(game_d['home_team']).lower(), str(game_d['away_team']).lower(), game_d['game_date'])
+                                if hasattr(self, 'market_odds_lookup') and key in self.market_odds_lookup:
+                                    all_games.append(game_d)
+                        time.sleep(0.6)
+                    except Exception as ex:
+                        logger.warning(f"Failed to fetch {season_str} from NBA API: {ex}")
+                
+                all_games.sort(key=lambda x: x['game_date'])
+                logger.info(f"Loaded {len(all_games)} games from NBA API matched with historical Kaggle odds")
+                return all_games
+                
+            except ImportError:
+                logger.error("nba_api not installed. Returning empty.")
+                return []
     
     def _get_market_odds(self, game: Dict) -> Dict:
         """Get or simulate market odds."""
-        # Simplified: Generate realistic odds
-        # Ideally this would query a historical odds table
+        key = (str(game['home_team']).lower(), str(game['away_team']).lower(), game['game_date'])
+        
+        if hasattr(self, 'market_odds_lookup') and key in self.market_odds_lookup:
+            odds = self.market_odds_lookup[key]
+            
+            # Helper to convert decimal to american for the predictor API format
+            def dec_to_american(decimal):
+                if decimal is None or decimal <= 1.0: return -110
+                if decimal >= 2.0: return int((decimal - 1) * 100)
+                return int(-100 / (decimal - 1))
+                
+            return {
+                'home_ml': dec_to_american(odds.get('home_ml_dec')),
+                'away_ml': dec_to_american(odds.get('away_ml_dec')),
+                'home_ml_dec': odds.get('home_ml_dec'),
+                'away_ml_dec': odds.get('away_ml_dec'),
+                'total': odds.get('total')
+            }
+            
+        # Fallback to simulated
         return {
             'home_ml': -150,
             'away_ml': 130,
+            'home_ml_dec': 1.66,
+            'away_ml_dec': 2.30,
             'spread': -3.5,
             'total': 218.5
         }
@@ -290,8 +431,13 @@ class NBABacktester:
         else:
             return abs(american_odds) / (abs(american_odds) + 100)
     
-    def _odds_to_decimal(self, american_odds: int) -> float:
-        """Convert American odds to decimal odds."""
+    def _odds_to_decimal(self, odds_val) -> float:
+        """Convert to decimal odds if it's American."""
+        # If it's already a float like 1.9, return it
+        if isinstance(odds_val, float) and odds_val < 100:
+            return odds_val
+        
+        american_odds = int(odds_val)
         if american_odds > 0:
             return (american_odds / 100) + 1
         else:

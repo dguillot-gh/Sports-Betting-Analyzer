@@ -1,81 +1,162 @@
 @page "/nhl-stats"
 @using SportsBettingAnalyzer.Components.Shared.Tailwind
-@using SportsBettingAnalyzer.Models
+@using SportsBettingAnalyzer.Services
+@inject PythonMLServiceClient MLServiceClient
+@inject ILogger<NHLStats> Logger
 @rendermode InteractiveServer
 
 <TwContainer>
     <div class="mb-10">
         <h1 class="text-4xl font-black text-white tracking-tight mb-2">NHL Analytics</h1>
-        <p class="text-slate-400 text-lg">Comprehensive team and player stats from the MoneyPuck ecosystem.</p>
+        <p class="text-slate-400 text-lg">Live team performance and standings from the NHL API.</p>
     </div>
 
     <TwTabs>
-        @* Teams Tab *@
         <TwTabPanel Title="Teams" TabIcon="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 10-9.417 0m9.417 0a5.002 5.002 0 01-9.417 0m9.417 0c.343.605.541 1.298.541 2.031a5 5 0 01-5 5c-2.761 0-5-2.239-5-5a4.991 4.991 0 01.541-2.031">
             <div class="space-y-6">
                 <div class="flex justify-between items-center bg-slate-900/50 p-6 rounded-2xl border border-slate-800">
                     <div>
-                        <h2 class="text-xl font-bold text-white">Team Performance</h2>
-                        <p class="text-slate-400 text-sm">Goals, xG, and specialty team metrics.</p>
+                        <h2 class="text-xl font-bold text-white">Team Performance Snapshot</h2>
+                        <p class="text-slate-400 text-sm">Top teams by points from current standings.</p>
                     </div>
+                    @if (_standings.Any())
+                    {
+                        <TwChip Color="blue" Size="sm">Season @_season</TwChip>
+                    }
                 </div>
 
-                <TwTable TItem="TeamStat">
-                    <HeaderContent>
-                        <TwTh>Team</TwTh>
-                        <TwTh>Goals For</TwTh>
-                        <TwTh>xGoals For</TwTh>
-                        <TwTh>Goals Against</TwTh>
-                        <TwTh>xGoals Against</TwTh>
-                        <TwTh>PP %</TwTh>
-                        <TwTh>Shot %</TwTh>
-                    </HeaderContent>
-                    <ChildContent>
-                        @foreach (var team in _teams)
-                        {
-                            <TwTr>
-                                <TwTd Class="font-bold text-white">@team.Name</TwTd>
-                                <TwTd>@team.GF</TwTd>
-                                <TwTd>@team.xGF.ToString("F1")</TwTd>
-                                <TwTd>@team.GA</TwTd>
-                                <TwTd>@team.xGA.ToString("F1")</TwTd>
-                                <TwTd>@team.PP.ToString("F1")%</TwTd>
-                                <TwTd>@team.ShotPct.ToString("F1")%</TwTd>
-                            </TwTr>
-                        }
-                    </ChildContent>
-                </TwTable>
+                @if (_isLoading)
+                {
+                    <TwProgressBar IsIndeterminate="true" Color="blue" Class="w-56" />
+                }
+                else if (!string.IsNullOrEmpty(_error))
+                {
+                    <TwAlert Severity="error">@_error</TwAlert>
+                }
+                else if (!_standings.Any())
+                {
+                    <TwAlert Severity="info">No NHL standings are available right now.</TwAlert>
+                }
+                else
+                {
+                    <TwTable TItem="LeagueStandingEntry">
+                        <HeaderContent>
+                            <TwTh>Team</TwTh>
+                            <TwTh>Record</TwTh>
+                            <TwTh>Points</TwTh>
+                            <TwTh>Goals For</TwTh>
+                            <TwTh>Goals Against</TwTh>
+                            <TwTh>Goal Diff</TwTh>
+                        </HeaderContent>
+                        <ChildContent>
+                            @foreach (var team in _standings.Take(16))
+                            {
+                                <TwTr>
+                                    <TwTd Class="font-bold text-white">@team.Team</TwTd>
+                                    <TwTd>@(string.IsNullOrWhiteSpace(team.Record) ? "-" : team.Record)</TwTd>
+                                    <TwTd>@(team.Points ?? 0)</TwTd>
+                                    <TwTd>@team.PointsFor</TwTd>
+                                    <TwTd>@team.PointsAgainst</TwTd>
+                                    <TwTd>@(team.PointsFor - team.PointsAgainst)</TwTd>
+                                </TwTr>
+                            }
+                        </ChildContent>
+                    </TwTable>
+                }
             </div>
         </TwTabPanel>
 
-        @* Standings Tab *@
         <TwTabPanel Title="Standings" TabIcon="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
-             <div class="py-10 text-center">
-                <TwIcon Icon="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" Class="w-16 h-16 text-slate-800 mx-auto mb-4" />
-                <h3 class="text-xl font-bold text-slate-500">Standings Sync In Progress</h3>
-                <p class="text-slate-600">Live standings are updated every 6 hours via the NHL Web API.</p>
-            </div>
+            @if (_isLoading)
+            {
+                <div class="py-10">
+                    <TwProgressBar IsIndeterminate="true" Color="blue" />
+                </div>
+            }
+            else if (!string.IsNullOrEmpty(_error))
+            {
+                <div class="py-6">
+                    <TwAlert Severity="error">@_error</TwAlert>
+                </div>
+            }
+            else if (_standings.Any())
+            {
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-xl font-bold text-white">League Standings</h3>
+                        <div class="text-xs text-slate-400">Source: @_source</div>
+                    </div>
+
+                    <TwTable TItem="LeagueStandingEntry">
+                        <HeaderContent>
+                            <TwTh>#</TwTh>
+                            <TwTh>Team</TwTh>
+                            <TwTh>Record</TwTh>
+                            <TwTh>Win %</TwTh>
+                            <TwTh>Points</TwTh>
+                        </HeaderContent>
+                        <ChildContent>
+                            @foreach (var row in _standings.Select((team, index) => new { Team = team, Rank = index + 1 }))
+                            {
+                                <TwTr>
+                                    <TwTd>@row.Rank</TwTd>
+                                    <TwTd Class="font-bold text-white">@row.Team.Team</TwTd>
+                                    <TwTd>@(string.IsNullOrWhiteSpace(row.Team.Record) ? "-" : row.Team.Record)</TwTd>
+                                    <TwTd>@(row.Team.WinPct.HasValue ? row.Team.WinPct.Value.ToString("P1") : "-")</TwTd>
+                                    <TwTd>@(row.Team.Points ?? 0)</TwTd>
+                                </TwTr>
+                            }
+                        </ChildContent>
+                    </TwTable>
+                </div>
+            }
+            else
+            {
+                <div class="py-10 text-center">
+                    <TwAlert Severity="info">No standings available yet.</TwAlert>
+                </div>
+            }
         </TwTabPanel>
     </TwTabs>
 </TwContainer>
 
 @code {
-    private List<TeamStat> _teams = new()
-    {
-        new TeamStat { Name = "Boston Bruins", GF = 124, xGF = 118.4, GA = 92, xGA = 95.2, PP = 24.5, ShotPct = 10.2 },
-        new TeamStat { Name = "New York Rangers", GF = 132, xGF = 125.1, GA = 88, xGA = 91.4, PP = 28.1, ShotPct = 11.5 },
-        new TeamStat { Name = "Colorado Avalanche", GF = 145, xGF = 138.9, GA = 112, xGA = 108.4, PP = 23.8, ShotPct = 12.1 },
-        new TeamStat { Name = "Florida Panthers", GF = 118, xGF = 122.3, GA = 95, xGA = 98.7, PP = 21.2, ShotPct = 9.8 }
-    };
+    private readonly List<LeagueStandingEntry> _standings = new();
+    private bool _isLoading = true;
+    private string _error = string.Empty;
+    private int _season;
+    private string _source = "NHL API";
 
-    private class TeamStat
+    protected override async Task OnInitializedAsync()
     {
-        public string Name { get; set; } = "";
-        public int GF { get; set; }
-        public double xGF { get; set; }
-        public int GA { get; set; }
-        public double xGA { get; set; }
-        public double PP { get; set; }
-        public double ShotPct { get; set; }
+        await LoadStandings();
+    }
+
+    private async Task LoadStandings()
+    {
+        _isLoading = true;
+        _error = string.Empty;
+
+        try
+        {
+            var response = await MLServiceClient.GetLeagueStandingsAsync("nhl");
+            _standings.Clear();
+
+            if (response?.Standings != null)
+            {
+                _season = response.Season;
+                _source = string.IsNullOrWhiteSpace(response.Source) ? "NHL API" : response.Source;
+                _standings.AddRange(response.Standings.OrderByDescending(s => s.Points ?? 0).ThenByDescending(s => s.Wins));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to load NHL standings");
+            _error = "Unable to load NHL standings right now.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
     }
 }

@@ -2,6 +2,7 @@
 @using System.Text.Json
 @using SportsBettingAnalyzer.Services
 @using SportsBettingAnalyzer.Models
+@using SportsBettingAnalyzer.Shared.Services
 @using SportsBettingAnalyzer.Components.Shared.Tailwind
 @inject HttpClient Http
 @inject ISnackbar Snackbar
@@ -272,7 +273,7 @@
         {
             // Update to use the new NHL endpoint
             var response = await Http.PostAsync(
-                $"http://backend:8000/nhl/analyze-all?sportsbook={_selectedSportsbook}", 
+                PredictionApiRoutes.NhlAnalyzeAll(_selectedSportsbook),
                 null
             );
             

@@ -1,5 +1,6 @@
 @page "/cfb-live-odds"
 @using System.Text.Json
+@using SportsBettingAnalyzer.Shared.Services
 @using SportsBettingAnalyzer.Components.Shared.Tailwind
 @inject HttpClient Http
 @inject ISnackbar Snackbar
@@ -201,7 +202,7 @@
         try
         {
             var response = await Http.PostAsync(
-                $"http://backend:8000/odds/cfb/analyze-all?sportsbook={_selectedSportsbook}", 
+                PredictionApiRoutes.CfbAnalyzeAll(_selectedSportsbook), 
                 null);
             
             if (response.IsSuccessStatusCode)

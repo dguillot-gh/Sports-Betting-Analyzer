@@ -5,6 +5,7 @@ Test betting strategies on historical data
 
 from fastapi import APIRouter, Request, Query
 from scripts.backtesting import BacktestRequest, BacktestResult, run_backtest
+from api.json_utils import sanitize_for_json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ async def run_backtest_endpoint(request: Request):
     """
     try:
         result = await run_backtest(request)
-        return result
+        return sanitize_for_json(result)
     except Exception as e:
         logger.error(f"Backtest error: {e}")
         raise
@@ -50,7 +51,7 @@ async def run_nba_backtest(
         from scripts.nba_backtesting import run_nba_backtest as nba_backtest
         logger.info(f"Running NBA backtest (min_edge={min_edge}, stake={stake})...")
         result = await nba_backtest(min_edge=min_edge, stake=stake, use_kelly=use_kelly)
-        return result
+        return sanitize_for_json(result)
     except Exception as e:
         logger.error(f"Error running NBA backtest: {e}")
         return {"error": str(e)}
@@ -70,7 +71,7 @@ async def run_nfl_backtest(
         from scripts.nfl_backtesting import run_nfl_backtest as nfl_backtest
         logger.info(f"Running NFL backtest (min_edge={min_edge}, stake={stake})...")
         result = await nfl_backtest(min_edge=min_edge, stake=stake, use_kelly=use_kelly)
-        return result
+        return sanitize_for_json(result)
     except Exception as e:
         logger.error(f"Error running NFL backtest: {e}")
         return {"error": str(e)}
@@ -149,11 +150,40 @@ async def get_bet_types(request: Request, sport: str):
 async def get_model_metrics(request: Request, sport: str):
     """
     Get latest performance metrics for a model.
-    Reads from saved backtest results.
+    Reads from Postgres model_performance.
     """
     import os
     import json
     
+    try:
+        from src.database import get_pool
+        pool = await get_pool()
+        
+        # Determine sport_id
+        sport_id_lookup = {"nfl": 1, "ncaab": 2, "nba": 3, "nhl": 4, "nascar": 5}
+        sport_id = sport_id_lookup.get(sport.lower())
+        
+        if sport_id:
+            async with pool.acquire() as conn:
+                row = await conn.fetchrow('''
+                    SELECT * FROM model_performance
+                    WHERE sport_id = $1
+                    ORDER BY id DESC LIMIT 1
+                ''', sport_id)
+                
+                if row:
+                    result = dict(row)
+                    # Convert jsonb/string fields back to python objects
+                    if isinstance(result.get('by_season'), str):
+                        result['by_season'] = json.loads(result['by_season'])
+                    if isinstance(result.get('bet_history'), str):
+                        result['bet_history'] = json.loads(result['bet_history'])
+                    
+                    return result
+    except Exception as e:
+        logger.error(f"Error fetching model performance from Postgres: {e}")
+
+    # Fallback to file JSON
     models_dir = f"models/{sport.lower()}"
     results_file = f"{models_dir}/backtest_results.json"
     

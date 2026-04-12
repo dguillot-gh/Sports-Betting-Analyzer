@@ -104,7 +104,16 @@ class NFLXGBTrainer:
                     oppg = sum(g[1] for g in history) / len(history)
                     win_pct = sum(g[2] for g in history) / len(history)
                     last5_wins = sum(g[2] for g in history[-5:]) if len(history) >= 5 else sum(g[2] for g in history)
-                    return {'ppg': ppg, 'oppg': oppg, 'win_pct': win_pct, 'last5_wins': last5_wins}
+                    # EPA proxy from scoring efficiency differential.
+                    # This keeps feature variability when direct play-by-play EPA is unavailable.
+                    epa_proxy = max(-0.35, min(0.35, (ppg - oppg) / 25.0))
+                    return {
+                        'ppg': ppg,
+                        'oppg': oppg,
+                        'win_pct': win_pct,
+                        'last5_wins': last5_wins,
+                        'epa_proxy': epa_proxy
+                    }
                 
                 home_stats = get_rolling_stats(home)
                 away_stats = get_rolling_stats(away)
@@ -120,8 +129,8 @@ class NFLXGBTrainer:
                         'away_win_pct': away_stats['win_pct'],
                         'home_last5_wins': home_stats['last5_wins'],
                         'away_last5_wins': away_stats['last5_wins'],
-                        'home_epa_per_play': 0.0,  # TODO: Add EPA from pbp data
-                        'away_epa_per_play': 0.0,
+                        'home_epa_per_play': home_stats['epa_proxy'],
+                        'away_epa_per_play': away_stats['epa_proxy'],
                     }
                     features.append(feature)
                     win_labels.append(home_win)
@@ -378,6 +387,18 @@ async def predict_nfl_xgb(home_team: str, away_team: str,
         if not trainer.load_models():
             return None
     
+    home_epa = home_stats.get('off_epa_per_play')
+    if home_epa is None:
+        home_epa = home_stats.get('net_epa')
+    if home_epa is None:
+        home_epa = (home_stats.get('ppg', 22.5) - home_stats.get('oppg', 22.5)) / 25.0
+
+    away_epa = away_stats.get('off_epa_per_play')
+    if away_epa is None:
+        away_epa = away_stats.get('net_epa')
+    if away_epa is None:
+        away_epa = (away_stats.get('ppg', 22.5) - away_stats.get('oppg', 22.5)) / 25.0
+
     features = {
         'home_ppg': home_stats.get('ppg', 22.5),
         'home_opp_ppg': home_stats.get('oppg', 22.5),
@@ -387,8 +408,8 @@ async def predict_nfl_xgb(home_team: str, away_team: str,
         'away_win_pct': away_stats.get('win_pct', 0.5),
         'home_last5_wins': 2,
         'away_last5_wins': 2,
-        'home_epa_per_play': 0.0,
-        'away_epa_per_play': 0.0,
+        'home_epa_per_play': float(home_epa),
+        'away_epa_per_play': float(away_epa),
     }
     
     result = trainer.predict(features)

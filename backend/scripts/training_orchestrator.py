@@ -2,9 +2,7 @@
 import logging
 import uuid
 import threading
-import time
-import json
-from pathlib import Path
+import asyncio
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
@@ -90,16 +88,44 @@ class TrainingOrchestrator:
         
         try:
             # Route to specific sport trainer
-            if job.sport.lower() == "nba":
+            sport = job.sport.lower()
+
+            if sport == "nba":
                 if job.model_type == "neural_network":
                     from scripts.nba_ai_integration import train_nba_nn_wrapper
                     train_nba_nn_wrapper(job)
                 else:
                     from scripts.nba_xgb_trainer import train_nba_model_wrapper
                     train_nba_model_wrapper(job)
-            elif job.sport.lower() == "college_baseball":
+            elif sport == "college_baseball":
                 from scripts.college_baseball_xgb_trainer import train_cbb_model_wrapper
                 train_cbb_model_wrapper(job)
+            elif sport == "nfl":
+                from scripts.nfl_xgb_trainer import train_nfl_model
+                epochs = int(job.config.get("epochs", 500))
+                job.log(f"Training NFL XGBoost model for {epochs} epochs...")
+                result = asyncio.run(train_nfl_model(epochs=epochs))
+                job.log(f"NFL training metrics: {result}")
+                job.output_model_path = "models/nfl"
+            elif sport == "nascar":
+                from scripts.train_nascar_model import train_nascar_models
+                job.log("Training NASCAR models...")
+                train_nascar_models()
+                job.log("NASCAR training completed.")
+                job.output_model_path = "models/nascar"
+            elif sport == "ncaab":
+                from scripts.train_ncaab_model import train_v2
+                job.log("Training NCAAB V2 models...")
+                train_v2()
+                job.log("NCAAB training completed.")
+                job.output_model_path = "models/ncaab"
+            elif sport == "nhl":
+                from scripts.nhl_xgb_trainer import train_nhl_model
+                epochs = int(job.config.get("epochs", 300))
+                job.log(f"Training NHL XGBoost model for {epochs} epochs...")
+                result = asyncio.run(train_nhl_model(epochs=epochs))
+                job.log(f"NHL training metrics: {result}")
+                job.output_model_path = "models/nhl"
             else:
                 raise NotImplementedError(f"Training for {job.sport} not implemented yet")
                 

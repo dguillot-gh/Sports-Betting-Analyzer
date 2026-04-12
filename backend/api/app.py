@@ -4,6 +4,8 @@ from pathlib import Path
 import sys
 import json
 import os
+import time
+import asyncio
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime
@@ -46,6 +48,39 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
+import numpy as np
+
+
+class NumpySafeEncoder(json.JSONEncoder):
+    """JSON encoder that converts numpy types to native Python types."""
+    def default(self, obj):
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, (np.float32, np.float64)):
+            return float(obj)
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
+
+
+class NumpySafeResponse(JSONResponse):
+    """JSONResponse subclass that uses NumpySafeEncoder."""
+    def render(self, content) -> bytes:
+        return json.dumps(
+            content,
+            cls=NumpySafeEncoder,
+            ensure_ascii=False,
+            allow_nan=False,
+            indent=None,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
 import asyncpg
 # import pandas as pd  <-- Moved to local function scope
 # import joblib     <-- Moved to local function scope
@@ -73,6 +108,7 @@ from src.version import get_version, get_version_info
 from src.error_notifier import install_error_email_handler
 from src.ops_alerts import OpsAlertService
 from src.notification_store import ensure_notifications_schema
+from api.json_utils import sanitize_for_json
 from src.push_store import ensure_push_schema
 from src.fcm_store import ensure_fcm_schema
 
@@ -137,7 +173,12 @@ async def lifespan(app: FastAPI):
 
 # Version â€” updated to DB-backed value after startup
 current_version = get_version()
-app = FastAPI(title='Sports ML API', version=current_version, lifespan=lifespan)
+app = FastAPI(
+    title='Sports ML API',
+    version=current_version,
+    lifespan=lifespan,
+    default_response_class=NumpySafeResponse,
+)
 
 
 @app.exception_handler(Exception)
@@ -320,14 +361,14 @@ def make_prediction(sport: str, task: str, request: PredictRequestBody, series: 
             'task': task
         }
         
-        return {
+        return sanitize_for_json({
             'predictions': predictions,
             'model_info': {
                 'type': 'heuristic',
                 'version': '1.0',
                 'note': 'Based on historical starting position patterns'
             }
-        }
+        })
     except Exception as e:
         logger.error(f"Error predicting for {sport}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -458,6 +499,154 @@ def get_data(sport: str, series: Optional[str] = None, limit: int = 100, skip: i
     except Exception as e:
         logger.error(f"Error getting data for {sport}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Train All Models ====================
+
+async def _train_all_background():
+    """
+    Fire-and-forget background task that trains all sport models in parallel
+    batches and sends a detailed notification on completion.
+    """
+    import concurrent.futures
+    import traceback
+    from datetime import datetime as dt
+
+    results = {}
+    start_time = dt.now()
+
+    # ---- Individual training functions (sync, run in thread pool) ----
+    def _train_ncaab_v2():
+        t0 = time.time()
+        try:
+            from scripts.train_ncaab_model import train_v2 as ncaab_train_v2
+            ncaab_train_v2()
+            elapsed = round(time.time() - t0, 1)
+            return {"status": "success", "elapsed_s": elapsed, "message": "V2 ML + O/U models trained"}
+        except Exception as e:
+            elapsed = round(time.time() - t0, 1)
+            logger.error(f"NCAAB V2 training failed: {e}", exc_info=True)
+            return {"status": "failed", "elapsed_s": elapsed, "error": str(e)}
+
+    def _train_nfl():
+        t0 = time.time()
+        try:
+            from scripts.nfl_xgb_trainer import NFLXGBTrainer
+            trainer = NFLXGBTrainer()
+            metrics = trainer.train()
+            elapsed = round(time.time() - t0, 1)
+            return {"status": "success", "elapsed_s": elapsed, "metrics": metrics}
+        except Exception as e:
+            elapsed = round(time.time() - t0, 1)
+            logger.error(f"NFL training failed: {e}", exc_info=True)
+            return {"status": "failed", "elapsed_s": elapsed, "error": str(e)}
+
+    def _train_college_baseball():
+        t0 = time.time()
+        try:
+            from scripts.college_baseball_xgb_trainer import CollegeBaseballXGBTrainer
+            trainer = CollegeBaseballXGBTrainer()
+            trainer.train_from_csvs()
+            elapsed = round(time.time() - t0, 1)
+            return {"status": "success", "elapsed_s": elapsed, "message": "XGB model trained from CSV data"}
+        except Exception as e:
+            elapsed = round(time.time() - t0, 1)
+            logger.error(f"College Baseball training failed: {e}", exc_info=True)
+            return {"status": "failed", "elapsed_s": elapsed, "error": str(e)}
+
+    def _train_nascar():
+        t0 = time.time()
+        try:
+            from scripts.train_nascar_model import train_nascar_models
+            train_nascar_models()
+            elapsed = round(time.time() - t0, 1)
+            return {"status": "success", "elapsed_s": elapsed, "message": "Cup/Xfinity/Truck models trained"}
+        except Exception as e:
+            elapsed = round(time.time() - t0, 1)
+            logger.error(f"NASCAR training failed: {e}", exc_info=True)
+            return {"status": "failed", "elapsed_s": elapsed, "error": str(e)}
+
+    # ---- Run in parallel batches using ThreadPoolExecutor ----
+    loop = asyncio.get_event_loop()
+
+    # Batch 1: NCAAB + NFL (independent data sources)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        ncaab_future = loop.run_in_executor(pool, _train_ncaab_v2)
+        nfl_future = loop.run_in_executor(pool, _train_nfl)
+        results["ncaab_v2"] = await ncaab_future
+        results["nfl"] = await nfl_future
+
+    # Batch 2: College Baseball + NASCAR (independent data sources)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        cbb_future = loop.run_in_executor(pool, _train_college_baseball)
+        nascar_future = loop.run_in_executor(pool, _train_nascar)
+        results["college_baseball"] = await cbb_future
+        results["nascar"] = await nascar_future
+
+    total_elapsed = round((dt.now() - start_time).total_seconds(), 1)
+
+    # ---- Build report ----
+    succeeded = [k for k, v in results.items() if v["status"] == "success"]
+    failed = [k for k, v in results.items() if v["status"] == "failed"]
+    total = len(results)
+
+    lines = [f"Trained {len(succeeded)}/{total} models in {total_elapsed}s"]
+    for sport, r in results.items():
+        icon = "✅" if r["status"] == "success" else "❌"
+        line = f"{icon} {sport.upper()}: {r['status']} ({r['elapsed_s']}s)"
+        if r.get("metrics"):
+            # Flatten top-level metrics into the line
+            metric_parts = []
+            for mk, mv in r["metrics"].items():
+                if isinstance(mv, (int, float)):
+                    metric_parts.append(f"{mk}={mv:.3f}" if isinstance(mv, float) else f"{mk}={mv}")
+            if metric_parts:
+                line += f" | {', '.join(metric_parts[:5])}"
+        if r.get("error"):
+            line += f" | {r['error'][:120]}"
+        if r.get("message"):
+            line += f" | {r['message']}"
+        lines.append(line)
+
+    report_message = "\n".join(lines)
+    severity = "success" if not failed else ("warning" if succeeded else "error")
+    title = f"Train All: {len(succeeded)}/{total} Succeeded"
+
+    # ---- Send notification (triggers email + FCM automatically) ----
+    try:
+        from src.notification_store import insert_notification as _insert_notif
+        await _insert_notif(
+            DATABASE_URL,
+            severity=severity,
+            category="model_training",
+            title=title,
+            message=report_message,
+            source="api.train_all_models",
+            metadata={
+                "results": results,
+                "total_elapsed_s": total_elapsed,
+                "succeeded": succeeded,
+                "failed": failed,
+            },
+        )
+    except Exception as exc:
+        logger.error("Failed to send train-all notification: %s", exc)
+
+    logger.info("Train-all completed: %s/%s succeeded in %ss", len(succeeded), total, total_elapsed)
+
+
+@app.post("/models/train-all")
+async def train_all_models(background_tasks: BackgroundTasks):
+    """
+    Fire-and-forget endpoint that trains ALL sport models in parallel batches.
+    Sends an in-app notification (+ email + FCM) when complete.
+    Sports trained: NCAAB V2, NFL, College Baseball, NASCAR.
+    """
+    background_tasks.add_task(_train_all_background)
+    return {
+        "status": "accepted",
+        "message": "Training dispatched for all models (NCAAB, NFL, College Baseball, NASCAR). You will be notified when complete.",
+    }
 
 
 class TrainPayload(BaseModel):
@@ -617,7 +806,50 @@ def predict(sport: str, task: str, payload: dict, series: Optional[str] = None):
             except Exception as e:
                 logger.debug(f"Could not get probability: {e}")
         
-        return resp
+        # --- Explainable AI (XAI) Insight / Factors ---
+        try:
+            if hasattr(model, 'get_booster'):
+                booster = model.get_booster()
+                importance_dict = booster.get_score(importance_type='gain')
+                
+                if importance_dict:
+                    factors = []
+                    for f_key, gain in importance_dict.items():
+                        try:
+                            idx = int(f_key.replace('f', ''))
+                            if idx < len(cols):
+                                col_name = cols[idx]
+                                val = float(X.iloc[0][col_name])
+                                factors.append({
+                                    "feature": col_name,
+                                    "gain": float(gain),
+                                    "value": val
+                                })
+                        except (ValueError, IndexError):
+                            pass
+                    
+                    factors.sort(key=lambda x: x["gain"], reverse=True)
+                    top_factors = factors[:5]
+                    
+                    human_factors = []
+                    for f in top_factors:
+                        feat_name = f["feature"]
+                        val = f["value"]
+                        label = feat_name.replace("_diff", " Advantage").replace("_", " ").title()
+                        direction = "Positive" if val > 0 else "Negative" if val < 0 else "Neutral"
+                        human_factors.append({
+                            "label": label,
+                            "impact": round(f["gain"], 2),
+                            "value": val,
+                            "direction": direction
+                        })
+                        
+                    resp['factors'] = human_factors
+                    
+        except Exception as e:
+            logger.debug(f"Could not extract XAI factors: {e}")
+        
+        return sanitize_for_json(resp)
         
     except HTTPException:
         raise
@@ -3262,14 +3494,14 @@ async def get_nba_model_testing_predictions(
                 "away_stats": away_stats,
             })
         
-        return {
+        return sanitize_for_json({
             "date": odds_data.get("date"),
             "sportsbook": sportsbook,
             "games": analyzed_games,
             "count": len(analyzed_games),
             "xgb_model_source": "kyleskom/NBA-Machine-Learning-Sports-Betting",
             "xgb_model_accuracy": "68.9%",
-        }
+        })
         
     except Exception as e:
         logger.error(f"Model testing NBA error: {e}")
@@ -3330,14 +3562,14 @@ async def get_nfl_model_testing_predictions(
                 "away_stats": away_stats,
             })
         
-        return {
+        return sanitize_for_json({
             "date": odds_data.get("date"),
             "sportsbook": sportsbook,
             "games": analyzed_games,
             "count": len(analyzed_games),
             "data_source": odds_data.get("source", "nflverse"),
             "api_quota": odds_data.get("api_quota"),
-        }
+        })
         
     except Exception as e:
         logger.error(f"Model testing NFL error: {e}")

@@ -210,7 +210,7 @@ class KyleskomPredictor:
                 logger.info(f"Loaded calibration: {calibration_path.name}")
                 return calibrator
             except Exception as e:
-                logger.error(f"Failed to load calibrator: {e}")
+                logger.warning(f"Failed to load calibrator: {e}. Falling back to raw probabilities.")
         return None
 
     def load_models(self) -> bool:
@@ -295,33 +295,30 @@ class KyleskomPredictor:
                 season = f"{start_year}-{str(start_year + 1)[2:]}"
             
             self._current_season_loaded = season
-
-            url = f"https://stats.nba.com/stats/leaguedashteamstats?Conference=&DateFrom=&DateTo=&Division=&GameScope=&GameSegment=&Height=&ISTRound=&LastNGames=0&LeagueID=00&Location=&MeasureType=Base&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=PerGame&Period=0&PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=Y&Season={season}&SeasonSegment=&SeasonType=Regular%20Season&ShotClockRange=&StarterBench=&TeamID=0&TwoWay=0&VsConference=&VsDivision="
             
-            logger.info(f"Kyleskom adapter starting direct NBA API fetch for season {season}")
+            logger.info(f"Kyleskom adapter fetching team stats using nba_api for season {season}")
             
             success = False
             for attempt in range(retry_count):
                 try:
-                    async with aiohttp.ClientSession() as session:
-                        timeout = 10 if attempt == 0 else 20
-                        async with session.get(url, headers=NBA_API_HEADERS, timeout=timeout) as response:
-                            if response.status == 200:
-                                data = await response.json()
-                                result_sets = data.get('resultSets', [])
-                                if result_sets:
-                                    rows = result_sets[0]['rowSet']
-                                    headers = result_sets[0]['headers']
-                                    self.df = pd.DataFrame(data=rows, columns=headers)
-                                    from scripts.nba_cache import set_nba_df
-                                    set_nba_df(self.df)
-                                    success = True
-                                    logger.info(f"Kyleskom adapter fetched {len(self.df)} teams")
-                                    break
-                            else:
-                                logger.warning(f"NBA API status {response.status}")
+                    from nba_api.stats.endpoints import leaguedashteamstats
+                    
+                    def fetch():
+                        endpoint = leaguedashteamstats.LeagueDashTeamStats(
+                            season=season, 
+                            per_mode_detailed='PerGame',
+                            timeout=30
+                        )
+                        return endpoint.get_data_frames()[0]
+                        
+                    self.df = await asyncio.to_thread(fetch)
+                    from scripts.nba_cache import set_nba_df
+                    set_nba_df(self.df)
+                    success = True
+                    logger.info(f"Kyleskom adapter fetched {len(self.df)} teams via nba_api")
+                    break
                 except Exception as e:
-                    logger.error(f"NBA API Fetch error: {e}")
+                    logger.error(f"NBA API Fetch error (attempt {attempt+1}): {e}", exc_info=True)
                 
                 if not success and attempt < retry_count - 1:
                     await asyncio.sleep(1)

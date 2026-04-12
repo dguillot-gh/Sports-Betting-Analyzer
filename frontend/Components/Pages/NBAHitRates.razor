@@ -3,6 +3,7 @@
 @using SportsBettingAnalyzer.Components.Shared.Tailwind
 @inject HttpClient Http
 @inject NavigationManager Navigation
+@inject ILogger<NBAHitRates> Logger
 @rendermode InteractiveServer
 
 <PageTitle>NBA Hit Rates</PageTitle>
@@ -256,7 +257,10 @@
                 _selectedSeason = _availableSeasons.First();
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed loading NBA seasons");
+        }
     }
     
     private void OnStatChanged(string newStat)

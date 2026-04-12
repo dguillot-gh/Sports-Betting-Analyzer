@@ -9,13 +9,13 @@ public class WebServerConfigService : IServerConfigService
 
     public WebServerConfigService(IConfiguration config)
     {
-        _baseUrl = config["PythonMLService:BaseUrl"] ?? "http://localhost:8000";
+        _baseUrl = ApiUrlHelper.NormalizeBaseUrl(config["PythonMLService:BaseUrl"], "http://localhost:8000");
     }
 
     public string GetBaseUrl() => _baseUrl;
 
     public void SetBaseUrl(string url)
     {
-        _baseUrl = url;
+        _baseUrl = ApiUrlHelper.NormalizeBaseUrl(url, "http://localhost:8000");
     }
 }

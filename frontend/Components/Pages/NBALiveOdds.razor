@@ -1,0 +1,391 @@
+@page "/live-nba-odds"
+@page "/nba-live-odds"
+@using System.Text.Json
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
+@using SportsBettingAnalyzer.Services
+@using SportsBettingAnalyzer.Shared.Services
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject ILogger<NBALiveOdds> Logger
+@inject PythonMLServiceClient MLServiceClient
+@rendermode InteractiveServer
+
+<TwContainer>
+    <TwLoadingOverlay
+        IsVisible="@_isLoading"
+        Title="Analyzing NBA Games..."
+        Color="orange"
+        CurrentStatusMessage="@_analysisStatus"
+        ShowProgress="false" />
+
+    <div class="px-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+        <div>
+            <h1 class="text-3xl font-bold text-white tracking-tight">NBA Live Betting Odds</h1>
+            <p class="text-slate-400 mt-1">Real-time lines with consensus model predictions and EV signals.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <TwSelect TValue="string" @bind-Value="_selectedSportsbook" Label="Book" Class="w-32">
+                <option value="fanduel">FanDuel</option>
+                <option value="draftkings">DraftKings</option>
+                <option value="betmgm">BetMGM</option>
+            </TwSelect>
+            <TwButton Variant="primary" OnClick="RunAnalysis" IsLoading="@_isLoading" Disabled="@_isLoading">
+                <TwIcon Icon="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" Class="w-4 h-4 mr-2" />
+                Analyze Games
+            </TwButton>
+            <TwButton Variant="secondary" OnClick="SaveAllToCache" IsLoading="@_isSavingAll" Disabled="@(!_games.Any() || _isSavingAll)">
+                <TwIcon Icon="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" Class="w-4 h-4 mr-2" />
+                Snapshot Results
+            </TwButton>
+            <TwButton Variant="outline" Href="/data-center">
+                <TwIcon Icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-4 h-4 mr-2" />
+                Data Center
+            </TwButton>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl">
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-blue-500/10 rounded-lg"><TwIcon Icon="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" Class="w-5 h-5 text-blue-400" /></div>
+            <div>
+                <p class="text-xs text-slate-500 font-medium uppercase tracking-wider">EV Logic</p>
+                <p class="text-sm text-white">Edge = Opportunity</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-emerald-500/10 rounded-lg"><TwIcon Icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-5 h-5 text-emerald-400" /></div>
+            <div>
+                <p class="text-xs text-slate-500 font-medium uppercase tracking-wider">Kelly %</p>
+                <p class="text-sm text-white">Bankroll Sizing</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-amber-500/10 rounded-lg"><TwIcon Icon="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-5 h-5 text-amber-400" /></div>
+            <div>
+                <p class="text-xs text-slate-500 font-medium uppercase tracking-wider">Agreement</p>
+                <p class="text-sm text-white">Model Consensus</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-slate-500/10 rounded-lg"><TwIcon Icon="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" Class="w-5 h-5 text-slate-400" /></div>
+            <div>
+                <p class="text-xs text-slate-500 font-medium uppercase tracking-wider">XGBoost</p>
+                <p class="text-sm text-white">Advanced Model</p>
+            </div>
+        </div>
+    </div>
+
+    @if (_error != null)
+    {
+        <TwAlert Severity="error" Class="mb-6">@_error</TwAlert>
+    }
+
+    <div class="mb-6">
+        <TwApiQuotaTracker />
+    </div>
+
+    <TwTabs HeaderClass="px-4">
+        <TwTabPanel Title="Games">
+            <IconContent>
+                <TwIcon Icon="M3 7h18M3 12h18M3 17h18" Class="w-4 h-4 mr-2" />
+            </IconContent>
+            <ChildContent>
+                <div class="px-4">
+                    @if (_games.Any())
+                    {
+                        <div class="flex items-center justify-between mb-6">
+                            <p class="text-sm text-slate-500 italic">
+                                @_games.Count game(s) found • @_date • Book: @_selectedSportsbook
+                            </p>
+                        </div>
+
+                        <TwGrid Columns="1" ColumnsMd="2" ColumnsLg="3" Gap="6">
+                            @foreach (var game in _games)
+                            {
+                                var modelsAgree = !string.IsNullOrWhiteSpace(game.SimpleModel?.PredictedWinner)
+                                && game.SimpleModel?.PredictedWinner == game.XgbModel?.PredictedWinner;
+                                <TwCard NoPadding="true" Class="h-full border-t-4 border-t-orange-500 bg-slate-900 shadow-lg overflow-hidden">
+                                    <div class="p-5 border-b border-slate-800 bg-white/[0.02]">
+                                        <div class="flex justify-between items-center mb-4">
+                                            <div class="flex flex-col">
+                                                <span class="text-lg font-bold text-white">@game.AwayTeam</span>
+                                                <span class="text-[10px] text-slate-500 uppercase tracking-widest my-0.5">at</span>
+                                                <span class="text-lg font-bold text-white">@game.HomeTeam</span>
+                                            </div>
+                                            <TwChip Color="slate" Variant="outline" Size="sm">@FormatStatus(game.Status)</TwChip>
+                                        </div>
+                                        <div class="flex justify-between gap-2">
+                                            <TwChip Variant="outline" Size="sm">A: @FormatOdds(game.AwayMoneyline)</TwChip>
+                                            <TwChip Variant="outline" Size="sm">H: @FormatOdds(game.HomeMoneyline)</TwChip>
+                                        </div>
+                                        <div class="mt-3 text-xs text-slate-400 flex justify-between">
+                                            <span>Spread: @FormatSpread(game.Spread)</span>
+                                            <span>O/U: @FormatTotal(game.OverUnder)</span>
+                                        </div>
+                                    </div>
+                                    <div class="p-3">
+                                        <TwTable Class="text-[11px]" TItem="object">
+                                            <thead>
+                                                <tr class="text-slate-500">
+                                                    <th class="text-left font-normal py-2">Metric</th>
+                                                    <th class="text-center font-normal py-2">Simple</th>
+                                                    <th class="text-center font-normal py-2">XGB</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <TwTr>
+                                                    <TwTd><span class="text-slate-400">Home Win %</span></TwTd>
+                                                    <TwTd Class="text-center font-bold text-emerald-400">@FormatPct(game.SimpleModel?.HomeWinProb)</TwTd>
+                                                    <TwTd Class="text-center font-bold text-blue-400">@FormatPct(game.XgbModel?.HomeWinProb)</TwTd>
+                                                </TwTr>
+                                                <TwTr>
+                                                    <TwTd><span class="text-slate-400">Pick</span></TwTd>
+                                                    <TwTd Class="text-center text-emerald-400">@(game.SimpleModel?.PredictedWinner ?? "—")</TwTd>
+                                                    <TwTd Class="text-center text-blue-400">@(game.XgbModel?.PredictedWinner ?? "—")</TwTd>
+                                                </TwTr>
+                                                <TwTr>
+                                                    <TwTd><span class="text-slate-400">EV (Home)</span></TwTd>
+                                                    <TwTd Class="text-center"><span class="@GetEvClass(game.SimpleModel?.HomeEv)">@FormatNum(game.SimpleModel?.HomeEv)</span></TwTd>
+                                                    <TwTd Class="text-center"><span class="@GetEvClass(game.XgbModel?.HomeEv)">@FormatNum(game.XgbModel?.HomeEv)</span></TwTd>
+                                                </TwTr>
+                                                <TwTr>
+                                                    <TwTd><span class="text-slate-400">Kelly %</span></TwTd>
+                                                    <TwTd Class="text-center">@FormatNum(game.SimpleModel?.KellyHome)</TwTd>
+                                                    <TwTd Class="text-center">@FormatNum(game.XgbModel?.KellyHome)</TwTd>
+                                                </TwTr>
+                                                <TwTr>
+                                                    <TwTd><span class="text-slate-400">O/U Pick</span></TwTd>
+                                                    <TwTd Class="text-center"><span class="@GetOuClass(game.SimpleModel?.OuPick)">@(game.SimpleModel?.OuPick ?? "—")</span></TwTd>
+                                                    <TwTd Class="text-center"><span class="@GetOuClass(game.XgbModel?.OuPick)">@(game.XgbModel?.OuPick ?? "—")</span></TwTd>
+                                                </TwTr>
+                                                <TwTr>
+                                                    <TwTd><span class="text-slate-400">Pred. Total</span></TwTd>
+                                                    <TwTd Class="text-center">@FormatNum(game.SimpleModel?.PredictedTotal)</TwTd>
+                                                    <TwTd Class="text-center">@(game.XgbModel?.OuConfidence.HasValue == true ? $"{game.XgbModel.OuConfidence:F1}% conf" : "—")</TwTd>
+                                                </TwTr>
+                                            </tbody>
+                                        </TwTable>
+
+                                        <div class="mt-4 flex justify-center">
+                                            @if (modelsAgree)
+                                            {
+                                                <TwChip Color="emerald" Size="sm">✓ Models Agree: @game.SimpleModel?.PredictedWinner</TwChip>
+                                            }
+                                            else
+                                            {
+                                                <TwChip Color="amber" Size="sm">⚠ Models Diverge</TwChip>
+                                            }
+                                        </div>
+                                    </div>
+                                </TwCard>
+                            }
+                        </TwGrid>
+                    }
+                    else if (!_isLoading)
+                    {
+                        <div class="py-20 text-center bg-slate-900/50 rounded-2xl border border-dashed border-slate-800">
+                            <TwIcon Icon="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" Class="w-12 h-12 text-slate-700 mx-auto mb-4" />
+                            <h3 class="text-xl font-bold text-white mb-2">No NBA Games Analyzed</h3>
+                            <p class="text-slate-400 mb-6 max-w-sm mx-auto">Click <strong class="text-orange-400">Analyze Games</strong> to fetch today's NBA slate and predictions.</p>
+                            <TwButton Variant="primary" OnClick="RunAnalysis" IsLoading="@_isLoading">Analyze Now</TwButton>
+                        </div>
+                    }
+                </div>
+            </ChildContent>
+        </TwTabPanel>
+    </TwTabs>
+</TwContainer>
+
+@code {
+    private bool _isLoading;
+    private bool _isSavingAll;
+    private string? _error;
+    private string _selectedSportsbook = "fanduel";
+    private string _date = "";
+    private string _analysisStatus = "🏀 Crunching matchup probabilities...";
+    private readonly List<NbaGamePrediction> _games = new();
+
+    private async Task RunAnalysis()
+    {
+        _isLoading = true;
+        _error = null;
+        _games.Clear();
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsync(PredictionApiRoutes.NbaAnalyzeCached(_selectedSportsbook), null);
+            if (!response.IsSuccessStatusCode)
+            {
+                _error = $"API Error: {response.StatusCode}";
+                return;
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            var data = JsonSerializer.Deserialize<JsonElement>(json);
+            _date = data.TryGetProperty("date", out var dateProp) ? dateProp.GetString() ?? "" : "";
+
+            if (data.TryGetProperty("games", out var gamesEl))
+            {
+                foreach (var game in gamesEl.EnumerateArray())
+                {
+                    var parsed = new NbaGamePrediction
+                    {
+                        HomeTeam = GetString(game, "home_team"),
+                        AwayTeam = GetString(game, "away_team"),
+                        Status = GetString(game, "status"),
+                        HomeMoneyline = GetNullableInt(game, "home_moneyline"),
+                        AwayMoneyline = GetNullableInt(game, "away_moneyline"),
+                        Spread = GetNullableDouble(game, "spread"),
+                        OverUnder = GetNullableDouble(game, "over_under"),
+                        SimpleModel = ParseModelResult(game, "simple_model"),
+                        XgbModel = ParseModelResult(game, "xgboost_model")
+                    };
+                    _games.Add(parsed);
+                }
+            }
+
+            Snackbar.Add($"Analyzed {_games.Count} games", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            Logger.LogError(ex, "Error analyzing NBA games");
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveAllToCache()
+    {
+        if (!_games.Any())
+        {
+            return;
+        }
+
+        _isSavingAll = true;
+        StateHasChanged();
+        var successCount = 0;
+
+        try
+        {
+            var tasks = _games.Select(async game =>
+            {
+                var analysis = new Dictionary<string, object>
+                {
+                    ["consensus_winner"] = game.XgbModel?.PredictedWinner ?? game.SimpleModel?.PredictedWinner ?? game.HomeTeam,
+                    ["win_prob"] = game.XgbModel?.HomeWinProb ?? game.SimpleModel?.HomeWinProb ?? 0.5,
+                    ["simple_prob"] = game.SimpleModel?.HomeWinProb ?? 0,
+                    ["xgb_prob"] = game.XgbModel?.HomeWinProb ?? 0,
+                    ["ev_home"] = game.XgbModel?.HomeEv ?? game.SimpleModel?.HomeEv ?? 0,
+                    ["kelly_home"] = game.XgbModel?.KellyHome ?? game.SimpleModel?.KellyHome ?? 0
+                };
+
+                if (await MLServiceClient.SaveAnalysisAsync("nba", game.HomeTeam, game.AwayTeam, analysis))
+                {
+                    System.Threading.Interlocked.Increment(ref successCount);
+                }
+            });
+
+            await Task.WhenAll(tasks);
+            if (successCount == _games.Count)
+            {
+                Snackbar.Add($"All {successCount} games saved to daily cache.", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add($"Saved {successCount}/{_games.Count} games to cache.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Snapshot save failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSavingAll = false;
+            StateHasChanged();
+        }
+    }
+
+    private static ModelResult? ParseModelResult(JsonElement game, string propName)
+    {
+        if (!game.TryGetProperty(propName, out var model) || model.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return new ModelResult
+        {
+            HomeWinProb = GetNullableDouble(model, "home_win_probability"),
+            PredictedWinner = GetString(model, "predicted_winner"),
+            HomeEv = GetNullableDouble(model, "home_ev"),
+            AwayEv = GetNullableDouble(model, "away_ev"),
+            KellyHome = GetNullableDouble(model, "kelly_home"),
+            KellyAway = GetNullableDouble(model, "kelly_away"),
+            PredictedTotal = GetNullableDouble(model, "predicted_total"),
+            OuPick = GetString(model, "ou_pick"),
+            OuConfidence = GetNullableDouble(model, "ou_confidence"),
+            HasValue = GetNullableBool(model, "has_value")
+        };
+    }
+
+    private static string GetString(JsonElement element, string propertyName)
+        => element.TryGetProperty(propertyName, out var prop) && prop.ValueKind == JsonValueKind.String
+            ? (prop.GetString() ?? "")
+            : "";
+
+    private static int? GetNullableInt(JsonElement element, string propertyName)
+        => element.TryGetProperty(propertyName, out var prop) && prop.ValueKind == JsonValueKind.Number
+            ? prop.GetInt32()
+            : null;
+
+    private static double? GetNullableDouble(JsonElement element, string propertyName)
+        => element.TryGetProperty(propertyName, out var prop) && prop.ValueKind == JsonValueKind.Number
+            ? prop.GetDouble()
+            : null;
+
+    private static bool? GetNullableBool(JsonElement element, string propertyName)
+        => element.TryGetProperty(propertyName, out var prop) && prop.ValueKind is JsonValueKind.True or JsonValueKind.False
+            ? prop.GetBoolean()
+            : null;
+
+    private static string FormatOdds(int? odds) => odds.HasValue ? (odds.Value > 0 ? $"+{odds.Value}" : odds.Value.ToString()) : "N/A";
+    private static string FormatSpread(double? spread) => spread.HasValue ? (spread.Value > 0 ? $"+{spread.Value:F1}" : $"{spread.Value:F1}") : "N/A";
+    private static string FormatTotal(double? total) => total.HasValue ? total.Value.ToString("F1") : "N/A";
+    private static string FormatPct(double? probability) => probability.HasValue ? $"{probability.Value * 100:F1}%" : "—";
+    private static string FormatNum(double? value) => value.HasValue ? value.Value.ToString("F2") : "—";
+    private static string GetOuClass(string? pick) => pick == "OVER" ? "text-emerald-400 font-bold" : pick == "UNDER" ? "text-red-400 font-bold" : "";
+    private static string GetEvClass(double? value) => value.GetValueOrDefault() > 0 ? "text-emerald-400" : "text-red-400";
+    private static string FormatStatus(string status) => string.IsNullOrWhiteSpace(status) ? "Scheduled" : status;
+
+    private sealed class NbaGamePrediction
+    {
+        public string HomeTeam { get; set; } = "";
+        public string AwayTeam { get; set; } = "";
+        public string Status { get; set; } = "";
+        public int? HomeMoneyline { get; set; }
+        public int? AwayMoneyline { get; set; }
+        public double? Spread { get; set; }
+        public double? OverUnder { get; set; }
+        public ModelResult? SimpleModel { get; set; }
+        public ModelResult? XgbModel { get; set; }
+    }
+
+    private sealed class ModelResult
+    {
+        public double? HomeWinProb { get; set; }
+        public string? PredictedWinner { get; set; }
+        public double? HomeEv { get; set; }
+        public double? AwayEv { get; set; }
+        public double? KellyHome { get; set; }
+        public double? KellyAway { get; set; }
+        public double? PredictedTotal { get; set; }
+        public string? OuPick { get; set; }
+        public double? OuConfidence { get; set; }
+        public bool? HasValue { get; set; }
+    }
+}

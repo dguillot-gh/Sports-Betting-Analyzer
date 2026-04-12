@@ -2,6 +2,7 @@
 @using SportsBettingAnalyzer.Components.Shared.Tailwind
 @using SportsBettingAnalyzer.Services
 @inject PythonMLServiceClient MLService
+@inject ILogger<About> Logger
 @rendermode InteractiveServer
 
 <PageTitle>About - Sports Betting Analyzer</PageTitle>
@@ -403,7 +404,6 @@
 
 @code {
     private VersionInfo? versionInfo;
-    private bool isLoading = true;
     private List<DeploymentEntry> deployHistory = new();
     
     // Release form
@@ -423,9 +423,6 @@
     {
         try
         {
-            isLoading = true;
-            StateHasChanged();
-            
             versionInfo = await MLService.GetVersionInfoAsync();
             
             // Auto-suggest next major version
@@ -440,6 +437,7 @@
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Failed loading version info");
             versionInfo = new VersionInfo 
             { 
                 Version = "error",
@@ -450,7 +448,6 @@
         }
         finally
         {
-            isLoading = false;
             StateHasChanged();
         }
     }
@@ -462,7 +459,10 @@
             deployHistory = await MLService.GetDeploymentHistoryAsync(10);
             StateHasChanged();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed loading deployment history");
+        }
     }
 
     private async Task CreateRelease()

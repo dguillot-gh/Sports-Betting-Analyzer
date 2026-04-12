@@ -1,0 +1,460 @@
+@page "/mlb-live-odds"
+@using System.Text.Json
+@using SportsBettingAnalyzer.Shared.Services
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject ILogger<MlbLiveOdds> Logger
+@inject PythonMLServiceClient MLServiceClient
+@rendermode InteractiveServer
+
+<TwContainer>
+    <TwLoadingOverlay
+        IsVisible="@_isLoading"
+        Title="Analyzing MLB Games..."
+        Color="emerald"
+        CurrentStatusMessage="@_analysisStatus"
+        ShowProgress="false" />
+
+    <div class="px-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+        <div>
+            <h1 class="text-3xl font-bold text-white tracking-tight">MLB Live Betting Odds</h1>
+            <p class="text-slate-400 mt-1">Ensemble predictions — Pythagorean + XGBoost moneyline, spread & totals.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <TwSelect TValue="string" @bind-Value="_selectedSportsbook" Label="Book" Class="w-32">
+                <option value="fanduel">FanDuel</option>
+                <option value="draftkings">DraftKings</option>
+                <option value="betmgm">BetMGM</option>
+            </TwSelect>
+            <TwButton Variant="primary" OnClick="RunAnalysis" IsLoading="@_isLoading" Disabled="@_isLoading">
+                <TwIcon Icon="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" Class="w-4 h-4 mr-2" />
+                Analyze Games
+            </TwButton>
+            <TwButton Variant="secondary" OnClick="SaveAllToCache" IsLoading="@_isSavingAll" Disabled="@(!_games.Any() || _isSavingAll)">
+                <TwIcon Icon="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" Class="w-4 h-4 mr-2" />
+                Snapshot Results
+            </TwButton>
+            <TwButton Variant="outline" Href="/data-center">
+                <TwIcon Icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-4 h-4 mr-2" />
+                Data Center
+            </TwButton>
+        </div>
+    </div>
+
+    <!-- Quick Reference Chips -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl">
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-blue-500/10 rounded-lg"><TwIcon Icon="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" Class="w-5 h-5 text-blue-400" /></div>
+            <div>
+                <p class="text-xs text-slate-500 font-medium uppercase tracking-wider">EV Logic</p>
+                <p class="text-sm text-white">Edge = Opportunity</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-emerald-500/10 rounded-lg"><TwIcon Icon="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-5 h-5 text-emerald-400" /></div>
+            <div>
+                <p class="text-xs text-slate-500 font-medium uppercase tracking-wider">Signals</p>
+                <p class="text-sm text-white cursor-help" title="BET = 8%+ edge (strong value) | LEAN = 4-8% edge (moderate) | PASS = &lt;4% edge (no value)">BET / LEAN / PASS</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-amber-500/10 rounded-lg"><TwIcon Icon="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" Class="w-5 h-5 text-amber-400" /></div>
+            <div>
+                <p class="text-xs text-slate-500 font-medium uppercase tracking-wider">XGBoost</p>
+                <p class="text-sm text-white">ML Ensemble Model</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-slate-500/10 rounded-lg"><TwIcon Icon="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" Class="w-5 h-5 text-slate-400" /></div>
+            <div>
+                <p class="text-xs text-slate-500 font-medium uppercase tracking-wider">Context</p>
+                <p class="text-sm text-white">SP, Park & Weather</p>
+            </div>
+        </div>
+    </div>
+
+    @if (_error != null)
+    {
+        <TwAlert Severity="error" Class="mb-6">@_error</TwAlert>
+    }
+
+    <div class="px-4">
+        @if (_games.Any())
+        {
+            <div class="flex items-center justify-between mb-6">
+                <p class="text-sm text-slate-500 italic">
+                    @_games.Count game(s) found • @_date • Book: @_selectedSportsbook
+                </p>
+            </div>
+
+            <TwGrid Columns="1" ColumnsMd="2" ColumnsLg="3" Gap="6">
+                @foreach (var game in _games)
+                {
+                    <TwCard NoPadding="true" Class="h-full border-t-4 border-t-emerald-500 bg-slate-900 shadow-lg overflow-hidden">
+                        <div class="p-5 border-b border-slate-800 bg-white/[0.02]">
+                            <div class="flex justify-between items-center mb-4">
+                                <div class="flex flex-col">
+                                    <span class="text-lg font-bold text-white">@game.AwayTeam</span>
+                                    <span class="text-[10px] text-slate-500 uppercase tracking-widest my-0.5">at</span>
+                                    <span class="text-lg font-bold text-white">@game.HomeTeam</span>
+                                </div>
+                                @if (game.HasValue)
+                                {
+                                    <TwChip Color="emerald" Size="sm">VALUE</TwChip>
+                                }
+                            </div>
+                            <div class="flex justify-between gap-2">
+                                <TwChip Variant="outline" Size="sm">A: @FormatOdds(game.AwayMoneyline)</TwChip>
+                                <TwChip Variant="outline" Size="sm">H: @FormatOdds(game.HomeMoneyline)</TwChip>
+                            </div>
+                            <div class="mt-3 text-xs text-slate-400 flex justify-between">
+                                <span>Spread: @(game.Spread.HasValue ? game.Spread.Value.ToString("+0.0;-0.0") : "—")</span>
+                                <span>O/U: @(game.OverUnder.HasValue ? game.OverUnder.Value.ToString() : "—")</span>
+                            </div>
+                        </div>
+                        <div class="p-3">
+                            <!-- SP Matchup Context -->
+                            @if (!string.IsNullOrEmpty(game.HomeSP) || !string.IsNullOrEmpty(game.AwaySP))
+                            {
+                                <div class="rounded-lg bg-slate-800/30 border border-slate-700/50 px-3 py-2 text-[10px] mb-3">
+                                    <div class="flex justify-between items-center text-slate-500 uppercase tracking-tighter">
+                                        <span>SP Matchup</span>
+                                        @if (!string.IsNullOrEmpty(game.Venue))
+                                        {
+                                            <span>@game.Venue</span>
+                                        }
+                                    </div>
+                                    <div class="flex justify-between mt-1 text-xs">
+                                        <span class="text-white font-medium">@(game.AwaySP ?? "TBD")</span>
+                                        <span class="text-slate-600">vs</span>
+                                        <span class="text-white font-medium">@(game.HomeSP ?? "TBD")</span>
+                                    </div>
+                                </div>
+                            }
+
+                            <!-- Prediction Table -->
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-[11px] text-left">
+                                    <thead class="text-slate-500 border-b border-slate-800/50">
+                                        <tr>
+                                            <th class="font-normal py-2">Metric</th>
+                                            <th class="text-center font-normal py-2">Model</th>
+                                            <th class="text-center font-normal py-2">Edge</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-800/30">
+                                        @if (game.Prediction != null)
+                                        {
+                                            <tr class="hover:bg-white/[0.02] transition-colors">
+                                                <td class="py-2"><span class="text-slate-400">Pick</span></td>
+                                                <td class="text-center font-bold text-emerald-400">@game.Prediction.PredictedWinner</td>
+                                                <td class="text-center">
+                                                    @if (!string.IsNullOrEmpty(game.Prediction.MlSignal))
+                                                    {
+                                                        <span class="@SignalClass(game.Prediction.MlSignal)" title="@SignalTooltip(game.Prediction.MlSignal)">@game.Prediction.MlSignal</span>
+                                                    }
+                                                </td>
+                                            </tr>
+                                            <tr class="hover:bg-white/[0.02] transition-colors">
+                                                <td class="py-2"><span class="text-slate-400">Win Prob</span></td>
+                                                <td class="text-center font-medium text-emerald-400">@((GetPickProb(game.Prediction) * 100).ToString("F1"))%</td>
+                                                <td class="text-center">
+                                                    @if (GetPickEdge(game.Prediction).HasValue)
+                                                    {
+                                                        <span class="@(GetPickEdge(game.Prediction) > 0 ? "text-emerald-400" : "text-red-400") font-bold">
+                                                            @GetPickEdge(game.Prediction)!.Value.ToString("+0.0;-0.0")%
+                                                        </span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-slate-500">—</span>
+                                                    }
+                                                </td>
+                                            </tr>
+                                            <tr class="hover:bg-white/[0.02] transition-colors text-[10px]">
+                                                <td class="py-2"><span class="text-slate-500">O/U Pick</span></td>
+                                                <td class="text-center font-medium">
+                                                    @if (!string.IsNullOrEmpty(game.Prediction.OuPick))
+                                                    {
+                                                        <span class="@(game.Prediction.OuPick == "OVER" ? "text-emerald-400" : "text-amber-400")">@game.Prediction.OuPick</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-slate-500">—</span>
+                                                    }
+                                                </td>
+                                                <td class="text-center text-amber-400 font-medium">Tot @game.Prediction.PredictedTotal.ToString("F1")</td>
+                                            </tr>
+                                            <tr class="hover:bg-white/[0.02] transition-colors text-[10px]">
+                                                <td class="py-2"><span class="text-slate-500">Spread</span></td>
+                                                <td class="text-center text-blue-400 font-medium">
+                                                    @if (!string.IsNullOrEmpty(game.Prediction.SpreadSignal))
+                                                    {
+                                                        <span class="@SignalClass(game.Prediction.SpreadSignal)" title="@SignalTooltip(game.Prediction.SpreadSignal)">@game.Prediction.SpreadSignal</span>
+                                                    }
+                                                </td>
+                                                <td class="text-center text-slate-500">@game.Prediction.ConfidenceLevel</td>
+                                            </tr>
+                                            <tr class="hover:bg-white/[0.02] transition-colors">
+                                                <td class="py-2"><span class="text-slate-400">Records</span></td>
+                                                <td class="text-center text-slate-300">@(game.Prediction.HomeRecord ?? "0-0")</td>
+                                                <td class="text-center text-slate-300">@(game.Prediction.AwayRecord ?? "0-0")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            @if (game.HasValue && game.ValueBets.Any())
+                            {
+                                <div class="mt-3 flex justify-center">
+                                    <TwChip Color="emerald" Size="sm" Class="px-3 animate-pulse">✓ Edge Detected</TwChip>
+                                </div>
+                            }
+                        </div>
+                    </TwCard>
+                }
+            </TwGrid>
+        }
+        else if (!_isLoading)
+        {
+            <div class="py-20 text-center bg-slate-900/50 rounded-2xl border border-dashed border-slate-800">
+                <TwIcon Icon="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" Class="w-12 h-12 text-slate-700 mx-auto mb-4" />
+                <h3 class="text-xl font-bold text-white mb-2">No MLB Games Analyzed</h3>
+                <p class="text-slate-400 mb-6 max-w-sm mx-auto">Click <strong class="text-emerald-400">Analyze Games</strong> to fetch today's MLB slate and predictions.</p>
+                <TwButton Variant="primary" OnClick="RunAnalysis" IsLoading="@_isLoading">Analyze Now</TwButton>
+            </div>
+        }
+    </div>
+</TwContainer>
+
+@code {
+    private bool _isLoading = false;
+    private bool _isSavingAll = false;
+    private string? _error = null;
+    private string _selectedSportsbook = "fanduel";
+    private string _date = "";
+    private string _analysisStatus = "⚾ Crunching matchup probabilities...";
+    private List<GameData> _games = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RunAnalysis();
+    }
+
+    private async Task RunAnalysis()
+    {
+        _isLoading = true;
+        _error = null;
+        _games.Clear();
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsync(
+                PredictionApiRoutes.MlbAnalyzeAll(_selectedSportsbook), 
+                null);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                _error = $"API Error: {response.StatusCode}";
+                return;
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            var data = JsonSerializer.Deserialize<JsonElement>(json);
+            _date = data.TryGetProperty("date", out var dateProp) ? dateProp.GetString() ?? "" : "";
+
+            if (data.TryGetProperty("games", out var gamesArr))
+            {
+                foreach (var g in gamesArr.EnumerateArray())
+                {
+                    _games.Add(ParseGame(g));
+                }
+            }
+
+            Snackbar.Add($"Analyzed {_games.Count} games", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            Logger.LogError(ex, "Error analyzing MLB games");
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private GameData ParseGame(JsonElement g)
+    {
+        var game = new GameData
+        {
+            HomeTeam = g.TryGetProperty("home_team", out var h) && h.ValueKind != JsonValueKind.Null ? h.GetString() ?? "" : "",
+            AwayTeam = g.TryGetProperty("away_team", out var a) && a.ValueKind != JsonValueKind.Null ? a.GetString() ?? "" : "",
+            HasValue = g.TryGetProperty("has_value", out var hv) && hv.ValueKind != JsonValueKind.Null && hv.GetBoolean(),
+        };
+
+        if (g.TryGetProperty("home_moneyline", out var hml) && hml.ValueKind == JsonValueKind.Number)
+            game.HomeMoneyline = (int)Math.Round(hml.GetDouble());
+        if (g.TryGetProperty("away_moneyline", out var aml) && aml.ValueKind == JsonValueKind.Number)
+            game.AwayMoneyline = (int)Math.Round(aml.GetDouble());
+        if (g.TryGetProperty("spread", out var sp) && sp.ValueKind == JsonValueKind.Number)
+            game.Spread = sp.GetDecimal();
+        if (g.TryGetProperty("over_under", out var ou) && ou.ValueKind == JsonValueKind.Number)
+            game.OverUnder = ou.GetDecimal();
+
+        if (g.TryGetProperty("value_bets", out var vbArr) && vbArr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var vbet in vbArr.EnumerateArray())
+            {
+                if (vbet.GetString() is string s)
+                    game.ValueBets.Add(s);
+            }
+        }
+
+        // Context fields
+        if (g.TryGetProperty("home_sp", out var hsp) && hsp.ValueKind != JsonValueKind.Null)
+            game.HomeSP = hsp.GetString();
+        if (g.TryGetProperty("away_sp", out var asp) && asp.ValueKind != JsonValueKind.Null)
+            game.AwaySP = asp.GetString();
+        if (g.TryGetProperty("venue", out var ven) && ven.ValueKind != JsonValueKind.Null)
+            game.Venue = ven.GetString();
+
+        // MLB endpoint returns "simple_model" instead of "prediction"
+        if (g.TryGetProperty("simple_model", out var pred) && pred.ValueKind == JsonValueKind.Object)
+        {
+            game.Prediction = new PredictionData
+            {
+                PredictedWinner = pred.TryGetProperty("predicted_winner", out var pw) && pw.ValueKind != JsonValueKind.Null ? pw.GetString() ?? "" : "",
+                HomeWinProbability = pred.TryGetProperty("home_win_probability", out var hwp) && hwp.ValueKind == JsonValueKind.Number ? hwp.GetDouble() : 0.5,
+                PredictedTotal = pred.TryGetProperty("predicted_total", out var pt) && pt.ValueKind == JsonValueKind.Number ? pt.GetDouble() : 0,
+                Confidence = pred.TryGetProperty("confidence", out var c) && c.ValueKind == JsonValueKind.Number ? c.GetDouble() : 0.5,
+                ConfidenceLevel = pred.TryGetProperty("confidence_level", out var cl) && cl.ValueKind != JsonValueKind.Null ? cl.GetString() ?? "" : "",
+                OuPick = pred.TryGetProperty("ou_pick", out var op) && op.ValueKind != JsonValueKind.Null ? op.GetString() : null,
+                HomeRecord = pred.TryGetProperty("home_record", out var hr) && hr.ValueKind != JsonValueKind.Null ? hr.GetString() : null,
+                AwayRecord = pred.TryGetProperty("away_record", out var ar) && ar.ValueKind != JsonValueKind.Null ? ar.GetString() : null,
+                ActiveModel = pred.TryGetProperty("model", out var md) && md.ValueKind != JsonValueKind.Null ? md.GetString() ?? "pythagorean" : "pythagorean",
+                MlEdge = pred.TryGetProperty("home_ml_edge", out var mle) && mle.ValueKind == JsonValueKind.Number ? mle.GetDouble() : null,
+                MlSignal = pred.TryGetProperty("ml_signal", out var mls) && mls.ValueKind != JsonValueKind.Null ? mls.GetString() : null,
+                SpreadSignal = pred.TryGetProperty("spread_signal", out var sps) && sps.ValueKind != JsonValueKind.Null ? sps.GetString() : null,
+                OuSignal = pred.TryGetProperty("ou_signal", out var ous) && ous.ValueKind != JsonValueKind.Null ? ous.GetString() : null,
+            };
+        }
+
+        return game;
+    }
+
+    private string SignalClass(string signal) => signal switch
+    {
+        "BET" => "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 cursor-help",
+        "LEAN" => "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 cursor-help",
+        _ => "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-700/40 text-slate-500 border border-slate-700 cursor-help",
+    };
+
+    private string SignalTooltip(string signal) => signal switch
+    {
+        "BET" => "Strong edge (8%+) — model sees significant value vs. the market line",
+        "LEAN" => "Moderate edge (4-8%) — model likes this side but not a slam dunk",
+        "PASS" => "No meaningful edge (<4%) — too close to the market line",
+        _ => "",
+    };
+
+    private double GetPickProb(PredictionData p)
+    {
+        return p.HomeWinProbability > 0.5 ? p.HomeWinProbability : (1 - p.HomeWinProbability);
+    }
+
+    private double? GetPickEdge(PredictionData p)
+    {
+        if (!p.MlEdge.HasValue) return null;
+        return p.HomeWinProbability > 0.5 ? p.MlEdge.Value : -p.MlEdge.Value;
+    }
+
+    private string FormatOdds(int? odds) => odds switch
+    {
+        null => "-",
+        > 0 => $"+{odds}",
+        _ => odds.ToString() ?? "-"
+    };
+
+    private class GameData
+    {
+        public string HomeTeam { get; set; } = "";
+        public string AwayTeam { get; set; } = "";
+        public int? HomeMoneyline { get; set; }
+        public int? AwayMoneyline { get; set; }
+        public decimal? Spread { get; set; }
+        public decimal? OverUnder { get; set; }
+        public bool HasValue { get; set; }
+        public List<string> ValueBets { get; set; } = new();
+        public PredictionData? Prediction { get; set; }
+        public string? HomeSP { get; set; }
+        public string? AwaySP { get; set; }
+        public string? Venue { get; set; }
+    }
+
+    private class PredictionData
+    {
+        public string PredictedWinner { get; set; } = "";
+        public double HomeWinProbability { get; set; }
+        public double PredictedTotal { get; set; }
+        public double Confidence { get; set; }
+        public string ConfidenceLevel { get; set; } = "";
+        public string? OuPick { get; set; }
+        public string? HomeRecord { get; set; }
+        public string? AwayRecord { get; set; }
+        public string ActiveModel { get; set; } = "pythagorean";
+        public double? MlEdge { get; set; }
+        public string? MlSignal { get; set; }
+        public string? SpreadSignal { get; set; }
+        public string? OuSignal { get; set; }
+    }
+
+    private async Task SaveAllToCache()
+    {
+        if (!_games.Any()) return;
+
+        _isSavingAll = true;
+        StateHasChanged();
+        
+        int successCount = 0;
+
+        try
+        {
+            var tasks = _games.Select(async game => 
+            {
+                var analysisData = new Dictionary<string, object>
+                {
+                    ["consensus_winner"] = game.Prediction?.PredictedWinner ?? game.HomeTeam,
+                    ["win_prob"] = game.Prediction?.HomeWinProbability ?? 0.5,
+                    ["total_proj"] = game.Prediction?.PredictedTotal ?? 0,
+                    ["spread"] = game.Spread ?? 0
+                };
+
+                if (await MLServiceClient.SaveAnalysisAsync("mlb", game.HomeTeam, game.AwayTeam, analysisData))
+                {
+                    System.Threading.Interlocked.Increment(ref successCount);
+                }
+            });
+
+            await Task.WhenAll(tasks);
+            
+            if (successCount == _games.Count)
+                Snackbar.Add($"All {successCount} games saved to daily cache!", Severity.Success);
+            else
+                Snackbar.Add($"Saved {successCount}/{_games.Count} games to cache.", Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+             Snackbar.Add($"Error saving snapshot: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSavingAll = false;
+            StateHasChanged();
+        }
+    }
+}
