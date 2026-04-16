@@ -128,6 +128,42 @@
             </TwCard>
         </div>
 
+        <!-- Data Ingestion Timeline -->
+        <div class="md:col-span-12">
+            <TwCard Class="p-6 bg-slate-900 border-slate-800 shadow-2xl">
+                <div class="mb-4">
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <TwIcon Icon="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" Class="w-5 h-5 text-emerald-400" />
+                        Data Ingestion Timeline
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-1">Rows imported over time by sport.</p>
+                </div>
+                
+                @if (_chartData != null && _chartData.Any())
+                {
+                    <div style="height: 350px;">
+                        <ApexChart TItem="ImportTrendPoint" Title="Rows Imported" Options="@_chartOptions">
+                             @foreach (var sportGroup in _chartData.GroupBy(g => g.Sport))
+                             {
+                                 <ApexPointSeries TItem="ImportTrendPoint"
+                                                  Items="@sportGroup"
+                                                  Name="@sportGroup.Key.ToUpper()"
+                                                  SeriesType="SeriesType.Area"
+                                                  XValue="@(e => e.DateStr)"
+                                                  YAggregate="@(e => e.Sum(e => e.RowsCount))" />
+                             }
+                        </ApexChart>
+                    </div>
+                }
+                else
+                {
+                    <div class="h-64 flex items-center justify-center border-2 border-dashed border-slate-800 rounded-lg">
+                        <span class="text-slate-500 italic">No timeline data available. Refresh logs.</span>
+                    </div>
+                }
+            </TwCard>
+        </div>
+
         <!-- Logs Table -->
         <div class="md:col-span-12">
             <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
@@ -181,6 +217,7 @@
 
 @code {
     private List<ImportLog> logs;
+    private List<ImportTrendPoint> _chartData = new();
     private bool isImporting = false;
     private string _importStatusMessage = "Connecting to data sources...";
     private CancellationTokenSource? _importCts;
@@ -204,7 +241,46 @@
     private async Task LoadLogs()
     {
         logs = await MLClient.GetImportLogsAsync();
+        ProcessChartData();
     }
+    
+    private void ProcessChartData()
+    {
+        if (logs == null || !logs.Any()) return;
+
+        // Take last 30 days of standard successful imports
+        _chartData = logs.Where(l => l.Status == "SUCCESS" && l.StartTime >= DateTime.Now.AddDays(-30))
+                         .Select(l => new ImportTrendPoint 
+                         { 
+                             DateStr = l.StartTime.ToLocalTime().ToString("MMM dd"), 
+                             RowsCount = l.RowsImported,
+                             Sport = l.Sport
+                         })
+                         .ToList();
+    }
+
+    public class ImportTrendPoint
+    {
+        public string DateStr { get; set; } = "";
+        public int RowsCount { get; set; }
+        public string Sport { get; set; } = "";
+    }
+
+    private ApexCharts.ApexChartOptions<ImportTrendPoint> _chartOptions = new()
+    {
+        Chart = new ApexCharts.Chart
+        {
+            Toolbar = new ApexCharts.Toolbar { Show = false },
+            Background = "transparent",
+            ForeColor = "#94a3b8" // slate-400
+        },
+        Theme = new ApexCharts.Theme { Mode = ApexCharts.Mode.Dark },
+        Stroke = new ApexCharts.Stroke { Curve = ApexCharts.Curve.Smooth, Width = 2 },
+        Markers = new ApexCharts.Markers { Size = 0 },
+        DataLabels = new ApexCharts.DataLabels { Enabled = false },
+        Grid = new ApexCharts.Grid { BorderColor = "#334155", StrokeDashArray = 4 },
+        Colors = new List<string> { "#10b981", "#3b82f6", "#f59e0b", "#a855f7" }
+    };
     
     private void CancelImport()
     {

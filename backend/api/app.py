@@ -105,7 +105,7 @@ from services.scheduler import SchedulerService
 
 # Import version management
 from src.version import get_version, get_version_info
-from src.error_notifier import install_error_email_handler
+from src.error_notifier import install_error_push_handler
 from src.ops_alerts import OpsAlertService
 from src.notification_store import ensure_notifications_schema
 from api.json_utils import sanitize_for_json
@@ -115,7 +115,7 @@ from src.fcm_store import ensure_fcm_schema
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-install_error_email_handler()
+install_error_push_handler()
 
 from src.config import DATABASE_URL
 
@@ -612,7 +612,7 @@ async def _train_all_background():
     severity = "success" if not failed else ("warning" if succeeded else "error")
     title = f"Train All: {len(succeeded)}/{total} Succeeded"
 
-    # ---- Send notification (triggers email + FCM automatically) ----
+    # ---- Send notification (triggers FCM + Web Push automatically) ----
     try:
         from src.notification_store import insert_notification as _insert_notif
         await _insert_notif(
@@ -639,7 +639,7 @@ async def _train_all_background():
 async def train_all_models(background_tasks: BackgroundTasks):
     """
     Fire-and-forget endpoint that trains ALL sport models in parallel batches.
-    Sends an in-app notification (+ email + FCM) when complete.
+    Sends an in-app notification (+ FCM + Web Push) when complete.
     Sports trained: NCAAB V2, NFL, College Baseball, NASCAR.
     """
     background_tasks.add_task(_train_all_background)

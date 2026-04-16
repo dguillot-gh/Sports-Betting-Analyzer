@@ -60,7 +60,7 @@ class OddsStorage:
             await conn.execute(
                 """INSERT INTO results (sport_id, season, series, metadata, content_hash)
                    VALUES ($1, $2, $3, $4, $5)
-                   ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                   ON CONFLICT (content_hash)
                    DO UPDATE SET metadata = EXCLUDED.metadata""",
                 sport_id, season, series, json.dumps(metadata), content_hash
             )

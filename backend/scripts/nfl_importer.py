@@ -623,7 +623,7 @@ async def import_pbp_2025(conn, sport_id: int, player_map: dict, progress_callba
             await conn.execute(
                 """INSERT INTO results (sport_id, season, series, metadata, content_hash)
                    VALUES ($1, $2, 'nfl', $3, $4)
-                   ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                   ON CONFLICT (content_hash)
                    DO UPDATE SET metadata = EXCLUDED.metadata""",
                 sport_id, 2025, json.dumps(metadata), content_hash
             )
@@ -659,7 +659,7 @@ async def import_pbp_2025(conn, sport_id: int, player_map: dict, progress_callba
                 await conn.execute(
                     """INSERT INTO stats (entity_id, season, stat_type, stats, content_hash)
                        VALUES ($1, $2, 'season', $3, $4)
-                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                       ON CONFLICT (content_hash)
                        DO UPDATE SET stats = EXCLUDED.stats""",
                     entity_id, 2025, json.dumps(stats_dict), stats_hash
                 )
@@ -688,9 +688,12 @@ async def ensure_schema(conn):
         await conn.execute("ALTER TABLE entities ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)")
         await conn.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)")
         await conn.execute("ALTER TABLE stats ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)")
-        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_hash ON entities(content_hash) WHERE content_hash IS NOT NULL")
-        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_results_hash ON results(content_hash) WHERE content_hash IS NOT NULL")
-        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_stats_hash ON stats(content_hash) WHERE content_hash IS NOT NULL")
+        await conn.execute("DROP INDEX IF EXISTS idx_entities_hash")
+        await conn.execute("DROP INDEX IF EXISTS idx_results_hash")
+        await conn.execute("DROP INDEX IF EXISTS idx_stats_hash")
+        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_content_hash ON entities(content_hash)")
+        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_results_content_hash ON results(content_hash)")
+        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_stats_content_hash ON stats(content_hash)")
         logger.info("Schema setup complete - content_hash columns ready and constraints relaxed")
     except Exception as e:
         logger.warning(f"Schema setup warning: {e}")
@@ -880,12 +883,12 @@ async def import_stats_via_nflreadpy(conn, sport_id: int, player_map: dict, prog
 
         UPSERT_RESULTS = """INSERT INTO results (sport_id, season, series, metadata, content_hash)
                             VALUES ($1, $2, 'nfl', $3, $4)
-                            ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                            ON CONFLICT (content_hash)
                             DO UPDATE SET metadata = EXCLUDED.metadata"""
         
         UPSERT_STATS = """INSERT INTO stats (entity_id, season, stat_type, stats, content_hash)
                           VALUES ($1, $2, 'season', $3, $4)
-                          ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                          ON CONFLICT (content_hash)
                           DO UPDATE SET stats = EXCLUDED.stats"""
         
         if progress_callback:
@@ -926,7 +929,7 @@ async def import_weekly_stats_via_nflreadpy(conn, sport_id: int, player_map: dic
     
     UPSERT_SQL = """INSERT INTO results (sport_id, season, series, metadata, content_hash)
                     VALUES ($1, $2, 'nfl_weekly', $3, $4)
-                    ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                    ON CONFLICT (content_hash)
                     DO UPDATE SET metadata = EXCLUDED.metadata"""
     
     try:
@@ -1060,7 +1063,7 @@ async def import_players_via_nflreadpy(conn, sport_id: int, progress_callback=No
                 entity_id = await conn.fetchval(
                     """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
                        VALUES ($1, $2, 'player', 'nfl', $3, $4)
-                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                       ON CONFLICT (content_hash)
                        DO UPDATE SET name = EXCLUDED.name, metadata = EXCLUDED.metadata
                        RETURNING id""",
                     sport_id, str(name), json.dumps(metadata), content_hash
@@ -1124,7 +1127,7 @@ async def import_players(conn, sport_id: int, progress_callback=None) -> dict:
                 entity_id = await conn.fetchval(
                     """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
                        VALUES ($1, $2, 'player', 'nfl', $3, $4)
-                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                       ON CONFLICT (content_hash)
                        DO UPDATE SET name = EXCLUDED.name, metadata = EXCLUDED.metadata
                        RETURNING id""",
                     sport_id, str(name), json.dumps(metadata), content_hash
@@ -1255,7 +1258,7 @@ async def import_player_stats(conn, sport_id: int, player_map: dict, progress_ca
                 if results_records:
                     UPSERT_RESULTS = """INSERT INTO results (sport_id, season, series, metadata, content_hash)
                                         VALUES ($1, $2, 'nfl', $3, $4)
-                                        ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                                        ON CONFLICT (content_hash)
                                         DO UPDATE SET metadata = EXCLUDED.metadata"""
                     await batch_upsert(conn, UPSERT_RESULTS, results_records)
                     imported += len(results_records)
@@ -1263,7 +1266,7 @@ async def import_player_stats(conn, sport_id: int, player_map: dict, progress_ca
                 if stats_records:
                     UPSERT_STATS = """INSERT INTO stats (entity_id, season, stat_type, stats, content_hash)
                                       VALUES ($1, $2, 'season', $3, $4)
-                                      ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                                      ON CONFLICT (content_hash)
                                       DO UPDATE SET stats = EXCLUDED.stats"""
                     await batch_upsert(conn, UPSERT_STATS, stats_records)
                 
@@ -1449,7 +1452,7 @@ async def import_schedules_via_nflreadpy(conn, sport_id: int, progress_callback=
     
     UPSERT_SQL = """INSERT INTO results (sport_id, season, series, metadata, content_hash)
                     VALUES ($1, $2, 'nfl_schedule', $3, $4)
-                    ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                    ON CONFLICT (content_hash)
                     DO UPDATE SET metadata = EXCLUDED.metadata"""
     
     try:

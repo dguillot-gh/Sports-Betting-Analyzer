@@ -265,40 +265,50 @@ class NBABacktester:
         return results
     
     async def _load_historical_games(self) -> List[Dict]:
-        """Load historical NBA games from database."""
+        """Load historical NBA games from database.
+        
+        Attempts to load from Postgres results table first (populated by
+        import_schedules_via_nba_api with proper home/away columns).
+        Falls back to NBA API if Postgres has insufficient data.
+        Optionally enriches with historical odds from nba_odds_history if
+        that table exists.
+        """
         try:
             from src.database import get_pool
             pool = await get_pool()
             
-            # Load closing lines from Kaggle odds
+            # Load closing lines from Kaggle odds (optional — table may not exist)
             self.market_odds_lookup = {}
             async with pool.acquire() as conn:
-                logger.info("Loading Kaggle historical odds from DB...")
-                odds_query = """
-                    SELECT DISTINCT ON (team1, team2, timestamp::date) 
-                        team1 as away_team, team2 as home_team, timestamp::date as game_date, 
-                        team1_moneyline, team2_moneyline, over_total, team1_spread_odds, team2_spread_odds
-                    FROM nba_odds_history
-                    ORDER BY team1, team2, timestamp::date, timestamp DESC
-                """
-                
                 try:
-                    odds_rows = await conn.fetch(odds_query)
-                    for row in odds_rows:
-                        # Convert to pydatetime and then to isoformat to match game_date
-                        date_str = None
-                        if hasattr(row['game_date'], 'isoformat'):
-                            date_str = row['game_date'].isoformat()
-                            
-                        key = (str(row['home_team']).lower(), str(row['away_team']).lower(), date_str)
-                        self.market_odds_lookup[key] = {
-                            'away_ml_dec': row['team1_moneyline'],
-                            'home_ml_dec': row['team2_moneyline'],
-                            'total': row['over_total']
-                        }
-                    logger.info(f"Loaded {len(self.market_odds_lookup)} historical odds lines.")
+                    table_exists = await conn.fetchval(
+                        "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'nba_odds_history')"
+                    )
+                    if table_exists:
+                        logger.info("Loading historical odds from nba_odds_history...")
+                        odds_query = """
+                            SELECT DISTINCT ON (team1, team2, timestamp::date) 
+                                team1 as away_team, team2 as home_team, timestamp::date as game_date, 
+                                team1_moneyline, team2_moneyline, over_total, team1_spread_odds, team2_spread_odds
+                            FROM nba_odds_history
+                            ORDER BY team1, team2, timestamp::date, timestamp DESC
+                        """
+                        odds_rows = await conn.fetch(odds_query)
+                        for row in odds_rows:
+                            date_str = None
+                            if hasattr(row['game_date'], 'isoformat'):
+                                date_str = row['game_date'].isoformat()
+                            key = (str(row['home_team']).lower(), str(row['away_team']).lower(), date_str)
+                            self.market_odds_lookup[key] = {
+                                'away_ml_dec': row['team1_moneyline'],
+                                'home_ml_dec': row['team2_moneyline'],
+                                'total': row['over_total']
+                            }
+                        logger.info(f"Loaded {len(self.market_odds_lookup)} historical odds lines.")
+                    else:
+                        logger.info("nba_odds_history table not found — backtesting will use simulated odds.")
                 except Exception as e:
-                    logger.error(f"Failed to load historical odds: {e}")
+                    logger.warning(f"Could not load historical odds (non-fatal): {e}")
 
                 logger.info("Loading NBA games from DB...")
                 query = """
@@ -313,7 +323,6 @@ class NBABacktester:
                     ORDER BY r.game_date ASC
                 """
                 rows = await conn.fetch(query)
-                # Convert to list of dicts and ensure date serializability
                 cleaned_rows = []
                 games_with_odds = 0
                 for row in rows:
@@ -331,9 +340,9 @@ class NBABacktester:
                         
                     cleaned_rows.append(d)
                     
-                logger.info(f"Loaded {len(cleaned_rows)} historical NBA games. {games_with_odds} matched with Kaggle odds.")
+                logger.info(f"Loaded {len(cleaned_rows)} historical NBA games. {games_with_odds} matched with odds.")
                 
-                # Filter down to games with odds if we matched enough of them
+                # If we have enough odds-matched games, prefer those; otherwise use all games
                 if games_with_odds > 100:
                     cleaned_rows = [g for g in cleaned_rows if (str(g['home_team']).lower(), str(g['away_team']).lower(), g['game_date']) in self.market_odds_lookup]
                     logger.info(f"Filtered DB games to {len(cleaned_rows)} matched with valid odds.")
@@ -341,57 +350,56 @@ class NBABacktester:
                 if len(cleaned_rows) > 100:
                     return cleaned_rows
                 else:
-                    raise ValueError("Not enough Postgres games matched. Falling back to NBA API.")
+                    logger.info(f"Only {len(cleaned_rows)} Postgres games found. Falling back to NBA API.")
                 
         except Exception as e:
-            logger.error(f"Error loading NBA games from Postgres: {e}")
-            logger.info("Fetching real historical games from NBA API...")
-            try:
-                from nba_api.stats.endpoints import leaguegamelog
-                import time
-                
-                all_games = []
-                seen_games = set()
-                # Fetch 2022-2026 seasons for backtesting to match Kaggle data
-                for season_year in range(2022, 2027):
-                    season_str = f"{season_year}-{str(season_year+1)[-2:]}"
-                    try:
-                        game_log = leaguegamelog.LeagueGameLog(season=season_str, season_type_all_star='Regular Season').get_data_frames()[0]
-                        for game_id in game_log['GAME_ID'].unique():
-                            if game_id in seen_games: continue
-                            seen_games.add(game_id)
-                            game_rows = game_log[game_log['GAME_ID'] == game_id]
-                            if len(game_rows) != 2: continue
-                            
-                            game_d = {'season': season_year}
-                            for _, row in game_rows.iterrows():
-                                matchup = row['MATCHUP']
-                                is_home = '@' not in matchup
-                                if is_home:
-                                    game_d['home_team'] = row['TEAM_NAME']
-                                    game_d['home_score'] = row['PTS']
-                                else:
-                                    game_d['away_team'] = row['TEAM_NAME']
-                                    game_d['away_score'] = row['PTS']
-                                    
-                                if not game_d.get('game_date'):
-                                    game_d['game_date'] = str(row['GAME_DATE'])
-                                    
-                            if 'home_team' in game_d and 'away_team' in game_d:
-                                key = (str(game_d['home_team']).lower(), str(game_d['away_team']).lower(), game_d['game_date'])
-                                if hasattr(self, 'market_odds_lookup') and key in self.market_odds_lookup:
-                                    all_games.append(game_d)
-                        time.sleep(0.6)
-                    except Exception as ex:
-                        logger.warning(f"Failed to fetch {season_str} from NBA API: {ex}")
-                
-                all_games.sort(key=lambda x: x['game_date'])
-                logger.info(f"Loaded {len(all_games)} games from NBA API matched with historical Kaggle odds")
-                return all_games
-                
-            except ImportError:
-                logger.error("nba_api not installed. Returning empty.")
-                return []
+            logger.warning(f"Error loading NBA games from Postgres: {e}")
+
+        # Fallback: fetch from NBA API
+        logger.info("Fetching historical games from NBA API...")
+        try:
+            from nba_api.stats.endpoints import leaguegamelog
+            import time
+            
+            all_games = []
+            seen_games = set()
+            for season_year in range(2022, 2027):
+                season_str = f"{season_year}-{str(season_year+1)[-2:]}"
+                try:
+                    game_log = leaguegamelog.LeagueGameLog(season=season_str, season_type_all_star='Regular Season').get_data_frames()[0]
+                    for game_id in game_log['GAME_ID'].unique():
+                        if game_id in seen_games: continue
+                        seen_games.add(game_id)
+                        game_rows = game_log[game_log['GAME_ID'] == game_id]
+                        if len(game_rows) != 2: continue
+                        
+                        game_d = {'season': season_year}
+                        for _, row in game_rows.iterrows():
+                            matchup = row['MATCHUP']
+                            is_home = '@' not in matchup
+                            if is_home:
+                                game_d['home_team'] = row['TEAM_NAME']
+                                game_d['home_score'] = row['PTS']
+                            else:
+                                game_d['away_team'] = row['TEAM_NAME']
+                                game_d['away_score'] = row['PTS']
+                                
+                            if not game_d.get('game_date'):
+                                game_d['game_date'] = str(row['GAME_DATE'])
+                                
+                        if 'home_team' in game_d and 'away_team' in game_d:
+                            all_games.append(game_d)
+                    time.sleep(0.6)
+                except Exception as ex:
+                    logger.warning(f"Failed to fetch {season_str} from NBA API: {ex}")
+            
+            all_games.sort(key=lambda x: x['game_date'])
+            logger.info(f"Loaded {len(all_games)} games from NBA API")
+            return all_games
+            
+        except ImportError:
+            logger.error("nba_api not installed. Returning empty.")
+            return []
     
     def _get_market_odds(self, game: Dict) -> Dict:
         """Get or simulate market odds."""

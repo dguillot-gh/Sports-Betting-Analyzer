@@ -484,6 +484,35 @@
         builder.CloseElement();
         builder.CloseElement();
 
+        // Feature Importance Chart
+        if (metrics.FeatureImportance?.Any() == true)
+        {
+            builder.OpenElement(90, "div");
+            builder.AddAttribute(91, "class", "mb-6");
+            
+            builder.OpenComponent<TwCard>(92);
+            builder.AddAttribute(93, "Class", "p-4 bg-slate-900 border-slate-800");
+            builder.AddAttribute(94, "ChildContent", (RenderFragment)((b) =>
+            {
+                b.OpenComponent<ApexChart<FeatureWeight>>(95);
+                b.AddAttribute(96, "Title", "Feature Importance");
+                b.AddAttribute(97, "Options", GetFeatureChartOptions(color));
+                b.AddAttribute(98, "ChildContent", (RenderFragment)((b2) =>
+                {
+                    b2.OpenComponent<ApexPointSeries<FeatureWeight>>(99);
+                    b2.AddAttribute(100, "Items", metrics.FeatureImportance);
+                    b2.AddAttribute(101, "Name", "Weight");
+                    b2.AddAttribute(102, "SeriesType", SeriesType.Bar);
+                    b2.AddAttribute(103, "XValue", (Func<FeatureWeight, object>)(e => e.FeatureName));
+                    b2.AddAttribute(104, "YAggregate", (Func<IEnumerable<FeatureWeight>, decimal?>)(e => (decimal?)e.Sum(x => x.Weight)));
+                    b2.CloseComponent();
+                }));
+                b.CloseComponent();
+            }));
+            builder.CloseComponent();
+            builder.CloseElement();
+        }
+
         // Season Breakdown
         if (metrics.BySeason?.Any() == true)
         {
@@ -594,6 +623,40 @@
         };
     }
 
+    private ApexCharts.ApexChartOptions<FeatureWeight> GetFeatureChartOptions(string colorName)
+    {
+        string hexColor = colorName switch {
+            "purple" => "#a855f7",
+            "orange" => "#f97316",
+            "green" => "#22c55e",
+            "red" => "#ef4444",
+            "emerald" => "#10b981",
+            "amber" => "#f59e0b",
+            _ => "#3b82f6" // blue
+        };
+
+        return new ApexCharts.ApexChartOptions<FeatureWeight>
+        {
+            Chart = new ApexCharts.Chart
+            {
+                Toolbar = new ApexCharts.Toolbar { Show = false },
+                Background = "transparent",
+                ForeColor = "#94a3b8" 
+            },
+            Theme = new ApexCharts.Theme { Mode = ApexCharts.Mode.Dark },
+            PlotOptions = new ApexCharts.PlotOptions
+            {
+                Bar = new ApexCharts.PlotOptionsBar
+                {
+                    Horizontal = true,
+                    BorderRadius = 4
+                }
+            },
+            Grid = new ApexCharts.Grid { BorderColor = "#334155", StrokeDashArray = 4 },
+            Colors = new List<string> { hexColor }
+        };
+    }
+
     // Default metrics generators
     private ModelMetricsData GetDefaultNHLMetrics() => new()
     {
@@ -606,6 +669,14 @@
         {
             new() { Season = 2023, Bets = 48, Wins = 28, WinRate = 58.3, Profit = 235.20, ROI = 4.9 },
             new() { Season = 2024, Bets = 52, Wins = 30, WinRate = 57.7, Profit = 252.30, ROI = 4.9 }
+        },
+        FeatureImportance = new List<FeatureWeight>
+        {
+            new() { FeatureName = "Corsi For %", Weight = 0.28 },
+            new() { FeatureName = "Save % (Recent)", Weight = 0.22 },
+            new() { FeatureName = "Rest Days", Weight = 0.15 },
+            new() { FeatureName = "Power Play %", Weight = 0.12 },
+            new() { FeatureName = "Fenwick Diff", Weight = 0.08 }
         }
     };
 
@@ -621,6 +692,14 @@
             new() { Season = 2022, Bets = 45, Wins = 25, WinRate = 55.6, Profit = 180.50, ROI = 4.0 },
             new() { Season = 2023, Bets = 52, Wins = 29, WinRate = 55.8, Profit = 215.30, ROI = 4.1 },
             new() { Season = 2024, Bets = 53, Wins = 30, WinRate = 56.6, Profit = 216.20, ROI = 4.1 }
+        },
+        FeatureImportance = new List<FeatureWeight>
+        {
+            new() { FeatureName = "Net Rating", Weight = 0.31 },
+            new() { FeatureName = "Pace", Weight = 0.18 },
+            new() { FeatureName = "True Shooting %", Weight = 0.16 },
+            new() { FeatureName = "Rebound Rate", Weight = 0.11 },
+            new() { FeatureName = "Rest Disadvantage", Weight = 0.09 }
         }
     };
 
@@ -636,6 +715,14 @@
             new() { Season = 2022, Bets = 28, Wins = 16, WinRate = 57.1, Profit = 135.00, ROI = 4.8 },
             new() { Season = 2023, Bets = 29, Wins = 16, WinRate = 55.2, Profit = 125.00, ROI = 4.3 },
             new() { Season = 2024, Bets = 28, Wins = 16, WinRate = 57.1, Profit = 125.00, ROI = 4.5 }
+        },
+        FeatureImportance = new List<FeatureWeight>
+        {
+            new() { FeatureName = "EPA/Play (Offense)", Weight = 0.35 },
+            new() { FeatureName = "EPA/Play (Defense)", Weight = 0.28 },
+            new() { FeatureName = "DVOA Diff", Weight = 0.15 },
+            new() { FeatureName = "QB Rating Diff", Weight = 0.12 },
+            new() { FeatureName = "Home Field", Weight = 0.05 }
         }
     };
 
@@ -673,6 +760,13 @@
         public int CVFolds { get; set; }
         public List<SeasonMetrics>? BySeason { get; set; }
         public List<BetHistoryRecord>? BetHistory { get; set; }
+        public List<FeatureWeight>? FeatureImportance { get; set; }
+    }
+
+    public class FeatureWeight
+    {
+        public string FeatureName { get; set; } = "";
+        public double Weight { get; set; }
     }
 
     private class SeasonMetrics

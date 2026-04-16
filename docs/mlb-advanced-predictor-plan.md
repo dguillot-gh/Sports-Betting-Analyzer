@@ -37,7 +37,7 @@
 │                   Feature Engine                             │
 │                   mlb_features.py                            │
 │                                                              │
-│  Team Stats: WPct, PythWPct, RS/G, RA/G, ERA, WHIP, K9,    │
+│  Team Stats: WPct, PythWPct, RS/G, RA/G, ERA, WHIP, K9,    │still
 │              BA, SLG, fielding %, LOB/G                      │
 │                                                              │
 │  Pitcher Stats: SP ERA, SP WHIP, SP K9, SP vs. opponent,    │

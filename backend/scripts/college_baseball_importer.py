@@ -190,7 +190,7 @@ def _import_via_python(division: int, year: int, progress_callback=None) -> Dict
             logger.error("ncaa_bbStats package not installed")
             return {"error": True, "message": "Required package ncaa_bbStats is missing."}
         except Exception as e:
-            logger.error(f"Failed to list teams: {e}")
+            logger.warning(f"Failed to list teams: {e}")
             return {"error": True, "message": f"NCAA site error: {e}"}
 
         if not teams:
@@ -486,7 +486,7 @@ async def sync_to_postgresql(import_results: Dict) -> Dict[str, int]:
         if team_entity_records:
             UPSERT_ENTITIES = """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
                                VALUES ($1, $2, 'team', $3, $4, $5)
-                               ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                               ON CONFLICT (content_hash)
                                DO UPDATE SET name = EXCLUDED.name, metadata = EXCLUDED.metadata"""
             # We can't know exactly new vs updated from batch_upsert easily, just add to updated for now
             metrics["teams_updated"] += await batch_upsert(conn, UPSERT_ENTITIES, team_entity_records)
@@ -546,7 +546,7 @@ async def sync_to_postgresql(import_results: Dict) -> Dict[str, int]:
             if player_entity_records:
                 UPSERT_PLAYER_ENTITIES = """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
                                    VALUES ($1, $2, 'player', $3, $4, $5)
-                                   ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                                   ON CONFLICT (content_hash)
                                    DO UPDATE SET metadata = EXCLUDED.metadata, series = EXCLUDED.series"""
                 metrics["players_updated"] += await batch_upsert(conn, UPSERT_PLAYER_ENTITIES, player_entity_records)
                 
