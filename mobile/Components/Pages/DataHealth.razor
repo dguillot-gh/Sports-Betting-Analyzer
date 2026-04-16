@@ -58,6 +58,24 @@ else if (_loading)
     <div class="loading-row"><div class="loading-spinner"></div><span>Loading freshness...</span></div>
 }
 
+<!-- Import Task Speeds -->
+@if (_importSpeedData.Any())
+{
+    <div class="section-title mt-section">Import Speeds (seconds)</div>
+    <div class="app-card" style="padding-top: 10px;">
+        <div style="height: 180px; width: 100%;">
+            <ApexCharts.ApexChart TItem="ImportSpeedPoint" Options="@_importSpeedOptions">
+                <ApexCharts.ApexPointSeries TItem="ImportSpeedPoint"
+                                            Items="@_importSpeedData"
+                                            Name="Duration (s)"
+                                            SeriesType="ApexCharts.SeriesType.Area"
+                                            XValue="@(e => e.Label)"
+                                            YValue="@(e => e.Seconds)" />
+            </ApexCharts.ApexChart>
+        </div>
+    </div>
+}
+
 <!-- Import Log Table -->
 @if (_logs.Any())
 {
@@ -230,8 +248,54 @@ else if (!_loading)
     private Dictionary<string, bool> _testBusy = new();
     private string _testResult = "";
     private bool _testIsSuccess = false;
+    
+    // Import Speed chart
+    private List<ImportSpeedPoint> _importSpeedData = new();
+    private ApexCharts.ApexChartOptions<ImportSpeedPoint> _importSpeedOptions = new();
 
-    protected override async Task OnInitializedAsync() => await Refresh();
+    protected override async Task OnInitializedAsync()
+    {
+        await Refresh();
+        BuildImportSpeedChart();
+    }
+
+    private void BuildImportSpeedChart()
+    {
+        _importSpeedData.Clear();
+
+        // Take the most recent logs that have a duration, ordered chronologically
+        var withDuration = _logs
+            .Where(l => l.DurationSeconds.HasValue)
+            .OrderBy(l => l.StartTime)
+            .TakeLast(20)
+            .ToList();
+
+        foreach (var log in withDuration)
+        {
+            _importSpeedData.Add(new ImportSpeedPoint
+            {
+                Label = $"{log.Sport.ToUpper()} {log.StartTime.ToLocalTime():MMM d HH:mm}",
+                Seconds = (decimal)log.DurationSeconds!.Value
+            });
+        }
+
+        _importSpeedOptions = new ApexCharts.ApexChartOptions<ImportSpeedPoint>
+        {
+            Chart = new ApexCharts.Chart
+            {
+                Toolbar = new ApexCharts.Toolbar { Show = false },
+                Background = "transparent",
+                ForeColor = "#94a3b8"
+            },
+            Theme = new ApexCharts.Theme { Mode = ApexCharts.Mode.Dark },
+            Stroke = new ApexCharts.Stroke { Curve = ApexCharts.Curve.Smooth, Width = 2 },
+            Colors = new List<string> { "#06b6d4" },
+            Fill = new ApexCharts.Fill { Opacity = 0.2 },
+            DataLabels = new ApexCharts.DataLabels { Enabled = false },
+            Grid = new ApexCharts.Grid { BorderColor = "#2e2e44", StrokeDashArray = 4 },
+            Xaxis = new ApexCharts.XAxis { Labels = new ApexCharts.XAxisLabels { Show = false } }
+        };
+    }
 
     private async Task Refresh()
     {
@@ -313,5 +377,6 @@ else if (!_loading)
         [JsonPropertyName("new_rows_imported")]    public int     NewRowsImported     { get; set; }
         [JsonPropertyName("updated_rows_imported")] public int    UpdatedRowsImported  { get; set; }
     }
-}
 
+    public class ImportSpeedPoint { public string Label { get; set; } = ""; public decimal Seconds { get; set; } }
+}

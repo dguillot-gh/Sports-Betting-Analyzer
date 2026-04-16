@@ -387,7 +387,7 @@ async def import_rda_series(
                     await conn.execute(
                         """INSERT INTO results (sport_id, season, series, track, metadata, content_hash)
                            VALUES ($1, $2, $3, $4, $5, $6)
-                           ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL 
+                           ON CONFLICT (content_hash) 
                            DO UPDATE SET metadata = EXCLUDED.metadata""",
                         sport_id, year, series, track[:255] if track else None,
                         json.dumps(metadata), content_hash
@@ -469,7 +469,7 @@ async def import_rda_series(
             await conn.execute(
                 """INSERT INTO stats (entity_id, season, series, stat_type, stats, content_hash)
                    VALUES ($1, $2, $3, $4, $5, $6)
-                   ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL 
+                   ON CONFLICT (content_hash) 
                    DO UPDATE SET stats = EXCLUDED.stats""",
                 int(driver_id), int(season), series, 'season_summary',
                 json.dumps(stats), stats_hash

@@ -1,11 +1,8 @@
 import logging
 import os
-import smtplib
 import socket
 import sys
 import time
-from dataclasses import dataclass
-from email.message import EmailMessage
 from typing import List
 
 
@@ -14,52 +11,6 @@ def _env_bool(name: str, default: bool = False) -> bool:
     if raw is None:
         return default
     return raw.strip().lower() in {"1", "true", "yes", "on"}
-
-
-@dataclass(frozen=True)
-class ErrorEmailSettings:
-    enabled: bool
-    smtp_host: str
-    smtp_port: int
-    smtp_username: str
-    smtp_password: str
-    smtp_use_tls: bool
-    email_from: str
-    email_to: List[str]
-    subject_prefix: str
-    cooldown_seconds: int
-    app_env: str
-
-    @staticmethod
-    def from_env() -> "ErrorEmailSettings":
-        def env_first(*names: str, default: str = "") -> str:
-            for name in names:
-                val = os.getenv(name)
-                if val is not None and str(val).strip():
-                    return str(val).strip()
-            return default
-
-        to_value = env_first("ERROR_EMAIL_TO", "REPORT_EMAIL_TO", default="")
-        recipients = [x.strip() for x in to_value.split(",") if x.strip()]
-        from_value = env_first("ERROR_EMAIL_FROM", "SMTP_USER", default="")
-        smtp_host = env_first("ERROR_EMAIL_SMTP_HOST", "SMTP_HOST", default="smtp.gmail.com")
-        smtp_port_raw = env_first("ERROR_EMAIL_SMTP_PORT", "SMTP_PORT", default="587")
-        smtp_user = env_first("ERROR_EMAIL_SMTP_USERNAME", "SMTP_USER", default="")
-        smtp_pass = env_first("ERROR_EMAIL_SMTP_PASSWORD", "SMTP_PASS", default="")
-
-        return ErrorEmailSettings(
-            enabled=_env_bool("ERROR_EMAIL_ENABLED", False) or _env_bool("EMAIL_ALERTS_ENABLED", False),
-            smtp_host=smtp_host,
-            smtp_port=int(smtp_port_raw),
-            smtp_username=smtp_user,
-            smtp_password=smtp_pass,
-            smtp_use_tls=_env_bool("ERROR_EMAIL_SMTP_USE_TLS", True),
-            email_from=from_value,
-            email_to=recipients,
-            subject_prefix=os.getenv("ERROR_EMAIL_SUBJECT_PREFIX", "[Sports API Error]"),
-            cooldown_seconds=int(os.getenv("ERROR_EMAIL_COOLDOWN_SECONDS", "600")),
-            app_env=os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "unknown")).strip() or "unknown",
-        )
 
 
 class _ErrorRateLimiter:
@@ -76,62 +27,73 @@ class _ErrorRateLimiter:
         return True
 
 
-class ErrorEmailHandler(logging.Handler):
-    def __init__(self, settings: ErrorEmailSettings) -> None:
+# Loggers whose ERROR messages should never generate push notifications.
+# They still get logged normally — just suppressed from the notification bell.
+_SUPPRESSED_LOGGERS = frozenset({
+    "asyncio",           # "Future exception was never retrieved" — transient connection churn
+    "pywebpush",         # Transient web-push delivery errors
+})
+
+# Substrings in the message that mark known-noisy errors to suppress.
+_SUPPRESSED_MESSAGES = (
+    "Future exception was never retrieved",
+    "unexpected connection_lost",
+)
+
+
+class ErrorPushHandler(logging.Handler):
+    """Logging handler that routes ERROR+ logs to in-app + FCM + Web Push notifications.
+    No emails are sent — all alerts go through push channels only."""
+
+    def __init__(self, cooldown_seconds: int = 600) -> None:
         super().__init__(level=logging.ERROR)
-        self.settings = settings
         self._hostname = socket.gethostname()
-        self._limiter = _ErrorRateLimiter(settings.cooldown_seconds)
+        self._limiter = _ErrorRateLimiter(cooldown_seconds)
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
-            signature = f"{record.name}|{record.levelname}|{record.getMessage()[:240]}"
+            # Skip known-noisy loggers and messages
+            if record.name in _SUPPRESSED_LOGGERS:
+                return
+            msg_text = record.getMessage()
+            if any(substr in msg_text for substr in _SUPPRESSED_MESSAGES):
+                return
+
+            signature = self._make_signature(record.name, record.levelname, msg_text)
             if not self._limiter.allow(signature):
                 return
 
-            formatted_line = self.format(record)
-            message = EmailMessage()
-            message["Subject"] = f"{self.settings.subject_prefix} {record.levelname} {record.name}"
-            message["From"] = self.settings.email_from
-            message["To"] = ", ".join(self.settings.email_to)
-
-            body_parts = [
-                f"Environment: {self.settings.app_env}",
-                f"Host: {self._hostname}",
-                f"Logger: {record.name}",
-                f"Level: {record.levelname}",
-                f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S %Z', time.localtime(record.created))}",
-                "",
-                "Message:",
-                formatted_line,
-            ]
-
-            if record.exc_info:
-                body_parts.extend(
-                    [
-                        "",
-                        "Traceback:",
-                        "".join(logging.Formatter().formatException(record.exc_info)),
-                    ]
-                )
-
-            message.set_content("\n".join(body_parts))
-            self._send(message)
-
-            # Also fire in-app + FCM + Web Push via insert_notification
-            self._queue_app_notification(record, formatted_line)
+            self._queue_app_notification(record)
         except Exception as exc:
-            print(f"ErrorEmailHandler failed to send email: {exc}", file=sys.stderr)
+            print(f"ErrorPushHandler failed: {exc}", file=sys.stderr)
 
-    def _queue_app_notification(self, record: logging.LogRecord, formatted_line: str) -> None:
-        """Fire insert_notification so errors also go to FCM, Web Push, and in-app bell."""
+    @staticmethod
+    def _make_signature(logger_name: str, level: str, msg: str) -> str:
+        """Build a dedup key that collapses repetitive per-item errors.
+
+        Many loops log `"Failed to <verb> <item>: <reason>"`.  The item
+        (e.g. team names) changes every iteration while the logger, verb,
+        and reason stay the same.  We keep the first token before ':'
+        (the verb/prefix) and the last token after ':' (the reason/type)
+        but strip the variable middle part so 20 NBA games map to one key.
+        """
+        short = msg[:240]
+        if ": " in short:
+            parts = short.split(": ", 1)
+            prefix = parts[0].split(" ")[0:4]  # first 4 words
+            suffix = parts[-1][:80]
+            short = " ".join(prefix) + ": " + suffix
+        return f"{logger_name}|{level}|{short}"
+
+    def _queue_app_notification(self, record: logging.LogRecord) -> None:
+        """Fire insert_notification so errors go to FCM, Web Push, and in-app bell."""
         import asyncio
 
         try:
             from src.config import DATABASE_URL
             from src.notification_store import insert_notification
 
-            title = f"🔴 {record.name}"
+            title = f"\U0001f534 {record.name}"
             msg = record.getMessage()[:500]
 
             async def _insert():
@@ -164,46 +126,31 @@ class ErrorEmailHandler(logging.Handler):
         except Exception:
             pass  # Never let notification failures break error logging
 
-    def _send(self, message: EmailMessage) -> None:
-        with smtplib.SMTP(self.settings.smtp_host, self.settings.smtp_port, timeout=10) as smtp:
-            if self.settings.smtp_use_tls:
-                smtp.starttls()
-            if self.settings.smtp_username and self.settings.smtp_password:
-                smtp.login(self.settings.smtp_username, self.settings.smtp_password)
-            smtp.send_message(message)
+
+# Keep old name as alias for backward compat
+ErrorEmailHandler = ErrorPushHandler
 
 
-def install_error_email_handler() -> bool:
-    settings = ErrorEmailSettings.from_env()
-    if not settings.enabled:
-        return False
-
-    missing = []
-    if not settings.smtp_host:
-        missing.append("ERROR_EMAIL_SMTP_HOST")
-    if not settings.email_from:
-        missing.append("ERROR_EMAIL_FROM")
-    if not settings.email_to:
-        missing.append("ERROR_EMAIL_TO")
-
-    if missing:
-        logging.getLogger(__name__).warning(
-            "Error email notifier disabled; missing required env vars: %s",
-            ", ".join(missing),
-        )
-        return False
+def install_error_push_handler() -> bool:
+    """Install a global logging handler that routes ERROR+ logs to push notifications."""
+    cooldown = int(os.getenv("ERROR_NOTIFICATION_COOLDOWN_SECONDS",
+                             os.getenv("ERROR_EMAIL_COOLDOWN_SECONDS", "600")))
 
     root = logging.getLogger()
-    if any(isinstance(handler, ErrorEmailHandler) for handler in root.handlers):
+    if any(isinstance(handler, ErrorPushHandler) for handler in root.handlers):
         return True
 
-    handler = ErrorEmailHandler(settings)
+    handler = ErrorPushHandler(cooldown_seconds=cooldown)
     handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s"))
     root.addHandler(handler)
 
     logging.getLogger(__name__).info(
-        "Error email notifier enabled; recipients=%d cooldown=%ss",
-        len(settings.email_to),
-        settings.cooldown_seconds,
+        "Error push handler installed (FCM + Web Push + in-app); cooldown=%ss",
+        cooldown,
     )
     return True
+
+
+# Backward-compatible alias
+def install_error_email_handler() -> bool:
+    return install_error_push_handler()

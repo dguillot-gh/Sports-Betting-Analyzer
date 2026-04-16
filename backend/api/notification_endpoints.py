@@ -127,11 +127,11 @@ async def mark_read_all(request: Request):
 async def test_notification_channel(channel: str):
     """
     Fire a test notification to a specific channel.
-    Channels: in-app, web-push, fcm, email, all
+    Channels: in-app, web-push, fcm, all
     """
     from datetime import datetime
 
-    valid_channels = ("in-app", "web-push", "fcm", "email", "all")
+    valid_channels = ("in-app", "web-push", "fcm", "all")
     if channel not in valid_channels:
         raise HTTPException(
             status_code=400,
@@ -144,7 +144,7 @@ async def test_notification_channel(channel: str):
 
     results = {}
 
-    # In-App (writes to DB, which also triggers push+email via insert_notification)
+    # In-App (writes to DB, which also triggers FCM + Web Push via insert_notification)
     if channel in ("in-app", "all"):
         try:
             from src.notification_store import insert_notification
@@ -158,7 +158,7 @@ async def test_notification_channel(channel: str):
                 source="admin.test_notification",
                 metadata={"test": True, "channel": channel},
             )
-            results["in-app"] = {"success": True, "detail": "Notification inserted (also triggers push+email)"}
+            results["in-app"] = {"success": True, "detail": "Notification inserted (also triggers FCM + Web Push)"}
         except Exception as exc:
             results["in-app"] = {"success": False, "detail": str(exc)}
 
@@ -191,16 +191,6 @@ async def test_notification_channel(channel: str):
             results["fcm"] = {"success": True, "sent": sent}
         except Exception as exc:
             results["fcm"] = {"success": False, "detail": str(exc)}
-
-    # Email (direct, bypasses insert_notification)
-    if channel == "email" or (channel == "all" and False):  # 'all' handled by in-app
-        try:
-            from src.notification_store import _send_notification_email
-
-            _send_notification_email(title, message, "info", "test")
-            results["email"] = {"success": True, "detail": "Email sent"}
-        except Exception as exc:
-            results["email"] = {"success": False, "detail": str(exc)}
 
     return {"channel": channel, "results": results}
 

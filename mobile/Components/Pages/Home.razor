@@ -76,6 +76,39 @@
     </a>
 }
 
+<div class="dashboard-section px-4 mt-2">
+    <div class="flex justify-between items-center mb-2 px-1">
+        <h2 class="section-title" style="margin: 0;">Performance Trend</h2>
+        @if (_profitData.Any())
+        {
+            <span style="font-size: 11px; @(_sparklineRoi >= 0 ? "color: #10b981;" : "color: #ef4444;") font-weight: bold;">
+                @((_sparklineRoi >= 0 ? "+" : ""))@_sparklineRoi.ToString("F1")% ROI
+            </span>
+        }
+    </div>
+    <div style="background: var(--surface, #1e1e2e); border: 1px solid var(--border, #2e2e44); border-radius: 12px; padding: 8px 12px 0;">
+        @if (_profitData.Any())
+        {
+            <div style="height: 80px; width: 100%">
+                <ApexChart TItem="ProfitPoint" Options="@_sparklineOptions">
+                    <ApexPointSeries TItem="ProfitPoint"
+                                     Items="@_profitData"
+                                     Name="Profit"
+                                     SeriesType="SeriesType.Area"
+                                     XValue="@(e => e.Date)"
+                                     YValue="@(e => e.Amount)" />
+                </ApexChart>
+            </div>
+        }
+        else
+        {
+            <div style="height: 80px; display: flex; align-items: center; justify-content: center;">
+                <span style="font-size: 12px; color: var(--text-tertiary, #475569);">No betting data yet — place tracked bets to see trends</span>
+            </div>
+        }
+    </div>
+</div>
+
 <div class="dashboard-section px-4">
     <h2 class="section-title">Analysis & Models</h2>
     <div class="dashboard-grid">
@@ -445,6 +478,10 @@
     private bool _isHealthy = false;
     private int _unreadNotifications = 0;
     private List<FreshnessItem> _freshness = new();
+    
+    private List<ProfitPoint> _profitData = new();
+    private decimal _sparklineRoi = 0m;
+    private ApexCharts.ApexChartOptions<ProfitPoint> _sparklineOptions = new();
 
     // 60-second static cache to prevent API spam on mobile tab switching
     private static DateTime _lastLoadTime = DateTime.MinValue;
@@ -456,6 +493,8 @@
     private static bool _cachedIsHealthy = false;
     private static int _cachedUnreadNotifications = 0;
     private static List<FreshnessItem> _cachedFreshness = new();
+    private static List<ProfitPoint> _cachedProfitData = new();
+    private static decimal _cachedSparklineRoi = 0m;
 
     protected override async Task OnInitializedAsync()
     {
@@ -469,6 +508,9 @@
             _isHealthy = _cachedIsHealthy;
             _unreadNotifications = _cachedUnreadNotifications;
             _freshness = _cachedFreshness;
+            _profitData = new List<ProfitPoint>(_cachedProfitData);
+            _sparklineRoi = _cachedSparklineRoi;
+            await InitializeSparklineOptions();
             return;
         }
 
@@ -482,8 +524,65 @@
         _cachedIsHealthy = _isHealthy;
         _cachedUnreadNotifications = _unreadNotifications;
         _cachedFreshness = _freshness;
+        
+        await LoadSparklineData();
+        
+        _cachedProfitData = new List<ProfitPoint>(_profitData);
+        _cachedSparklineRoi = _sparklineRoi;
         _lastLoadTime = DateTime.Now;
     }
+
+    private async Task LoadSparklineData()
+    {
+        if (_profitData.Any()) return;
+        
+        try
+        {
+            var baseUrl = ServerConfig.GetBaseUrl();
+            var resp = await Http.GetFromJsonAsync<JsonElement>($"{baseUrl}/bets/stats/chart-data?days=7");
+            if (resp.TryGetProperty("daily_data", out var daily))
+            {
+                foreach (var d in daily.EnumerateArray())
+                {
+                    var dateStr = d.GetProperty("date").GetString() ?? "";
+                    if (DateTime.TryParse(dateStr, out var dt))
+                    {
+                        var profit = (decimal)d.GetProperty("cumulative_profit").GetDouble();
+                        _profitData.Add(new ProfitPoint { Date = dt.ToString("MMM dd"), Amount = profit });
+                    }
+                }
+            }
+            if (resp.TryGetProperty("summary", out var summary) && summary.TryGetProperty("roi", out var roiProp))
+            {
+                _sparklineRoi = (decimal)roiProp.GetDouble();
+            }
+        }
+        catch { }
+        await InitializeSparklineOptions();
+    }
+
+    private Task InitializeSparklineOptions()
+    {
+        _sparklineOptions = new ApexCharts.ApexChartOptions<ProfitPoint>
+        {
+            Chart = new ApexCharts.Chart
+            {
+                Type = ApexCharts.ChartType.Area,
+                Sparkline = new ApexCharts.ChartSparkline { Enabled = true },
+                Toolbar = new ApexCharts.Toolbar { Show = false },
+                Background = "transparent",
+                Animations = new ApexCharts.Animations { Enabled = false }
+            },
+            Theme = new ApexCharts.Theme { Mode = ApexCharts.Mode.Dark },
+            Stroke = new ApexCharts.Stroke { Curve = ApexCharts.Curve.Smooth, Width = 2 },
+            Colors = new List<string> { "#10b981" },
+            Fill = new ApexCharts.Fill { Opacity = 0.2 },
+            Tooltip = new ApexCharts.Tooltip { Fixed = new ApexCharts.TooltipFixed { Enabled = false }, X = new ApexCharts.TooltipX { Show = false } }
+        };
+        return Task.CompletedTask;
+    }
+
+    public class ProfitPoint { public string Date { get; set; } = ""; public decimal Amount { get; set; } }
 
     private async Task LoadFreshness()
     {

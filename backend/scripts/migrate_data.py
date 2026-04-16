@@ -51,9 +51,12 @@ async def setup_duplicate_protection(conn):
         await conn.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)")
         await conn.execute("ALTER TABLE stats ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)")
         await conn.execute("ALTER TABLE entities ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)")
-        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_results_hash ON results(content_hash) WHERE content_hash IS NOT NULL")
-        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_stats_hash ON stats(content_hash) WHERE content_hash IS NOT NULL")
-        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_hash ON entities(content_hash) WHERE content_hash IS NOT NULL")
+        await conn.execute("DROP INDEX IF EXISTS idx_results_hash")
+        await conn.execute("DROP INDEX IF EXISTS idx_stats_hash")
+        await conn.execute("DROP INDEX IF EXISTS idx_entities_hash")
+        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_results_content_hash ON results(content_hash)")
+        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_stats_content_hash ON stats(content_hash)")
+        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_content_hash ON entities(content_hash)")
         # Also fix NULL season constraint
         await conn.execute("ALTER TABLE results ALTER COLUMN season DROP NOT NULL")
         logger.info("Duplicate protection setup complete")
@@ -248,7 +251,7 @@ async def migrate_nascar(conn, data_dir: Path):
                             await conn.execute(
                                 """INSERT INTO results (sport_id, season, series, track, metadata, content_hash)
                                    VALUES ($1, $2, $3, $4, $5, $6)
-                                   ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL 
+                                   ON CONFLICT (content_hash) 
                                    DO UPDATE SET metadata = EXCLUDED.metadata""",
                                 sport_id,
                                 season,
@@ -556,7 +559,7 @@ async def migrate_nba(conn, data_dir: Path):
                                 await conn.execute(
                                     """INSERT INTO results (sport_id, home_entity_id, away_entity_id, metadata, content_hash)
                                        VALUES ($1, $2, $3, $4, $5)
-                                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL 
+                                       ON CONFLICT (content_hash) 
                                        DO UPDATE SET metadata = EXCLUDED.metadata""",
                                     sport_id, home_id, away_id, json.dumps(game_data), content_hash
                                 )

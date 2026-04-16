@@ -120,7 +120,7 @@ async def import_parquet(conn, sport_id: int, series: str, file_path: Path, min_
                 is_new = await conn.fetchval(
                     """INSERT INTO results (sport_id, season, series, track, metadata, content_hash)
                        VALUES ($1, $2, $3, $4, $5, $6)
-                       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                       ON CONFLICT (content_hash)
                        DO UPDATE SET metadata = EXCLUDED.metadata
                        RETURNING (xmax = 0)""",
                     sport_id, season, series, track, json.dumps(metadata), content_hash

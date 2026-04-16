@@ -92,7 +92,7 @@ async def import_via_sportsdataverse_api(conn, sport_id: int, progress_callback=
     
     UPSERT_RESULTS_SQL = """INSERT INTO results (sport_id, season, series, metadata, content_hash)
                             VALUES ($1, $2, 'nba', $3, $4)
-                            ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                            ON CONFLICT (content_hash)
                             DO UPDATE SET metadata = EXCLUDED.metadata"""
     
     try:
@@ -144,7 +144,7 @@ async def import_via_sportsdataverse_api(conn, sport_id: int, progress_callback=
                             entity_id = await conn.fetchval(
                                 """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
                                    VALUES ($1, $2, 'player', 'nba', $3, $4)
-                                   ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                                   ON CONFLICT (content_hash)
                                    DO UPDATE SET name = EXCLUDED.name, metadata = EXCLUDED.metadata
                                    RETURNING id""",
                                 sport_id, str(player_name), json.dumps(metadata), content_hash
@@ -341,7 +341,7 @@ async def import_season_stats_via_basketball_reference(conn, sport_id: int, play
                     is_insert = await conn.fetchval(
                         """INSERT INTO results (sport_id, season, series, metadata, content_hash)
                            VALUES ($1, $2, 'nba', $3, $4)
-                           ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                           ON CONFLICT (content_hash)
                            DO UPDATE SET metadata = EXCLUDED.metadata
                            RETURNING (xmax = 0)""",
                         sport_id, year, json.dumps(metadata), content_hash
@@ -377,7 +377,7 @@ async def import_season_stats_via_basketball_reference(conn, sport_id: int, play
                         await conn.execute(
                             """INSERT INTO stats (entity_id, season, stat_type, stats, content_hash)
                                VALUES ($1, $2, 'season', $3, $4)
-                               ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                               ON CONFLICT (content_hash)
                                DO UPDATE SET stats = EXCLUDED.stats""",
                             entity_id, year, json.dumps(stats_dict), stats_hash
                         )
@@ -460,7 +460,7 @@ async def import_from_hoopdata(conn, sport_id: int, progress_callback=None) -> d
                             entity_id = await conn.fetchval(
                                 """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
                                    VALUES ($1, $2, 'player', 'nba', $3, $4)
-                                   ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                                   ON CONFLICT (content_hash)
                                    DO UPDATE SET name = EXCLUDED.name, metadata = EXCLUDED.metadata
                                    RETURNING id""",
                                 sport_id, str(player_name), json.dumps(metadata), content_hash
@@ -529,7 +529,7 @@ async def import_from_hoopdata(conn, sport_id: int, progress_callback=None) -> d
                 if game_records:
                     UPSERT_RESULTS = """INSERT INTO results (sport_id, season, series, metadata, content_hash)
                                         VALUES ($1, $2, 'nba', $3, $4)
-                                        ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                                        ON CONFLICT (content_hash)
                                         DO UPDATE SET metadata = EXCLUDED.metadata"""
                     await batch_upsert(conn, UPSERT_RESULTS, game_records)
                     results["games"] += len(game_records)
@@ -550,17 +550,27 @@ async def get_db_connection():
 
 
 async def ensure_schema(conn):
-    """Ensure required columns exist in database tables."""
-    try:
-        await conn.execute("ALTER TABLE entities ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)")
-        await conn.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)")
-        await conn.execute("ALTER TABLE stats ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)")
-        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_hash ON entities(content_hash) WHERE content_hash IS NOT NULL")
-        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_results_hash ON results(content_hash) WHERE content_hash IS NOT NULL")
-        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_stats_hash ON stats(content_hash) WHERE content_hash IS NOT NULL")
-        logger.info("Schema setup complete - content_hash columns ready")
-    except Exception as e:
-        logger.warning(f"Schema setup warning: {e}")
+    """Ensure required columns and indexes exist in database tables."""
+    stmts = [
+        # 1. Add columns
+        "ALTER TABLE entities ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)",
+        "ALTER TABLE results ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)",
+        "ALTER TABLE stats ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)",
+        # 2. Drop old partial indexes that cause ON CONFLICT predicate mismatch
+        "DROP INDEX IF EXISTS idx_entities_hash",
+        "DROP INDEX IF EXISTS idx_results_hash",
+        "DROP INDEX IF EXISTS idx_stats_hash",
+        # 3. Create simple (non-partial) unique indexes — NULLs are distinct in PG
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_content_hash ON entities(content_hash)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_results_content_hash ON results(content_hash)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_stats_content_hash ON stats(content_hash)",
+    ]
+    for stmt in stmts:
+        try:
+            await conn.execute(stmt)
+        except Exception as e:
+            logger.warning(f"Schema setup warning ({stmt[:50]}...): {e}")
+    logger.info("Schema setup complete - content_hash columns ready")
 
 
 async def ensure_sport_exists(conn) -> int:
@@ -628,7 +638,7 @@ async def import_from_kaggle(conn, sport_id: int, progress_callback=None) -> dic
                             entity_data = await conn.fetchval(
                                 """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
                                    VALUES ($1, $2, 'player', 'nba', $3, $4)
-                                   ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                                   ON CONFLICT (content_hash)
                                    DO UPDATE SET name = EXCLUDED.name, metadata = EXCLUDED.metadata
                                    RETURNING (id, (xmax = 0))""",
                                 sport_id, str(name), json.dumps(metadata), content_hash
@@ -726,7 +736,7 @@ async def import_from_kaggle(conn, sport_id: int, progress_callback=None) -> dic
                 if stats_records:
                     UPSERT_STATS = """INSERT INTO stats (entity_id, season, series, stat_type, stats, content_hash)
                                       VALUES ($1, $2, 'nba', 'season_per_game', $3, $4)
-                                      ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                                      ON CONFLICT (content_hash)
                                       DO UPDATE SET stats = EXCLUDED.stats"""
                     # We can't track new vs updated individually per row easily out of a bulk insert
                     # but we can track total games inserted via the return value of batch_upsert.
@@ -842,7 +852,7 @@ async def import_box_scores(conn, sport_id: int, progress_callback=None) -> dict
                     await conn.execute(
                         """INSERT INTO results (sport_id, season, series, metadata, content_hash)
                            VALUES ($1, $2, 'nba', $3, $4)
-                           ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                           ON CONFLICT (content_hash)
                            DO UPDATE SET metadata = EXCLUDED.metadata""",
                         sport_id, season, json.dumps(metadata), content_hash
                     )
@@ -1015,8 +1025,45 @@ async def import_all_nba(clear_existing: bool = False, progress_callback=None) -
     return results
 
 
+async def _get_or_create_team(conn, sport_id: int, team_name: str, _cache: dict = None) -> int:
+    """Get or create a team entity, with in-process cache to avoid repeated queries."""
+    if _cache is None:
+        _cache = {}
+    cache_key = (sport_id, team_name)
+    if cache_key in _cache:
+        return _cache[cache_key]
+    
+    # Use standard content_hash for team
+    content_hash = compute_hash({
+        'sport': 'nba',
+        'type': 'team',
+        'team_name': team_name
+    })
+    
+    entity_id = await conn.fetchval(
+        """INSERT INTO entities (sport_id, name, type, content_hash)
+           VALUES ($1, $2, 'team', $3)
+           ON CONFLICT (content_hash) DO UPDATE SET name = EXCLUDED.name
+           RETURNING id""",
+        sport_id, team_name, content_hash
+    )
+    if not entity_id:
+        # Fallback if EXCLUDED.name update didn't return an ID (rare but possible)
+        entity_id = await conn.fetchval(
+            "SELECT id FROM entities WHERE content_hash = $1", content_hash
+        )
+        
+    _cache[cache_key] = entity_id
+    return entity_id
+
+
 async def import_schedules_via_nba_api(conn, sport_id: int, progress_callback=None) -> dict:
-    """Import NBA game schedules using nba_api's LeagueGameFinder."""
+    """Import NBA game schedules using nba_api's LeagueGameFinder.
+    
+    Populates the actual results columns (home_entity_id, away_entity_id,
+    home_score, away_score, game_date) so that backtesting and other
+    queries that JOIN on these columns find data.
+    """
     from scripts.batch_db import batch_upsert
     
     try:
@@ -1029,10 +1076,44 @@ async def import_schedules_via_nba_api(conn, sport_id: int, progress_callback=No
     if progress_callback:
         progress_callback("Loading NBA schedules via nba_api...")
     
-    UPSERT_SQL = """INSERT INTO results (sport_id, season, series, metadata, content_hash)
-                    VALUES ($1, $2, 'nba_schedule', $3, $4)
-                    ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
-                    DO UPDATE SET metadata = EXCLUDED.metadata"""
+    # Ensure a usable unique index on content_hash exists.
+    # Drop the old partial index if present and recreate as a simple unique index
+    # (PostgreSQL allows multiple NULLs in a regular unique index).
+    try:
+        await conn.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)")
+    except Exception:
+        pass
+    try:
+        await conn.execute("DROP INDEX IF EXISTS idx_results_hash")
+    except Exception:
+        pass
+    try:
+        # Dedup any existing rows that would block index creation
+        await conn.execute("""
+            DELETE FROM results a USING results b
+            WHERE a.id < b.id AND a.content_hash IS NOT NULL
+              AND a.content_hash = b.content_hash
+        """)
+    except Exception:
+        pass
+    try:
+        await conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_results_content_hash "
+            "ON results(content_hash)"
+        )
+    except Exception as e:
+        logger.error(f"CRITICAL: Cannot create unique index on results.content_hash: {e}")
+    
+    UPSERT_SQL = """INSERT INTO results
+                        (sport_id, season, game_date, home_entity_id, away_entity_id,
+                         home_score, away_score, series, metadata, content_hash)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, 'nba_schedule', $8, $9)
+                    ON CONFLICT (content_hash)
+                    DO UPDATE SET
+                        home_score  = EXCLUDED.home_score,
+                        away_score  = EXCLUDED.away_score,
+                        game_date   = EXCLUDED.game_date,
+                        metadata    = EXCLUDED.metadata"""
     
     try:
         # Keep historical coverage, and include the active NBA season.
@@ -1072,9 +1153,6 @@ async def import_schedules_via_nba_api(conn, sport_id: int, progress_callback=No
         if progress_callback:
             progress_callback(f"Preparing {len(game_ids)} unique NBA games for batch insert...")
         
-        # Collect all schedule records
-        schedule_records = []
-        
         def safe_val(val):
             if pd.isna(val):
                 return None
@@ -1084,7 +1162,24 @@ async def import_schedules_via_nba_api(conn, sport_id: int, progress_callback=No
                 return int(val) if val == int(val) else round(val, 2)
             return val
 
-        
+        # Phase 1: Pre-create all team entities so we have IDs for the batch insert
+        team_id_cache = {}  # team_name -> entity_id
+        unique_team_names = set()
+        for game_id in game_ids:
+            game_rows = games_df[games_df['GAME_ID'] == game_id]
+            for _, row in game_rows.iterrows():
+                tn = safe_val(row.get('TEAM_NAME'))
+                if tn:
+                    unique_team_names.add(tn)
+
+        if progress_callback:
+            progress_callback(f"Ensuring {len(unique_team_names)} NBA team entities exist...")
+        for tn in unique_team_names:
+            team_id_cache[(sport_id, tn)] = await _get_or_create_team(conn, sport_id, tn, team_id_cache)
+        logger.info(f"Resolved {len(team_id_cache)} NBA team entities")
+
+        # Phase 2: Build game records with proper column values
+        schedule_records = []
         for game_id in game_ids:
             game_rows = games_df[games_df['GAME_ID'] == game_id]
             if len(game_rows) < 2:
@@ -1102,24 +1197,44 @@ async def import_schedules_via_nba_api(conn, sport_id: int, progress_callback=No
             season_str = home_row.get('SEASON_ID', '')
             season_year = int(season_str[1:5]) if len(season_str) >= 5 else 2024
             
+            home_team_name = safe_val(home_row.get('TEAM_NAME'))
+            away_team_name = safe_val(away_row.get('TEAM_NAME'))
+            
+            home_entity_id = team_id_cache.get((sport_id, home_team_name))
+            away_entity_id = team_id_cache.get((sport_id, away_team_name))
+            if not home_entity_id or not away_entity_id:
+                continue
+            
+            # Parse game_date to a proper date object
+            game_date_val = None
+            raw_date = safe_val(home_row.get('GAME_DATE'))
+            if raw_date:
+                try:
+                    game_date_val = date.fromisoformat(str(raw_date)[:10])
+                except (ValueError, TypeError):
+                    pass
+            
+            home_score = safe_val(home_row.get('PTS'))
+            away_score = safe_val(away_row.get('PTS'))
+            
             metadata = {
                 'game_id': str(game_id),
-                'season': season_year,
-                'game_date': safe_val(home_row.get('GAME_DATE')),
-                'home_team': safe_val(home_row.get('TEAM_ABBREVIATION')),
-                'away_team': safe_val(away_row.get('TEAM_ABBREVIATION')),
-                'home_score': safe_val(home_row.get('PTS')),
-                'away_score': safe_val(away_row.get('PTS')),
-                'home_team_name': safe_val(home_row.get('TEAM_NAME')),
-                'away_team_name': safe_val(away_row.get('TEAM_NAME')),
+                'home_abbr': safe_val(home_row.get('TEAM_ABBREVIATION')),
+                'away_abbr': safe_val(away_row.get('TEAM_ABBREVIATION')),
                 'wl_home': safe_val(home_row.get('WL')),
                 'wl_away': safe_val(away_row.get('WL')),
             }
             metadata = {k: v for k, v in metadata.items() if v is not None}
             content_hash = compute_hash({'sport': 'nba', 'game_id': str(game_id)})
-            schedule_records.append((sport_id, season_year, json.dumps(metadata), content_hash))
+            
+            schedule_records.append((
+                sport_id, season_year, game_date_val,
+                home_entity_id, away_entity_id,
+                home_score, away_score,
+                json.dumps(metadata), content_hash
+            ))
         
-        # Batch insert all schedules
+        # Phase 3: Batch insert all schedules
         imported = await batch_upsert(
             conn, UPSERT_SQL, schedule_records,
             progress_callback=progress_callback,
@@ -1130,7 +1245,7 @@ async def import_schedules_via_nba_api(conn, sport_id: int, progress_callback=No
         logger.error(f"Error in NBA schedule import: {e}")
         return {"imported": 0, "error": str(e)}
     
-    logger.info(f"Imported {imported} NBA game schedules")
+    logger.info(f"Imported {imported} NBA game schedules with proper home/away columns")
     return {"imported": imported}
 
 
@@ -1150,7 +1265,7 @@ async def import_game_logs_via_nba_api(conn, sport_id: int, progress_callback=No
     
     UPSERT_SQL = """INSERT INTO results (sport_id, season, series, metadata, content_hash)
                     VALUES ($1, $2, 'nba_game_log', $3, $4)
-                    ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL
+                    ON CONFLICT (content_hash)
                     DO UPDATE SET metadata = EXCLUDED.metadata"""
     
     try:

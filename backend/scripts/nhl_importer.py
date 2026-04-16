@@ -165,14 +165,14 @@ async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, sta
         if entity_records:
             UPSERT_ENTITIES = """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
                                VALUES ($1, $2, $3, $4, $5, $6)
-                               ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL 
+                               ON CONFLICT (content_hash) 
                                DO UPDATE SET name = EXCLUDED.name"""
             await batch_upsert(conn, UPSERT_ENTITIES, entity_records)
 
         if result_records:
             UPSERT_RESULTS = """INSERT INTO results (sport_id, season, series, metadata, content_hash)
                                VALUES ($1, $2, $3, $4, $5)
-                               ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL 
+                               ON CONFLICT (content_hash) 
                                DO UPDATE SET metadata = EXCLUDED.metadata"""
             updated_count += await batch_upsert(conn, UPSERT_RESULTS, result_records)
 
@@ -243,7 +243,7 @@ async def import_player_bios(conn, sport_id: int) -> dict:
             chunk = player_records[i:i+chunk_size]
             UPSERT_PLAYER_BIOS = """INSERT INTO entities (sport_id, name, type, series, metadata, content_hash)
                                    VALUES ($1, $2, $3, $4, $5, $6)
-                                   ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL 
+                                   ON CONFLICT (content_hash) 
                                    DO UPDATE SET metadata = EXCLUDED.metadata"""
             updated_count += await batch_upsert(conn, UPSERT_PLAYER_BIOS, chunk)
         

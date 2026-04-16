@@ -75,6 +75,7 @@ class OddsCacheService:
         
         expires_at = datetime.now() + timedelta(hours=ttl_hours)
         count = 0
+        failed = []
         
         async with pool.acquire() as conn:
             for game in games:
@@ -84,8 +85,9 @@ class OddsCacheService:
                         # Generate ID if missing
                         home = game.get("home_team", "unknown")
                         away = game.get("away_team", "unknown")
-                        date_str = game.get("game_time", "")
+                        date_str = game.get("game_time") or ""
                         game_id = f"{sport}_{home}_{away}_{date_str}"
+                    game_id = str(game_id)
 
                     # Clean data for storage
                     odds_data = {
@@ -117,7 +119,12 @@ class OddsCacheService:
                     
                     count += 1
                 except Exception as e:
-                    logger.error(f"Failed to cache game {game.get('home_team')} vs {game.get('away_team')}: {e}")
+                    failed.append(f"{game.get('home_team')} vs {game.get('away_team')}")
+                    logger.debug(f"Cache insert failed for {game.get('home_team')} vs {game.get('away_team')}: {e}")
+
+        # Single summary log instead of per-game spam
+        if failed:
+            logger.warning(f"Failed to cache {len(failed)}/{len(games)} {sport} games: {', '.join(failed[:5])}{'...' if len(failed) > 5 else ''}")
                     
         return count
 

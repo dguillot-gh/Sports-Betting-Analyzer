@@ -543,6 +543,8 @@ async def analyze_nba_with_cache(
     if not odds_data.get("error") and odds_data.get("games"):
         # Step 2: Analyze fresh games
         for game in odds_data["games"]:
+            game_id = f"nba_{game.get('home_team', '')}_{game.get('away_team', '')}_{game.get('game_time', '')}"
+            fresh_game_ids.append(game_id)
             try:
                 prediction = await analyze_matchup_dual(
                     home_team=game.get("home_team", ""),
@@ -552,16 +554,12 @@ async def analyze_nba_with_cache(
                     home_ml=game.get("home_moneyline"),
                     away_ml=game.get("away_moneyline")
                 )
-                analyzed_game = {**game, **prediction, "is_cached": False}
+                analyzed_game = {**game, **prediction, "is_cached": False, "id": game_id}
                 analyzed_games.append(analyzed_game)
                 
-                game_id = f"nba_{game.get('home_team', '')}_{game.get('away_team', '')}_{game.get('game_time', '')}"
-                fresh_game_ids.append(game_id)
-                analyzed_game["id"] = game_id
-                
             except Exception as e:
-                logger.error(f"Error analyzing NBA game: {e}")
-                analyzed_game = {**game, "prediction_error": str(e), "is_cached": False}
+                logger.warning(f"Error analyzing NBA game {game.get('home_team')} vs {game.get('away_team')}: {e}")
+                analyzed_game = {**game, "prediction_error": str(e), "is_cached": False, "id": game_id}
                 analyzed_games.append(analyzed_game)
         
         # Step 3: Cache the fresh results

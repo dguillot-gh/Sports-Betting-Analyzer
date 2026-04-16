@@ -3,7 +3,7 @@ Unit tests for NotificationService.send_summary_report.
 
 Validates:
   1. In-app notification is always inserted (via insert_notification).
-  2. Email report is ALWAYS sent (success and failure).
+  2. Push notifications are sent via FCM + Web Push (no email).
 """
 
 import asyncio
@@ -39,42 +39,35 @@ class TestSendSummaryReport(unittest.TestCase):
     # ---- tests ---------------------------------------------------
 
     @patch("services.notifications.insert_notification", new_callable=AsyncMock)
-    @patch.object(NotificationService, "_send_import_email")
-    def test_all_success__email_still_sent(self, mock_email, mock_insert):
-        """Email should be sent even when all imports succeed."""
+    def test_all_success__notification_inserted(self, mock_insert):
+        """In-app notification should be inserted when all imports succeed."""
         self._run(NotificationService.send_summary_report(
             self._success_results(), perf_summary=self._perf_summary()
         ))
 
         # In-app notification always inserted
         mock_insert.assert_called_once()
-        # Email always fires now
-        mock_email.assert_called_once()
 
         # Verify severity is "success"
         call_kwargs = mock_insert.call_args
         self.assertEqual(call_kwargs.kwargs.get("severity") or call_kwargs[1].get("severity", call_kwargs[0][1] if len(call_kwargs[0]) > 1 else None), "success")
 
     @patch("services.notifications.insert_notification", new_callable=AsyncMock)
-    @patch.object(NotificationService, "_send_import_email")
-    def test_has_failure__sends_email(self, mock_email, mock_insert):
-        """When any import fails, email SHOULD be sent."""
+    def test_has_failure__sends_warning(self, mock_insert):
+        """When any import fails, notification severity should be warning."""
         self._run(NotificationService.send_summary_report(
             self._failure_results(), perf_summary=self._perf_summary()
         ))
 
         # In-app notification inserted
         mock_insert.assert_called_once()
-        # Email fires
-        mock_email.assert_called_once()
 
         # Verify severity is "warning"
         call_kwargs = mock_insert.call_args
         self.assertEqual(call_kwargs.kwargs.get("severity") or call_kwargs[1].get("severity", call_kwargs[0][1] if len(call_kwargs[0]) > 1 else None), "warning")
 
     @patch("services.notifications.insert_notification", new_callable=AsyncMock)
-    @patch.object(NotificationService, "_send_import_email")
-    def test_metadata_contains_sports(self, mock_email, mock_insert):
+    def test_metadata_contains_sports(self, mock_insert):
         """Metadata in the inserted notification should include per-sport breakdown."""
         self._run(NotificationService.send_summary_report(
             self._success_results(), perf_summary=self._perf_summary()

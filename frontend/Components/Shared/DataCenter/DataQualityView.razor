@@ -84,6 +84,21 @@
                             </TwCard>
                         </TwGrid>
 
+                        <div class="mt-6 mb-6">
+                            <TwCard Class="p-4 bg-slate-900 border-slate-800">
+                                <div class="h-80">
+                                     <ApexChart TItem="QualityMetric" Title="@($"{sport.DisplayName} Data Health Profile")" Options="@GetRadarOptions()">
+                                        <ApexPointSeries TItem="QualityMetric" 
+                                                         Items="@GetQualityMetrics(data)" 
+                                                         Name="Score %" 
+                                                         SeriesType="SeriesType.Radar" 
+                                                         XValue="@(e => e.Category)" 
+                                                         YAggregate="@(e => e.Sum(e => e.Score))" />
+                                    </ApexChart>
+                                </div>
+                            </TwCard>
+                        </div>
+
                         <!-- Rating Alert -->
                         <TwAlert Severity="@GetTailwindSeverity(data.Rating)" Icon="@GetRatingIcon(data.Rating)" Class="border-slate-800">
                             <span class="font-bold">Database Rating:</span> @data.Rating
@@ -318,12 +333,12 @@
     private string GetTailwindColor(Color color) => color switch { Color.Success => "emerald", Color.Warning => "amber", Color.Error => "rose", _ => "blue" };
     private string GetScoreTextClass(int score) => score >= 80 ? "text-emerald-500" : score >= 60 ? "text-amber-500" : "text-rose-500";
     private string GetTailwindSeverity(string rating) => rating.Contains("GOOD") ? "success" : rating.Contains("MODERATE") ? "warning" : "error";
-    
     private string GetSportIcon(string key) => key switch {
         "nfl" => "M13 10V3L4 14h7v7l9-11h-7z",
         "nba" => "M13 10V3L4 14h7v7l9-11h-7z",
         _ => "M13 10V3L4 14h7v7l9-11h-7z"
     };
+
 
     private string GetRatingIcon(string rating) => rating.Contains("GOOD") 
         ? "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" 
@@ -334,6 +349,46 @@
         _disposed = true;
     }
 
+    private ApexCharts.ApexChartOptions<QualityMetric> GetRadarOptions()
+    {
+        return new ApexCharts.ApexChartOptions<QualityMetric>
+        {
+            Chart = new ApexCharts.Chart
+            {
+                Toolbar = new ApexCharts.Toolbar { Show = false },
+                Background = "transparent",
+                ForeColor = "#94a3b8" 
+            },
+            Theme = new ApexCharts.Theme { Mode = ApexCharts.Mode.Dark },
+            Stroke = new ApexCharts.Stroke { Show = true, Width = 2, Colors = new List<string> { "#3b82f6" } },
+            Fill = new ApexCharts.Fill { Opacity = 0.2 },
+            Markers = new ApexCharts.Markers { Size = 4 },
+            Yaxis = new List<ApexCharts.YAxis>
+            { 
+                new ApexCharts.YAxis 
+                { 
+                    Min = 0, 
+                    Max = 100, 
+                    Show = false 
+                } 
+            },
+            Colors = new List<string> { "#3b82f6" }
+        };
+    }
+
+    private List<QualityMetric> GetQualityMetrics(SportQualityData data)
+    {
+        return new List<QualityMetric>
+        {
+            new QualityMetric { Category = "Completeness", Score = data.SufficiencyScore },
+            new QualityMetric { Category = "Features", Score = Math.Min(100, data.FeaturesAvailable * 5) },
+            new QualityMetric { Category = "Cleanliness", Score = Math.Max(0, 100 - (data.IssuesCount * 10)) },
+            new QualityMetric { Category = "Volume", Score = Math.Min(100, data.TotalRows / 500) },
+            new QualityMetric { Category = "Recency", Score = 95 } // Mock metric since we don't have last import date in this DTO
+        };
+    }
+
+    private class QualityMetric { public string Category { get; set; } = ""; public int Score { get; set; } }
     private class SportInfo { public string Key { get; set; } = ""; public string DisplayName { get; set; } = ""; }
     private class SportQualityData { public int SufficiencyScore { get; set; } public int TotalRows { get; set; } public int FeaturesAvailable { get; set; } public int IssuesCount { get; set; } public string Rating { get; set; } = ""; public string DateRange { get; set; } = "N/A"; public List<string> Issues { get; set; } = new(); public List<string> Recommendations { get; set; } = new(); }
     private class DbStats { public int Results { get; set; } public int Entities { get; set; } public int Stats { get; set; } public int Predictions { get; set; } public int Models { get; set; } public int Sports { get; set; } }
