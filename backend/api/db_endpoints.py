@@ -458,6 +458,120 @@ async def run_rda_import(series: str, year_start: int, year_end: int, clear_exis
         if conn:
             await conn.close()
         
+@router.post("/import/nascar/supplemental")
+async def import_nascar_supplemental(
+    background_tasks: BackgroundTasks,
+    year: int = None,
+    series: str = None,
+):
+    """
+    Import NASCAR data from DriverAverages.com + NASCAR.com live feed.
+    Fills gaps when the parquet source is stale and adds live-feed extras.
+
+    Args:
+        year: Season year (default: current year)
+        series: Optional series filter ('cup', 'xfinity', 'trucks', or None for all)
+    """
+    from datetime import datetime
+
+    if year is None:
+        year = datetime.now().year
+
+    import_status["nascar_supplemental"] = {
+        "status": "running",
+        "started_at": datetime.now().isoformat(),
+        "completed_at": None,
+        "progress": [f"Supplemental import started for {series or 'all'} ({year})"],
+        "result": None,
+        "error": None
+    }
+
+    background_tasks.add_task(_run_supplemental_import_bg, year, series)
+
+    return {
+        "status": "started",
+        "message": f"NASCAR supplemental import started for {series or 'all'} ({year})",
+        "year": year,
+        "series": series or "all",
+    }
+
+
+@router.get("/import/nascar/supplemental/status")
+async def get_nascar_supplemental_status():
+    """Get the current status of NASCAR supplemental import."""
+    return import_status.get("nascar_supplemental", {"status": "idle"})
+
+
+async def _run_supplemental_import_bg(year: int, series: str = None):
+    """Background task for NASCAR supplemental import."""
+    import asyncpg
+    conn = None
+    log_id = None
+    start_time = datetime.now()
+
+    try:
+        conn = await asyncpg.connect(DATABASE_URL)
+        log_id = await conn.fetchval("""
+            INSERT INTO import_logs (sport, status, start_time)
+            VALUES ('nascar_supplemental', 'IN_PROGRESS', NOW())
+            RETURNING id
+        """)
+
+        def progress_cb(msg):
+            import_status["nascar_supplemental"]["progress"].append(msg)
+            if len(import_status["nascar_supplemental"]["progress"]) > 200:
+                import_status["nascar_supplemental"]["progress"] = \
+                    import_status["nascar_supplemental"]["progress"][-200:]
+
+        from scripts.nascar_supplemental_importer import (
+            run_import as supp_run_all,
+            run_supplemental_import as supp_run_series,
+        )
+
+        if series and series != "all":
+            result = await supp_run_series(year, series, progress_cb)
+        else:
+            result = await supp_run_all(year, progress_cb)
+
+        rows = result.get("rows", 0)
+        new = result.get("new", 0)
+        updated = result.get("updated", 0)
+
+        import_status["nascar_supplemental"]["status"] = "completed"
+        import_status["nascar_supplemental"]["completed_at"] = datetime.now().isoformat()
+        import_status["nascar_supplemental"]["result"] = result
+        import_status["nascar_supplemental"]["progress"].append(
+            f"Done: {rows} total ({new} new, {updated} updated)"
+        )
+
+        duration = (datetime.now() - start_time).total_seconds()
+        await conn.execute("""
+            UPDATE import_logs
+            SET status = 'SUCCESS', end_time = NOW(), duration_seconds = $2,
+                rows_imported = $3, new_rows_imported = $4, updated_rows_imported = $5
+            WHERE id = $1
+        """, log_id, duration, rows, new, updated)
+
+    except Exception as e:
+        logger.error(f"NASCAR supplemental import failed: {e}")
+        import_status["nascar_supplemental"]["status"] = "failed"
+        import_status["nascar_supplemental"]["completed_at"] = datetime.now().isoformat()
+        import_status["nascar_supplemental"]["error"] = str(e)
+        import_status["nascar_supplemental"]["progress"].append(f"Error: {e}")
+
+        if conn and log_id:
+            duration = (datetime.now() - start_time).total_seconds()
+            await conn.execute("""
+                UPDATE import_logs
+                SET status = 'FAILED', end_time = NOW(), duration_seconds = $2,
+                    error_message = $3
+                WHERE id = $1
+            """, log_id, duration, str(e))
+    finally:
+        if conn:
+            await conn.close()
+
+
 @router.post("/import/ncaab")
 async def import_ncaab(background_tasks: BackgroundTasks, start_year: int = Query(2018), end_year: int = Query(2025)):
     """Start NCAAB data import in the background."""
@@ -1192,7 +1306,7 @@ async def get_race_results_list(
     track: str = None,
     driver: str = None,
     finish_max: int = None,  # For filtering wins (finish_max=1) or top 5 (finish_max=5)
-    limit: int = 100,
+    limit: int = 2000,
     offset: int = 0
 ):
     """
@@ -1236,11 +1350,11 @@ async def get_race_results_list(
         
         if finish_max:
             param_count += 1
-            query += f" AND (r.metadata->>'finish')::int <= ${param_count}"
+            query += f" AND (r.metadata->>'finish')::numeric <= ${param_count}"
             params.append(finish_max)
         
         # Order and paginate
-        query += f" ORDER BY r.season DESC, (r.metadata->>'race_num')::int DESC NULLS LAST"
+        query += f" ORDER BY r.season DESC, (r.metadata->>'race_num')::numeric DESC NULLS LAST"
         param_count += 1
         query += f" LIMIT ${param_count}"
         params.append(limit)
@@ -1268,7 +1382,7 @@ async def get_race_results_list(
             count_query += f" AND LOWER(r.metadata->>'driver_name') LIKE LOWER(${len(count_params)+1})"
             count_params.append(f"%{driver}%")
         if finish_max:
-            count_query += f" AND (r.metadata->>'finish')::int <= ${len(count_params)+1}"
+            count_query += f" AND (r.metadata->>'finish')::numeric <= ${len(count_params)+1}"
             count_params.append(finish_max)
         
         total_count = await conn.fetchval(count_query, *count_params)
@@ -1322,29 +1436,23 @@ async def get_race_results_list(
                 "team": meta.get("team") or meta.get("Team"),
                 "make": meta.get("make") or meta.get("Manufacturer") or meta.get("Make"),
                 "rating": v_rating,
+                "car_number": meta.get("car_number") or meta.get("Number"),
+                "stage1": safe_int(meta.get("Stage1")),
+                "stage2": safe_int(meta.get("Stage2")),
+                "avg_speed": safe_float(meta.get("avg_speed")),
+                "best_lap_speed": safe_float(meta.get("best_lap_speed")),
+                "best_lap_time": safe_float(meta.get("best_lap_time")),
+                "passes_made": safe_int(meta.get("passes_made")),
+                "quality_passes": safe_int(meta.get("quality_passes")),
+                "fastest_laps_run": safe_int(meta.get("fastest_laps_run")),
+                "pit_stop_count": safe_int(meta.get("pit_stop_count")),
             })
         
         from fastapi.responses import JSONResponse
         return JSONResponse(content={
             "results": [
-                {
-                    "id": r["id"],
-                    "season": int(r["season"]),
-                    "series": r["series"],
-                    "track": r["track"],
-                    "race_num": int(r["race_num"]) if r["race_num"] is not None else None,
-                    "race_name": r["race_name"],
-                    "driver": r["driver"],
-                    "finish": int(r["finish"]) if r["finish"] is not None else None,
-                    "start": int(r["start"]) if r["start"] is not None else None,
-                    "led": int(r["led"]) if r["led"] is not None else None,
-                    "laps": int(r["laps"]) if r["laps"] is not None else None,
-                    "pts": int(r["pts"]) if r["pts"] is not None else None,
-                    "status": r["status"],
-                    "team": r["team"],
-                    "make": r["make"],
-                    "rating": float(r["rating"]) if r["rating"] is not None else None,
-                } for r in race_results
+                {k: v for k, v in r.items() if v is not None}
+                for r in race_results
             ],
             "total": total_count,
             "limit": limit,

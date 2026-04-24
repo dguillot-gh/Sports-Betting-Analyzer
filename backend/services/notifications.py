@@ -1,25 +1,56 @@
 """
 Notification Service
-Handles sending alerts via in-app notifications and push (FCM/Web Push).
-Email reports have been removed — all alerts go through push channels only.
+Handles sending alerts via in-app notifications, push (FCM/Web Push),
+and SMTP email with CSV attachment of detailed import records.
 """
 
+import csv
+import io
 import logging
-from datetime import datetime
+import smtplib
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+from email.mime.application import MIMEApplication
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from typing import Optional, List, Dict, Any
 
-from src.config import DATABASE_URL
+CST = ZoneInfo("America/Chicago")
+
+from src.config import DATABASE_URL, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, REPORT_EMAIL_TO
 from src.notification_store import insert_notification
 
 logger = logging.getLogger(__name__)
+
+# Sport display name mapping (shared across methods)
+_SPORT_NAMES = {
+    "ncaab": "College Basketball",
+    "nba": "NBA",
+    "nba_backtest": "NBA Backtest",
+    "nfl": "NFL",
+    "nascar": "NASCAR",
+    "baseball": "College Baseball",
+    "nhl": "NHL",
+    "baseball_results": "Live Score Scraper",
+    "baseball_training": "XGBoost Trainer",
+    "cfb": "College Football",
+    "mlb_stats": "MLB Stats",
+    "mlb_training": "MLB Training",
+}
 
 
 class NotificationService:
 
     @staticmethod
-    async def send_summary_report(results: list, perf_summary: dict = None):
+    async def send_summary_report(
+        results: list,
+        perf_summary: dict = None,
+        import_records: list = None,
+    ):
         """
-        Send import report via in-app notification (DB + push via FCM/Web Push).
+        Send import report via:
+          1. In-app notification (DB + push)
+          2. SMTP email with HTML summary + CSV attachment
         """
         if not results:
             return
@@ -32,27 +63,13 @@ class NotificationService:
         
         # Calculate Health Score
         health_score = int((success_count / len(results)) * 100) if results else 0
-        health_color = "#22c55e" if health_score >= 90 else "#f59e0b" if health_score >= 70 else "#ef4444"
-
-        # Sport display name mapping
-        sport_names = {
-            "ncaab": "College Basketball",
-            "nba": "NBA",
-            "nfl": "NFL",
-            "nascar": "NASCAR",
-            "baseball": "College Baseball",
-            "nhl": "NHL",
-            "baseball_results": "Live Score Scraper",
-            "baseball_training": "XGBoost Trainer",
-            "cfb": "College Football",
-        }
 
         # Build rich notification message matching email detail level
-        push_lines = [f"{'✅' if r.get('success') else '❌'} {sport_names.get(r['sport'], r['sport'].upper())}: {r.get('rows', 0):,} rows ({r.get('duration', 0):.0f}s)" for r in results]
+        push_lines = [f"{'✅' if r.get('success') else '❌'} {_SPORT_NAMES.get(r['sport'], r['sport'].upper())}: {r.get('rows', 0):,} rows ({r.get('duration', 0):.0f}s)" for r in results]
         push_msg = "\n".join(push_lines) + f"\n\n📊 Health: {health_score}% | ⏱ {total_duration:.0f}s | 📦 {total_rows:,} total rows"
         push_title = f"{'✅' if overall_success else '⚠️'} Import Report — {success_count}/{len(results)} Passed"
 
-        # 2. IN-APP NOTIFICATION — always write to app_notifications DB
+        # 1. IN-APP NOTIFICATION — always write to app_notifications DB
         await insert_notification(
             DATABASE_URL,
             severity="success" if overall_success else "warning",
@@ -78,4 +95,208 @@ class NotificationService:
             },
         )
 
-        # Email sending removed — all alerts go through push channels only
+        # 2. SMTP EMAIL — send detailed report with CSV attachment
+        await NotificationService._send_email_report(
+            results, perf_summary, import_records or [], health_score, total_duration, total_rows
+        )
+
+    # ------------------------------------------------------------------
+    # Email helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    async def _send_email_report(
+        results: list,
+        perf_summary: dict,
+        import_records: list,
+        health_score: int,
+        total_duration: float,
+        total_rows: int,
+    ):
+        """Build and send the HTML email with CSV attachment via SMTP."""
+        if not SMTP_USER or not SMTP_PASS or not REPORT_EMAIL_TO:
+            logger.info("SMTP not configured — skipping email report.")
+            return
+
+        try:
+            now_str = datetime.now(CST).strftime("%Y-%m-%d %I:%M %p CST")
+            subject = f"Sports Betting Analyzer — Import Report {now_str}"
+
+            html_body = NotificationService._build_html_body(
+                results, perf_summary, health_score, total_duration, total_rows, now_str, len(import_records)
+            )
+
+            msg = MIMEMultipart("mixed")
+            msg["From"] = SMTP_USER
+            msg["To"] = REPORT_EMAIL_TO
+            msg["Subject"] = subject
+
+            # HTML body
+            msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+            # CSV attachment (import records)
+            if import_records:
+                csv_bytes = NotificationService._build_csv(import_records)
+                attachment = MIMEApplication(csv_bytes, _subtype="csv")
+                attachment.add_header(
+                    "Content-Disposition", "attachment",
+                    filename=f"import_records_{datetime.now(CST).strftime('%Y%m%d_%H%M')}.csv",
+                )
+                msg.attach(attachment)
+
+            # TXT attachment (same data as plain text fallback)
+            if import_records:
+                txt_bytes = NotificationService._build_txt(import_records)
+                txt_attach = MIMEApplication(txt_bytes, _subtype="plain")
+                txt_attach.add_header(
+                    "Content-Disposition", "attachment",
+                    filename=f"import_records_{datetime.now(CST).strftime('%Y%m%d_%H%M')}.txt",
+                )
+                msg.attach(txt_attach)
+
+            # Send via SMTP (run in thread to avoid blocking the event loop)
+            import asyncio
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, NotificationService._smtp_send, msg)
+
+            logger.info(f"Email report sent to {REPORT_EMAIL_TO} ({len(import_records)} records attached).")
+        except Exception as e:
+            logger.error(f"Failed to send email report: {e}", exc_info=True)
+
+    @staticmethod
+    def _smtp_send(msg: MIMEMultipart):
+        """Blocking SMTP send — called via run_in_executor."""
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.send_message(msg)
+
+    @staticmethod
+    def _build_csv(records: list) -> bytes:
+        """Generate CSV bytes from import record dicts."""
+        buf = io.StringIO()
+        fieldnames = ["sport", "action", "season", "series", "entity", "track", "detail"]
+        writer = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for rec in records:
+            writer.writerow(rec)
+        return buf.getvalue().encode("utf-8")
+
+    @staticmethod
+    def _build_txt(records: list) -> bytes:
+        """Generate a plain-text formatted log from import records."""
+        lines = [f"{'Sport':<20} {'Action':<10} {'Season':<8} {'Series':<12} {'Entity':<30} {'Track':<25} {'Detail'}"]
+        lines.append("-" * 130)
+        for rec in records:
+            lines.append(
+                f"{rec.get('sport',''):<20} {rec.get('action',''):<10} "
+                f"{str(rec.get('season','')):<8} {rec.get('series',''):<12} "
+                f"{str(rec.get('entity',''))[:28]:<30} {str(rec.get('track',''))[:23]:<25} "
+                f"{rec.get('detail','')}"
+            )
+        return "\n".join(lines).encode("utf-8")
+
+    @staticmethod
+    def _build_html_body(
+        results: list,
+        perf_summary: dict,
+        health_score: int,
+        total_duration: float,
+        total_rows: int,
+        now_str: str,
+        record_count: int,
+    ) -> str:
+        """Build a clean HTML email body with summary table."""
+        success_count = sum(1 for r in results if r.get("success"))
+        fail_count = len(results) - success_count
+        health_color = "#22c55e" if health_score >= 90 else "#f59e0b" if health_score >= 70 else "#ef4444"
+
+        # Sport rows
+        sport_rows = ""
+        for r in results:
+            icon = "✅" if r.get("success") else "❌"
+            name = _SPORT_NAMES.get(r["sport"], r["sport"].upper())
+            rows = r.get("rows", 0)
+            new = r.get("new", 0)
+            updated = r.get("updated", 0)
+            dur = r.get("duration", 0)
+            err = r.get("error", "")
+            bg = "#0d1117" if r.get("success") else "#1c1014"
+            sport_rows += f"""
+            <tr style="background:{bg};">
+                <td style="padding:6px 12px;border-bottom:1px solid #21262d;">{icon} {name}</td>
+                <td style="padding:6px 12px;border-bottom:1px solid #21262d;text-align:right;">{rows:,}</td>
+                <td style="padding:6px 12px;border-bottom:1px solid #21262d;text-align:right;">{new:,}</td>
+                <td style="padding:6px 12px;border-bottom:1px solid #21262d;text-align:right;">{updated:,}</td>
+                <td style="padding:6px 12px;border-bottom:1px solid #21262d;text-align:right;">{dur:.1f}s</td>
+                <td style="padding:6px 12px;border-bottom:1px solid #21262d;color:#f87171;font-size:12px;">{err[:60] if err else ''}</td>
+            </tr>"""
+
+        # Performance section
+        perf_html = ""
+        if perf_summary and not perf_summary.get("error"):
+            roi = perf_summary.get("roi", 0)
+            roi_color = "#22c55e" if roi >= 0 else "#ef4444"
+            perf_html = f"""
+            <div style="margin-top:20px;padding:12px;background:#161b22;border:1px solid #21262d;border-radius:8px;">
+                <h3 style="margin:0 0 8px;color:#c9d1d9;">24h Betting Performance</h3>
+                <span style="color:#8b949e;">Graded: {perf_summary.get('total',0)}</span> &nbsp;|&nbsp;
+                <span style="color:#22c55e;">W: {perf_summary.get('wins',0)}</span> &nbsp;|&nbsp;
+                <span style="color:#ef4444;">L: {perf_summary.get('losses',0)}</span> &nbsp;|&nbsp;
+                <span style="color:{roi_color};">ROI: {roi:.1f}%</span> &nbsp;|&nbsp;
+                <span style="color:#8b949e;">DB Rows: {perf_summary.get('db_total_rows',0):,}</span>
+            </div>"""
+
+        return f"""
+        <html>
+        <body style="margin:0;padding:20px;background:#0d1117;color:#c9d1d9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+            <div style="max-width:700px;margin:0 auto;">
+                <h1 style="color:#f0f6fc;margin-bottom:4px;">Sports Betting Analyzer</h1>
+                <p style="color:#8b949e;margin-top:0;">Import Pipeline Report — {now_str}</p>
+
+                <div style="display:flex;gap:16px;margin:16px 0;">
+                    <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:12px 20px;text-align:center;">
+                        <div style="font-size:28px;font-weight:bold;color:{health_color};">{health_score}%</div>
+                        <div style="color:#8b949e;font-size:12px;">Health</div>
+                    </div>
+                    <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:12px 20px;text-align:center;">
+                        <div style="font-size:28px;font-weight:bold;color:#58a6ff;">{total_rows:,}</div>
+                        <div style="color:#8b949e;font-size:12px;">Total Rows</div>
+                    </div>
+                    <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:12px 20px;text-align:center;">
+                        <div style="font-size:28px;font-weight:bold;color:#c9d1d9;">{total_duration:.0f}s</div>
+                        <div style="color:#8b949e;font-size:12px;">Duration</div>
+                    </div>
+                    <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:12px 20px;text-align:center;">
+                        <div style="font-size:28px;font-weight:bold;color:#c9d1d9;">{record_count:,}</div>
+                        <div style="color:#8b949e;font-size:12px;">Records</div>
+                    </div>
+                </div>
+
+                <table style="width:100%;border-collapse:collapse;background:#0d1117;border:1px solid #21262d;border-radius:8px;overflow:hidden;">
+                    <thead>
+                        <tr style="background:#161b22;">
+                            <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #21262d;color:#f0f6fc;">Sport</th>
+                            <th style="padding:8px 12px;text-align:right;border-bottom:2px solid #21262d;color:#f0f6fc;">Rows</th>
+                            <th style="padding:8px 12px;text-align:right;border-bottom:2px solid #21262d;color:#f0f6fc;">New</th>
+                            <th style="padding:8px 12px;text-align:right;border-bottom:2px solid #21262d;color:#f0f6fc;">Updated</th>
+                            <th style="padding:8px 12px;text-align:right;border-bottom:2px solid #21262d;color:#f0f6fc;">Time</th>
+                            <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #21262d;color:#f0f6fc;">Error</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {sport_rows}
+                    </tbody>
+                </table>
+
+                {perf_html}
+
+                <p style="margin-top:16px;color:#8b949e;font-size:12px;">
+                    {'📎 CSV and TXT files with ' + str(record_count) + ' line-by-line import records are attached.' if record_count > 0 else 'No new records to attach.'}
+                </p>
+                <p style="margin-top:4px;color:#484f58;font-size:11px;">
+                    Passed: {success_count} | Failed: {fail_count}
+                </p>
+            </div>
+        </body>
+        </html>"""

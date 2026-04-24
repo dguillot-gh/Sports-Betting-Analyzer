@@ -93,6 +93,7 @@
                                     <span class="col-pos">P</span>
                                     <span class="col-driver">Driver</span>
                                     <span class="col-start">S</span>
+                                    <span class="col-led">Led</span>
                                     <span class="col-points">PTS</span>
                                 </div>
                                 
@@ -101,16 +102,13 @@
                                     <div class="table-row">
                                         <span class="col-pos pos-badge @GetFinishClass(res.Finish)">@res.Finish</span>
                                         <div class="col-driver">
-                                            <span class="driver-name">@res.Driver</span>
+                                            <a class="driver-link" href="/mobile/nascar/driver/@(Uri.EscapeDataString(res.Driver ?? ""))">@res.Driver</a>
                                             <span class="driver-team-mini">@res.Team</span>
                                         </div>
                                         <span class="col-start">@res.Start</span>
+                                        <span class="col-led">@(res.Led > 0 ? res.Led : "")</span>
                                         <span class="col-points">@res.Pts</span>
                                     </div>
-                                    @if (res.Status != null && res.Status.ToLower() != "running")
-                                    {
-                                        <div class="row-status">🏁 @res.Status</div>
-                                    }
                                 }
                             </div>
                         </div>
@@ -187,19 +185,19 @@
     .table-row:last-child { border-bottom: none; }
 
     .col-pos { width: 24px; text-align: center; font-weight: 900; }
-    .col-driver { flex: 1; display: flex; flex-direction: column; }
+    .col-driver { flex: 1; display: flex; flex-direction: column; min-width: 0; }
     .col-start { width: 24px; text-align: center; font-size: 11px; color: var(--text-muted); }
-    .col-points { width: 32px; text-align: center; font-weight: 800; color: #60a5fa; }
+    .col-led { width: 28px; text-align: center; font-size: 11px; color: var(--text-muted); }
+    .col-points { width: 36px; text-align: right; font-weight: 800; color: #60a5fa; }
+
+    .driver-link { font-size: 13px; font-weight: 700; color: var(--text-primary); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .driver-link:hover { color: #60a5fa; }
+    .driver-team-mini { font-size: 10px; color: var(--text-muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     .pos-badge { font-size: 12px; padding: 2px 0; border-radius: 4px; }
     .pos-badge.Win { background: var(--success-bg); color: var(--success); }
     .pos-badge.Top5 { color: #60a5fa; }
     .pos-badge.Top10 { color: #94a3b8; }
-    
-    .driver-name { font-size: 14px; font-weight: 700; color: var(--text-primary); }
-    .driver-team-mini { font-size: 9px; color: var(--text-muted); text-transform: uppercase; }
-
-    .row-status { padding: 4px 16px 8px 52px; font-size: 10px; font-weight: 700; color: var(--danger); opacity: 0.8; }
 </style>
 
 @code {
@@ -231,6 +229,7 @@
             _expandedRaces.Add(key);
     }
 
+
     private async Task LoadSeasons()
     {
         try
@@ -256,7 +255,7 @@
         try
         {
             var baseUrl = ServerConfig.GetBaseUrl();
-            var url = $"{baseUrl}/db/races/nascar/list?series={_selectedSeries}&limit=200";
+            var url = $"{baseUrl}/db/races/nascar/list?series={_selectedSeries}&limit=2000";
             
             if (_selectedSeason.HasValue)
                 url += $"&season={_selectedSeason.Value}";
@@ -362,5 +361,45 @@
         
         [System.Text.Json.Serialization.JsonPropertyName("team")]
         public string? Team { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("led")]
+        public int? Led { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("laps")]
+        public int? Laps { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("make")]
+        public string? Make { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("rating")]
+        public double? Rating { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("car_number")]
+        public string? CarNumber { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("stage1")]
+        public int? Stage1 { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("stage2")]
+        public int? Stage2 { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("avg_speed")]
+        public double? AvgSpeed { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("best_lap_speed")]
+        public double? BestLapSpeed { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("passes_made")]
+        public int? PassesMade { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("quality_passes")]
+        public int? QualityPasses { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("fastest_laps_run")]
+        public int? FastestLapsRun { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("pit_stop_count")]
+        public int? PitStopCount { get; set; }
+
     }
 }

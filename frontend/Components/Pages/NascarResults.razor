@@ -68,65 +68,150 @@
     {
         <TwCard NoPadding="true" Class="bg-slate-950 border-slate-800 overflow-hidden shadow-2xl">
             <div class="overflow-x-auto max-h-[70vh] custom-scrollbar">
-                <TwTable TItem="RaceResultItem" Items="@_results" Hover="true" Dense="true">
-                    <HeaderContent>
-                        <TwTh>Ssn</TwTh>
-                        <TwTh>Race</TwTh>
-                        <TwTh>Track</TwTh>
-                        <TwTh>Driver</TwTh>
-                        <TwTh>Finish</TwTh>
-                        <TwTh>Start</TwTh>
-                        <TwTh>Led</TwTh>
-                        <TwTh>Pts</TwTh>
-                        <TwTh>Status</TwTh>
-                        <TwTh>Team</TwTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <TwTd>@context.Season</TwTd>
-                        <TwTd>@($"R{context.RaceNum}")</TwTd>
-                        <TwTd>
-                            <span class="text-xs text-slate-400" title="@context.RaceName">@TruncateTrack(context.Track)</span>
-                        </TwTd>
-                        <TwTd>
-                            <TwButton Variant="text" Class="p-0 text-blue-400 hover:text-blue-300 font-bold" 
-                                      Href="@($"/driver-profiles?driver={Uri.EscapeDataString(context.Driver ?? "")}&series={_selectedSeries}")">
-                                @context.Driver
-                            </TwButton>
-                        </TwTd>
-                        <TwTd>
-                            <TwChip Size="sm" Color="@GetFinishColor(context.Finish)">
-                                P@(context.Finish)
-                            </TwChip>
-                        </TwTd>
-                        <TwTd>@(context.Start?.ToString() ?? "-")</TwTd>
-                        <TwTd>
-                            @if (context.Led > 0)
+                <table class="w-full text-sm text-left">
+                    <thead class="text-[10px] uppercase tracking-wider text-slate-500 bg-slate-900/80 sticky top-0 z-10">
+                        <tr>
+                            <th class="px-3 py-2.5">Ssn</th>
+                            <th class="px-3 py-2.5">Race</th>
+                            <th class="px-3 py-2.5">Track</th>
+                            <th class="px-3 py-2.5">#</th>
+                            <th class="px-3 py-2.5">Driver</th>
+                            <th class="px-3 py-2.5 text-center">Fin</th>
+                            <th class="px-3 py-2.5 text-center">St</th>
+                            <th class="px-3 py-2.5 text-center">Led</th>
+                            <th class="px-3 py-2.5 text-center">Laps</th>
+                            <th class="px-3 py-2.5 text-center">Pts</th>
+                            <th class="px-3 py-2.5">Make</th>
+                            <th class="px-3 py-2.5 text-center">Rating</th>
+                            <th class="px-3 py-2.5">Status</th>
+                            <th class="px-3 py-2.5">Team</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in _results)
+                        {
+                            var rowId = $"{item.Id}";
+                            var isExpanded = _expandedRows.Contains(rowId);
+                            var hasExtras = item.HasExtras;
+
+                            <tr class="border-b border-slate-800/50 hover:bg-slate-900/60 transition-colors @(hasExtras ? "cursor-pointer" : "") @(isExpanded ? "bg-slate-900/80" : "")"
+                                @onclick="() => { if (hasExtras) ToggleRow(rowId); }">
+                                <td class="px-3 py-2 text-slate-400">@item.Season</td>
+                                <td class="px-3 py-2 text-slate-400">R@(item.RaceNum)</td>
+                                <td class="px-3 py-2">
+                                    <span class="text-xs text-slate-400" title="@item.RaceName">@TruncateTrack(item.Track)</span>
+                                </td>
+                                <td class="px-3 py-2 text-slate-500 font-mono text-xs">@(item.CarNumber ?? "-")</td>
+                                <td class="px-3 py-2">
+                                    <a href="/driver-profiles?driver=@(Uri.EscapeDataString(item.Driver ?? ""))&series=@_selectedSeries"
+                                       class="text-blue-400 hover:text-blue-300 font-bold text-sm">
+                                        @item.Driver
+                                    </a>
+                                </td>
+                                <td class="px-3 py-2 text-center">
+                                    <span class="inline-block min-w-[28px] text-center px-1.5 py-0.5 rounded text-xs font-black @GetFinishBg(item.Finish)">
+                                        P@(item.Finish)
+                                    </span>
+                                </td>
+                                <td class="px-3 py-2 text-center text-slate-400">@(item.Start?.ToString() ?? "-")</td>
+                                <td class="px-3 py-2 text-center">
+                                    @if (item.Led > 0)
+                                    {
+                                        <span class="text-amber-400 font-bold">@item.Led</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-slate-600">0</span>
+                                    }
+                                </td>
+                                <td class="px-3 py-2 text-center text-slate-400">@(item.Laps?.ToString() ?? "-")</td>
+                                <td class="px-3 py-2 text-center font-bold text-blue-400">@(item.Pts?.ToString() ?? "-")</td>
+                                <td class="px-3 py-2 text-xs text-slate-500">@(item.Make ?? "-")</td>
+                                <td class="px-3 py-2 text-center text-slate-400">@(item.Rating?.ToString("F1") ?? "-")</td>
+                                <td class="px-3 py-2">
+                                    @if (item.Status != null && item.Status.ToLower() != "running")
+                                    {
+                                        <span class="text-[10px] font-bold text-red-400 bg-red-400/10 px-1.5 py-0.5 rounded">@item.Status</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-emerald-500 text-[10px] font-bold">RUNNING</span>
+                                    }
+                                </td>
+                                <td class="px-3 py-2">
+                                    <span class="text-xs text-slate-500">@TruncateTeam(item.Team)</span>
+                                    @if (hasExtras)
+                                    {
+                                        <span class="ml-1 text-[9px] text-cyan-500/60" title="Click for telemetry details">@(isExpanded ? "▲" : "▼")</span>
+                                    }
+                                </td>
+                            </tr>
+
+                            @if (isExpanded && hasExtras)
                             {
-                                <TwChip Size="sm" Color="amber" Variant="outline">@context.Led</TwChip>
+                                <tr class="bg-slate-900/90 border-b border-slate-700/50">
+                                    <td colspan="14" class="px-4 py-2.5">
+                                        <div class="flex flex-wrap gap-2 items-center">
+                                            <span class="text-[9px] font-bold uppercase tracking-widest text-cyan-500/70 mr-1">Telemetry</span>
+                                            @if (item.AvgSpeed.HasValue)
+                                            {
+                                                <span class="detail-chip">Avg Speed <b>@item.AvgSpeed.Value.ToString("F1") mph</b></span>
+                                            }
+                                            @if (item.BestLapSpeed.HasValue)
+                                            {
+                                                <span class="detail-chip">Best Lap <b>@item.BestLapSpeed.Value.ToString("F1") mph</b></span>
+                                            }
+                                            @if (item.PassesMade.HasValue)
+                                            {
+                                                <span class="detail-chip">Passes <b>@item.PassesMade</b></span>
+                                            }
+                                            @if (item.QualityPasses.HasValue)
+                                            {
+                                                <span class="detail-chip">Quality Passes <b>@item.QualityPasses</b></span>
+                                            }
+                                            @if (item.FastestLapsRun.HasValue)
+                                            {
+                                                <span class="detail-chip">Fastest Laps <b>@item.FastestLapsRun</b></span>
+                                            }
+                                            @if (item.PitStopCount.HasValue)
+                                            {
+                                                <span class="detail-chip">Pit Stops <b>@item.PitStopCount</b></span>
+                                            }
+                                            @if (item.Stage1.HasValue)
+                                            {
+                                                <span class="detail-chip">S1 <b>P@item.Stage1</b></span>
+                                            }
+                                            @if (item.Stage2.HasValue)
+                                            {
+                                                <span class="detail-chip">S2 <b>P@item.Stage2</b></span>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
                             }
-                            else
-                            {
-                                <span class="text-slate-600">0</span>
-                            }
-                        </TwTd>
-                        <TwTd>@(context.Pts?.ToString() ?? "-")</TwTd>
-                        <TwTd>
-                            @if (context.Status != null && context.Status.ToLower() != "running")
-                            {
-                                <TwChip Size="sm" Color="red" Variant="outline">@context.Status</TwChip>
-                            }
-                            else
-                            {
-                                <span class="text-emerald-500 text-[10px] font-bold">RUNNING</span>
-                            }
-                        </TwTd>
-                        <TwTd>
-                            <span class="text-xs text-slate-500">@TruncateTeam(context.Team)</span>
-                        </TwTd>
-                    </RowTemplate>
-                </TwTable>
+                        }
+                    </tbody>
+                </table>
             </div>
         </TwCard>
+
+        <style>
+            .detail-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                font-size: 11px;
+                color: #94a3b8;
+                background: rgba(148, 163, 184, 0.08);
+                border: 1px solid rgba(148, 163, 184, 0.15);
+                border-radius: 6px;
+                padding: 3px 8px;
+            }
+            .detail-chip b {
+                color: #e2e8f0;
+                font-weight: 700;
+            }
+        </style>
         
         <div class="mt-4 flex justify-between items-center px-2">
             <span class="text-xs text-slate-500 italic">
@@ -154,6 +239,7 @@
     private List<int> _availableSeasons = new();
     private List<RaceResultItem> _results = new();
     private int _totalResults = 0;
+    private HashSet<string> _expandedRows = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -183,7 +269,7 @@
         
         try
         {
-            var url = $"http://backend:8000/db/races/nascar/list?series={_selectedSeries}&limit=500";
+            var url = $"http://backend:8000/db/races/nascar/list?series={_selectedSeries}&limit=2000";
             
             if (_selectedSeason.HasValue)
                 url += $"&season={_selectedSeason.Value}";
@@ -211,6 +297,12 @@
         }
     }
 
+    private void ToggleRow(string id)
+    {
+        if (!_expandedRows.Remove(id))
+            _expandedRows.Add(id);
+    }
+
     private string GetFinishColor(int? finish) => finish switch
     {
         1 => "emerald",
@@ -218,6 +310,14 @@
         <= 5 => "blue",
         <= 10 => "blue",
         _ => "slate"
+    };
+
+    private string GetFinishBg(int? finish) => finish switch
+    {
+        1 => "bg-emerald-500/20 text-emerald-400",
+        <= 5 => "bg-blue-500/15 text-blue-400",
+        <= 10 => "bg-blue-500/10 text-blue-300",
+        _ => "text-slate-400"
     };
 
     private string TruncateTrack(string? track) => 
@@ -245,21 +345,81 @@
 
     private class RaceResultItem
     {
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
         public int Id { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("season")]
         public int Season { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("series")]
         public string? Series { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("track")]
         public string? Track { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("race_num")]
         public int? RaceNum { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("race_name")]
         public string? RaceName { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("driver")]
         public string? Driver { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("finish")]
         public int? Finish { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("start")]
         public int? Start { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("led")]
         public int? Led { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("laps")]
         public int? Laps { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("pts")]
         public int? Pts { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("status")]
         public string? Status { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("team")]
         public string? Team { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("make")]
         public string? Make { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("rating")]
         public double? Rating { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("car_number")]
+        public string? CarNumber { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("stage1")]
+        public int? Stage1 { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("stage2")]
+        public int? Stage2 { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("avg_speed")]
+        public double? AvgSpeed { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("best_lap_speed")]
+        public double? BestLapSpeed { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("passes_made")]
+        public int? PassesMade { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("quality_passes")]
+        public int? QualityPasses { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("fastest_laps_run")]
+        public int? FastestLapsRun { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("pit_stop_count")]
+        public int? PitStopCount { get; set; }
+
+        public bool HasExtras => AvgSpeed.HasValue || PassesMade.HasValue || PitStopCount.HasValue;
     }
 }

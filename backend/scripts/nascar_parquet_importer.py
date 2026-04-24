@@ -1,6 +1,7 @@
 
 import asyncio
 import pandas as pd
+import numpy as np
 import requests
 import json
 import hashlib
@@ -25,7 +26,35 @@ PARQUET_URLS = {
 }
 
 def compute_hash(data: dict) -> str:
-    return hashlib.md5(json.dumps(data, sort_keys=True).encode()).hexdigest()
+    return hashlib.md5(json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()
+
+
+# Fields that should always be stored as integers in metadata
+_INT_FIELDS = {'Season', 'Finish', 'Start', 'Race', 'Laps', 'Led', 'Pts',
+               'season', 'finish', 'start', 'race_num', 'laps', 'led', 'pts'}
+
+def safe_python_value(key: str, val):
+    """Convert numpy/pandas types to JSON-safe Python native types.
+    Ensures integer fields are stored as int, not float."""
+    if val is None:
+        return None
+    if isinstance(val, (np.integer,)):
+        return int(val)
+    if isinstance(val, (np.floating,)):
+        if pd.isna(val):
+            return None
+        if key in _INT_FIELDS or val == int(val):
+            return int(val)
+        return float(val)
+    if isinstance(val, (np.bool_,)):
+        return bool(val)
+    if isinstance(val, float):
+        if pd.isna(val):
+            return None
+        if key in _INT_FIELDS or val == int(val):
+            return int(val)
+        return val
+    return val
 
 async def download_file(url: str, filename: str):
     logger.info(f"Downloading {url}...")
@@ -93,7 +122,12 @@ async def import_parquet(conn, sport_id: int, series: str, file_path: Path, min_
                 metadata = {}
                 row_dict = row.to_dict()
                 for raw_key, val in row_dict.items():
-                    if pd.isna(val):
+                    if pd.isna(val) if not isinstance(val, str) else False:
+                        continue
+                    
+                    # Convert to JSON-safe Python native type
+                    val = safe_python_value(raw_key, val)
+                    if val is None:
                         continue
                     
                     # Store original
