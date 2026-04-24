@@ -142,8 +142,10 @@ async def get_top_picks(
     limit: int = Query(8, ge=1, le=30, description="Maximum number of picks to return"),
 ):
     """
-    Build dashboard-ready top picks from live NBA/NFL analyzed games.
+    Build dashboard-ready top picks from ALL live sports (NBA, NFL, MLB, NHL, NCAAB, CFB, College Baseball).
     """
+    import asyncio
+
     try:
         from scripts.nba_odds import get_todays_nba_odds
         from scripts.nba_predictor import analyze_matchup_dual
@@ -182,8 +184,49 @@ async def get_top_picks(
             except Exception as sport_exc:
                 logger.warning("Failed to collect %s top picks: %s", sport, sport_exc)
 
-        await collect_for_sport("nba", get_todays_nba_odds, analyze_matchup_dual)
-        await collect_for_sport("nfl", get_todays_nfl_odds, analyze_nfl_matchup_dual)
+        async def collect_from_analyze_all(sport: str, analyze_all_fn) -> None:
+            """Collect picks from sports that use an analyze-all endpoint."""
+            try:
+                result = await analyze_all_fn(sportsbook=sportsbook)
+                if isinstance(result, dict):
+                    games = result.get("games", [])
+                elif hasattr(result, "body"):
+                    import json as _json
+                    games = _json.loads(result.body).get("games", [])
+                else:
+                    games = []
+                for game in games:
+                    if game.get("error") or game.get("prediction_error"):
+                        continue
+                    try:
+                        picks.append(_build_top_pick(game, sport))
+                    except Exception as inner_exc:
+                        logger.warning("Failed to build %s pick: %s", sport, inner_exc)
+            except Exception as sport_exc:
+                logger.warning("Failed to collect %s top picks: %s", sport, sport_exc)
+
+        # Tier 1: NBA & NFL (direct odds+analyzer pattern)
+        # Tier 2: MLB, NHL (direct odds+analyzer pattern — same signature)
+        # Tier 3: NCAAB, CFB, College Baseball (use their analyze-all endpoints)
+        from scripts.mlb_odds import get_todays_mlb_odds
+        from scripts.mlb_predictor import analyze_mlb_matchup
+        from scripts.nhl_odds import get_todays_nhl_odds
+        from scripts.nhl_predictor import analyze_nhl_matchup
+        from api.odds_endpoints import (
+            analyze_all_ncaab_games,
+            analyze_all_cfb_games,
+            analyze_all_college_baseball_games,
+        )
+
+        await asyncio.gather(
+            collect_for_sport("nba", get_todays_nba_odds, analyze_matchup_dual),
+            collect_for_sport("nfl", get_todays_nfl_odds, analyze_nfl_matchup_dual),
+            collect_for_sport("mlb", get_todays_mlb_odds, analyze_mlb_matchup),
+            collect_for_sport("nhl", get_todays_nhl_odds, analyze_nhl_matchup),
+            collect_from_analyze_all("ncaab", analyze_all_ncaab_games),
+            collect_from_analyze_all("cfb", analyze_all_cfb_games),
+            collect_from_analyze_all("college-baseball", analyze_all_college_baseball_games),
+        )
 
         picks.sort(key=lambda item: item.get("value_score", 0), reverse=True)
         sliced = picks[:limit]

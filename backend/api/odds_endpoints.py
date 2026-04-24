@@ -1125,6 +1125,18 @@ async def get_mlb_model_metrics(request: Request):
         return {"error": str(e)}
 
 
+@router.post("/mlb/import-results")
+async def import_mlb_results(request: Request):
+    """Trigger on-demand import of completed MLB game results."""
+    try:
+        from scripts.mlb_results_importer import run_import
+        result = await run_import()
+        return result
+    except Exception as e:
+        logger.error(f"MLB results import failed: {e}")
+        return {"error": str(e)}
+
+
 @router.post("/mlb/refresh-stats")
 async def refresh_mlb_stats(request: Request):
     """Trigger on-demand MLB data collection."""

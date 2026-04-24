@@ -1,0 +1,298 @@
+@page "/mobile/nascar/driver/{DriverName}"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject SportsBettingAnalyzer.Shared.Services.IServerConfigService ServerConfig
+@inject NavigationManager Nav
+
+<div class="app-card" style="margin-bottom: 24px;">
+    <div class="app-card-header" style="background: linear-gradient(135deg, #1e293b, #0f172a) !important;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <button class="back-btn" @onclick="GoBack">←</button>
+            <div>
+                <h2>@Uri.UnescapeDataString(DriverName ?? "")</h2>
+                <p>Career stats &amp; race history</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-card-body">
+        @if (_isLoading)
+        {
+            <div class="app-loading-indicator">
+                <div class="app-spinner"></div>
+                <span>Loading driver profile...</span>
+            </div>
+        }
+        else if (_allResults.Any())
+        {
+            <!-- Career Summary Cards -->
+            <div class="stat-grid">
+                <div class="stat-card">
+                    <span class="stat-val">@_totalRaces</span>
+                    <span class="stat-label">Races</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-val accent">@_wins</span>
+                    <span class="stat-label">Wins</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-val">@_top5s</span>
+                    <span class="stat-label">Top 5</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-val">@_top10s</span>
+                    <span class="stat-label">Top 10</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-val">@_avgFinish.ToString("F1")</span>
+                    <span class="stat-label">Avg Finish</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-val">@_totalLapsLed</span>
+                    <span class="stat-label">Laps Led</span>
+                </div>
+            </div>
+
+            <!-- Track Breakdown -->
+            @if (_trackStats.Any())
+            {
+                <h3 class="section-title">Track Breakdown</h3>
+                <div class="track-list">
+                    @foreach (var ts in _trackStats.OrderByDescending(t => t.Races))
+                    {
+                        <div class="track-row">
+                            <div class="track-name">@ts.Track</div>
+                            <div class="track-details">
+                                <span class="td-item"><b>@ts.Races</b> starts</span>
+                                <span class="td-item">Avg <b>P@ts.AvgFinish.ToString("F1")</b></span>
+                                <span class="td-item">Best <b>P@ts.BestFinish</b></span>
+                                @if (ts.Wins > 0)
+                                {
+                                    <span class="td-item win">@ts.Wins W</span>
+                                }
+                                @if (ts.LapsLed > 0)
+                                {
+                                    <span class="td-item"><b>@ts.LapsLed</b> led</span>
+                                }
+                                @if (ts.AvgRating.HasValue)
+                                {
+                                    <span class="td-item"><b>@ts.AvgRating.Value.ToString("F1")</b> rtg</span>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            <!-- Recent Results -->
+            <h3 class="section-title">Recent Results</h3>
+            <div class="results-table">
+                <div class="res-header">
+                    <span class="rh-track">Track</span>
+                    <span class="rh-fin">Fin</span>
+                    <span class="rh-st">St</span>
+                    <span class="rh-led">Led</span>
+                    <span class="rh-pts">PTS</span>
+                </div>
+                @foreach (var res in _allResults.Take(50))
+                {
+                    <div class="res-row">
+                        <div class="rh-track">
+                            <span class="track-text">@res.Track</span>
+                            <span class="season-text">@res.Season</span>
+                        </div>
+                        <span class="rh-fin @GetFinishClass(res.Finish)">@res.Finish</span>
+                        <span class="rh-st">@res.Start</span>
+                        <span class="rh-led">@(res.Led > 0 ? res.Led : "")</span>
+                        <span class="rh-pts">@res.Pts</span>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="app-alert app-alert-error" style="margin-top: 16px;">
+                No results found for this driver.
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .back-btn { background: none; border: 1px solid var(--border); color: var(--text-primary); border-radius: 6px; padding: 4px 10px; font-size: 16px; cursor: pointer; }
+    .back-btn:hover { background: rgba(255,255,255,0.05); }
+
+    .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 20px; }
+    .stat-card { background: var(--surface-overlay); border: 1px solid var(--border); border-radius: 8px; padding: 12px 8px; text-align: center; display: flex; flex-direction: column; }
+    .stat-val { font-size: 20px; font-weight: 900; color: var(--text-primary); }
+    .stat-val.accent { color: #34d399; }
+    .stat-label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+    .section-title { font-size: 13px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin: 20px 0 10px 0; }
+
+    .track-list { display: flex; flex-direction: column; gap: 6px; }
+    .track-row { background: var(--surface-overlay); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; }
+    .track-name { font-size: 13px; font-weight: 800; color: var(--text-primary); margin-bottom: 4px; }
+    .track-details { display: flex; flex-wrap: wrap; gap: 6px; }
+    .td-item { font-size: 11px; color: var(--text-muted); }
+    .td-item b { color: var(--text-primary); font-weight: 700; }
+    .td-item.win { color: #34d399; font-weight: 700; }
+
+    .results-table { margin-top: 8px; }
+    .res-header { display: flex; gap: 8px; padding: 8px 12px; font-size: 9px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; border-bottom: 1px solid var(--border); }
+    .res-row { display: flex; gap: 8px; padding: 8px 12px; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.02); }
+    .rh-track { flex: 1; min-width: 0; }
+    .rh-fin { width: 28px; text-align: center; font-weight: 900; }
+    .rh-st { width: 24px; text-align: center; font-size: 11px; color: var(--text-muted); }
+    .rh-led { width: 28px; text-align: center; font-size: 11px; color: var(--text-muted); }
+    .rh-pts { width: 32px; text-align: right; font-weight: 800; color: #60a5fa; }
+
+    .track-text { display: block; font-size: 12px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .season-text { font-size: 10px; color: var(--text-muted); }
+
+    .rh-fin.Win { color: #34d399; }
+    .rh-fin.Top5 { color: #60a5fa; }
+    .rh-fin.Top10 { color: #94a3b8; }
+</style>
+
+@code {
+    [Parameter] public string? DriverName { get; set; }
+
+    private bool _isLoading = true;
+    private List<DriverResult> _allResults = new();
+    private List<TrackStat> _trackStats = new();
+
+    private int _totalRaces;
+    private int _wins;
+    private int _top5s;
+    private int _top10s;
+    private double _avgFinish;
+    private int _totalLapsLed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDriverData();
+    }
+
+    private void GoBack() => Nav.NavigateTo("/mobile-nascar/results");
+
+    private async Task LoadDriverData()
+    {
+        _isLoading = true;
+        try
+        {
+            var driverDecoded = Uri.UnescapeDataString(DriverName ?? "");
+            var baseUrl = ServerConfig.GetBaseUrl();
+            var url = $"{baseUrl}/db/races/nascar/list?driver={Uri.EscapeDataString(driverDecoded)}&limit=2000";
+
+            var response = await Http.GetFromJsonAsync<RaceResultsResponse>(url);
+            var items = response?.Results ?? new();
+
+            _allResults = items
+                .OrderByDescending(r => r.Season)
+                .ThenByDescending(r => r.RaceNum)
+                .ToList();
+
+            // Career summary
+            _totalRaces = _allResults.Count;
+            _wins = _allResults.Count(r => r.Finish == 1);
+            _top5s = _allResults.Count(r => r.Finish <= 5);
+            _top10s = _allResults.Count(r => r.Finish <= 10);
+            _avgFinish = _allResults.Any() ? _allResults.Where(r => r.Finish.HasValue).Average(r => (double)r.Finish!.Value) : 0;
+            _totalLapsLed = _allResults.Sum(r => r.Led ?? 0);
+
+            // Track breakdown
+            _trackStats = _allResults
+                .GroupBy(r => r.Track ?? "Unknown")
+                .Select(g => new TrackStat
+                {
+                    Track = g.Key,
+                    Races = g.Count(),
+                    Wins = g.Count(r => r.Finish == 1),
+                    BestFinish = g.Where(r => r.Finish.HasValue).Min(r => r.Finish!.Value),
+                    AvgFinish = g.Where(r => r.Finish.HasValue).Average(r => (double)r.Finish!.Value),
+                    LapsLed = g.Sum(r => r.Led ?? 0),
+                    AvgRating = g.Where(r => r.Rating.HasValue).Any()
+                        ? g.Where(r => r.Rating.HasValue).Average(r => r.Rating!.Value)
+                        : null,
+                })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading driver data: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetFinishClass(int? finish) => finish switch
+    {
+        1 => "Win",
+        <= 5 => "Top5",
+        <= 10 => "Top10",
+        _ => ""
+    };
+
+    private class RaceResultsResponse
+    {
+        public List<DriverResult> Results { get; set; } = new();
+        public int Total { get; set; }
+    }
+
+    private class DriverResult
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        public int Id { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("season")]
+        public int Season { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("series")]
+        public string? Series { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("track")]
+        public string? Track { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("race_num")]
+        public int? RaceNum { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("driver")]
+        public string? Driver { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("finish")]
+        public int? Finish { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("start")]
+        public int? Start { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("pts")]
+        public int? Pts { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("status")]
+        public string? Status { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("team")]
+        public string? Team { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("led")]
+        public int? Led { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("laps")]
+        public int? Laps { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("make")]
+        public string? Make { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("rating")]
+        public double? Rating { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("car_number")]
+        public string? CarNumber { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("avg_speed")]
+        public double? AvgSpeed { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("passes_made")]
+        public int? PassesMade { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("pit_stop_count")]
+        public int? PitStopCount { get; set; }
+    }
+
+    private class TrackStat
+    {
+        public string Track { get; set; } = "";
+        public int Races { get; set; }
+        public int Wins { get; set; }
+        public int BestFinish { get; set; }
+        public double AvgFinish { get; set; }
+        public int LapsLed { get; set; }
+        public double? AvgRating { get; set; }
+    }
+}

@@ -92,7 +92,7 @@
                                                     <div class="text-xs text-slate-500 mt-1">Win Prob: @pick.Probability.ToString("P1") | Edge: @pick.Edge.ToString("P1")</div>
                                                 </div>
                                                 <TwButton Variant="text" Color="blue" Class="p-0 text-sm" 
-                                                          Href="@(pick.Sport == "NBA" ? "/live-nba-odds" : "/nfl-live-odds")">
+                                                          Href="@GetSportRoute(pick.Sport)">
                                                     View Details →
                                                 </TwButton>
                                             </TwCard>
@@ -535,6 +535,18 @@
             Logger.LogWarning(ex, "Failed to save analysis");
         }
     }
+
+    private string GetSportRoute(string sport) => sport?.ToUpper() switch
+    {
+        "NBA" => "/live-nba-odds",
+        "NFL" => "/nfl-live-odds",
+        "MLB" => "/mlb-live-odds",
+        "NHL" => "/nhl-live-odds",
+        "NCAAB" => "/ncaab-live-odds",
+        "CFB" => "/cfb-live-odds",
+        "COLLEGE-BASEBALL" => "/college-baseball-live-odds",
+        _ => "/all-sports"
+    };
 
     public class TopPick
     {

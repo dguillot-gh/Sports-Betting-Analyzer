@@ -1,0 +1,56 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - master
+
+# These variables need to be adjusted to your specific domain names
+env:
+  REGISTRY: gitea.yourdomain.com
+  IMAGE_NAME_BACKEND: ${{ github.repository_owner }}/sports-ml-backend
+  IMAGE_NAME_FRONTEND: ${{ github.repository_owner }}/sports-betting-frontend
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      # Using Docker's official login action to authenticate with Gitea's built-in Container Registry
+      - name: Log in to Gitea Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITEA_TOKEN }}
+
+      # Build and push the Backend Python API
+      - name: Build and Push Backend
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:latest
+
+      # Build and push the Frontend Blazor App
+      - name: Build and Push Frontend
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      # This step triggers the Portainer Webhook to pull the newly built images and restart the stack
+      - name: Trigger Portainer Redeployment
+        run: |
+          echo "Triggering Portainer Webhook..."
+          curl -X POST "${{ secrets.PORTAINER_WEBHOOK_URL }}"
+          echo "Deployment triggered successfully!"

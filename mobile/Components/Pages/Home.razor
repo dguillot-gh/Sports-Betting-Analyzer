@@ -4,15 +4,11 @@
 @inject HttpClient Http
 @inject SportsBettingAnalyzer.Shared.Services.IServerConfigService ServerConfig
 
-<div class="home-hero">
-    <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
-        <div>
-            <h1>Sports Betting Analyzer</h1>
-            <p>@_todayLabel</p>
-        </div>
-        <div class="mini-status @(_isHealthy ? "online" : "offline")">
-            <span class="status-dot"></span>
-        </div>
+<div class="home-hero" style="position: relative;">
+    <h1>Sports Betting Analyzer</h1>
+    <p>@_todayLabel</p>
+    <div class="mini-status @(_isHealthy ? "online" : "offline")" style="position: absolute; right: 16px; top: 32px;">
+        <span class="status-dot"></span>
     </div>
 </div>
 
@@ -510,7 +506,7 @@
             _freshness = _cachedFreshness;
             _profitData = new List<ProfitPoint>(_cachedProfitData);
             _sparklineRoi = _cachedSparklineRoi;
-            await InitializeSparklineOptions();
+            InitializeSparklineOptions();
             return;
         }
 
@@ -558,10 +554,10 @@
             }
         }
         catch { }
-        await InitializeSparklineOptions();
+        InitializeSparklineOptions();
     }
 
-    private Task InitializeSparklineOptions()
+    private void InitializeSparklineOptions()
     {
         _sparklineOptions = new ApexCharts.ApexChartOptions<ProfitPoint>
         {
@@ -579,7 +575,6 @@
             Fill = new ApexCharts.Fill { Opacity = 0.2 },
             Tooltip = new ApexCharts.Tooltip { Fixed = new ApexCharts.TooltipFixed { Enabled = false }, X = new ApexCharts.TooltipX { Show = false } }
         };
-        return Task.CompletedTask;
     }
 
     public class ProfitPoint { public string Date { get; set; } = ""; public decimal Amount { get; set; } }

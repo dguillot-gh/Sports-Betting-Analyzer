@@ -6,12 +6,16 @@ Handles automated data imports, job locking, retries, and database logging.
 
 import logging
 import asyncio
+import json
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 import time
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from typing import Optional, Dict, Any, List
+
+CST = ZoneInfo("America/Chicago")
 
 from src.config import DATABASE_URL
 from src.ops_alerts import OpsAlertService
@@ -21,6 +25,7 @@ from services.notifications import NotificationService
 from scripts.ncaab_importer import import_ncaab_data
 from scripts.migrate_data import run_migration
 from scripts.nascar_parquet_importer import run_import as import_nascar_parquet
+from scripts.nascar_supplemental_importer import run_import as import_nascar_supplemental
 from scripts.college_baseball_importer import run_college_baseball_import
 from scripts.college_football_importer import run_college_football_import
 
@@ -51,17 +56,65 @@ CREATE INDEX IF NOT EXISTS idx_import_logs_status ON import_logs(status);
 CREATE INDEX IF NOT EXISTS idx_import_logs_start_time ON import_logs(start_time);
 """
 
+RESULTS_UPDATED_AT_SQL = """
+ALTER TABLE results ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+CREATE OR REPLACE FUNCTION update_results_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_results_updated_at ON results;
+CREATE TRIGGER trg_results_updated_at
+    BEFORE INSERT OR UPDATE ON results
+    FOR EACH ROW
+    EXECUTE FUNCTION update_results_updated_at();
+
+CREATE INDEX IF NOT EXISTS idx_results_updated_at ON results(updated_at);
+"""
+
+# Maps scheduler sport keys to the sports table name
+_SPORT_DB_NAME = {
+    "ncaab": "ncaab",
+    "nba": "nba",
+    "nfl": "nfl",
+    "nascar": "nascar",
+    "baseball": "college_baseball",
+    "nhl": "nhl",
+    "cfb": "cfb",
+    "baseball_results": "college_baseball",
+    "nascar_supplemental": "nascar",
+    "mlb_results": "mlb",
+    "mlb_stats": "mlb",
+}
+
+def _compact_detail(meta: dict, max_len: int = 120) -> str:
+    """Build a short human-readable summary from result metadata for CSV."""
+    parts = []
+    for key in ("finish", "start", "pts", "status", "home_score", "away_score",
+                "race_name", "week", "game_date"):
+        val = meta.get(key)
+        if val is not None and str(val).strip():
+            parts.append(f"{key}={val}")
+    detail = ", ".join(parts)
+    return detail[:max_len] if len(detail) > max_len else detail
+
+
 class SchedulerService:
     _scheduler: Optional[AsyncIOScheduler] = None
     _is_running_job = False  # In-memory lock for safety
     
     @classmethod
     async def init_db(cls):
-        """Initialize the import_logs table."""
+        """Initialize the import_logs table and results updated_at column."""
         try:
             import asyncpg
             conn = await asyncpg.connect(DATABASE_URL)
             await conn.execute(CREATE_LOGS_TABLE_SQL)
+            await conn.execute(RESULTS_UPDATED_AT_SQL)
             await conn.close()
             logger.info("Scheduler tables initialized.")
         except Exception as e:
@@ -118,6 +171,7 @@ class SchedulerService:
         logger.info(f"Starting pipeline ({trigger_source})...")
         
         results = []
+        all_import_records: List[Dict[str, Any]] = []  # detailed row-level records
         
         try:
             # --- 1. NCAAB ---
@@ -136,9 +190,13 @@ class SchedulerService:
             res_nfl = await cls._run_job_wrapper("nfl", cls._import_nfl_task)
             results.append(res_nfl)
 
-            # --- 4. NASCAR ---
+            # --- 4. NASCAR (Parquet) ---
             res_nascar = await cls._run_job_wrapper("nascar", cls._import_nascar_task)
             results.append(res_nascar)
+
+            # --- 4b. NASCAR (Supplemental — DriverAverages + Live Feed) ---
+            res_nascar_supp = await cls._run_job_wrapper("nascar_supplemental", cls._import_nascar_supplemental_task)
+            results.append(res_nascar_supp)
 
             # --- 5. College Baseball ---
             res_baseball = await cls._run_job_wrapper("baseball", cls._import_baseball_task)
@@ -160,7 +218,11 @@ class SchedulerService:
             res_cfb = await cls._run_job_wrapper("cfb", cls._import_cfb_task)
             results.append(res_cfb)
 
-            # --- 10. MLB Stats Collection ---
+            # --- 10. MLB Game Results ---
+            res_mlb_results = await cls._run_job_wrapper("mlb_results", cls._import_mlb_results_task)
+            results.append(res_mlb_results)
+
+            # --- 10b. MLB Stats Collection ---
             res_mlb = await cls._run_job_wrapper("mlb_stats", cls._mlb_stats_collection_task)
             results.append(res_mlb)
 
@@ -168,20 +230,24 @@ class SchedulerService:
             res_mlb_train = await cls._run_job_wrapper("mlb_training", cls._mlb_model_training_task)
             results.append(res_mlb_train)
             
-            # --- 12. Fetch Performance Summary ---
+            # --- 12. Collect all import records for the email CSV ---
+            for res in results:
+                all_import_records.extend(res.get("_records", []))
+            
+            # --- 13. Fetch Performance Summary ---
             perf_summary = await cls._get_performance_summary()
 
             # Alert on any failed import jobs in the run.
             OpsAlertService.report_import_failures(results, trigger_source)
             
-            # --- Send Notification ---
-            await NotificationService.send_summary_report(results, perf_summary)
+            # --- Send Notification (with CSV of import records) ---
+            await NotificationService.send_summary_report(results, perf_summary, all_import_records)
             
             # --- Check Database Health ---
             await OpsAlertService.check_database_health(DATABASE_URL)
 
             # Explicitly log completion
-            logger.info("Pipeline Execution Finished.")
+            logger.info(f"Pipeline Execution Finished. {len(all_import_records)} records collected for email.")
             
             return {"status": "completed", "results": results, "performance": perf_summary}
             
@@ -193,6 +259,80 @@ class SchedulerService:
             cls._is_running_job = False
 
     @staticmethod
+    async def _collect_import_records(conn, sport_key: str, since: datetime, limit: int = 100000) -> List[Dict[str, Any]]:
+        """
+        Query the results table for records inserted or updated since `since`
+        for the given sport. Returns a list of dicts suitable for the CSV report.
+        """
+        db_sport = _SPORT_DB_NAME.get(sport_key)
+        if not db_sport:
+            return []
+        
+        try:
+            sport_id = await conn.fetchval("SELECT id FROM sports WHERE name = $1", db_sport)
+            if not sport_id:
+                return []
+            
+            # Get actual count first for logging
+            actual_count = await conn.fetchval("""
+                SELECT COUNT(*) FROM results r
+                WHERE r.sport_id = $1 AND r.updated_at >= $2
+            """, sport_id, since)
+            
+            if actual_count and actual_count > limit:
+                logger.warning(f"[{sport_key}] {actual_count:,} records touched but CSV capped at {limit:,}")
+            
+            rows = await conn.fetch("""
+                SELECT r.id, r.season, r.series, r.track, r.metadata, r.created_at, r.updated_at
+                FROM results r
+                WHERE r.sport_id = $1 AND r.updated_at >= $2
+                ORDER BY r.id
+                LIMIT $3
+            """, sport_id, since, limit)
+            
+            records = []
+            for row in rows:
+                meta = {}
+                if row["metadata"]:
+                    try:
+                        meta = json.loads(row["metadata"]) if isinstance(row["metadata"], str) else row["metadata"]
+                    except Exception:
+                        pass
+                
+                # Determine if record is new or updated (handle tz-naive vs tz-aware)
+                is_new = True
+                try:
+                    created = row["created_at"]
+                    if created:
+                        if created.tzinfo is None and since.tzinfo is not None:
+                            created = created.replace(tzinfo=timezone.utc)
+                        is_new = created >= since
+                except Exception:
+                    pass
+                action = "inserted" if is_new else "updated"
+                
+                # Build a flat record for CSV
+                entity = (
+                    meta.get("driver_name") or meta.get("Driver")
+                    or meta.get("home_team") or meta.get("home")
+                    or meta.get("name") or meta.get("team")
+                    or row.get("track") or "—"
+                )
+                records.append({
+                    "sport": sport_key,
+                    "action": action,
+                    "season": row["season"],
+                    "series": row["series"] or "",
+                    "entity": str(entity),
+                    "track": row["track"] or "",
+                    "detail": _compact_detail(meta),
+                })
+            return records
+        except Exception as e:
+            logger.warning(f"Failed to collect import records for {sport_key}: {e}")
+            return []
+
+    @staticmethod
     async def _run_job_wrapper(sport: str, func) -> Dict[str, Any]:
         """
         Wrapper to handle DB logging, timing, and retries.
@@ -200,7 +340,7 @@ class SchedulerService:
         import asyncpg
         conn = None
         log_id = None
-        start_time = datetime.now()
+        start_time = datetime.now(CST)
         
         try:
              # Connect to DB to create log entry
@@ -218,7 +358,7 @@ class SchedulerService:
             result_data = await func() 
             
             # Success logic
-            end_time = datetime.now()
+            end_time = datetime.now(CST)
             duration = (end_time - start_time).total_seconds()
             
             await conn.execute("""
@@ -229,7 +369,10 @@ class SchedulerService:
                 WHERE id = $1
             """, log_id, duration, result_data.get("rows", 0), result_data.get("new", 0), result_data.get("updated", 0), result_data.get("files", 0))
             
-            logger.info(f"Task {sport} finished successfully.")
+            # Collect detailed records that were inserted/updated during this task
+            import_records = await SchedulerService._collect_import_records(conn, sport, start_time)
+            
+            logger.info(f"Task {sport} finished successfully. {len(import_records)} records collected.")
             
             return {
                 "sport": sport,
@@ -237,7 +380,8 @@ class SchedulerService:
                 "duration": duration,
                 "rows": result_data.get("rows", 0),
                 "new": result_data.get("new", 0),
-                "updated": result_data.get("updated", 0)
+                "updated": result_data.get("updated", 0),
+                "_records": import_records,
             }
             
         except Exception as e:
@@ -246,7 +390,7 @@ class SchedulerService:
             error_traceback = traceback.format_exc()
             logger.error(f"Task {sport} failed: {e}\n{error_traceback}")
             
-            end_time = datetime.now()
+            end_time = datetime.now(CST)
             duration = (end_time - start_time).total_seconds()
             error_msg = str(e)
             
@@ -266,7 +410,8 @@ class SchedulerService:
                 "success": False,
                 "duration": duration,
                 "error": error_msg,
-                "traceback": error_traceback
+                "traceback": error_traceback,
+                "_records": [],
             }
         finally:
             if conn:
@@ -367,6 +512,27 @@ class SchedulerService:
         }
 
     @staticmethod
+    async def _import_nascar_supplemental_task():
+        """Worker for NASCAR supplemental data (DriverAverages + NASCAR.com live feed).
+        
+        Fills gaps when the parquet source is stale and adds live-feed
+        extras (speed, pit stops, passing stats) for the latest race.
+        Covers Cup, Xfinity, and Trucks.
+        """
+        def log_progress(msg):
+            logger.info(f"[NASCAR Supplemental] {msg}")
+
+        res = await import_nascar_supplemental(
+            year=datetime.now().year,
+            progress_callback=log_progress,
+        )
+        return {
+            "rows": res.get("rows", 0),
+            "new": res.get("new", 0),
+            "updated": res.get("updated", 0),
+        }
+
+    @staticmethod
     async def _import_baseball_task():
         """Worker for College Baseball."""
         from scripts.college_baseball_importer import run_college_baseball_import
@@ -460,6 +626,18 @@ class SchedulerService:
         except Exception as e:
             logger.error(f"Closing line capture failed: {e}")
             return {"rows": 0, "error": str(e)}
+
+    @staticmethod
+    async def _import_mlb_results_task():
+        """Import completed MLB game results from MLB Stats API."""
+        try:
+            from scripts.mlb_results_importer import run_import
+            result = await run_import()
+            logger.info(f"MLB results import finished: {result.get('total_imported', 0)} games")
+            return result
+        except Exception as e:
+            logger.error(f"MLB results import failed: {e}")
+            return {"error": str(e)}
 
     @staticmethod
     async def _mlb_stats_collection_task():
