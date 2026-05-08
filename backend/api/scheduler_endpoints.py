@@ -147,6 +147,12 @@ async def get_data_freshness(request: Request):
                 "last_import_new_rows": imp["new_rows_imported"] if imp else 0,
                 "last_import_total_rows": imp["rows_imported"] if imp else 0,
                 "freshness_status": freshness_status,
+                # Source-level staleness: ran successfully but got 0 new records
+                "is_source_stale": (
+                    imp is not None
+                    and imp.get("new_rows_imported", 0) == 0
+                    and imp.get("rows_imported", 0) > 0
+                ) if imp else False,
             })
 
         return result
@@ -184,3 +190,4 @@ async def trigger_cbb_backfill(request: Request, background_tasks: BackgroundTas
     year_list = [y.strip() for y in years.split(",")]
     background_tasks.add_task(run_script, year_list)
     return {"status": "started", "message": f"Backfill queued for years {years}"}
+
