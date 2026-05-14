@@ -14,6 +14,42 @@
     </button>
 </div>
 
+<!-- Pipeline Status Card -->
+@if (_freshness.Any())
+{
+    var freshSports = _freshness.Count(f => f.FreshnessStatus == "fresh" && !f.IsSourceStale);
+    var staleSports = _freshness.Count(f => f.IsSourceStale);
+    var failedSports = _logs.Where(l => l.Status == "FAILED").Select(l => l.Sport).Distinct().Count();
+    var pipelineOk = failedSports == 0 && staleSports == 0;
+    var lastRun = _logs.OrderByDescending(l => l.StartTime).FirstOrDefault();
+    <div class="pipeline-card @(pipelineOk ? "pipeline-ok" : "pipeline-warn")">
+        <div class="pipeline-header">
+            <span class="pipeline-icon">@(pipelineOk ? "✅" : "⚠️")</span>
+            <span class="pipeline-title">@(pipelineOk ? "Pipeline Healthy" : "Needs Attention")</span>
+        </div>
+        <div class="pipeline-stats">
+            <div class="pipeline-stat">
+                <span class="stat-value stat-green">@freshSports</span>
+                <span class="stat-label">Fresh</span>
+            </div>
+            <div class="pipeline-stat">
+                <span class="stat-value @(staleSports > 0 ? "stat-amber" : "")">@staleSports</span>
+                <span class="stat-label">Stale</span>
+            </div>
+            <div class="pipeline-stat">
+                <span class="stat-value @(failedSports > 0 ? "stat-red" : "")">@failedSports</span>
+                <span class="stat-label">Failed</span>
+            </div>
+        </div>
+        @if (lastRun != null)
+        {
+            <div class="pipeline-footer">
+                Last run: @lastRun.StartTime.ToLocalTime().ToString("MMM d, h:mm tt")
+            </div>
+        }
+    </div>
+}
+
 <!-- Freshness Cards -->
 @if (_freshness.Any())
 {
@@ -21,11 +57,15 @@
     <div class="freshness-grid">
         @foreach (var f in _freshness)
         {
-            var status = f.FreshnessStatus;
-            var dotClass = status == "fresh" ? "dot-green" : status == "stale" ? "dot-amber" : status == "very_stale" ? "dot-red" : "dot-gray";
-            var badge = status == "fresh" ? "Fresh" : status == "stale" ? "Stale" : status == "very_stale" ? "Old" : "Never";
-            var badgeClass = status == "fresh" ? "badge-green" : status == "stale" ? "badge-amber" : status == "very_stale" ? "badge-red" : "badge-gray";
-            <div class="freshness-card @(status == "fresh" ? "card-green" : status == "stale" ? "card-amber" : status == "very_stale" ? "card-red" : "")">
+            var timeStatus = f.FreshnessStatus;
+            var isStaleSource = f.IsSourceStale;
+            // Source staleness overrides time-based "fresh" status
+            var effectiveStatus = isStaleSource && timeStatus == "fresh" ? "source_stale" : timeStatus;
+            var dotClass = effectiveStatus == "fresh" ? "dot-green" : effectiveStatus == "source_stale" ? "dot-amber" : effectiveStatus == "stale" ? "dot-amber" : effectiveStatus == "very_stale" ? "dot-red" : "dot-gray";
+            var badge = effectiveStatus == "fresh" ? "Fresh" : effectiveStatus == "source_stale" ? "Stale Source" : effectiveStatus == "stale" ? "Stale" : effectiveStatus == "very_stale" ? "Old" : "Never";
+            var badgeClass = effectiveStatus == "fresh" ? "badge-green" : (effectiveStatus == "source_stale" || effectiveStatus == "stale") ? "badge-amber" : effectiveStatus == "very_stale" ? "badge-red" : "badge-gray";
+            var cardClass = effectiveStatus == "fresh" ? "card-green" : (effectiveStatus == "source_stale" || effectiveStatus == "stale") ? "card-amber" : effectiveStatus == "very_stale" ? "card-red" : "";
+            <div class="freshness-card @cardClass">
                 <div class="freshness-top">
                     <div class="sport-row">
                         <span class="dot @dotClass"></span>
@@ -159,6 +199,27 @@ else if (!_loading)
     .page-header h1 { font-size: 22px; font-weight: 900; color: var(--text-primary); margin: 0 0 4px; }
     .page-header p { font-size: 12px; color: var(--text-secondary); margin: 0 0 10px; }
     .btn-sm { padding: 6px 14px; font-size: 12px; }
+
+    /* Pipeline Status Card */
+    .pipeline-card {
+        border-radius: 14px;
+        padding: 16px;
+        margin-bottom: 16px;
+        border: 1px solid var(--border);
+    }
+    .pipeline-ok   { background: rgba(16,185,129,0.08); border-color: rgba(16,185,129,0.3); }
+    .pipeline-warn { background: rgba(245,158,11,0.08); border-color: rgba(245,158,11,0.3); }
+    .pipeline-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .pipeline-icon { font-size: 20px; }
+    .pipeline-title { font-size: 16px; font-weight: 900; color: var(--text-primary); }
+    .pipeline-stats { display: flex; gap: 20px; }
+    .pipeline-stat { display: flex; flex-direction: column; align-items: center; }
+    .stat-value { font-size: 22px; font-weight: 900; color: var(--text-primary); font-family: monospace; }
+    .stat-value.stat-green { color: #10b981; }
+    .stat-value.stat-amber { color: #f59e0b; }
+    .stat-value.stat-red   { color: #ef4444; }
+    .stat-label { font-size: 10px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+    .pipeline-footer { margin-top: 10px; font-size: 10px; color: var(--text-secondary); }
 
     .section-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-secondary); margin: 16px 0 8px; }
     .mt-section { margin-top: 24px; }
@@ -365,6 +426,7 @@ else if (!_loading)
         [JsonPropertyName("days_since_import")]    public int?   DaysSinceImport   { get; set; }
         [JsonPropertyName("last_import_new_rows")] public int    LastImportNewRows  { get; set; }
         [JsonPropertyName("freshness_status")]     public string FreshnessStatus   { get; set; } = "never";
+        [JsonPropertyName("is_source_stale")]      public bool   IsSourceStale     { get; set; }
     }
 
     private class ImportLogItem

@@ -6,6 +6,7 @@ and SMTP email with CSV attachment of detailed import records.
 
 import csv
 import io
+import zipfile
 import logging
 import smtplib
 from datetime import datetime, timezone
@@ -35,7 +36,9 @@ _SPORT_NAMES = {
     "baseball_training": "XGBoost Trainer",
     "cfb": "College Football",
     "mlb_stats": "MLB Stats",
+    "mlb_results": "MLB Results",
     "mlb_training": "MLB Training",
+    "nascar_supplemental": "NASCAR Supplemental",
 }
 
 
@@ -95,10 +98,26 @@ class NotificationService:
             },
         )
 
-        # 2. SMTP EMAIL — send detailed report with CSV attachment
-        await NotificationService._send_email_report(
-            results, perf_summary, import_records or [], health_score, total_duration, total_rows
-        )
+        # 2. SMTP EMAIL — only send when something needs attention
+        #    (failures, stale data sources, or errors)
+        stale_sports = [
+            r for r in results
+            if r.get('success') and r.get('rows', 0) > 0 and r.get('new', 0) == 0
+        ]
+        has_problems = fail_count > 0 or len(stale_sports) > 0
+
+        if has_problems:
+            logger.info(
+                f"Email triggered: {fail_count} failures, {len(stale_sports)} stale. Sending report."
+            )
+            await NotificationService._send_email_report(
+                results, perf_summary, import_records or [], health_score, total_duration, total_rows
+            )
+        else:
+            logger.info(
+                f"All {success_count} imports healthy — skipping email. "
+                f"Check Data Health page or in-app notifications for details."
+            )
 
     # ------------------------------------------------------------------
     # Email helpers
@@ -134,25 +153,48 @@ class NotificationService:
             # HTML body
             msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-            # CSV attachment (import records)
+            # Zip attachment (CSV + TXT compressed to stay under Gmail 25MB limit)
             if import_records:
+                ts = datetime.now(CST).strftime('%Y%m%d_%H%M')
                 csv_bytes = NotificationService._build_csv(import_records)
-                attachment = MIMEApplication(csv_bytes, _subtype="csv")
+                txt_bytes = NotificationService._build_txt(import_records)
+                summary_bytes = NotificationService._build_summary_csv(results)
+
+                zip_buf = io.BytesIO()
+                with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+                    zf.writestr(f"summary_{ts}.csv", summary_bytes)
+                    zf.writestr(f"import_records_{ts}.csv", csv_bytes)
+                    zf.writestr(f"import_records_{ts}.txt", txt_bytes)
+                zip_bytes = zip_buf.getvalue()
+
+                # Gmail hard-limit is 25MB; stay safely under it
+                MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024  # 20 MB
+                if len(zip_bytes) < MAX_ATTACHMENT_BYTES:
+                    attachment = MIMEApplication(zip_bytes, _subtype="zip")
+                    attachment.add_header(
+                        "Content-Disposition", "attachment",
+                        filename=f"import_report_{ts}.zip",
+                    )
+                    msg.attach(attachment)
+                else:
+                    logger.warning(
+                        f"Zip attachment too large ({len(zip_bytes)/1024/1024:.1f} MB) — "
+                        f"skipping attachment to avoid Gmail rejection."
+                    )
+            else:
+                # No detailed records — still attach the per-sport summary
+                ts = datetime.now(CST).strftime('%Y%m%d_%H%M')
+                summary_bytes = NotificationService._build_summary_csv(results)
+                zip_buf = io.BytesIO()
+                with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+                    zf.writestr(f"summary_{ts}.csv", summary_bytes)
+                zip_bytes = zip_buf.getvalue()
+                attachment = MIMEApplication(zip_bytes, _subtype="zip")
                 attachment.add_header(
                     "Content-Disposition", "attachment",
-                    filename=f"import_records_{datetime.now(CST).strftime('%Y%m%d_%H%M')}.csv",
+                    filename=f"import_report_{ts}.zip",
                 )
                 msg.attach(attachment)
-
-            # TXT attachment (same data as plain text fallback)
-            if import_records:
-                txt_bytes = NotificationService._build_txt(import_records)
-                txt_attach = MIMEApplication(txt_bytes, _subtype="plain")
-                txt_attach.add_header(
-                    "Content-Disposition", "attachment",
-                    filename=f"import_records_{datetime.now(CST).strftime('%Y%m%d_%H%M')}.txt",
-                )
-                msg.attach(txt_attach)
 
             # Send via SMTP (run in thread to avoid blocking the event loop)
             import asyncio
@@ -197,6 +239,37 @@ class NotificationService:
         return "\n".join(lines).encode("utf-8")
 
     @staticmethod
+    def _build_summary_csv(results: list) -> bytes:
+        """Generate a per-sport summary CSV showing freshness status."""
+        buf = io.StringIO()
+        fieldnames = ["sport", "status", "rows", "new", "updated", "duration_s", "error"]
+        writer = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for r in results:
+            name = _SPORT_NAMES.get(r.get("sport", ""), r.get("sport", "").upper())
+            rows = r.get("rows", 0)
+            new = r.get("new", 0)
+            err = r.get("error", "")
+            if err:
+                status = "ERROR"
+            elif new > 0:
+                status = "FRESH"
+            elif rows > 0:
+                status = "STALE"
+            else:
+                status = "EMPTY"
+            writer.writerow({
+                "sport": name,
+                "status": status,
+                "rows": rows,
+                "new": new,
+                "updated": r.get("updated", 0),
+                "duration_s": round(r.get("duration", 0), 1),
+                "error": err[:200] if err else "",
+            })
+        return buf.getvalue().encode("utf-8")
+
+    @staticmethod
     def _build_html_body(
         results: list,
         perf_summary: dict,
@@ -206,10 +279,14 @@ class NotificationService:
         now_str: str,
         record_count: int,
     ) -> str:
-        """Build a clean HTML email body with summary table."""
+        """Build a clean HTML email body with summary table and freshness badges."""
         success_count = sum(1 for r in results if r.get("success"))
         fail_count = len(results) - success_count
         health_color = "#22c55e" if health_score >= 90 else "#f59e0b" if health_score >= 70 else "#ef4444"
+
+        # Freshness counters
+        fresh_count = 0
+        stale_count = 0
 
         # Sport rows
         sport_rows = ""
@@ -222,15 +299,41 @@ class NotificationService:
             dur = r.get("duration", 0)
             err = r.get("error", "")
             bg = "#0d1117" if r.get("success") else "#1c1014"
+
+            # Freshness badge
+            if err:
+                badge = '<span style="background:#7f1d1d;color:#fca5a5;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">ERROR</span>'
+            elif new > 0:
+                badge = '<span style="background:#064e3b;color:#6ee7b7;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">FRESH</span>'
+                fresh_count += 1
+            elif rows > 0 and r.get("success"):
+                badge = '<span style="background:#78350f;color:#fcd34d;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">STALE</span>'
+                stale_count += 1
+            else:
+                badge = '<span style="color:#484f58;font-size:11px;">—</span>'
+                if r.get("success"):
+                    fresh_count += 1  # empty but successful (e.g. training tasks)
+
             sport_rows += f"""
             <tr style="background:{bg};">
                 <td style="padding:6px 12px;border-bottom:1px solid #21262d;">{icon} {name}</td>
+                <td style="padding:6px 12px;border-bottom:1px solid #21262d;text-align:center;">{badge}</td>
                 <td style="padding:6px 12px;border-bottom:1px solid #21262d;text-align:right;">{rows:,}</td>
                 <td style="padding:6px 12px;border-bottom:1px solid #21262d;text-align:right;">{new:,}</td>
                 <td style="padding:6px 12px;border-bottom:1px solid #21262d;text-align:right;">{updated:,}</td>
                 <td style="padding:6px 12px;border-bottom:1px solid #21262d;text-align:right;">{dur:.1f}s</td>
                 <td style="padding:6px 12px;border-bottom:1px solid #21262d;color:#f87171;font-size:12px;">{err[:60] if err else ''}</td>
             </tr>"""
+
+        # Freshness summary callout
+        if stale_count > 0:
+            freshness_html = f"""
+            <div style="margin-top:16px;padding:12px;background:#1c1814;border:1px solid #78350f;border-radius:8px;">
+                <span style="color:#fcd34d;font-weight:600;">⚠️ {stale_count} sport{'s' if stale_count != 1 else ''} returned stale data</span>
+                <span style="color:#8b949e;font-size:12px;"> — rows processed but 0 new records. Data source may be down or unchanged.</span>
+            </div>"""
+        else:
+            freshness_html = ""
 
         # Performance section
         perf_html = ""
@@ -250,11 +353,11 @@ class NotificationService:
         return f"""
         <html>
         <body style="margin:0;padding:20px;background:#0d1117;color:#c9d1d9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
-            <div style="max-width:700px;margin:0 auto;">
+            <div style="max-width:750px;margin:0 auto;">
                 <h1 style="color:#f0f6fc;margin-bottom:4px;">Sports Betting Analyzer</h1>
                 <p style="color:#8b949e;margin-top:0;">Import Pipeline Report — {now_str}</p>
 
-                <div style="display:flex;gap:16px;margin:16px 0;">
+                <div style="display:flex;gap:16px;margin:16px 0;flex-wrap:wrap;">
                     <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:12px 20px;text-align:center;">
                         <div style="font-size:28px;font-weight:bold;color:{health_color};">{health_score}%</div>
                         <div style="color:#8b949e;font-size:12px;">Health</div>
@@ -264,12 +367,16 @@ class NotificationService:
                         <div style="color:#8b949e;font-size:12px;">Total Rows</div>
                     </div>
                     <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:12px 20px;text-align:center;">
-                        <div style="font-size:28px;font-weight:bold;color:#c9d1d9;">{total_duration:.0f}s</div>
-                        <div style="color:#8b949e;font-size:12px;">Duration</div>
+                        <div style="font-size:28px;font-weight:bold;color:#6ee7b7;">{fresh_count}</div>
+                        <div style="color:#8b949e;font-size:12px;">Fresh</div>
                     </div>
                     <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:12px 20px;text-align:center;">
-                        <div style="font-size:28px;font-weight:bold;color:#c9d1d9;">{record_count:,}</div>
-                        <div style="color:#8b949e;font-size:12px;">Records</div>
+                        <div style="font-size:28px;font-weight:bold;color:{'#fcd34d' if stale_count > 0 else '#c9d1d9'};">{stale_count}</div>
+                        <div style="color:#8b949e;font-size:12px;">Stale</div>
+                    </div>
+                    <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:12px 20px;text-align:center;">
+                        <div style="font-size:28px;font-weight:bold;color:#c9d1d9;">{total_duration:.0f}s</div>
+                        <div style="color:#8b949e;font-size:12px;">Duration</div>
                     </div>
                 </div>
 
@@ -277,6 +384,7 @@ class NotificationService:
                     <thead>
                         <tr style="background:#161b22;">
                             <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #21262d;color:#f0f6fc;">Sport</th>
+                            <th style="padding:8px 12px;text-align:center;border-bottom:2px solid #21262d;color:#f0f6fc;">Status</th>
                             <th style="padding:8px 12px;text-align:right;border-bottom:2px solid #21262d;color:#f0f6fc;">Rows</th>
                             <th style="padding:8px 12px;text-align:right;border-bottom:2px solid #21262d;color:#f0f6fc;">New</th>
                             <th style="padding:8px 12px;text-align:right;border-bottom:2px solid #21262d;color:#f0f6fc;">Updated</th>
@@ -289,13 +397,14 @@ class NotificationService:
                     </tbody>
                 </table>
 
+                {freshness_html}
                 {perf_html}
 
                 <p style="margin-top:16px;color:#8b949e;font-size:12px;">
-                    {'📎 CSV and TXT files with ' + str(record_count) + ' line-by-line import records are attached.' if record_count > 0 else 'No new records to attach.'}
+                    {'📎 Attached: import_report.zip — contains per-sport summary CSV' + (' and ' + str(record_count) + ' detailed import records (new/changed only).' if record_count > 0 else '.') }
                 </p>
                 <p style="margin-top:4px;color:#484f58;font-size:11px;">
-                    Passed: {success_count} | Failed: {fail_count}
+                    Passed: {success_count} | Failed: {fail_count} | Fresh: {fresh_count} | Stale: {stale_count}
                 </p>
             </div>
         </body>

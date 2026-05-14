@@ -293,7 +293,7 @@ async def run_import(progress_callback=None) -> Dict[str, Any]:
         )
         if not sport_id:
             sport_id = await conn.fetchval(
-                """INSERT INTO sports (name, description) VALUES ('mlb', 'Major League Baseball')
+                """INSERT INTO sports (name, config) VALUES ('mlb', '{}')
                    ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
                    RETURNING id"""
             )

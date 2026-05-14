@@ -62,7 +62,16 @@ ALTER TABLE results ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW(
 CREATE OR REPLACE FUNCTION update_results_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW.updated_at = NOW();
+    -- On INSERT always set updated_at
+    IF TG_OP = 'INSERT' THEN
+        NEW.updated_at = NOW();
+    -- On UPDATE only bump updated_at when metadata actually changed;
+    -- prevents no-op re-upserts from inflating "updated" counts.
+    ELSIF OLD.metadata IS DISTINCT FROM NEW.metadata THEN
+        NEW.updated_at = NOW();
+    ELSE
+        NEW.updated_at = OLD.updated_at;
+    END IF;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -259,7 +268,7 @@ class SchedulerService:
             cls._is_running_job = False
 
     @staticmethod
-    async def _collect_import_records(conn, sport_key: str, since: datetime, limit: int = 100000) -> List[Dict[str, Any]]:
+    async def _collect_import_records(conn, sport_key: str, since: datetime, limit: int = 10000) -> List[Dict[str, Any]]:
         """
         Query the results table for records inserted or updated since `since`
         for the given sport. Returns a list of dicts suitable for the CSV report.
@@ -633,11 +642,16 @@ class SchedulerService:
         try:
             from scripts.mlb_results_importer import run_import
             result = await run_import()
-            logger.info(f"MLB results import finished: {result.get('total_imported', 0)} games")
-            return result
+            total = result.get('total_imported', 0)
+            logger.info(f"MLB results import finished: {total} games")
+            return {
+                "rows": total,
+                "new": total,
+                "updated": 0,
+            }
         except Exception as e:
             logger.error(f"MLB results import failed: {e}")
-            return {"error": str(e)}
+            raise
 
     @staticmethod
     async def _mlb_stats_collection_task():
@@ -645,11 +659,17 @@ class SchedulerService:
         try:
             from scripts.mlb_stats_collector import run_full_collection
             result = await run_full_collection()
-            logger.info(f"MLB stats collection finished: {result.get('team_rows_saved', 0)} teams, {result.get('pitcher_rows_saved', 0)} pitchers")
-            return result
+            teams = result.get('team_rows_saved', 0)
+            pitchers = result.get('pitcher_rows_saved', 0)
+            logger.info(f"MLB stats collection finished: {teams} teams, {pitchers} pitchers")
+            return {
+                "rows": teams + pitchers,
+                "new": result.get('new', 0),
+                "updated": result.get('updated', 0),
+            }
         except Exception as e:
             logger.error(f"MLB stats collection failed: {e}")
-            return {"error": str(e)}
+            raise
 
     @staticmethod
     async def _mlb_model_training_task():
