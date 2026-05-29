@@ -724,7 +724,7 @@
     private bool _loadingGames = false;
     private List<Game> _games = new();
     private List<Leg> _legs = new();
-    private string _sportsbook = "fanduel";
+    private string _sportsbook = "draftkings";
     private decimal _stake = 10;
     private string _manualDesc = "";
     private int _manualOdds = -110;
@@ -750,7 +750,7 @@
     private string _editDescription = "";
     private decimal _editStake = 10;
     private int _editOdds = -110;
-    private string _editSportsbook = "fanduel";
+    private string _editSportsbook = "draftkings";
 
     // Import state
     private bool _isImporting = false;
@@ -802,7 +802,7 @@
         
         try
         {
-            var resp = await Http.GetAsync($"http://backend:8000/odds/{_sport}?sportsbook=fanduel");
+            var resp = await Http.GetAsync($"http://backend:8000/odds/{_sport}?sportsbook=draftkings");
             if (resp.IsSuccessStatusCode)
             {
                 var json = await resp.Content.ReadAsStringAsync();
@@ -889,7 +889,7 @@
 
         try
         {
-            var resp = await Http.GetAsync($"http://backend:8000/odds/{_dialogSport}?sportsbook=fanduel");
+            var resp = await Http.GetAsync($"http://backend:8000/odds/{_dialogSport}?sportsbook=draftkings");
             if (resp.IsSuccessStatusCode)
             {
                 var json = await resp.Content.ReadAsStringAsync();

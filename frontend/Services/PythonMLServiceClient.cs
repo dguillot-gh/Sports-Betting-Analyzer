@@ -668,6 +668,9 @@ public class PythonMLServiceClient
     private readonly PythonMLOptions _options;
     private bool _isHealthy = false;
     private DateTime _lastHealthCheck = DateTime.MinValue;
+    private DateTime _lastQuotaCheck = DateTime.MinValue;
+    private AiQuota? _cachedQuota;
+    private readonly System.Threading.SemaphoreSlim _quotaLock = new(1, 1);
 
     public PythonMLServiceClient(
         HttpClient httpClient,
@@ -1482,14 +1485,43 @@ public class PythonMLServiceClient
 
     public async Task<AiQuota?> GetAiQuotaAsync()
     {
+        var now = DateTime.UtcNow;
+        if ((now - _lastQuotaCheck).TotalSeconds < 60 && _cachedQuota != null)
+        {
+            return _cachedQuota;
+        }
+
+        using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(10));
+        
         try
         {
-            return await _httpClient.GetFromJsonAsync<AiQuota>("/ai/quota");
+            await _quotaLock.WaitAsync(cts.Token);
+            try
+            {
+                // Double-check pattern
+                if ((DateTime.UtcNow - _lastQuotaCheck).TotalSeconds < 60 && _cachedQuota != null)
+                {
+                    return _cachedQuota;
+                }
+
+                _cachedQuota = await _httpClient.GetFromJsonAsync<AiQuota>("/ai/quota", cts.Token);
+                _lastQuotaCheck = DateTime.UtcNow;
+                return _cachedQuota;
+            }
+            finally
+            {
+                _quotaLock.Release();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("AI quota request timed out.");
+            return _cachedQuota;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting AI quota");
-            return null;
+            return _cachedQuota;
         }
     }
 
@@ -1511,7 +1543,7 @@ public class PythonMLServiceClient
         }
     }
 
-    public async Task<List<DashboardTopPick>> GetDashboardTopPicksAsync(int limit = 8, string sportsbook = "fanduel")
+    public async Task<List<DashboardTopPick>> GetDashboardTopPicksAsync(int limit = 8, string sportsbook = "draftkings")
     {
         try
         {

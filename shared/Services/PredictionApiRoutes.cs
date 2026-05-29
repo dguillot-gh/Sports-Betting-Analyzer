@@ -7,25 +7,25 @@ public static class PredictionApiRoutes
     private static string WithSportsbook(string path, string sportsbook)
         => $"{ApiUrlHelper.NormalizeRoute(path)}?sportsbook={Uri.EscapeDataString(sportsbook)}";
 
-    public static string NbaAnalyzeCached(string sportsbook = "fanduel")
+    public static string NbaAnalyzeCached(string sportsbook = "draftkings")
         => $"{WithSportsbook("odds/nba/analyze-cached", sportsbook)}&include_cached=true";
 
-    public static string NflPredictions(string sportsbook = "fanduel")
+    public static string NflPredictions(string sportsbook = "draftkings")
         => WithSportsbook("model-testing/nfl/predictions", sportsbook);
 
-    public static string NhlAnalyzeAll(string sportsbook = "fanduel")
+    public static string NhlAnalyzeAll(string sportsbook = "draftkings")
         => WithSportsbook("nhl/analyze-all", sportsbook);
 
-    public static string NcaabAnalyzeAll(string sportsbook = "fanduel")
+    public static string NcaabAnalyzeAll(string sportsbook = "draftkings")
         => WithSportsbook("odds/ncaab/analyze-all", sportsbook);
 
-    public static string CfbAnalyzeAll(string sportsbook = "fanduel")
+    public static string CfbAnalyzeAll(string sportsbook = "draftkings")
         => WithSportsbook("odds/cfb/analyze-all", sportsbook);
 
-    public static string CollegeBaseballAnalyzeAll(string sportsbook = "fanduel")
+    public static string CollegeBaseballAnalyzeAll(string sportsbook = "draftkings")
         => WithSportsbook("odds/college-baseball/analyze-all", sportsbook);
 
-    public static string MlbAnalyzeAll(string sportsbook = "fanduel")
+    public static string MlbAnalyzeAll(string sportsbook = "draftkings")
         => WithSportsbook("odds/mlb/analyze-all", sportsbook);
 
     public static string MlbTeamStats()

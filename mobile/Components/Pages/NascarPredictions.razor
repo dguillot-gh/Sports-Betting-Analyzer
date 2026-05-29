@@ -1,0 +1,372 @@
+@page "/mobile-nascar-predictions"
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@inject HttpClient Http
+@inject SportsBettingAnalyzer.Shared.Services.IServerConfigService ServerConfig
+
+<div class="page-header">
+    <h1>🏁 NASCAR AI Predictions</h1>
+    <p>XGBoost Ensemble Model</p>
+</div>
+
+@* ─── Series Selector ─── *@
+<div class="series-selector">
+    <button class="series-btn @(_seriesId == 1 ? "active" : "")" @onclick="() => SelectSeries(1)">Cup</button>
+    <button class="series-btn @(_seriesId == 2 ? "active" : "")" @onclick="() => SelectSeries(2)">O'Reilly</button>
+    <button class="series-btn @(_seriesId == 3 ? "active" : "")" @onclick="() => SelectSeries(3)">Trucks</button>
+</div>
+
+@* ─── Race Banner ─── *@
+@if (_raceInfo != null)
+{
+    <div class="race-banner">
+        <div class="race-label">NEXT RACE — @_seriesName</div>
+        <div class="race-name">@GetRaceString("name")</div>
+        <div class="race-details">@GetRaceString("track") • @GetRaceInt("laps") Laps</div>
+        <div class="race-date">@FormatRaceDate()</div>
+    </div>
+}
+
+@* ─── Loading / Error ─── *@
+@if (_loading)
+{
+    <div class="loading-box">
+        <div class="spinner"></div>
+        <span>Running AI predictions...</span>
+    </div>
+}
+else if (_error != null)
+{
+    <div class="error-box">
+        <span>⚠️ @_error</span>
+        <button class="retry-btn" @onclick="LoadPredictions">Retry</button>
+    </div>
+}
+else if (_predictions.Any())
+{
+    @* ─── Stats Row ─── *@
+    <div class="stats-row">
+        <div class="stat-pill">
+            <span class="stat-val emerald">@(_predictions.FirstOrDefault()?["driver_name"]?.ToString() ?? "--")</span>
+            <span class="stat-lbl">Top Pick</span>
+        </div>
+        <div class="stat-pill">
+            <span class="stat-val amber">@($"{GetDouble(_predictions.First(), "win_probability") * 100:F1}%")</span>
+            <span class="stat-lbl">Win Prob</span>
+        </div>
+        <div class="stat-pill">
+            <span class="stat-val blue">@_predictions.Count</span>
+            <span class="stat-lbl">Drivers</span>
+        </div>
+    </div>
+
+    @* ─── Tab Selector ─── *@
+    <div class="tab-row">
+        <button class="tab-btn @(_activeTab == 0 ? "active" : "")" @onclick="() => _activeTab = 0">📊 Predictions</button>
+        <button class="tab-btn @(_activeTab == 1 ? "active" : "")" @onclick="() => _activeTab = 1">🏆 Rankings</button>
+    </div>
+
+    @* ─── TAB 0: Predictions ─── *@
+    @if (_activeTab == 0)
+    {
+        <div class="driver-list">
+            @foreach (var (driver, index) in _predictions.Select((d, i) => (d, i)))
+            {
+                var winPct = GetDouble(driver, "win_probability") * 100;
+                var top3Pct = GetDouble(driver, "top3_probability") * 100;
+                var top5Pct = GetDouble(driver, "top5_probability") * 100;
+                var top10Pct = GetDouble(driver, "top10_probability") * 100;
+                var projFinish = GetDouble(driver, "projected_finish");
+                var projColor = projFinish <= 5 ? "emerald" : projFinish <= 10 ? "blue" : "muted";
+
+                <div class="driver-card">
+                    <div class="driver-header">
+                        <span class="rank-badge">@(index + 1)</span>
+                        <span class="driver-name">@driver["driver_name"]</span>
+                        <span class="proj-finish @projColor">P@($"{projFinish:F0}")</span>
+                    </div>
+                    <div class="prob-grid">
+                        <div class="prob-item">
+                            <div class="prob-bar-track"><div class="prob-bar-fill win" style="width: @(Math.Min(winPct * 10, 100))%"></div></div>
+                            <div class="prob-meta"><span class="prob-label">Win</span><span class="prob-val emerald">@($"{winPct:F1}%")</span></div>
+                        </div>
+                        <div class="prob-item">
+                            <div class="prob-bar-track"><div class="prob-bar-fill top3" style="width: @(Math.Min(top3Pct * 2, 100))%"></div></div>
+                            <div class="prob-meta"><span class="prob-label">Top 3</span><span class="prob-val cyan">@($"{top3Pct:F1}%")</span></div>
+                        </div>
+                        <div class="prob-item">
+                            <div class="prob-bar-track"><div class="prob-bar-fill top5" style="width: @(Math.Min(top5Pct * 2, 100))%"></div></div>
+                            <div class="prob-meta"><span class="prob-label">Top 5</span><span class="prob-val blue">@($"{top5Pct:F1}%")</span></div>
+                        </div>
+                        <div class="prob-item">
+                            <div class="prob-bar-track"><div class="prob-bar-fill top10" style="width: @(Math.Min(top10Pct * 1.3, 100))%"></div></div>
+                            <div class="prob-meta"><span class="prob-label">Top 10</span><span class="prob-val purple">@($"{top10Pct:F1}%")</span></div>
+                        </div>
+                    </div>
+                    <div class="driver-footer">
+                        <span class="team-name">@(driver.ContainsKey("team") ? driver["team"]?.ToString() : "")</span>
+                        <span class="model-odds">@(driver["model_odds"]?.ToString() ?? "--")</span>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    @* ─── TAB 1: Power Rankings ─── *@
+    @if (_activeTab == 1 && _powerRankings != null)
+    {
+        @RenderMobileTier("🏆", "Elite Favorites", "elite")
+        @RenderMobileTier("📈", "Strong Contenders", "contenders")
+        @RenderMobileTier("🎯", "Dark Horses", "dark_horses")
+        @RenderMobileTier("⚡", "Longshots", "longshots")
+    }
+}
+
+<div style="height: 80px;"></div>
+
+<style>
+    .page-header { padding: 20px 16px 12px; }
+    .page-header h1 { font-size: 22px; font-weight: 800; margin: 0; color: var(--text-primary, #e2e8f0); }
+    .page-header p { font-size: 12px; color: var(--text-muted, #64748b); margin: 4px 0 0; }
+
+    .series-selector { display: flex; gap: 8px; padding: 0 16px 12px; }
+    .series-btn {
+        flex: 1; padding: 10px 0; border: 1px solid var(--border, #334155); border-radius: 10px;
+        background: var(--surface, #1e293b); color: var(--text-secondary, #94a3b8);
+        font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s;
+    }
+    .series-btn.active {
+        background: linear-gradient(135deg, #f59e0b, #d97706); color: #0f172a;
+        border-color: #f59e0b; box-shadow: 0 2px 8px rgba(245,158,11,0.3);
+    }
+
+    .race-banner {
+        margin: 0 16px 12px; padding: 16px; border-radius: 12px;
+        background: linear-gradient(135deg, #f59e0b, #ea580c);
+    }
+    .race-label { font-size: 10px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; color: rgba(0,0,0,0.45); }
+    .race-name { font-size: 18px; font-weight: 800; color: #0f172a; margin: 2px 0; }
+    .race-details { font-size: 13px; color: rgba(0,0,0,0.6); font-weight: 500; }
+    .race-date { font-size: 12px; color: rgba(0,0,0,0.5); margin-top: 2px; }
+
+    .loading-box { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 40px 16px; color: var(--text-muted, #64748b); font-size: 14px; }
+    .spinner { width: 24px; height: 24px; border: 3px solid var(--border, #334155); border-top-color: #f59e0b; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @@keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-box { margin: 0 16px; padding: 16px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 10px; text-align: center; color: #f87171; font-size: 14px; }
+    .retry-btn { margin-top: 8px; padding: 6px 16px; border: 1px solid #f59e0b; background: transparent; color: #f59e0b; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; }
+
+    .stats-row { display: flex; gap: 8px; padding: 0 16px 12px; }
+    .stat-pill {
+        flex: 1; padding: 10px 8px; background: var(--surface, #1e293b); border: 1px solid var(--border, #334155);
+        border-radius: 10px; text-align: center;
+    }
+    .stat-val { display: block; font-size: 14px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .stat-lbl { display: block; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted, #64748b); margin-top: 2px; }
+    .emerald { color: #10b981; }
+    .amber { color: #f59e0b; }
+    .blue { color: #3b82f6; }
+    .cyan { color: #06b6d4; }
+    .purple { color: #8b5cf6; }
+    .muted { color: #94a3b8; }
+
+    .tab-row { display: flex; gap: 4px; padding: 0 16px; margin-bottom: 12px; }
+    .tab-btn {
+        flex: 1; padding: 10px 0; border: none; border-radius: 8px;
+        background: transparent; color: var(--text-muted, #64748b);
+        font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s;
+    }
+    .tab-btn.active { background: var(--surface, #1e293b); color: #f59e0b; border: 1px solid var(--border, #334155); }
+
+    .driver-list { padding: 0 16px; }
+    .driver-card {
+        background: var(--surface, #1e293b); border: 1px solid var(--border, #334155);
+        border-radius: 12px; padding: 14px; margin-bottom: 10px;
+    }
+    .driver-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .rank-badge {
+        width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+        background: rgba(245,158,11,0.15); color: #f59e0b; border-radius: 6px;
+        font-size: 12px; font-weight: 800; flex-shrink: 0;
+    }
+    .driver-name { font-size: 15px; font-weight: 700; color: var(--text-primary, #f8fafc); flex: 1; }
+    .proj-finish { font-size: 13px; font-weight: 800; }
+
+    .prob-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .prob-item { }
+    .prob-bar-track { height: 4px; background: var(--border, #334155); border-radius: 2px; overflow: hidden; margin-bottom: 3px; }
+    .prob-bar-fill { height: 100%; border-radius: 2px; transition: width 0.4s; }
+    .prob-bar-fill.win { background: linear-gradient(90deg, #10b981, #34d399); }
+    .prob-bar-fill.top3 { background: linear-gradient(90deg, #06b6d4, #22d3ee); }
+    .prob-bar-fill.top5 { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+    .prob-bar-fill.top10 { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+    .prob-meta { display: flex; justify-content: space-between; }
+    .prob-label { font-size: 10px; color: var(--text-muted, #64748b); font-weight: 600; }
+    .prob-val { font-size: 11px; font-weight: 700; }
+
+    .driver-footer { display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border, #334155); }
+    .team-name { font-size: 11px; color: var(--text-muted, #64748b); }
+    .model-odds { font-size: 12px; font-weight: 700; color: var(--text-secondary, #94a3b8); font-family: monospace; }
+
+    .tier-section { padding: 0 16px; margin-bottom: 16px; }
+    .tier-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .tier-header h3 { font-size: 15px; font-weight: 800; color: var(--text-primary, #e2e8f0); margin: 0; }
+    .tier-icon { font-size: 20px; }
+    .tier-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .tier-card {
+        background: var(--surface, #1e293b); border: 1px solid var(--border, #334155);
+        border-radius: 10px; padding: 12px;
+    }
+    .tier-card-name { font-size: 13px; font-weight: 700; color: var(--text-primary, #f8fafc); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tier-stat { display: flex; justify-content: space-between; font-size: 11px; margin-top: 3px; }
+    .tier-stat-label { color: var(--text-muted, #64748b); }
+    .tier-stat-val { font-weight: 700; }
+</style>
+
+@code {
+    private int _seriesId = 1;
+    private int _activeTab = 0;
+    private bool _loading = false;
+    private string? _error = null;
+    private string _seriesName = "Cup Series";
+
+    private Dictionary<string, object>? _raceInfo;
+    private List<Dictionary<string, object>> _predictions = new();
+    private Dictionary<string, object>? _powerRankings;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPredictions();
+    }
+
+    private async Task SelectSeries(int id)
+    {
+        _seriesId = id;
+        _seriesName = id switch { 2 => "O'Reilly Auto Parts", 3 => "CRAFTSMAN Trucks", _ => "Cup Series" };
+        await LoadPredictions();
+    }
+
+    private async Task LoadPredictions()
+    {
+        _loading = true;
+        _error = null;
+        _predictions.Clear();
+        _raceInfo = null;
+        _powerRankings = null;
+        StateHasChanged();
+
+        try
+        {
+            var baseUrl = ServerConfig.GetBaseUrl();
+            var response = await Http.GetAsync($"{baseUrl}/nascar/prediction-hub?series={_seriesId}");
+
+            if (response == null || !response.IsSuccessStatusCode)
+            {
+                _error = "Could not reach prediction engine";
+                return;
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("error", out var errorProp))
+            {
+                _error = errorProp.GetString();
+                return;
+            }
+
+            if (root.TryGetProperty("race", out var raceProp))
+                _raceInfo = JsonToDictionary(raceProp);
+
+            if (root.TryGetProperty("predictions", out var predsProp))
+                foreach (var pred in predsProp.EnumerateArray())
+                    _predictions.Add(JsonToDictionary(pred));
+
+            if (root.TryGetProperty("power_rankings", out var prProp))
+                _powerRankings = JsonToDictionary(prProp);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to load: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private RenderFragment RenderMobileTier(string icon, string title, string tierKey) => __builder =>
+    {
+        var drivers = GetTierDrivers(tierKey);
+        if (!drivers.Any()) return;
+
+        <div class="tier-section">
+            <div class="tier-header">
+                <span class="tier-icon">@icon</span>
+                <h3>@title</h3>
+            </div>
+            <div class="tier-cards">
+                @foreach (var d in drivers)
+                {
+                    <div class="tier-card">
+                        <div class="tier-card-name">@d["driver_name"]</div>
+                        <div class="tier-stat"><span class="tier-stat-label">Win</span><span class="tier-stat-val emerald">@($"{GetDouble(d, "win_probability") * 100:F1}%")</span></div>
+                        <div class="tier-stat"><span class="tier-stat-label">Top 5</span><span class="tier-stat-val blue">@($"{GetDouble(d, "top5_probability") * 100:F1}%")</span></div>
+                        <div class="tier-stat"><span class="tier-stat-label">Finish</span><span class="tier-stat-val">P@($"{GetDouble(d, "projected_finish"):F0}")</span></div>
+                    </div>
+                }
+            </div>
+        </div>
+    };
+
+    // ─── Helpers ───
+
+    private string GetRaceString(string key) =>
+        _raceInfo != null && _raceInfo.ContainsKey(key) ? _raceInfo[key]?.ToString() ?? "" : "";
+
+    private int GetRaceInt(string key) =>
+        _raceInfo != null && _raceInfo.ContainsKey(key) && _raceInfo[key] is JsonElement el && el.ValueKind == JsonValueKind.Number
+            ? el.GetInt32() : 0;
+
+    private string FormatRaceDate()
+    {
+        var dateStr = GetRaceString("date");
+        if (DateTime.TryParse(dateStr, out var dt))
+            return dt.ToString("MMM d, yyyy @ h:mm tt");
+        return dateStr;
+    }
+
+    private double GetDouble(Dictionary<string, object> dict, string key)
+    {
+        if (!dict.ContainsKey(key)) return 0;
+        var val = dict[key];
+        if (val is JsonElement el)
+        {
+            if (el.ValueKind == JsonValueKind.Number) return el.GetDouble();
+            if (el.ValueKind == JsonValueKind.String && double.TryParse(el.GetString(), out var d)) return d;
+        }
+        if (val is double dbl) return dbl;
+        if (double.TryParse(val?.ToString(), out var parsed)) return parsed;
+        return 0;
+    }
+
+    private List<Dictionary<string, object>> GetTierDrivers(string tierKey)
+    {
+        if (_powerRankings == null || !_powerRankings.ContainsKey(tierKey)) return new();
+        var val = _powerRankings[tierKey];
+        if (val is JsonElement el && el.ValueKind == JsonValueKind.Array)
+            return el.EnumerateArray().Select(JsonToDictionary).ToList();
+        return new();
+    }
+
+    private static Dictionary<string, object> JsonToDictionary(JsonElement element)
+    {
+        var dict = new Dictionary<string, object>();
+        if (element.ValueKind == JsonValueKind.Object)
+            foreach (var prop in element.EnumerateObject())
+                dict[prop.Name] = prop.Value;
+        return dict;
+    }
+}

@@ -17,7 +17,7 @@ router = APIRouter(prefix="/nhl", tags=["nhl"])
 
 @router.get("/odds")
 async def get_nhl_odds(
-    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from"),
+    sportsbook: str = Query("draftkings", description="Sportsbook to fetch odds from"),
 ):
     """Get today's NHL betting odds."""
     return await get_todays_nhl_odds(sportsbook)
@@ -41,7 +41,7 @@ async def predict_nhl_game(
 
 @router.post("/analyze-all")
 async def analyze_all_nhl_games(
-    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from")
+    sportsbook: str = Query("draftkings", description="Sportsbook to fetch odds from")
 ):
     """Fetch today's NHL games and run predictions on all of them."""
     odds_data = await get_todays_nhl_odds(sportsbook)

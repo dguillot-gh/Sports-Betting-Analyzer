@@ -792,6 +792,287 @@ async def get_race_predictions(request: Request, race_id: int):
         print(f"Prediction error: {e}")
         return {"error": str(e)}
 
+
+# ============================================
+# PREDICTION HUB - Full-Field AI Predictions
+# ============================================
+
+from scripts.odds_math import probability_to_american
+from src.sport_factory import SportFactory
+
+# Series ID to name mapping
+SERIES_NAMES = {1: "Cup Series", 2: "O'Reilly Auto Parts Series", 3: "CRAFTSMAN Truck Series"}
+SERIES_CONFIG_KEY = {1: "cup", 2: "xfinity", 3: "truck"}
+
+# Track type classification for model features
+TRACK_TYPES = {
+    "Daytona International Speedway": "Superspeedway",
+    "Talladega Superspeedway": "Superspeedway",
+    "Atlanta Motor Speedway": "Superspeedway",
+    "Circuit of The Americas": "Road Course",
+    "Watkins Glen International": "Road Course",
+    "Sonoma Raceway": "Road Course",
+    "San Diego Street Course": "Road Course",
+    "Grand Prix of St. Petersburg": "Road Course",
+    "Lime Rock Park": "Road Course",
+    "Bristol Motor Speedway": "Short Track",
+    "Martinsville Speedway": "Short Track",
+    "Richmond Raceway": "Short Track",
+    "Phoenix Raceway": "Short Track",
+    "New Hampshire Motor Speedway": "Short Track",
+    "North Wilkesboro Speedway": "Short Track",
+    "Rockingham Speedway": "Short Track",
+    "Iowa Speedway": "Short Track",
+    "Lucas Oil Indianapolis Raceway Park": "Short Track",
+    "Bowman Gray Stadium": "Short Track",
+    "Dover Motor Speedway": "Short Track",
+}
+
+
+def _normalize_name(name: str) -> str:
+    """Lowercase, strip suffixes and extra whitespace for loose name matching."""
+    import re
+    name = name.lower().strip()
+    name = re.sub(r'\b(jr|sr|ii|iii|iv)\.?$', '', name).strip()
+    return name
+
+
+def _fetch_entry_list(year: int, series_id: int, race_id: int):
+    """
+    Attempt to fetch the official entry list from cf.nascar.com.
+    Returns a set of normalised driver names, or None if the data is unavailable.
+    NASCAR only publishes the weekend-feed entry data from ~Thursday of race week;
+    earlier in the week this will gracefully return None so we fall back to the
+    full active roster.
+    """
+    import urllib.request
+    import urllib.error
+    import json
+
+    url = f"https://cf.nascar.com/cacher/{year}/{series_id}/{race_id}/weekend-feed.json"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+        runs = data.get("weekend_runs", [])
+        if not runs:
+            return None
+        names = set()
+        for run in runs:
+            for result in run.get("results", []):
+                driver_name = result.get("driver_name", "")
+                if driver_name:
+                    names.add(_normalize_name(driver_name))
+        return names if names else None
+    except Exception as e:
+        print(f"Entry list fetch failed (will use full roster): {e}")
+        return None
+
+
+@router.get("/prediction-hub")
+async def get_prediction_hub(
+    request: Request,
+    series: int = Query(1, description="Series ID: 1=Cup, 2=Xfinity, 3=Trucks")
+):
+    """
+    NASCAR AI Prediction Hub — Full field predictions for the next upcoming race.
+    Returns win/top3/top5/top10 probabilities, projected finish, and power rankings.
+    Works for all 3 series: Cup (1), O'Reilly/Xfinity (2), Trucks (3).
+    """
+    try:
+        year = datetime.now().year
+        series_name = SERIES_NAMES.get(series, "Cup Series")
+        series_config = SERIES_CONFIG_KEY.get(series, "cup")
+
+        # 1. Find the next upcoming race from the schedule
+        print(f"DEBUG: calling get_schedule({year}, {series})")
+        schedule = await get_schedule(year, series)
+        print(f"DEBUG: get_schedule returned {len(schedule)} races")
+        now = datetime.now()
+        next_race = None
+        for race in schedule:
+            race_date_str = race.get("raceDate", "")
+            if not race_date_str or race_date_str.startswith("1900"):
+                continue
+            try:
+                race_dt = datetime.fromisoformat(race_date_str.replace("Z", ""))
+                if race_dt > now:
+                    next_race = race
+                    break
+            except (ValueError, TypeError):
+                continue
+
+        # If no future race found, use the last completed race
+        if not next_race and schedule:
+            next_race = schedule[-1]
+
+        if not next_race:
+            return {"error": "No races found for this series", "series": series_name}
+
+        track_name = next_race.get("trackName", "Unknown Track")
+        race_name = next_race.get("raceName", "Unknown Race")
+        race_id = next_race.get("raceId", 0)
+        track_type = TRACK_TYPES.get(track_name, "Intermediate")
+
+        # 2. Load driver roster for this series
+        try:
+            print(f"DEBUG: calling SportFactory.get_sport('nascar', '{series_config}')")
+            sport, _ = SportFactory.get_sport("nascar", series_config)
+            print(f"DEBUG: calling sport.get_roster(series='{series_config}')")
+            roster = sport.get_roster(series=series_config, min_races=3)
+            print(f"DEBUG: get_roster returned {len(roster)} drivers")
+        except Exception as e:
+            print(f"Prediction Hub: roster load error: {e}")
+            roster = []
+
+        # 2b. Try to narrow roster to official entry list for this specific race
+        race_id = next_race.get("raceId", 0)
+        if race_id:
+            entry_names = _fetch_entry_list(year, series, race_id)
+            if entry_names:
+                filtered = [d for d in roster if _normalize_name(d.get("name", "")) in entry_names]
+                if filtered:
+                    print(f"DEBUG: entry list filtered roster from {len(roster)} → {len(filtered)} drivers")
+                    roster = filtered
+                else:
+                    print("DEBUG: entry list returned no matching names, using full roster")
+            else:
+                print("DEBUG: entry list unavailable, using full roster")
+
+        if not roster:
+            return {
+                "race": {"name": race_name, "track": track_name, "date": next_race.get("raceDate", ""),
+                         "laps": next_race.get("scheduledLaps", 0), "series": series_name},
+                "predictions": [],
+                "error": "No driver roster found for this series"
+            }
+
+        # 3. Run predictions for each driver
+        predictions = []
+        print(f"DEBUG: starting predictions for {len(roster)} drivers")
+        for i, driver_info in enumerate(roster):
+            name = driver_info.get("name", "Unknown")
+            print(f"DEBUG: predicting for {name} ({i+1}/{len(roster)})")
+            try:
+                stats = sport.get_entity_stats(name)
+                stat_data = stats.get("stats", {})
+
+                # Build driver_stats dict for the AI integration
+                driver_stats = {
+                    "avg_start": float(str(stat_data.get("Avg Start", 20)).replace(",", "")),
+                    "career_races": int(str(stat_data.get("Races", 50)).replace(",", "")),
+                    "career_wins": int(str(stat_data.get("Wins", 0)).replace(",", "")),
+                    "career_top5": int(str(stat_data.get("Top 5", 0)).replace(",", "")),
+                    "career_top10": int(str(stat_data.get("Top 10", 0)).replace(",", "")),
+                    "career_avg_finish": float(str(stat_data.get("Avg Finish", 18)).replace(",", "")),
+                    "consistency_score": float(str(stat_data.get("Consistency", 1.0)).replace(",", "")),
+                    "manufacturer": driver_info.get("manufacturer", "Unknown"),
+                    "team": driver_info.get("team", "Unknown"),
+                    "recent_avg_finish": float(str(stat_data.get("Avg Finish", 18)).replace(",", "")),
+                }
+                
+                # Try to map track type split
+                tt_lower = track_type.lower()
+                split_key = 'paved'
+                if 'dirt' in tt_lower: split_key = 'dirt'
+                elif 'road' in tt_lower: split_key = 'road'
+                
+                splits = stats.get("splits", {})
+                if split_key in splits:
+                    driver_stats[f"avg_finish_{tt_lower}"] = float(str(splits[split_key].get("Avg Finish", stat_data.get("Avg Finish", 18))).replace(",", ""))
+
+                # Calculate career rates
+                races = driver_stats["career_races"] or 1
+                driver_stats["career_win_pct"] = driver_stats["career_wins"] / races
+
+                # Run prediction
+                pred = get_nascar_ai_predictions(
+                    driver_name=name,
+                    track_name=track_name,
+                    driver_stats=driver_stats,
+                    track_type=track_type
+                )
+
+                engines = pred.get("engines", {})
+                clf = engines.get("XGBoostClassifier", {})
+                reg = engines.get("XGBoostRegressor", {})
+                baseline = engines.get("TrackBaseline", {})
+
+                win_prob = clf.get("win_prob") or baseline.get("win_prob", 0.001)
+                proj_finish = reg.get("predicted_finish") or baseline.get("predicted_finish", 25.0)
+
+                # Derive top3/top5/top10 from projected finish (heuristic until we train dedicated models)
+                top3_prob = max(0.001, min(0.95, 1.0 - (proj_finish / 15.0))) if proj_finish < 15 else 0.02
+                top5_prob = max(0.005, min(0.95, 1.0 - (proj_finish / 22.0))) if proj_finish < 22 else 0.03
+                top10_prob = max(0.01, min(0.98, 1.0 - (proj_finish / 35.0))) if proj_finish < 35 else 0.05
+
+                predictions.append({
+                    "driver_name": name,
+                    "car_number": driver_info.get("car_number", ""),
+                    "team": driver_info.get("team", ""),
+                    "manufacturer": driver_info.get("manufacturer", ""),
+                    "win_probability": round(win_prob, 4),
+                    "top3_probability": round(top3_prob, 4),
+                    "top5_probability": round(top5_prob, 4),
+                    "top10_probability": round(top10_prob, 4),
+                    "projected_finish": round(proj_finish, 1),
+                    "model_odds": probability_to_american(win_prob),
+                    "engines_used": list(engines.keys()),
+                    "confidence": clf.get("confidence", "Medium"),
+                })
+            except Exception as e:
+                print(f"Prediction Hub: error for {name}: {e}")
+                continue
+
+        # 4. Sort by win probability descending
+        predictions.sort(key=lambda x: x["win_probability"], reverse=True)
+        for i, p in enumerate(predictions):
+            p["rank"] = i + 1
+
+        # 5. Build power rankings tiers
+        power_rankings = {"elite": [], "contenders": [], "dark_horses": [], "longshots": []}
+        for p in predictions:
+            pf = p["projected_finish"]
+            entry = {"driver_name": p["driver_name"], "team": p["team"],
+                     "win_probability": p["win_probability"], "top5_probability": p["top5_probability"],
+                     "projected_finish": pf, "model_odds": p["model_odds"]}
+            if pf <= 5:
+                power_rankings["elite"].append(entry)
+            elif pf <= 10:
+                power_rankings["contenders"].append(entry)
+            elif pf <= 15:
+                power_rankings["dark_horses"].append(entry)
+            else:
+                power_rankings["longshots"].append(entry)
+
+        return {
+            "race": {
+                "name": race_name,
+                "track": track_name,
+                "track_type": track_type,
+                "date": next_race.get("raceDate", ""),
+                "laps": next_race.get("scheduledLaps", 0),
+                "series": series_name,
+                "series_id": series,
+                "race_id": race_id,
+                "restrictor_plate": next_race.get("restrictorPlate", False),
+            },
+            "predictions": predictions,
+            "prediction_count": len(predictions),
+            "power_rankings": power_rankings,
+            "model_info": {
+                "engines": 2,
+                "type": "XGBoost Ensemble",
+                "features": 40,
+            },
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}
+
+
 # ============================================
 # MODEL MAINTENANCE - Retrain & Update
 # ============================================

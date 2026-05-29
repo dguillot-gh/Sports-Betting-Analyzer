@@ -49,7 +49,7 @@ namespace SportsBettingAnalyzer.Services
             }
         }
 
-        public async Task<List<OddsEvent>> GetOddsAsync(string sportKey, string region = "us", string markets = "h2h,spreads,totals", string bookmakers = "draftkings,fanduel")
+        public async Task<List<OddsEvent>> GetOddsAsync(string sportKey, string region = "us", string markets = "h2h,spreads,totals", string bookmakers = "draftkings")
         {
             try
             {
@@ -78,7 +78,7 @@ namespace SportsBettingAnalyzer.Services
                 return new List<OddsEvent>();
             }
         }
-        public async Task<OddsEvent?> GetEventOddsAsync(string sportKey, string eventId, string region = "us", string markets = "player_pass_tds,player_pass_yds,player_rush_yds,player_rush_att,player_reception_yds,player_receptions", string bookmakers = "draftkings,fanduel")
+        public async Task<OddsEvent?> GetEventOddsAsync(string sportKey, string eventId, string region = "us", string markets = "player_pass_tds,player_pass_yds,player_rush_yds,player_rush_att,player_reception_yds,player_receptions", string bookmakers = "draftkings")
         {
             try
             {

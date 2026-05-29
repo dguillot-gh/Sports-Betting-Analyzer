@@ -8,7 +8,7 @@ class SbrOddsProvider:
         string: Full location name
     """
 
-    def __init__(self, sportsbook="fanduel"):
+    def __init__(self, sportsbook="draftkings"):
         sb = Scoreboard(sport="NBA")
         self.games = sb.games if hasattr(sb, 'games') else []
         self.sportsbook = sportsbook

@@ -1,0 +1,396 @@
+@page "/nascar-predictions"
+@using System.Text.Json
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+<PageTitle>NASCAR AI Prediction Hub</PageTitle>
+
+<div class="min-h-screen bg-slate-950 p-6">
+    <div class="max-w-screen-xl mx-auto space-y-6">
+
+        @* ─── Header ─── *@
+        <div class="bg-gradient-to-r from-slate-800/80 via-slate-900 to-slate-800/80 border border-slate-700 rounded-2xl p-6 relative overflow-hidden">
+            <div class="absolute top-0 right-0 w-64 h-full bg-gradient-to-l from-amber-500/5 to-transparent"></div>
+            <div class="relative z-10 flex flex-wrap justify-between items-center gap-4">
+                <div>
+                    <h1 class="text-2xl font-extrabold bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
+                        🏁 NASCAR AI Prediction Hub
+                    </h1>
+                    <p class="text-sm text-slate-400 mt-1">XGBoost Ensemble Model • Win / Top 3 / Top 5 / Top 10 Predictions</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <select class="bg-slate-800 border border-slate-600 text-slate-200 rounded-lg px-4 py-2 text-sm font-medium focus:border-amber-500 focus:outline-none"
+                            @onchange="OnSeriesChanged">
+                        <option value="1" selected="@(_seriesId == 1)">Cup Series</option>
+                        <option value="2" selected="@(_seriesId == 2)">O'Reilly Auto Parts</option>
+                        <option value="3" selected="@(_seriesId == 3)">CRAFTSMAN Trucks</option>
+                    </select>
+                    <button class="bg-gradient-to-r from-amber-500 to-orange-600 text-slate-900 font-bold text-sm px-5 py-2 rounded-lg hover:shadow-lg hover:shadow-amber-500/20 transition-all disabled:opacity-50"
+                            @onclick="LoadPredictions" disabled="@_loading">
+                        @(_loading ? "Loading..." : "⟳ Refresh")
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        @* ─── Race Banner ─── *@
+        @if (_raceInfo != null)
+        {
+            <div class="bg-gradient-to-r from-amber-500 to-orange-600 rounded-xl p-5 flex flex-wrap justify-between items-center gap-4">
+                <div>
+                    <div class="text-[11px] uppercase tracking-[2px] text-black/50 font-bold">🏁 Next Race — @_seriesName</div>
+                    <div class="text-xl font-extrabold text-slate-900">@GetRaceString("name")</div>
+                    <div class="text-sm text-black/70 font-medium">@GetRaceString("track") • @GetRaceInt("laps") Laps • @FormatRaceDate()</div>
+                </div>
+                <div class="flex gap-2">
+                    <span class="bg-black/15 text-slate-900 px-3 py-1 rounded-full text-xs font-bold">
+                        @GetRaceString("track_type")
+                    </span>
+                    <span class="bg-black/15 text-slate-900 px-3 py-1 rounded-full text-xs font-bold">
+                        @_predictions.Count Drivers
+                    </span>
+                </div>
+            </div>
+        }
+
+        @* ─── Stat Cards ─── *@
+        @if (_predictions.Any())
+        {
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <TwStatCard Value="@(_predictions.FirstOrDefault()?["driver_name"]?.ToString() ?? "--")"
+                            Label="Top Pick" Subtext="@($"Projected P{GetDouble(_predictions.First(), "projected_finish"):F1}")"
+                            Color="emerald" />
+                <TwStatCard Value="@($"{GetDouble(_predictions.First(), "win_probability") * 100:F1}%")"
+                            Label="Win Probability" Subtext="Highest in field"
+                            Color="amber" />
+                <TwStatCard Value="@_predictions.Count.ToString()"
+                            Label="Field Size" Subtext="@_seriesName"
+                            Color="blue" />
+                <TwStatCard Value="2"
+                            Label="Prediction Engines" Subtext="XGBoost + Random Forest"
+                            Color="purple" />
+            </div>
+        }
+
+        @* ─── Tabs ─── *@
+        <div class="flex gap-1 border-b border-slate-700">
+            <button class="@TabClass(0)" @onclick="() => _activeTab = 0">📊 Race Predictions</button>
+            <button class="@TabClass(1)" @onclick="() => _activeTab = 1">🏆 Power Rankings</button>
+        </div>
+
+        @* ─── Loading State ─── *@
+        @if (_loading)
+        {
+            <div class="flex items-center justify-center py-20">
+                <div class="text-center space-y-4">
+                    <div class="animate-spin w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full mx-auto"></div>
+                    <p class="text-slate-400 text-sm">Running AI predictions for @_seriesName...</p>
+                </div>
+            </div>
+        }
+        else if (_error != null)
+        {
+            <div class="bg-red-900/30 border border-red-700 rounded-xl p-6 text-center">
+                <p class="text-red-400 font-semibold">⚠️ @_error</p>
+                <button class="mt-3 text-sm text-amber-400 underline" @onclick="LoadPredictions">Try Again</button>
+            </div>
+        }
+        else
+        {
+            @* ─── TAB 0: Predictions Table ─── *@
+            @if (_activeTab == 0 && _predictions.Any())
+            {
+                <div class="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="bg-slate-800">
+                                    <th class="text-left px-4 py-3 text-[11px] uppercase tracking-wider text-slate-500 font-semibold">#</th>
+                                    <th class="text-left px-4 py-3 text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Driver</th>
+                                    <th class="text-left px-4 py-3 text-[11px] uppercase tracking-wider text-slate-500 font-semibold cursor-pointer hover:text-amber-400" @onclick="@(() => SortBy("win"))">Win % ↕</th>
+                                    <th class="text-left px-4 py-3 text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Top 3 %</th>
+                                    <th class="text-left px-4 py-3 text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Top 5 %</th>
+                                    <th class="text-left px-4 py-3 text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Top 10 %</th>
+                                    <th class="text-left px-4 py-3 text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Proj Finish</th>
+                                    <th class="text-left px-4 py-3 text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Model Odds</th>
+                                    <th class="text-left px-4 py-3 text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Team</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var (driver, index) in _predictions.Select((d, i) => (d, i)))
+                                {
+                                    var winPct = GetDouble(driver, "win_probability") * 100;
+                                    var top3Pct = GetDouble(driver, "top3_probability") * 100;
+                                    var top5Pct = GetDouble(driver, "top5_probability") * 100;
+                                    var top10Pct = GetDouble(driver, "top10_probability") * 100;
+                                    var projFinish = GetDouble(driver, "projected_finish");
+                                    var projColor = projFinish <= 5 ? "text-emerald-400" : projFinish <= 10 ? "text-blue-400" : "text-slate-400";
+
+                                    <tr class="border-b border-slate-700/50 hover:bg-amber-500/5 transition-colors">
+                                        <td class="px-4 py-3 text-amber-500 font-bold text-sm">@(index + 1)</td>
+                                        <td class="px-4 py-3">
+                                            <span class="font-semibold text-slate-100 text-sm">@driver["driver_name"]</span>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <div class="flex items-center gap-2">
+                                                <div class="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                                                    <div class="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full" style="width: @(Math.Min(winPct * 10, 100))%"></div>
+                                                </div>
+                                                <span class="text-emerald-400 text-xs font-semibold min-w-[40px]">@($"{winPct:F1}%")</span>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <div class="flex items-center gap-2">
+                                                <div class="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                                                    <div class="h-full bg-gradient-to-r from-cyan-500 to-cyan-400 rounded-full" style="width: @(Math.Min(top3Pct * 2, 100))%"></div>
+                                                </div>
+                                                <span class="text-cyan-400 text-xs font-semibold min-w-[40px]">@($"{top3Pct:F1}%")</span>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <div class="flex items-center gap-2">
+                                                <div class="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                                                    <div class="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full" style="width: @(Math.Min(top5Pct * 2, 100))%"></div>
+                                                </div>
+                                                <span class="text-blue-400 text-xs font-semibold min-w-[40px]">@($"{top5Pct:F1}%")</span>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <div class="flex items-center gap-2">
+                                                <div class="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                                                    <div class="h-full bg-gradient-to-r from-purple-500 to-purple-400 rounded-full" style="width: @(Math.Min(top10Pct * 1.3, 100))%"></div>
+                                                </div>
+                                                <span class="text-purple-400 text-xs font-semibold min-w-[40px]">@($"{top10Pct:F1}%")</span>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <span class="@projColor font-bold text-sm">P@($"{projFinish:F1}")</span>
+                                        </td>
+                                        <td class="px-4 py-3 text-slate-400 font-mono text-sm font-semibold">
+                                            @(driver["model_odds"]?.ToString() ?? "--")
+                                        </td>
+                                        <td class="px-4 py-3 text-slate-500 text-xs">
+                                            @(driver.ContainsKey("team") ? driver["team"]?.ToString() : "")
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+
+            @* ─── TAB 1: Power Rankings ─── *@
+            @if (_activeTab == 1 && _powerRankings != null)
+            {
+                @RenderTier("🏆", "Elite Favorites", "Projected Top 5", "emerald", "elite")
+                @RenderTier("📈", "Strong Contenders", "Projected 6-10", "amber", "contenders")
+                @RenderTier("🎯", "Dark Horses", "Projected 11-15", "slate", "dark_horses")
+                @RenderTier("⚡", "Longshots", "High Risk / High Reward", "red", "longshots")
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private int _seriesId = 1;
+    private int _activeTab = 0;
+    private bool _loading = false;
+    private string? _error = null;
+    private string _seriesName = "Cup Series";
+    private string _sortField = "win";
+    private bool _sortAsc = false;
+
+    private Dictionary<string, object>? _raceInfo;
+    private List<Dictionary<string, object>> _predictions = new();
+    private Dictionary<string, object>? _powerRankings;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPredictions();
+    }
+
+    private async Task OnSeriesChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var id))
+        {
+            _seriesId = id;
+            _seriesName = id switch { 2 => "O'Reilly Auto Parts", 3 => "CRAFTSMAN Trucks", _ => "Cup Series" };
+            await LoadPredictions();
+        }
+    }
+
+    private async Task LoadPredictions()
+    {
+        _loading = true;
+        _error = null;
+        _predictions.Clear();
+        _raceInfo = null;
+        _powerRankings = null;
+        StateHasChanged();
+
+        try
+        {
+            var url = $"http://backend:8000/nascar/prediction-hub?series={_seriesId}";
+            var response = await Http.GetAsync(url);
+
+            if (response == null || !response.IsSuccessStatusCode)
+            {
+                _error = "No response from prediction engine";
+                return;
+            }
+
+            // Parse JSON response
+            var json = await response.Content.ReadAsStringAsync();
+            var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            // Check for error
+            if (root.TryGetProperty("error", out var errorProp))
+            {
+                _error = errorProp.GetString();
+                return;
+            }
+
+            // Parse race info
+            if (root.TryGetProperty("race", out var raceProp))
+            {
+                _raceInfo = JsonToDictionary(raceProp);
+            }
+
+            // Parse predictions
+            if (root.TryGetProperty("predictions", out var predsProp))
+            {
+                foreach (var pred in predsProp.EnumerateArray())
+                {
+                    _predictions.Add(JsonToDictionary(pred));
+                }
+            }
+
+            // Parse power rankings
+            if (root.TryGetProperty("power_rankings", out var prProp))
+            {
+                _powerRankings = JsonToDictionary(prProp);
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to load predictions: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void SortBy(string field)
+    {
+        if (_sortField == field) _sortAsc = !_sortAsc; else { _sortField = field; _sortAsc = false; }
+
+        _predictions = _sortField switch
+        {
+            "win" => _sortAsc
+                ? _predictions.OrderBy(p => GetDouble(p, "win_probability")).ToList()
+                : _predictions.OrderByDescending(p => GetDouble(p, "win_probability")).ToList(),
+            _ => _predictions
+        };
+    }
+
+    private RenderFragment RenderTier(string icon, string title, string subtitle, string color, string tierKey) => __builder =>
+    {
+        var drivers = GetTierDrivers(tierKey);
+        if (!drivers.Any()) return;
+
+        var chipColor = color switch
+        {
+            "emerald" => "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30",
+            "amber" => "bg-amber-500/15 text-amber-400 border border-amber-500/30",
+            "red" => "bg-red-500/15 text-red-400 border border-red-500/30",
+            _ => "bg-slate-500/15 text-slate-400 border border-slate-500/30"
+        };
+
+        <div class="mb-6">
+            <div class="flex items-center gap-3 mb-3">
+                <span class="text-2xl">@icon</span>
+                <h3 class="text-base font-bold text-slate-100">@title</h3>
+                <span class="@chipColor text-[11px] font-bold px-2.5 py-1 rounded-md">@subtitle</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                @foreach (var d in drivers)
+                {
+                    <div class="bg-slate-800/50 border border-slate-700 rounded-lg p-4 hover:border-slate-600 hover:-translate-y-0.5 transition-all">
+                        <div class="font-bold text-slate-100 text-sm mb-2">@d["driver_name"]</div>
+                        <div class="space-y-1.5 text-xs">
+                            <div class="flex justify-between"><span class="text-slate-500">Win Prob</span><span class="text-emerald-400 font-semibold">@($"{GetDouble(d, "win_probability") * 100:F1}%")</span></div>
+                            <div class="flex justify-between"><span class="text-slate-500">Top 5</span><span class="text-blue-400 font-semibold">@($"{GetDouble(d, "top5_probability") * 100:F1}%")</span></div>
+                            <div class="flex justify-between"><span class="text-slate-500">Proj Finish</span><span class="text-slate-200 font-semibold">P@($"{GetDouble(d, "projected_finish"):F1}")</span></div>
+                            <div class="flex justify-between"><span class="text-slate-500">Model Odds</span><span class="text-slate-300 font-semibold">@(d.ContainsKey("model_odds") ? d["model_odds"]?.ToString() : "--")</span></div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    };
+
+    // ─── Helpers ───
+
+    private string TabClass(int tab) =>
+        _activeTab == tab
+            ? "px-6 py-3 text-sm font-semibold text-amber-400 border-b-2 border-amber-400 cursor-pointer"
+            : "px-6 py-3 text-sm font-semibold text-slate-500 border-b-2 border-transparent cursor-pointer hover:text-slate-300";
+
+    private string GetRaceString(string key) =>
+        _raceInfo != null && _raceInfo.ContainsKey(key) ? _raceInfo[key]?.ToString() ?? "" : "";
+
+    private int GetRaceInt(string key) =>
+        _raceInfo != null && _raceInfo.ContainsKey(key) && _raceInfo[key] is JsonElement el && el.ValueKind == JsonValueKind.Number
+            ? el.GetInt32() : 0;
+
+    private string FormatRaceDate()
+    {
+        var dateStr = GetRaceString("date");
+        if (DateTime.TryParse(dateStr, out var dt))
+            return dt.ToString("MMM d, yyyy @ h:mm tt");
+        return dateStr;
+    }
+
+    private double GetDouble(Dictionary<string, object> dict, string key)
+    {
+        if (!dict.ContainsKey(key)) return 0;
+        var val = dict[key];
+        if (val is JsonElement el)
+        {
+            if (el.ValueKind == JsonValueKind.Number) return el.GetDouble();
+            if (el.ValueKind == JsonValueKind.String && double.TryParse(el.GetString(), out var d)) return d;
+        }
+        if (val is double dbl) return dbl;
+        if (val is int i) return i;
+        if (double.TryParse(val?.ToString(), out var parsed)) return parsed;
+        return 0;
+    }
+
+    private List<Dictionary<string, object>> GetTierDrivers(string tierKey)
+    {
+        if (_powerRankings == null || !_powerRankings.ContainsKey(tierKey)) return new();
+        var val = _powerRankings[tierKey];
+        if (val is JsonElement el && el.ValueKind == JsonValueKind.Array)
+        {
+            return el.EnumerateArray().Select(JsonToDictionary).ToList();
+        }
+        return new();
+    }
+
+    private static Dictionary<string, object> JsonToDictionary(JsonElement element)
+    {
+        var dict = new Dictionary<string, object>();
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in element.EnumerateObject())
+            {
+                dict[prop.Name] = prop.Value;
+            }
+        }
+        return dict;
+    }
+}

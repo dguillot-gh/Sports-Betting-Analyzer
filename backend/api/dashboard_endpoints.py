@@ -138,7 +138,7 @@ async def get_model_summary(request: Request):
 
 @router.get("/top-picks")
 async def get_top_picks(
-    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from"),
+    sportsbook: str = Query("draftkings", description="Sportsbook to fetch odds from"),
     limit: int = Query(8, ge=1, le=30, description="Maximum number of picks to return"),
 ):
     """

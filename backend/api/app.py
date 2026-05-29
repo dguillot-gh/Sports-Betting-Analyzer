@@ -3431,7 +3431,7 @@ def get_system_logs(level: str = None, limit: int = 100):
 
 @app.post('/model-testing/nba/predictions')
 async def get_nba_model_testing_predictions(
-    sportsbook: str = Query("fanduel", description="Sportsbook for odds")
+    sportsbook: str = Query("draftkings", description="Sportsbook for odds")
 ):
     """
     Get today's NBA games with BOTH simple and kyleskom XGBoost predictions.
@@ -3510,7 +3510,7 @@ async def get_nba_model_testing_predictions(
 
 @app.post('/model-testing/nfl/predictions')
 async def get_nfl_model_testing_predictions(
-    sportsbook: str = Query("fanduel", description="Sportsbook for odds")
+    sportsbook: str = Query("draftkings", description="Sportsbook for odds")
 ):
     """
     Get today's NFL games with BOTH simple and nflverse XGBoost predictions.

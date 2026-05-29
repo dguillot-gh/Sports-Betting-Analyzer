@@ -163,6 +163,15 @@ class SchedulerService:
             replace_existing=True
         )
 
+        # Schedule NASCAR Entry List Polling every 1 hour
+        cls._scheduler.add_job(
+            cls._poll_nascar_entry_list_task,
+            'interval',
+            hours=1,
+            id="poll_nascar_entry_list",
+            replace_existing=True
+        )
+
         cls._scheduler.start()
         logger.info("APScheduler started. Job 'daily_import' scheduled for 03:00.")
 
@@ -540,6 +549,82 @@ class SchedulerService:
             "new": res.get("new", 0),
             "updated": res.get("updated", 0),
         }
+
+    @staticmethod
+    async def _poll_nascar_entry_list_task():
+        """Worker to poll NASCAR API for the upcoming race's entry list."""
+        try:
+            from api.nascar_endpoints import get_schedule, _fetch_entry_list
+            from src.notification_store import insert_notification
+            import asyncpg
+            
+            year = datetime.now().year
+            series = 1 # Cup Series
+            
+            # 1. Find the next upcoming race from the schedule
+            schedule = await get_schedule(year, series)
+            now = datetime.now(timezone.utc)
+            next_race = None
+            for race in schedule:
+                race_date_str = race.get("raceDate", "")
+                if not race_date_str or race_date_str.startswith("1900"):
+                    continue
+                try:
+                    # NASCAR API dates often have trailing 'Z'
+                    race_dt = datetime.fromisoformat(race_date_str.replace("Z", "+00:00"))
+                    if race_dt > now:
+                        next_race = race
+                        break
+                except (ValueError, TypeError):
+                    continue
+            
+            if not next_race:
+                logger.info("No upcoming NASCAR race found for entry list polling.")
+                return {"rows": 0, "detail": "No upcoming race"}
+            
+            race_id = next_race.get("raceId", 0)
+            if not race_id:
+                return {"rows": 0, "detail": "Upcoming race has no ID"}
+                
+            # 2. Check if we already notified for this race
+            conn = await asyncpg.connect(DATABASE_URL)
+            try:
+                count = await conn.fetchval(
+                    """
+                    SELECT COUNT(*) FROM app_notifications 
+                    WHERE title = 'NASCAR Entry List Available' 
+                    AND metadata_json->>'race_id' = $1
+                    """, str(race_id)
+                )
+                if count > 0:
+                    logger.info(f"Entry list notification already sent for race {race_id}.")
+                    return {"rows": 0, "detail": "Already notified"}
+            finally:
+                await conn.close()
+                
+            # 3. Poll Entry List
+            entry_names = _fetch_entry_list(year, series, race_id)
+            if not entry_names:
+                logger.info(f"Entry list not yet available for race {race_id}.")
+                return {"rows": 0, "detail": "Not available yet"}
+                
+            # 4. Trigger Notification
+            logger.info(f"Entry list is available for race {race_id}. Sending notification.")
+            await insert_notification(
+                DATABASE_URL,
+                severity="success",
+                category="sports",
+                title="NASCAR Entry List Available",
+                message=f"The official entry list for {next_race.get('raceName', 'the upcoming race')} is now populated. The Prediction Hub is fully locked in with the finalized driver roster.",
+                source="scheduler._poll_nascar_entry_list_task",
+                metadata={"race_id": str(race_id)}
+            )
+            
+            return {"rows": len(entry_names), "new": 1, "detail": "Notification sent"}
+            
+        except Exception as e:
+            logger.error(f"NASCAR entry list polling failed: {e}")
+            return {"rows": 0, "error": str(e)}
 
     @staticmethod
     async def _import_baseball_task():

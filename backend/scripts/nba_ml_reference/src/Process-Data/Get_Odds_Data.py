@@ -209,7 +209,7 @@ def backfill_season(con, season_key, value, sportsbook, today):
         df.to_sql(season_key, con, if_exists="append", index=False)
 
 
-def main(sportsbook="fanduel", backfill=False, season=None, today=None, db_path=DB_PATH):
+def main(sportsbook="draftkings", backfill=False, season=None, today=None, db_path=DB_PATH):
     config = load_config()
     if today is None:
         today = datetime.today().date()

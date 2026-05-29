@@ -51,16 +51,16 @@ class NFLPredictor:
     Simple NFL game predictor using team statistics.
     Uses points per game, home-field advantage, and EPA.
     """
+    _global_epa_cache: Dict[str, Dict] = {}
+    _global_epa_loaded: bool = False
     
     def __init__(self, db_connection=None):
         self.db = db_connection
         self._team_stats_cache: Dict[str, Dict] = {}
-        self._epa_cache: Dict[str, Dict] = {}
-        self._epa_loaded = False
     
     def _load_epa_stats(self):
         """Load EPA stats from nflreadpy play-by-play data."""
-        if self._epa_loaded:
+        if NFLPredictor._global_epa_loaded:
             return
         
         try:
@@ -96,7 +96,7 @@ class NFLPredictor:
             
             if pbp is None or len(pbp) == 0:
                 logger.warning("No play-by-play data loaded")
-                self._epa_loaded = True
+                NFLPredictor._global_epa_loaded = True
                 return
             
             # Calculate team EPA stats
@@ -117,7 +117,7 @@ class NFLPredictor:
                 def_epa = def_plays['epa'].mean() if len(def_plays) > 0 else 0.0
                 
                 import numpy as np
-                self._epa_cache[team] = {
+                NFLPredictor._global_epa_cache[team] = {
                     'off_epa_per_play': round(float(off_epa), 3) if not np.isnan(off_epa) else 0.0,
                     'def_epa_per_play': round(float(def_epa), 3) if not np.isnan(def_epa) else 0.0,
                     'pass_epa': round(float(pass_epa), 3) if not np.isnan(pass_epa) else 0.0,
@@ -125,14 +125,14 @@ class NFLPredictor:
                     'net_epa': round(float(off_epa - def_epa), 3) if not (np.isnan(off_epa) or np.isnan(def_epa)) else 0.0
                 }
             
-            self._epa_loaded = True
-            logger.info(f"Loaded EPA stats for {len(self._epa_cache)} teams: {list(self._epa_cache.keys())[:5]}...")
+            NFLPredictor._global_epa_loaded = True
+            logger.info(f"Loaded EPA stats for {len(NFLPredictor._global_epa_cache)} teams: {list(NFLPredictor._global_epa_cache.keys())[:5]}...")
             
         except Exception as e:
             logger.error(f"Could not load EPA stats: {e}")
             import traceback
             logger.error(traceback.format_exc())
-            self._epa_loaded = True  # Don't retry
+            NFLPredictor._global_epa_loaded = True  # Don't retry
     
     def get_team_epa(self, team_name: str) -> Dict[str, float]:
         """Get EPA stats for a team."""
@@ -158,8 +158,8 @@ class NFLPredictor:
         
         abbr = abbr_map.get(team, team)
         
-        if abbr in self._epa_cache:
-            return self._epa_cache[abbr]
+        if abbr in NFLPredictor._global_epa_cache:
+            return NFLPredictor._global_epa_cache[abbr]
         
         # Default EPA values
         return {
@@ -257,7 +257,7 @@ class NFLPredictor:
         return result
 
 
-async def get_todays_nfl_odds(sportsbook: str = "fanduel") -> Dict[str, Any]:
+async def get_todays_nfl_odds(sportsbook: str = "draftkings") -> Dict[str, Any]:
     """
     Fetch today's NFL odds. Uses The Odds API as primary source (more reliable),
     falls back to sbrscrape if API key not available.

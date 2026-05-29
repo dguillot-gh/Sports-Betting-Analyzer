@@ -98,8 +98,8 @@ class NASCARSport(BaseSport):
             return df
         
         # Process the loaded data
-        self._populate_active_entities(df)
         df = self.preprocess_data(df)
+        self._populate_active_entities(df)
         df = self._load_scraped_features(df)
         self.df = df
         
@@ -286,7 +286,12 @@ class NASCARSport(BaseSport):
         else:
             self._active_drivers = []
             
-        # Also populate by-series dictionaries if we have series column
+        # Also populate by-series dictionaries if we have series column (or default to current series)
+        if 'series' not in recent_df.columns:
+            default_series = self.config.get('series', 'cup')
+            recent_df = recent_df.copy()
+            recent_df['series'] = default_series
+
         if 'series' in recent_df.columns:
             self._active_teams_by_series = {}
             self._active_drivers_by_series = {}

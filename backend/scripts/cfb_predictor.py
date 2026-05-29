@@ -113,7 +113,7 @@ class CFBPredictor:
         return result
 
 
-async def get_todays_cfb_odds(sportsbook: str = "fanduel") -> Dict[str, Any]:
+async def get_todays_cfb_odds(sportsbook: str = "draftkings") -> Dict[str, Any]:
     """
     Fetch today's CFB odds (americanfootball_ncaaf).
     Uses The Odds API with request quota tracking.

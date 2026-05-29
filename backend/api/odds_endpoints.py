@@ -17,7 +17,7 @@ router = APIRouter(prefix="/odds", tags=["odds"])
 
 @router.get("/nba")
 async def get_nba_odds(
-    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from"),
+    sportsbook: str = Query("draftkings", description="Sportsbook to fetch odds from"),
 ):
     """
     Get today's NBA betting odds from specified sportsbook.
@@ -189,7 +189,7 @@ async def train_nba_model(epochs: int = Query(500, description="Training epochs"
 
 @router.post("/nba/analyze-all")
 async def analyze_all_games(
-    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from")
+    sportsbook: str = Query("draftkings", description="Sportsbook to fetch odds from")
 ):
     """
     Fetch today's games and run predictions on all of them.
@@ -240,7 +240,7 @@ async def analyze_all_games(
 
 @router.get("/nfl")
 async def get_nfl_odds(
-    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from"),
+    sportsbook: str = Query("draftkings", description="Sportsbook to fetch odds from"),
 ):
     """
     Get today's NFL betting odds from specified sportsbook.
@@ -328,7 +328,7 @@ async def predict_nfl_game(
 
 @router.post("/nfl/analyze-all")
 async def analyze_all_nfl_games(
-    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from")
+    sportsbook: str = Query("draftkings", description="Sportsbook to fetch odds from")
 ):
     """
     Fetch today's NFL games and run predictions on all of them.
@@ -401,7 +401,7 @@ async def predict_nfl_game_dual(
 
 @router.post("/nfl/analyze-cached")
 async def analyze_nfl_with_cache(
-    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from"),
+    sportsbook: str = Query("draftkings", description="Sportsbook to fetch odds from"),
     include_cached: bool = Query(True, description="Include previously cached games")
 ):
     """
@@ -478,9 +478,14 @@ async def analyze_nfl_with_cache(
             from src.odds_cache import get_cache_service
             cache = get_cache_service()
             
-            cached_games = await cache.get_cached_games("nfl", exclude_ids=fresh_game_ids, include_expired=True)
+            cached_games = await cache.get_cached_games("nfl", exclude_ids=fresh_game_ids, include_expired=False)
+            current_date_str = str(odds_data.get("date", ""))
             
             for cg in cached_games:
+                game_time = cg.get("game_date")
+                if game_time and current_date_str and not str(game_time).startswith(current_date_str):
+                    continue
+                
                 # Convert cached format back to display format
                 odds_data_cached = cg.get("odds_data", {})
                 analysis_cached = cg.get("analysis", {})
@@ -520,7 +525,7 @@ async def analyze_nfl_with_cache(
 
 @router.post("/nba/analyze-cached")
 async def analyze_nba_with_cache(
-    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from"),
+    sportsbook: str = Query("draftkings", description="Sportsbook to fetch odds from"),
     include_cached: bool = Query(True, description="Include previously cached games")
 ):
     """
@@ -596,9 +601,14 @@ async def analyze_nba_with_cache(
             from src.odds_cache import get_cache_service
             cache = get_cache_service()
             
-            cached_games = await cache.get_cached_games("nba", exclude_ids=fresh_game_ids, include_expired=True)
+            cached_games = await cache.get_cached_games("nba", exclude_ids=fresh_game_ids, include_expired=False)
+            current_date_str = str(odds_data.get("date", ""))
             
             for cg in cached_games:
+                game_time = cg.get("game_date")
+                if game_time and current_date_str and not str(game_time).startswith(current_date_str):
+                    continue
+                
                 odds_data_cached = cg.get("odds_data", {})
                 analysis_cached = cg.get("analysis", {})
                 
@@ -641,7 +651,7 @@ async def analyze_nba_with_cache(
 
 @router.get("/ncaab")
 async def get_ncaab_odds(
-    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from"),
+    sportsbook: str = Query("draftkings", description="Sportsbook to fetch odds from"),
 ):
     """
     Get today's NCAAB betting odds from specified sportsbook.
@@ -670,7 +680,7 @@ async def predict_ncaab_game(
 
 @router.post("/ncaab/analyze-all")
 async def analyze_all_ncaab_games(
-    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from")
+    sportsbook: str = Query("draftkings", description="Sportsbook to fetch odds from")
 ):
     """
     Fetch today's NCAAB games and run predictions on all of them.
@@ -730,7 +740,7 @@ async def analyze_all_ncaab_games(
 
 @router.get("/college-baseball")
 async def get_college_baseball_odds(
-    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from"),
+    sportsbook: str = Query("draftkings", description="Sportsbook to fetch odds from"),
 ):
     """
     Get today's College Baseball betting odds.
@@ -741,7 +751,7 @@ async def get_college_baseball_odds(
 
 @router.post("/college-baseball/analyze-all")
 async def analyze_all_college_baseball_games(
-    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from")
+    sportsbook: str = Query("draftkings", description="Sportsbook to fetch odds from")
 ):
     """
     Fetch today's College Baseball games and run predictions.
@@ -920,7 +930,7 @@ async def upload_torvik_csv(
 
 @router.post("/cfb/analyze-all")
 async def analyze_all_cfb_games(
-    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from")
+    sportsbook: str = Query("draftkings", description="Sportsbook to fetch odds from")
 ):
     """
     Fetch today's College Football games and run predictions.
@@ -988,7 +998,7 @@ async def predict_cfb_dual(
 
 @router.get("/mlb")
 async def get_mlb_odds(
-    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from"),
+    sportsbook: str = Query("draftkings", description="Sportsbook to fetch odds from"),
 ):
     """
     Get today's MLB betting odds.
@@ -1000,7 +1010,7 @@ async def get_mlb_odds(
 @router.post("/mlb/analyze-all")
 async def analyze_all_mlb_games(
     request: Request,
-    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from")
+    sportsbook: str = Query("draftkings", description="Sportsbook to fetch odds from")
 ):
     """
     Fetch today's MLB games and run ensemble predictions.
@@ -1172,7 +1182,7 @@ async def train_mlb_models(request: Request):
 
 @router.get("/all-sports/analyze")
 async def analyze_all_sports(
-    sportsbook: str = Query("fanduel", description="Sportsbook to fetch odds from")
+    sportsbook: str = Query("draftkings", description="Sportsbook to fetch odds from")
 ):
     """
     Run analysis on ALL sports concurrently.

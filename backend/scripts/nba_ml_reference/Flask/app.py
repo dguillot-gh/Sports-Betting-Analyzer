@@ -8,7 +8,7 @@ import subprocess, requests, re, time
 @lru_cache()
 def fetch_fanduel(ttl_hash=None):
     del ttl_hash
-    return fetch_game_data(sportsbook="fanduel")
+    return fetch_game_data(sportsbook="draftkings")
 
 @lru_cache()
 def fetch_draftkings(ttl_hash=None):
@@ -20,7 +20,7 @@ def fetch_betmgm(ttl_hash=None):
     del ttl_hash
     return fetch_game_data(sportsbook="betmgm")
 
-def fetch_game_data(sportsbook="fanduel"):
+def fetch_game_data(sportsbook="draftkings"):
     cmd = ["python", "main.py", "-xgb", f"-odds={sportsbook}"]
     stdout = subprocess.check_output(cmd, cwd="../").decode()
     data_re = re.compile(r'\n(?P<home_team>[\w ]+)(\((?P<home_confidence>[\d+\.]+)%\))? vs (?P<away_team>[\w ]+)(\((?P<away_confidence>[\d+\.]+)%\))?: (?P<ou_pick>OVER|UNDER) (?P<ou_value>[\d+\.]+) (\((?P<ou_confidence>[\d+\.]+)%\))?', re.MULTILINE)

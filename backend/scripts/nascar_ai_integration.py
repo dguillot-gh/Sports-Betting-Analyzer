@@ -146,8 +146,9 @@ def get_nascar_ai_predictions(
     
     if not engines:
         # Baseline
-        avg_fin = val(f"avg_finish_{track_type.lower()}", 18)
-        base_score = 1 - (avg_fin / 40)
+        career_avg = val("career_avg_finish", 18)
+        avg_fin = val(f"avg_finish_{track_type.lower()}", career_avg)
+        base_score = max(0.01, 1 - (avg_fin / 40))
         
         engines["TrackBaseline"] = {
             "predicted_finish": round(avg_fin, 1),

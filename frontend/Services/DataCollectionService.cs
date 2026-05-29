@@ -27,7 +27,7 @@ namespace SportsBettingAnalyzer.Services
                 {
                     sport = analysis.BetSlip.Sport?.ToLower() ?? "nba",
                     bet_type = analysis.BetSlip.BetType?.ToLower() ?? "single",
-                    sportsbook = "fanduel", // Default
+                    sportsbook = "draftkings", // Default
                     stake = (double)analysis.BetSlip.WagerAmount,
                     odds = (int)analysis.BetSlip.Odds,
                     description = $"AI Analysis: {analysis.BetSlip.BetType}",
@@ -203,7 +203,7 @@ namespace SportsBettingAnalyzer.Services
             }
         }
 
-        public async Task<MultiSportAnalysisResponse?> GetMultiSportAnalysisAsync(string sportsbook = "fanduel")
+        public async Task<MultiSportAnalysisResponse?> GetMultiSportAnalysisAsync(string sportsbook = "draftkings")
         {
             try
             {

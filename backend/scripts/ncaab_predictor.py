@@ -870,7 +870,7 @@ class NCAABPredictor:
         return result
 
 
-async def get_todays_ncaab_odds(sportsbook: str = "fanduel") -> Dict[str, Any]:
+async def get_todays_ncaab_odds(sportsbook: str = "draftkings") -> Dict[str, Any]:
     """Fetch today's NCAAB odds via sbrscrape or Odds API."""
     # Use "Sports Date" (UTC - 6 hours) so late games count as "today"
     from datetime import timedelta

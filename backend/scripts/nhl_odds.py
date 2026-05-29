@@ -20,7 +20,7 @@ SPORTSBOOKS = [
     "bet_rivers_ny"
 ]
 
-async def get_todays_nhl_odds(sportsbook: str = "fanduel") -> Dict[str, Any]:
+async def get_todays_nhl_odds(sportsbook: str = "draftkings") -> Dict[str, Any]:
     """
     Fetch today's NHL odds from the specified sportsbook.
     """

@@ -458,7 +458,7 @@
         _isPicksLoading = true;
         try
         {
-            var picks = await MLServiceClient.GetDashboardTopPicksAsync(limit: 8, sportsbook: "fanduel");
+            var picks = await MLServiceClient.GetDashboardTopPicksAsync(limit: 8, sportsbook: "draftkings");
             _topPicks = picks
                 .Select(p => new TopPick
                 {

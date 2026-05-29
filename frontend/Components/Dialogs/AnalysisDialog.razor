@@ -223,7 +223,7 @@
     [CascadingParameter] IMudDialogInstance? MudDialog { get; set; }
 
     [Parameter] public JsonElement FullGameData { get; set; }
-    [Parameter] public string Sportsbook { get; set; } = "fanduel";
+    [Parameter] public string Sportsbook { get; set; } = "draftkings";
 
     private string HomeTeam => FullGameData.TryGetProperty("home_team", out var h) ? h.GetString() ?? "" : "";
     private string AwayTeam => FullGameData.TryGetProperty("away_team", out var a) ? a.GetString() ?? "" : "";

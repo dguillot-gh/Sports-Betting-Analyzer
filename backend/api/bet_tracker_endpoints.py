@@ -41,7 +41,7 @@ class CreateBetRequest(BaseModel):
     """Request to create a new bet."""
     sport: str = Field(..., description="nfl, nba, nascar")
     bet_type: str = Field("single", description="single or parlay")
-    sportsbook: str = Field("fanduel", description="Sportsbook name")
+    sportsbook: str = Field("draftkings", description="Sportsbook name")
     stake: float = Field(..., gt=0, description="Amount wagered")
     odds: Optional[int] = Field(None, description="American odds (for singles)")
     game_id: Optional[str] = Field(None, description="Linked game ID from cache")
