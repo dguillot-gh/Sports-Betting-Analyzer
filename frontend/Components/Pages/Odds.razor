@@ -1,5 +1,6 @@
 @page "/odds"
 @page "/ncaab"
+@using System.Text.Json
 @using SportsBettingAnalyzer.Services
 @using SportsBettingAnalyzer.Models
 @using SportsBettingAnalyzer.Components.Shared.Tailwind
@@ -84,6 +85,10 @@
                                 <TwTh>Matchup</TwTh>
                                 <TwTh>DraftKings</TwTh>
                                 <TwTh>FanDuel</TwTh>
+                                @if (_selectedSportKey == "americanfootball_nfl")
+                                {
+                                    <TwTh>NFL XGBoost</TwTh>
+                                }
                                 <TwTh>ESPN BPI</TwTh>
                                 <TwTh Class="text-right">Analysis</TwTh>
                                 @foreach (var context in validEvents)
@@ -113,6 +118,35 @@
                                                 @GetBookmakerOdds(context, "FanDuel")
                                             </div>
                                         </TwTd>
+                                        @if (_selectedSportKey == "americanfootball_nfl")
+                                        {
+                                            <TwTd>
+                                                @if (_isNflPredictionLoading)
+                                                {
+                                                    <span class="text-slate-400">Calculating…</span>
+                                                }
+                                                else if (_nflPredictions.TryGetValue(context.Id, out var modelPrediction))
+                                                {
+                                                    @if (modelPrediction.TryGetProperty("error", out var predictionError))
+                                                    {
+                                                        <span class="text-amber-400" title="@predictionError.GetString()">Unavailable</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        var winner = modelPrediction.TryGetProperty("predicted_winner", out var winnerProp) ? winnerProp.GetString() : null;
+                                                        var homeProb = modelPrediction.TryGetProperty("home_win_probability", out var probProp) && probProp.ValueKind == JsonValueKind.Number ? probProp.GetDouble() : 0.5;
+                                                        <div class="text-xs">
+                                                            <b class="text-white">@winner</b>
+                                                            <div class="text-slate-400">Home @((homeProb * 100).ToString("F0"))%</div>
+                                                        </div>
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-slate-600">-</span>
+                                                }
+                                            </TwTd>
+                                        }
                                         <TwTd>
                                             @{
                                                 var bpi = MatchEspnGame(context);
@@ -397,6 +431,8 @@
     private List<OddsEvent> _events = new();
     private string _selectedSportKey = "";
     private bool _isLoading = false;
+    private bool _isNflPredictionLoading = false;
+    private Dictionary<string, JsonElement> _nflPredictions = new();
 
     // Major US sports to filter by
     private readonly HashSet<string> _majorSports = new() 
@@ -548,6 +584,13 @@
         try
         {
             _events = await OddsService.GetOddsAsync(_selectedSportKey);
+            _nflPredictions.Clear();
+            if (_selectedSportKey == "americanfootball_nfl" && _events.Count > 0)
+            {
+                _isNflPredictionLoading = true;
+                StateHasChanged();
+                await LoadNflPredictions();
+            }
             Snackbar.Add($"Loaded {_events.Count} events", Severity.Info);
         }
         catch (Exception ex)
@@ -557,8 +600,55 @@
         }
         finally
         {
+            _isNflPredictionLoading = false;
             _isLoading = false;
         }
+    }
+
+    private async Task LoadNflPredictions()
+    {
+        var games = _events.Select(game => new
+        {
+            id = game.Id,
+            home_team = game.HomeTeam,
+            away_team = game.AwayTeam,
+            home_ml = GetBestMoneyline(game, game.HomeTeam),
+            away_ml = GetBestMoneyline(game, game.AwayTeam)
+        }).ToList();
+
+        var response = await PythonMLService.PredictNflBatchAsync(new { games });
+        if (response == null || !response.Value.TryGetProperty("predictions", out var predictions))
+        {
+            Snackbar.Add("Odds loaded, but NFL model predictions were unavailable.", Severity.Warning);
+            return;
+        }
+
+        foreach (var result in predictions.EnumerateArray())
+        {
+            if (!result.TryGetProperty("id", out var idProp) || !result.TryGetProperty("prediction", out var prediction))
+                continue;
+            var id = idProp.GetString();
+            if (!string.IsNullOrEmpty(id))
+                _nflPredictions[id] = prediction.Clone();
+        }
+
+        if (_nflPredictions.Values.Any(prediction => prediction.TryGetProperty("error", out _)))
+            Snackbar.Add("Some NFL predictions were unavailable; see the XGBoost column for details.", Severity.Warning);
+    }
+
+    private static int? GetBestMoneyline(OddsEvent game, string team)
+    {
+        var prices = game.Bookmakers
+            .SelectMany(bookmaker => bookmaker.Markets.Where(market => market.Key == "h2h"))
+            .SelectMany(market => market.Outcomes)
+            .Where(outcome => outcome.Name.Equals(team, StringComparison.OrdinalIgnoreCase))
+            .Select(outcome => (int?)Math.Round(outcome.Price))
+            .ToList();
+
+        if (prices.Count == 0) return null;
+        return prices.Where(price => price.HasValue).Select(price => price!.Value)
+            .OrderByDescending(price => price)
+            .FirstOrDefault();
     }
 
     private async Task LoadNcaabTeams()

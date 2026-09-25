@@ -1417,6 +1417,27 @@ public class PythonMLServiceClient
         }
     }
 
+    public async Task<JsonElement?> PredictNflBatchAsync(object request)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync("/odds/nfl/predict-batch", request);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("NFL batch prediction request returned {StatusCode}", response.StatusCode);
+                return null;
+            }
+
+            using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+            return document.RootElement.Clone();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting NFL batch predictions for refreshed odds");
+            return null;
+        }
+    }
+
     public async Task<NascarRacePredictions?> GetRacePredictionsAsync(int raceId)
     {
         try

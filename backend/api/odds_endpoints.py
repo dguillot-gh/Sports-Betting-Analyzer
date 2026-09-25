@@ -4,7 +4,8 @@ Fetches real-time betting lines from sportsbooks
 """
 
 from fastapi import APIRouter, Query, Request, UploadFile, File
-from typing import Optional
+from pydantic import BaseModel
+from typing import Any, Dict, List, Optional
 import logging
 from datetime import datetime
 from src.ops_alerts import OpsAlertService
@@ -13,6 +14,18 @@ from api.json_utils import sanitize_for_json
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/odds", tags=["odds"])
+
+
+class NFLBatchPredictionGame(BaseModel):
+    id: str
+    home_team: str
+    away_team: str
+    home_ml: Optional[int] = None
+    away_ml: Optional[int] = None
+
+
+class NFLBatchPredictionRequest(BaseModel):
+    games: List[NFLBatchPredictionGame]
 
 
 @router.get("/nba")
@@ -324,6 +337,31 @@ async def predict_nfl_game(
     """
     from scripts.nfl_predictor import analyze_nfl_matchup
     return sanitize_for_json(await analyze_nfl_matchup(home_team, away_team, spread, over_under, home_ml, away_ml))
+
+
+@router.post("/nfl/predict-batch")
+async def predict_nfl_games_batch(request: NFLBatchPredictionRequest):
+    """Run the already-trained NFL model against refreshed odds-page matchups."""
+    from scripts.model_testing_predictor import calculate_expected_value, calculate_kelly_criterion
+    from scripts.nfl_xgb_trainer import predict_nfl_xgb
+
+    predictions: List[Dict[str, Any]] = []
+    for game in request.games:
+        prediction = await predict_nfl_xgb(game.home_team, game.away_team)
+        if prediction and "error" not in prediction:
+            home_probability = prediction.get("home_win_probability", 0.5)
+            prediction["predicted_winner"] = game.home_team if home_probability > 0.5 else game.away_team
+            if game.home_ml and game.away_ml:
+                prediction["ev_home"] = calculate_expected_value(home_probability, game.home_ml)
+                prediction["ev_away"] = calculate_expected_value(1 - home_probability, game.away_ml)
+                prediction["kelly_home"] = calculate_kelly_criterion(game.home_ml, home_probability)
+                prediction["kelly_away"] = calculate_kelly_criterion(game.away_ml, 1 - home_probability)
+        else:
+            prediction = prediction or {"error": "No prediction returned"}
+        predictions.append({"id": game.id, "prediction": prediction})
+
+    logger.info("NFL batch inference completed for %d refreshed odds events", len(predictions))
+    return sanitize_for_json({"predictions": predictions})
 
 
 @router.post("/nfl/analyze-all")

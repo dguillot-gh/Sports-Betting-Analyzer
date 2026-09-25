@@ -3520,6 +3520,7 @@ async def get_nfl_model_testing_predictions(
         # Force reload check
         from scripts.nfl_predictor import get_todays_nfl_odds
         from scripts.nflverse_adapter import predict_with_nflverse, get_nflverse_predictor
+        from scripts.nfl_xgb_trainer import predict_nfl_xgb
         from scripts.model_testing_predictor import predict_nfl_simple
         
         # Get today's games with odds
@@ -3549,7 +3550,42 @@ async def get_nfl_model_testing_predictions(
                 home_team, away_team, home_stats, away_stats, home_ml, away_ml
             )
             
-            # Get prediction from nflverse model (uses real EPA data)
+            # This is the XGBoost result displayed by the NFL Live Odds page.
+            # Use the nightly-trained model that reads the same imported PostgreSQL
+            # history as training, rather than the separate legacy nflverse model.
+            xgb_pred = await predict_nfl_xgb(home_team, away_team)
+            if xgb_pred and "error" not in xgb_pred:
+                from scripts.model_testing_predictor import (
+                    calculate_expected_value,
+                    calculate_kelly_criterion,
+                )
+
+                home_probability = xgb_pred.get("home_win_probability", 0.5)
+                xgb_pred["predicted_winner"] = home_team if home_probability > 0.5 else away_team
+                xgb_pred["confidence"] = round(max(home_probability, 1 - home_probability) * 100, 1)
+                if home_ml and away_ml:
+                    xgb_pred["ev_home"] = calculate_expected_value(home_probability, home_ml)
+                    xgb_pred["ev_away"] = calculate_expected_value(1 - home_probability, away_ml)
+                    xgb_pred["kelly_home"] = calculate_kelly_criterion(home_ml, home_probability)
+                    xgb_pred["kelly_away"] = calculate_kelly_criterion(away_ml, 1 - home_probability)
+                logger.info(
+                    "Nightly NFL XGBoost prediction %s vs %s: model=%s samples=%s trained_through=%s",
+                    away_team,
+                    home_team,
+                    xgb_pred.get("model_version"),
+                    xgb_pred.get("training_samples"),
+                    xgb_pred.get("latest_training_game_date"),
+                )
+            else:
+                logger.warning(
+                    "Nightly NFL XGBoost unavailable for %s vs %s: %s",
+                    away_team,
+                    home_team,
+                    xgb_pred.get("error") if xgb_pred else "no prediction returned",
+                )
+                xgb_pred = xgb_pred or {"error": "No prediction returned"}
+
+            # Keep the independent nflverse EPA-based result available for diagnostics.
             nflverse_pred = await predict_with_nflverse(
                 home_team, away_team, total_line, home_ml, away_ml
             )
@@ -3557,7 +3593,8 @@ async def get_nfl_model_testing_predictions(
             analyzed_games.append({
                 **game,
                 "simple_model": simple_pred,
-                "xgboost_model": nflverse_pred,  # Now using nflverse data
+                "xgboost_model": xgb_pred,
+                "nflverse_model": nflverse_pred,
                 "home_stats": home_stats,
                 "away_stats": away_stats,
             })
