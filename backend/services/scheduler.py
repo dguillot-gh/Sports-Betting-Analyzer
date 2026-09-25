@@ -199,6 +199,19 @@ class SchedulerService:
             res_nfl = await cls._run_job_wrapper("nfl", cls._import_nfl_task)
             results.append(res_nfl)
 
+            # Retrain after importing NFL schedules so the odds-time XGBoost model
+            # consumes the same nightly-updated database records as inference.
+            if res_nfl.get("success"):
+                res_nfl_train = await cls._run_job_wrapper("nfl_training", cls._retrain_nfl_xgb_task)
+            else:
+                res_nfl_train = {
+                    "sport": "nfl_training",
+                    "success": False,
+                    "error": "Skipped because the NFL data import failed; keeping the last trained model.",
+                    "_records": [],
+                }
+            results.append(res_nfl_train)
+
             # --- 4. NASCAR (Parquet) ---
             res_nascar = await cls._run_job_wrapper("nascar", cls._import_nascar_task)
             results.append(res_nascar)
@@ -504,6 +517,27 @@ class SchedulerService:
             "new": new,
             "updated": updated,
             "files": len(res.get("downloaded", []))
+        }
+
+    @staticmethod
+    async def _retrain_nfl_xgb_task():
+        """Train the production NFL XGBoost models from imported PostgreSQL schedules."""
+        from scripts.nfl_xgb_trainer import train_nfl_model
+
+        result = await train_nfl_model()
+        if result.get("status") != "success":
+            raise Exception(result.get("error", "NFL XGBoost training did not complete"))
+
+        logger.info(
+            "[NFL XGBoost] Trained %s samples through %s; walk-forward Brier=%s log-loss=%s",
+            result.get("samples_trained"), result.get("latest_training_game_date"),
+            result.get("validation_brier_score"), result.get("validation_log_loss"),
+        )
+        return {
+            "rows": result.get("samples_trained", 0),
+            "new": 0,
+            "updated": result.get("validation_samples", 0),
+            "files": 2,
         }
 
     @staticmethod

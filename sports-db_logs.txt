@@ -1,0 +1,235 @@
+
+PostgreSQL Database directory appears to contain a database; Skipping initialization
+
+2026-09-07 00:25:53.603 UTC [1] LOG:  starting PostgreSQL 16.11 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+2026-09-07 00:25:53.603 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+2026-09-07 00:25:53.603 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+2026-09-07 00:25:53.645 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-09-07 00:25:53.693 UTC [28] LOG:  database system was interrupted; last known up at 2026-09-06 09:09:36 UTC
+2026-09-07 00:25:57.697 UTC [28] LOG:  database system was not properly shut down; automatic recovery in progress
+2026-09-07 00:25:57.711 UTC [28] LOG:  redo starts at 2C/E98F7F70
+2026-09-07 00:26:00.101 UTC [28] LOG:  invalid record length at 2C/F800C5B8: expected at least 24, got 0
+2026-09-07 00:26:00.101 UTC [28] LOG:  redo done at 2C/F800C580 system usage: CPU: user: 0.49 s, system: 0.47 s, elapsed: 2.39 s
+2026-09-07 00:26:00.168 UTC [26] LOG:  checkpoint starting: end-of-recovery immediate wait
+2026-09-07 00:26:01.029 UTC [26] LOG:  checkpoint complete: wrote 16083 buffers (98.2%); 0 WAL file(s) added, 15 removed, 0 recycled; write=0.377 s, sync=0.350 s, total=0.871 s; sync files=50, longest=0.135 s, average=0.007 s; distance=236625 kB, estimate=236625 kB; lsn=2C/F800C5B8, redo lsn=2C/F800C5B8
+2026-09-07 00:26:01.056 UTC [1] LOG:  database system is ready to accept connections
+2026-09-07 00:31:00.129 UTC [26] LOG:  checkpoint starting: time
+2026-09-07 00:31:01.972 UTC [26] LOG:  checkpoint complete: wrote 19 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=1.809 s, sync=0.013 s, total=1.844 s; sync files=16, longest=0.004 s, average=0.001 s; distance=65 kB, estimate=212969 kB; lsn=2C/F801CB20, redo lsn=2C/F801CAE8
+2026-09-07 09:01:10.200 UTC [26] LOG:  checkpoint starting: time
+2026-09-07 09:05:40.241 UTC [26] LOG:  checkpoint complete: wrote 4155 buffers (25.4%); 0 WAL file(s) added, 7 removed, 6 recycled; write=269.817 s, sync=0.106 s, total=270.042 s; sync files=55, longest=0.006 s, average=0.002 s; distance=228507 kB, estimate=228507 kB; lsn=2D/1DB2E4E8, redo lsn=2D/5F43740
+2026-09-07 09:06:10.271 UTC [26] LOG:  checkpoint starting: time
+2026-09-07 09:09:16.258 UTC [22467] ERROR:  column "description" of relation "sports" does not exist at character 27
+2026-09-07 09:09:16.258 UTC [22467] STATEMENT:  INSERT INTO sports (name, description) VALUES ('mlb', 'Major League Baseball')
+	                   ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+	                   RETURNING id
+2026-09-07 09:10:40.161 UTC [26] LOG:  checkpoint complete: wrote 2469 buffers (15.1%); 0 WAL file(s) added, 0 removed, 24 recycled; write=269.707 s, sync=0.022 s, total=269.890 s; sync files=37, longest=0.005 s, average=0.001 s; distance=393663 kB, estimate=393663 kB; lsn=2D/32CCE5C8, redo lsn=2D/1DFB3480
+2026-09-08 09:01:37.676 UTC [26] LOG:  checkpoint starting: time
+2026-09-08 09:06:07.146 UTC [26] LOG:  checkpoint complete: wrote 4190 buffers (25.6%); 0 WAL file(s) added, 0 removed, 28 recycled; write=269.367 s, sync=0.039 s, total=269.470 s; sync files=65, longest=0.005 s, average=0.001 s; distance=450326 kB, estimate=450326 kB; lsn=2D/517536E0, redo lsn=2D/39778DA0
+2026-09-08 09:06:37.176 UTC [26] LOG:  checkpoint starting: time
+2026-09-08 09:07:22.198 UTC [84218] ERROR:  column "description" of relation "sports" does not exist at character 27
+2026-09-08 09:07:22.198 UTC [84218] STATEMENT:  INSERT INTO sports (name, description) VALUES ('mlb', 'Major League Baseball')
+	                   ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+	                   RETURNING id
+2026-09-08 09:11:07.102 UTC [26] LOG:  checkpoint complete: wrote 2182 buffers (13.3%); 0 WAL file(s) added, 0 removed, 24 recycled; write=269.854 s, sync=0.020 s, total=269.926 s; sync files=34, longest=0.002 s, average=0.001 s; distance=394255 kB, estimate=444719 kB; lsn=2D/65430B10, redo lsn=2D/5187CCA8
+2026-09-09 09:02:04.278 UTC [26] LOG:  checkpoint starting: time
+2026-09-09 09:06:34.561 UTC [26] LOG:  checkpoint complete: wrote 1879 buffers (11.5%); 0 WAL file(s) added, 0 removed, 27 recycled; write=269.775 s, sync=0.132 s, total=270.284 s; sync files=62, longest=0.009 s, average=0.003 s; distance=438237 kB, estimate=444071 kB; lsn=2D/80B3D1C0, redo lsn=2D/6C474200
+2026-09-09 09:07:04.592 UTC [26] LOG:  checkpoint starting: time
+2026-09-09 09:09:39.586 UTC [145897] ERROR:  column "description" of relation "sports" does not exist at character 27
+2026-09-09 09:09:39.586 UTC [145897] STATEMENT:  INSERT INTO sports (name, description) VALUES ('mlb', 'Major League Baseball')
+	                   ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+	                   RETURNING id
+2026-09-09 09:11:34.157 UTC [26] LOG:  checkpoint complete: wrote 2134 buffers (13.0%); 0 WAL file(s) added, 0 removed, 21 recycled; write=269.391 s, sync=0.016 s, total=269.566 s; sync files=36, longest=0.001 s, average=0.001 s; distance=341702 kB, estimate=433834 kB; lsn=2D/958BDF90, redo lsn=2D/81225B78
+2026-09-10 09:01:40.949 UTC [206864] ERROR:  canceling autovacuum task
+2026-09-10 09:01:40.949 UTC [206864] CONTEXT:  while vacuuming index "idx_results_date" of relation "public.results"
+	automatic vacuum of table "sports_betting.public.results"
+2026-09-10 09:02:32.186 UTC [26] LOG:  checkpoint starting: time
+2026-09-10 09:07:02.217 UTC [26] LOG:  checkpoint complete: wrote 4613 buffers (28.2%); 0 WAL file(s) added, 0 removed, 27 recycled; write=269.904 s, sync=0.059 s, total=270.031 s; sync files=61, longest=0.016 s, average=0.001 s; distance=444899 kB, estimate=444899 kB; lsn=2D/B7BA1950, redo lsn=2D/9C49E848
+2026-09-10 09:07:32.246 UTC [26] LOG:  checkpoint starting: time
+2026-09-10 09:08:32.882 UTC [207178] ERROR:  column "description" of relation "sports" does not exist at character 27
+2026-09-10 09:08:32.882 UTC [207178] STATEMENT:  INSERT INTO sports (name, description) VALUES ('mlb', 'Major League Baseball')
+	                   ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+	                   RETURNING id
+2026-09-10 09:12:02.102 UTC [26] LOG:  checkpoint complete: wrote 2465 buffers (15.0%); 0 WAL file(s) added, 0 removed, 27 recycled; write=269.789 s, sync=0.014 s, total=269.857 s; sync files=31, longest=0.001 s, average=0.001 s; distance=451457 kB, estimate=451457 kB; lsn=2D/C4DF35D8, redo lsn=2D/B7D7ED08
+2026-09-11 09:03:00.824 UTC [26] LOG:  checkpoint starting: time
+2026-09-11 09:04:08.909 UTC [268247] ERROR:  canceling autovacuum task
+2026-09-11 09:04:08.909 UTC [268247] CONTEXT:  while vacuuming block 12316 of relation "public.results"
+	automatic vacuum of table "sports_betting.public.results"
+2026-09-11 09:07:30.119 UTC [26] LOG:  checkpoint complete: wrote 3751 buffers (22.9%); 0 WAL file(s) added, 0 removed, 26 recycled; write=269.196 s, sync=0.044 s, total=269.295 s; sync files=59, longest=0.019 s, average=0.001 s; distance=414223 kB, estimate=447733 kB; lsn=2D/EA183DA0, redo lsn=2D/D1202A18
+2026-09-11 09:08:00.149 UTC [26] LOG:  checkpoint starting: time
+2026-09-11 09:09:02.437 UTC [268477] ERROR:  column "description" of relation "sports" does not exist at character 27
+2026-09-11 09:09:02.437 UTC [268477] STATEMENT:  INSERT INTO sports (name, description) VALUES ('mlb', 'Major League Baseball')
+	                   ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+	                   RETURNING id
+2026-09-11 09:12:30.119 UTC [26] LOG:  checkpoint complete: wrote 2416 buffers (14.7%); 0 WAL file(s) added, 0 removed, 25 recycled; write=269.899 s, sync=0.017 s, total=269.970 s; sync files=36, longest=0.002 s, average=0.001 s; distance=410900 kB, estimate=444050 kB; lsn=2D/F6C89BD0, redo lsn=2D/EA347A58
+2026-09-12 09:03:28.390 UTC [26] LOG:  checkpoint starting: time
+2026-09-12 09:07:58.287 UTC [26] LOG:  checkpoint complete: wrote 2792 buffers (17.0%); 0 WAL file(s) added, 0 removed, 30 recycled; write=269.639 s, sync=0.056 s, total=269.898 s; sync files=57, longest=0.005 s, average=0.001 s; distance=494152 kB, estimate=494152 kB; lsn=2E/1E1E7C38, redo lsn=2E/85D9DD8
+2026-09-12 09:08:28.318 UTC [26] LOG:  checkpoint starting: time
+2026-09-12 09:09:54.412 UTC [329380] ERROR:  column "description" of relation "sports" does not exist at character 27
+2026-09-12 09:09:54.412 UTC [329380] STATEMENT:  INSERT INTO sports (name, description) VALUES ('mlb', 'Major League Baseball')
+	                   ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+	                   RETURNING id
+2026-09-12 09:12:58.081 UTC [26] LOG:  checkpoint complete: wrote 911 buffers (5.6%); 0 WAL file(s) added, 0 removed, 22 recycled; write=269.688 s, sync=0.018 s, total=269.764 s; sync files=33, longest=0.003 s, average=0.001 s; distance=357929 kB, estimate=480530 kB; lsn=2E/2B8EC3C0, redo lsn=2E/1E364460
+2026-09-13 09:03:56.064 UTC [26] LOG:  checkpoint starting: time
+2026-09-13 09:08:00.291 UTC [26] LOG:  checkpoint complete: wrote 908 buffers (5.5%); 0 WAL file(s) added, 0 removed, 30 recycled; write=243.584 s, sync=0.116 s, total=244.229 s; sync files=61, longest=0.006 s, average=0.002 s; distance=497896 kB, estimate=497896 kB; lsn=2E/5019B720, redo lsn=2E/3C99E520
+2026-09-13 09:08:56.053 UTC [26] LOG:  checkpoint starting: time
+2026-09-13 09:13:10.365 UTC [390624] ERROR:  column "description" of relation "sports" does not exist at character 27
+2026-09-13 09:13:10.365 UTC [390624] STATEMENT:  INSERT INTO sports (name, description) VALUES ('mlb', 'Major League Baseball')
+	                   ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+	                   RETURNING id
+2026-09-13 09:13:26.149 UTC [26] LOG:  checkpoint complete: wrote 4314 buffers (26.3%); 0 WAL file(s) added, 0 removed, 20 recycled; write=269.999 s, sync=0.021 s, total=270.097 s; sync files=34, longest=0.006 s, average=0.001 s; distance=331593 kB, estimate=481265 kB; lsn=2E/66471C38, redo lsn=2E/50D709F0
+2026-09-13 09:13:56.179 UTC [26] LOG:  checkpoint starting: time
+2026-09-13 09:17:14.362 UTC [26] LOG:  checkpoint complete: wrote 1979 buffers (12.1%); 0 WAL file(s) added, 0 removed, 22 recycled; write=198.085 s, sync=0.025 s, total=198.183 s; sync files=29, longest=0.005 s, average=0.001 s; distance=351743 kB, estimate=468313 kB; lsn=2E/664F09E8, redo lsn=2E/664F0978
+
+PostgreSQL Database directory appears to contain a database; Skipping initialization
+
+2026-09-13 22:46:29.090 UTC [1] LOG:  starting PostgreSQL 16.11 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+2026-09-13 22:46:29.091 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+2026-09-13 22:46:29.092 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+2026-09-13 22:46:29.102 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-09-13 22:46:29.177 UTC [29] LOG:  database system was interrupted; last known up at 2026-09-13 09:17:14 UTC
+2026-09-13 22:46:30.759 UTC [29] LOG:  database system was not properly shut down; automatic recovery in progress
+2026-09-13 22:46:30.763 UTC [29] LOG:  redo starts at 2E/664F0978
+2026-09-13 22:46:30.763 UTC [29] LOG:  invalid record length at 2E/664F0A98: expected at least 24, got 0
+2026-09-13 22:46:30.763 UTC [29] LOG:  redo done at 2E/664F0A60 system usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.00 s
+2026-09-13 22:46:30.779 UTC [27] LOG:  checkpoint starting: end-of-recovery immediate wait
+2026-09-13 22:46:30.798 UTC [27] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.006 s, sync=0.003 s, total=0.026 s; sync files=2, longest=0.002 s, average=0.002 s; distance=0 kB, estimate=0 kB; lsn=2E/664F0A98, redo lsn=2E/664F0A98
+2026-09-13 22:46:30.816 UTC [1] LOG:  database system is ready to accept connections
+2026-09-13 22:51:30.898 UTC [27] LOG:  checkpoint starting: time
+2026-09-13 22:51:32.725 UTC [27] LOG:  checkpoint complete: wrote 19 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=1.806 s, sync=0.012 s, total=1.828 s; sync files=16, longest=0.006 s, average=0.001 s; distance=66 kB, estimate=66 kB; lsn=2E/665013C0, redo lsn=2E/66501388
+2026-09-14 09:01:42.141 UTC [27] LOG:  checkpoint starting: time
+2026-09-14 09:02:06.258 UTC [26444] ERROR:  canceling autovacuum task
+2026-09-14 09:02:06.258 UTC [26444] CONTEXT:  while scanning block 21136 of relation "public.results"
+	automatic vacuum of table "sports_betting.public.results"
+2026-09-14 09:06:12.219 UTC [27] LOG:  checkpoint complete: wrote 2258 buffers (13.8%); 0 WAL file(s) added, 14 removed, 0 recycled; write=269.870 s, sync=0.103 s, total=270.079 s; sync files=55, longest=0.006 s, average=0.002 s; distance=226261 kB, estimate=226261 kB; lsn=2E/8F9F3E48, redo lsn=2E/741F69D8
+2026-09-14 09:06:42.249 UTC [27] LOG:  checkpoint starting: time
+2026-09-14 09:10:13.132 UTC [26808] ERROR:  column "description" of relation "sports" does not exist at character 27
+2026-09-14 09:10:13.132 UTC [26808] STATEMENT:  INSERT INTO sports (name, description) VALUES ('mlb', 'Major League Baseball')
+	                   ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+	                   RETURNING id
+2026-09-14 09:11:12.381 UTC [27] LOG:  checkpoint complete: wrote 3165 buffers (19.3%); 0 WAL file(s) added, 0 removed, 27 recycled; write=269.775 s, sync=0.043 s, total=270.133 s; sync files=35, longest=0.013 s, average=0.002 s; distance=455147 kB, estimate=455147 kB; lsn=2E/A3159A18, redo lsn=2E/8FE715F8
+2026-09-14 09:16:42.511 UTC [27] LOG:  checkpoint starting: time
+2026-09-14 09:20:10.966 UTC [27] LOG:  checkpoint complete: wrote 2085 buffers (12.7%); 0 WAL file(s) added, 0 removed, 20 recycled; write=208.383 s, sync=0.022 s, total=208.456 s; sync files=29, longest=0.006 s, average=0.001 s; distance=314294 kB, estimate=441061 kB; lsn=2E/A315F028, redo lsn=2E/A315EFF0
+2026-09-15 09:01:31.633 UTC [88257] ERROR:  canceling autovacuum task
+2026-09-15 09:01:31.633 UTC [88257] CONTEXT:  while vacuuming block 18696 of relation "public.results"
+	automatic vacuum of table "sports_betting.public.results"
+2026-09-15 09:02:08.378 UTC [27] LOG:  checkpoint starting: time
+2026-09-15 09:06:38.134 UTC [27] LOG:  checkpoint complete: wrote 3378 buffers (20.6%); 0 WAL file(s) added, 0 removed, 20 recycled; write=269.685 s, sync=0.024 s, total=269.757 s; sync files=50, longest=0.005 s, average=0.001 s; distance=335978 kB, estimate=430553 kB; lsn=2E/D317B070, redo lsn=2E/B7979B78
+2026-09-15 09:07:08.164 UTC [27] LOG:  checkpoint starting: time
+2026-09-15 09:07:37.719 UTC [88549] ERROR:  column "description" of relation "sports" does not exist at character 27
+2026-09-15 09:07:37.719 UTC [88549] STATEMENT:  INSERT INTO sports (name, description) VALUES ('mlb', 'Major League Baseball')
+	                   ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+	                   RETURNING id
+2026-09-15 09:11:38.173 UTC [27] LOG:  checkpoint complete: wrote 913 buffers (5.6%); 0 WAL file(s) added, 0 removed, 29 recycled; write=269.922 s, sync=0.021 s, total=270.009 s; sync files=35, longest=0.001 s, average=0.001 s; distance=479225 kB, estimate=479225 kB; lsn=2E/DF5E35B0, redo lsn=2E/D4D78300
+2026-09-16 09:02:34.957 UTC [27] LOG:  checkpoint starting: time
+2026-09-16 09:07:04.553 UTC [27] LOG:  checkpoint complete: wrote 2750 buffers (16.8%); 0 WAL file(s) added, 0 removed, 24 recycled; write=269.046 s, sync=0.137 s, total=269.597 s; sync files=61, longest=0.008 s, average=0.003 s; distance=394636 kB, estimate=470766 kB; lsn=2F/8BB74A0, redo lsn=2E/ECEDB650
+2026-09-16 09:07:34.160 UTC [27] LOG:  checkpoint starting: time
+2026-09-16 09:08:53.349 UTC [27] LOG:  checkpoint complete: wrote 795 buffers (4.9%); 0 WAL file(s) added, 0 removed, 29 recycled; write=78.969 s, sync=0.019 s, total=79.190 s; sync files=18, longest=0.005 s, average=0.002 s; distance=460492 kB, estimate=469739 kB; lsn=2F/F398640, redo lsn=2F/908E650
+2026-09-16 09:09:25.680 UTC [150450] ERROR:  column "description" of relation "sports" does not exist at character 27
+2026-09-16 09:09:25.680 UTC [150450] STATEMENT:  INSERT INTO sports (name, description) VALUES ('mlb', 'Major League Baseball')
+	                   ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+	                   RETURNING id
+2026-09-16 09:12:34.413 UTC [27] LOG:  checkpoint starting: time
+2026-09-16 09:13:33.006 UTC [27] LOG:  checkpoint complete: wrote 586 buffers (3.6%); 0 WAL file(s) added, 0 removed, 14 recycled; write=58.461 s, sync=0.021 s, total=58.594 s; sync files=48, longest=0.002 s, average=0.001 s; distance=239480 kB, estimate=446713 kB; lsn=2F/17A6C6B8, redo lsn=2F/17A6C680
+2026-09-17 09:03:00.345 UTC [27] LOG:  checkpoint starting: time
+2026-09-17 09:07:30.240 UTC [27] LOG:  checkpoint complete: wrote 2685 buffers (16.4%); 0 WAL file(s) added, 0 removed, 27 recycled; write=269.700 s, sync=0.032 s, total=269.896 s; sync files=50, longest=0.005 s, average=0.001 s; distance=434552 kB, estimate=445497 kB; lsn=2F/488CE8C0, redo lsn=2F/322CA820
+2026-09-17 09:08:00.255 UTC [27] LOG:  checkpoint starting: time
+2026-09-17 09:08:49.613 UTC [212234] ERROR:  column "description" of relation "sports" does not exist at character 27
+2026-09-17 09:08:49.613 UTC [212234] STATEMENT:  INSERT INTO sports (name, description) VALUES ('mlb', 'Major League Baseball')
+	                   ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+	                   RETURNING id
+2026-09-17 09:12:30.139 UTC [27] LOG:  checkpoint complete: wrote 1172 buffers (7.2%); 0 WAL file(s) added, 0 removed, 22 recycled; write=269.802 s, sync=0.020 s, total=269.884 s; sync files=29, longest=0.006 s, average=0.001 s; distance=367951 kB, estimate=437742 kB; lsn=2F/55D2EF40, redo lsn=2F/48A1E7C8
+2026-09-18 09:03:21.693 UTC [273794] ERROR:  canceling autovacuum task
+2026-09-18 09:03:21.693 UTC [273794] CONTEXT:  while vacuuming block 37828 of relation "public.results"
+	automatic vacuum of table "sports_betting.public.results"
+2026-09-18 09:03:26.283 UTC [27] LOG:  checkpoint starting: time
+2026-09-18 09:07:46.706 UTC [274014] ERROR:  column "description" of relation "sports" does not exist at character 27
+2026-09-18 09:07:46.706 UTC [274014] STATEMENT:  INSERT INTO sports (name, description) VALUES ('mlb', 'Major League Baseball')
+	                   ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+	                   RETURNING id
+2026-09-18 09:07:56.097 UTC [27] LOG:  checkpoint complete: wrote 1559 buffers (9.5%); 0 WAL file(s) added, 0 removed, 31 recycled; write=269.712 s, sync=0.030 s, total=269.815 s; sync files=61, longest=0.005 s, average=0.001 s; distance=512666 kB, estimate=512666 kB; lsn=2F/84108C60, redo lsn=2F/67EC5260
+2026-09-18 09:08:26.119 UTC [27] LOG:  checkpoint starting: time
+2026-09-18 09:10:38.975 UTC [27] LOG:  checkpoint complete: wrote 1328 buffers (8.1%); 0 WAL file(s) added, 0 removed, 29 recycled; write=132.770 s, sync=0.021 s, total=132.856 s; sync files=27, longest=0.006 s, average=0.001 s; distance=461496 kB, estimate=507549 kB; lsn=2F/841735C8, redo lsn=2F/84173590
+2026-09-19 09:01:27.865 UTC [335516] ERROR:  canceling autovacuum task
+2026-09-19 09:01:27.865 UTC [335516] CONTEXT:  while scanning block 21597 of relation "public.results"
+	automatic vacuum of table "sports_betting.public.results"
+2026-09-19 09:03:52.636 UTC [27] LOG:  checkpoint starting: time
+2026-09-19 09:07:33.954 UTC [335799] ERROR:  column "description" of relation "sports" does not exist at character 27
+2026-09-19 09:07:33.954 UTC [335799] STATEMENT:  INSERT INTO sports (name, description) VALUES ('mlb', 'Major League Baseball')
+	                   ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+	                   RETURNING id
+2026-09-19 09:07:40.174 UTC [27] LOG:  checkpoint complete: wrote 1363 buffers (8.3%); 0 WAL file(s) added, 0 removed, 25 recycled; write=227.455 s, sync=0.028 s, total=227.539 s; sync files=48, longest=0.005 s, average=0.001 s; distance=423797 kB, estimate=499174 kB; lsn=2F/B9D80720, redo lsn=2F/9DF50C60
+2026-09-19 09:08:52.246 UTC [27] LOG:  checkpoint starting: time
+2026-09-19 09:10:33.341 UTC [27] LOG:  checkpoint complete: wrote 1012 buffers (6.2%); 0 WAL file(s) added, 0 removed, 28 recycled; write=101.023 s, sync=0.016 s, total=101.096 s; sync files=28, longest=0.005 s, average=0.001 s; distance=457391 kB, estimate=494996 kB; lsn=2F/B9DFCC48, redo lsn=2F/B9DFCC10
+2026-09-20 09:04:18.696 UTC [27] LOG:  checkpoint starting: time
+2026-09-20 09:08:40.954 UTC [397691] ERROR:  column "description" of relation "sports" does not exist at character 27
+2026-09-20 09:08:40.954 UTC [397691] STATEMENT:  INSERT INTO sports (name, description) VALUES ('mlb', 'Major League Baseball')
+	                   ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+	                   RETURNING id
+2026-09-20 09:08:48.187 UTC [27] LOG:  checkpoint complete: wrote 1627 buffers (9.9%); 0 WAL file(s) added, 0 removed, 30 recycled; write=269.380 s, sync=0.041 s, total=269.491 s; sync files=48, longest=0.017 s, average=0.001 s; distance=487361 kB, estimate=494232 kB; lsn=2F/EFAB7608, redo lsn=2F/D79ED040
+2026-09-20 09:09:18.217 UTC [27] LOG:  checkpoint starting: time
+2026-09-20 09:12:26.477 UTC [27] LOG:  checkpoint complete: wrote 906 buffers (5.5%); 0 WAL file(s) added, 0 removed, 24 recycled; write=188.177 s, sync=0.022 s, total=188.260 s; sync files=28, longest=0.006 s, average=0.001 s; distance=394447 kB, estimate=484254 kB; lsn=2F/EFB39458, redo lsn=2F/EFB21028
+2026-09-21 09:04:45.946 UTC [27] LOG:  checkpoint starting: time
+2026-09-21 09:09:01.452 UTC [459531] ERROR:  column "description" of relation "sports" does not exist at character 27
+2026-09-21 09:09:01.452 UTC [459531] STATEMENT:  INSERT INTO sports (name, description) VALUES ('mlb', 'Major League Baseball')
+	                   ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+	                   RETURNING id
+2026-09-21 09:09:15.283 UTC [27] LOG:  checkpoint complete: wrote 2650 buffers (16.2%); 0 WAL file(s) added, 0 removed, 31 recycled; write=269.090 s, sync=0.039 s, total=269.337 s; sync files=55, longest=0.011 s, average=0.001 s; distance=509404 kB, estimate=509404 kB; lsn=30/25EA7A48, redo lsn=30/EC980A0
+2026-09-21 09:09:45.313 UTC [27] LOG:  checkpoint starting: time
+2026-09-21 09:10:50.625 UTC [27] LOG:  checkpoint complete: wrote 653 buffers (4.0%); 0 WAL file(s) added, 0 removed, 23 recycled; write=65.137 s, sync=0.020 s, total=65.313 s; sync files=29, longest=0.005 s, average=0.001 s; distance=379255 kB, estimate=496389 kB; lsn=30/25F16F98, redo lsn=30/25EF5E20
+2026-09-22 00:05:03.350 UTC [27] LOG:  checkpoint starting: time
+2026-09-22 00:05:09.072 UTC [27] LOG:  checkpoint complete: wrote 58 buffers (0.4%); 0 WAL file(s) added, 0 removed, 0 recycled; write=5.712 s, sync=0.005 s, total=5.723 s; sync files=8, longest=0.001 s, average=0.001 s; distance=220 kB, estimate=446772 kB; lsn=30/25F2CF48, redo lsn=30/25F2CF10
+2026-09-22 00:10:03.131 UTC [27] LOG:  checkpoint starting: time
+2026-09-22 00:10:03.137 UTC [27] LOG:  checkpoint complete: wrote 0 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.007 s; sync files=1, longest=0.001 s, average=0.001 s; distance=4 kB, estimate=402095 kB; lsn=30/25F2E268, redo lsn=30/25F2E230
+2026-09-22 02:55:06.309 UTC [27] LOG:  checkpoint starting: time
+2026-09-22 02:55:06.423 UTC [27] LOG:  checkpoint complete: wrote 2 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.102 s, sync=0.004 s, total=0.115 s; sync files=3, longest=0.002 s, average=0.002 s; distance=1 kB, estimate=361886 kB; lsn=30/25F2EA28, redo lsn=30/25F2E9F0
+2026-09-22 09:00:13.559 UTC [27] LOG:  checkpoint starting: time
+2026-09-22 09:00:14.071 UTC [27] LOG:  checkpoint complete: wrote 6 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.503 s, sync=0.004 s, total=0.513 s; sync files=6, longest=0.002 s, average=0.001 s; distance=24 kB, estimate=325700 kB; lsn=30/25F34B08, redo lsn=30/25F34AD0
+2026-09-22 09:01:35.805 UTC [521151] LOG:  skipping analyze of "results" --- lock not available
+2026-09-22 09:03:23.523 UTC [521234] ERROR:  canceling autovacuum task
+2026-09-22 09:03:23.523 UTC [521234] CONTEXT:  while scanning block 22165 of relation "public.results"
+	automatic vacuum of table "sports_betting.public.results"
+2026-09-22 09:05:13.179 UTC [27] LOG:  checkpoint starting: time
+2026-09-22 09:07:45.484 UTC [521445] ERROR:  column "description" of relation "sports" does not exist at character 27
+2026-09-22 09:07:45.484 UTC [521445] STATEMENT:  INSERT INTO sports (name, description) VALUES ('mlb', 'Major League Baseball')
+	                   ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+	                   RETURNING id
+2026-09-22 09:09:43.179 UTC [27] LOG:  checkpoint complete: wrote 2845 buffers (17.4%); 0 WAL file(s) added, 0 removed, 32 recycled; write=269.902 s, sync=0.022 s, total=270.000 s; sync files=50, longest=0.001 s, average=0.001 s; distance=514071 kB, estimate=514071 kB; lsn=30/59AFDD98, redo lsn=30/4553A880
+2026-09-23 09:00:40.504 UTC [27] LOG:  checkpoint starting: time
+2026-09-23 09:05:09.229 UTC [27] LOG:  checkpoint complete: wrote 2378 buffers (14.5%); 0 WAL file(s) added, 0 removed, 23 recycled; write=268.611 s, sync=0.063 s, total=268.726 s; sync files=58, longest=0.021 s, average=0.002 s; distance=375380 kB, estimate=500202 kB; lsn=30/79F09518, redo lsn=30/5C3CFB78
+2026-09-23 09:05:40.509 UTC [27] LOG:  checkpoint starting: time
+2026-09-23 09:08:06.308 UTC [583484] ERROR:  column "description" of relation "sports" does not exist at character 27
+2026-09-23 09:08:06.308 UTC [583484] STATEMENT:  INSERT INTO sports (name, description) VALUES ('mlb', 'Major League Baseball')
+	                   ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+	                   RETURNING id
+2026-09-23 09:10:10.153 UTC [27] LOG:  checkpoint complete: wrote 6328 buffers (38.6%); 0 WAL file(s) added, 0 removed, 30 recycled; write=269.548 s, sync=0.025 s, total=269.644 s; sync files=48, longest=0.006 s, average=0.001 s; distance=500771 kB, estimate=500771 kB; lsn=30/905ABEA8, redo lsn=30/7ACD8798
+2026-09-24 09:01:07.911 UTC [27] LOG:  checkpoint starting: time
+2026-09-24 09:03:12.322 UTC [645270] ERROR:  canceling autovacuum task
+2026-09-24 09:03:12.322 UTC [645270] CONTEXT:  while vacuuming block 5024 of relation "public.results"
+	automatic vacuum of table "sports_betting.public.results"
+2026-09-24 09:05:37.441 UTC [27] LOG:  checkpoint complete: wrote 7263 buffers (44.3%); 0 WAL file(s) added, 0 removed, 28 recycled; write=269.112 s, sync=0.054 s, total=269.531 s; sync files=48, longest=0.007 s, average=0.002 s; distance=452054 kB, estimate=495899 kB; lsn=30/B229F2F8, redo lsn=30/9664DFE0
+2026-09-24 09:06:07.742 UTC [27] LOG:  checkpoint starting: time
+2026-09-24 09:07:48.195 UTC [645485] ERROR:  column "description" of relation "sports" does not exist at character 27
+2026-09-24 09:07:48.195 UTC [645485] STATEMENT:  INSERT INTO sports (name, description) VALUES ('mlb', 'Major League Baseball')
+	                   ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+	                   RETURNING id
+2026-09-24 09:10:37.155 UTC [27] LOG:  checkpoint complete: wrote 2495 buffers (15.2%); 0 WAL file(s) added, 0 removed, 28 recycled; write=269.347 s, sync=0.016 s, total=269.414 s; sync files=38, longest=0.001 s, average=0.001 s; distance=458940 kB, estimate=492203 kB; lsn=30/C66CD608, redo lsn=30/B267D078
+2026-09-24 15:41:14.767 UTC [27] LOG:  checkpoint starting: time
+2026-09-24 15:41:50.413 UTC [27] LOG:  checkpoint complete: wrote 358 buffers (2.2%); 0 WAL file(s) added, 0 removed, 20 recycled; write=35.580 s, sync=0.022 s, total=35.647 s; sync files=30, longest=0.006 s, average=0.001 s; distance=328012 kB, estimate=475784 kB; lsn=30/C66D0388, redo lsn=30/C66D0350
+2026-09-25 03:56:28.567 UTC [27] LOG:  checkpoint starting: time
+2026-09-25 03:56:28.787 UTC [27] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.202 s, sync=0.008 s, total=0.221 s; sync files=3, longest=0.006 s, average=0.003 s; distance=2 kB, estimate=428206 kB; lsn=30/C66D0CE8, redo lsn=30/C66D0CB0
+2026-09-25 09:01:34.225 UTC [27] LOG:  checkpoint starting: time
+2026-09-25 09:01:43.598 UTC [707265] ERROR:  canceling autovacuum task
+2026-09-25 09:01:43.598 UTC [707265] CONTEXT:  while vacuuming block 38225 of relation "public.results"
+	automatic vacuum of table "sports_betting.public.results"
+2026-09-25 09:03:30.707 UTC [707356] ERROR:  canceling autovacuum task
+2026-09-25 09:03:30.707 UTC [707356] CONTEXT:  while vacuuming index "idx_results_series" of relation "public.results"
+	automatic vacuum of table "sports_betting.public.results"
+2026-09-25 09:06:04.140 UTC [27] LOG:  checkpoint complete: wrote 4559 buffers (27.8%); 0 WAL file(s) added, 7 removed, 8 recycled; write=269.802 s, sync=0.080 s, total=269.916 s; sync files=43, longest=0.043 s, average=0.002 s; distance=245618 kB, estimate=409947 kB; lsn=30/F0B018E8, redo lsn=30/D56AD4C8
+2026-09-25 09:06:34.164 UTC [27] LOG:  checkpoint starting: time
+2026-09-25 09:07:55.933 UTC [707556] ERROR:  column "description" of relation "sports" does not exist at character 27
+2026-09-25 09:07:55.933 UTC [707556] STATEMENT:  INSERT INTO sports (name, description) VALUES ('mlb', 'Major League Baseball')
+	                   ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+	                   RETURNING id
+2026-09-25 09:11:04.070 UTC [27] LOG:  checkpoint complete: wrote 2122 buffers (13.0%); 0 WAL file(s) added, 0 removed, 27 recycled; write=269.840 s, sync=0.015 s, total=269.906 s; sync files=31, longest=0.002 s, average=0.001 s; distance=448628 kB, estimate=448628 kB; lsn=31/55D0C20, redo lsn=30/F0CCA878
+2026-09-25 17:16:43.620 UTC [27] LOG:  checkpoint starting: time
+2026-09-25 17:21:13.053 UTC [27] LOG:  checkpoint complete: wrote 5432 buffers (33.2%); 0 WAL file(s) added, 0 removed, 21 recycled; write=269.376 s, sync=0.014 s, total=269.434 s; sync files=32, longest=0.002 s, average=0.001 s; distance=336923 kB, estimate=437458 kB; lsn=31/55D1748, redo lsn=31/55D1710

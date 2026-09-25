@@ -488,11 +488,8 @@ async def analyze_nfl_matchup_dual(home_team: str, away_team: str,
     xgb_pred = None
     try:
         from scripts.nfl_xgb_trainer import predict_nfl_xgb
-        predictor = NFLPredictor()
-        home_stats = predictor.get_team_stats(home_team)
-        away_stats = predictor.get_team_stats(away_team)
-        
-        xgb_result = await predict_nfl_xgb(home_team, away_team, home_stats, away_stats)
+        # XGBoost builds its features from the same imported schedule history used to train it.
+        xgb_result = await predict_nfl_xgb(home_team, away_team)
         
         if xgb_result and "error" not in xgb_result:
             xgb_pred = {
@@ -501,6 +498,11 @@ async def analyze_nfl_matchup_dual(home_team: str, away_team: str,
                 'away_win_probability': xgb_result.get('away_win_probability'),
                 'predicted_total': xgb_result.get('predicted_total'),
                 'predicted_winner': home_team if xgb_result.get('home_win_probability', 0) > 0.5 else away_team,
+                'model_version': xgb_result.get('model_version'),
+                'training_samples': xgb_result.get('training_samples'),
+                'latest_training_game_date': xgb_result.get('latest_training_game_date'),
+                'feature_source': xgb_result.get('feature_source'),
+                'features': xgb_result.get('features'),
             }
             
             # Calculate XGBoost value vs odds

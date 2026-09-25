@@ -1,366 +1,607 @@
-"""
-NFL XGBoost Model Trainer
-Trains XGBoost models on historical game data for win prediction
-Uses nflreadpy (Python port of nflfastR) for data
-"""
+"""Train and serve NFL XGBoost models from the application's imported data."""
 
-import logging
-import os
+import asyncio
 import json
-from datetime import datetime
-from typing import Dict, List, Tuple, Optional
+import logging
+import math
+import os
+import tempfile
+from collections import defaultdict, deque
+from datetime import date, datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+from src.config import DATABASE_URL
 
 logger = logging.getLogger(__name__)
 
-# Check if xgboost is available
 try:
-    import xgboost as xgb
+    import asyncpg
     import numpy as np
+    import xgboost as xgb
     XGB_AVAILABLE = True
 except ImportError:
+    asyncpg = None
+    np = None
+    xgb = None
     XGB_AVAILABLE = False
-    logger.warning("XGBoost not installed - training will be unavailable")
+    logger.warning("NFL XGBoost training unavailable: asyncpg, numpy, or xgboost is missing")
 
-MODELS_DIR = "models/nfl"
+MODELS_DIR = Path(os.getenv("NFL_MODELS_DIR", "models/nfl"))
+MODEL_VERSION = "db_rolling_v2"
+MIN_HISTORY_GAMES = 2
+ROLLING_WINDOW = 8
+
+# Keep this order identical in feature creation, training, and inference.
+FEATURE_NAMES = [
+    "home_ppg", "home_opp_ppg", "away_ppg", "away_opp_ppg",
+    "home_win_pct", "away_win_pct",
+    "home_last5_wins", "away_last5_wins",
+    "home_epa_per_play", "away_epa_per_play",
+    "home_pass_yds_per_game", "away_pass_yds_per_game",
+    "home_rush_yds_per_game", "away_rush_yds_per_game",
+    "home_td_per_game", "away_td_per_game",
+    "home_turnovers_per_game", "away_turnovers_per_game",
+]
+
+TEAM_ALIASES = {
+    "arizona cardinals": "ARI", "atlanta falcons": "ATL", "baltimore ravens": "BAL",
+    "buffalo bills": "BUF", "carolina panthers": "CAR", "chicago bears": "CHI",
+    "cincinnati bengals": "CIN", "cleveland browns": "CLE", "dallas cowboys": "DAL",
+    "denver broncos": "DEN", "detroit lions": "DET", "green bay packers": "GB",
+    "houston texans": "HOU", "indianapolis colts": "IND", "jacksonville jaguars": "JAX",
+    "kansas city chiefs": "KC", "las vegas raiders": "LV", "oakland raiders": "LV",
+    "los angeles chargers": "LAC", "san diego chargers": "LAC",
+    "los angeles rams": "LAR", "st. louis rams": "LAR", "miami dolphins": "MIA",
+    "minnesota vikings": "MIN", "new england patriots": "NE", "new orleans saints": "NO",
+    "new york giants": "NYG", "new york jets": "NYJ", "philadelphia eagles": "PHI",
+    "pittsburgh steelers": "PIT", "san francisco 49ers": "SF", "seattle seahawks": "SEA",
+    "tampa bay buccaneers": "TB", "tennessee titans": "TEN",
+    "washington commanders": "WAS", "washington football team": "WAS",
+    "washington redskins": "WAS", "jacksonville": "JAX", "washington": "WAS",
+}
+
+
+def _canonical_team(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    team = str(value).strip()
+    if not team:
+        return None
+    upper = team.upper()
+    aliases = {"JAC": "JAX", "LA": "LAR", "STL": "LAR", "SD": "LAC", "OAK": "LV", "WSH": "WAS"}
+    if upper in set(TEAM_ALIASES.values()) | {"JAC", "LA", "STL", "SD", "OAK", "WSH"}:
+        return aliases.get(upper, upper)
+    return TEAM_ALIASES.get(team.lower())
+
+
+def _metadata(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except (TypeError, json.JSONDecodeError):
+            return {}
+    return {}
+
+
+def _as_date(value: Any) -> Optional[date]:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if value is None:
+        return None
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except (TypeError, ValueError):
+        return None
+
+
+def _number(value: Any) -> Optional[float]:
+    if value is None or value == "":
+        return None
+    try:
+        parsed = float(value)
+        return parsed if math.isfinite(parsed) else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _american_implied_probability(value: Optional[float]) -> Optional[float]:
+    if value is None or value == 0:
+        return None
+    if value > 0:
+        return 100.0 / (value + 100.0)
+    return abs(value) / (abs(value) + 100.0)
+
+
+def _normalize_schedule_rows(rows: Sequence[Any]) -> List[Dict[str, Any]]:
+    games = []
+    for row in rows:
+        meta = _metadata(row["metadata"])
+        game_date = _as_date(meta.get("gameday") or row.get("game_date"))
+        home = _canonical_team(meta.get("home_team"))
+        away = _canonical_team(meta.get("away_team"))
+        home_score_value = meta.get("home_score")
+        away_score_value = meta.get("away_score")
+        if home_score_value is None:
+            home_score_value = row.get("home_score")
+        if away_score_value is None:
+            away_score_value = row.get("away_score")
+        home_score = _number(home_score_value)
+        away_score = _number(away_score_value)
+        if not game_date or not home or not away:
+            continue
+        games.append({
+            "date": game_date,
+            "season": int(row["season"] or meta.get("season") or game_date.year),
+            "home": home,
+            "away": away,
+            "week": int(meta["week"]) if _number(meta.get("week")) is not None else None,
+            "home_score": home_score,
+            "away_score": away_score,
+            "home_moneyline": _number(meta.get("home_moneyline")),
+            "away_moneyline": _number(meta.get("away_moneyline")),
+            "game_type": str(meta.get("game_type") or "REG").upper(),
+        })
+    return sorted(games, key=lambda game: (game["date"], game["season"], game["home"], game["away"]))
+
+
+def _team_features(history: Sequence[Tuple[float, float, int]]) -> Optional[Dict[str, float]]:
+    if len(history) < MIN_HISTORY_GAMES:
+        return None
+    recent = list(history)[-ROLLING_WINDOW:]
+    ppg = sum(game[0] for game in recent) / len(recent)
+    oppg = sum(game[1] for game in recent) / len(recent)
+    win_pct = sum(game[2] for game in recent) / len(recent)
+    last5_wins = sum(game[2] for game in recent[-5:])
+    return {
+        "ppg": ppg,
+        "oppg": oppg,
+        "win_pct": win_pct,
+        "last5_wins": float(last5_wins),
+        # Scoring differential proxy retained as part of this model's feature contract.
+        "epa_proxy": max(-0.35, min(0.35, (ppg - oppg) / 25.0)),
+    }
+
+
+def _matchup_features(home_stats: Dict[str, float], away_stats: Dict[str, float],
+                      home_weekly: Optional[Dict[str, float]] = None,
+                      away_weekly: Optional[Dict[str, float]] = None) -> Dict[str, float]:
+    home_weekly = home_weekly or {}
+    away_weekly = away_weekly or {}
+    return {
+        "home_ppg": home_stats["ppg"],
+        "home_opp_ppg": home_stats["oppg"],
+        "away_ppg": away_stats["ppg"],
+        "away_opp_ppg": away_stats["oppg"],
+        "home_win_pct": home_stats["win_pct"],
+        "away_win_pct": away_stats["win_pct"],
+        "home_last5_wins": home_stats["last5_wins"],
+        "away_last5_wins": away_stats["last5_wins"],
+        "home_epa_per_play": home_stats["epa_proxy"],
+        "away_epa_per_play": away_stats["epa_proxy"],
+        "home_pass_yds_per_game": home_weekly.get("pass_yds_per_game", 0.0),
+        "away_pass_yds_per_game": away_weekly.get("pass_yds_per_game", 0.0),
+        "home_rush_yds_per_game": home_weekly.get("rush_yds_per_game", 0.0),
+        "away_rush_yds_per_game": away_weekly.get("rush_yds_per_game", 0.0),
+        "home_td_per_game": home_weekly.get("td_per_game", 0.0),
+        "away_td_per_game": away_weekly.get("td_per_game", 0.0),
+        "home_turnovers_per_game": home_weekly.get("turnovers_per_game", 0.0),
+        "away_turnovers_per_game": away_weekly.get("turnovers_per_game", 0.0),
+    }
+
+
+def _weekly_team_games(rows: Sequence[Any]) -> Dict[str, List[Tuple[int, int, Dict[str, float]]]]:
+    """Aggregate player-week rows into team-week totals from the nightly import."""
+    buckets: Dict[Tuple[int, int, str], Dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    for row in rows:
+        meta = _metadata(row["metadata"])
+        team = _canonical_team(meta.get("team"))
+        season_value = _number(row["season"] or meta.get("season"))
+        week_value = _number(meta.get("week"))
+        if not team or season_value is None or week_value is None:
+            continue
+        key = (int(season_value), int(week_value), team)
+        for target, source in (
+            ("pass_yds", "pass_yds"), ("rush_yds", "rush_yds"),
+            ("pass_td", "pass_td"), ("rush_td", "rush_td"), ("turnovers", "pass_int"),
+        ):
+            buckets[key][target] += _number(meta.get(source)) or 0.0
+
+    by_team: Dict[str, List[Tuple[int, int, Dict[str, float]]]] = defaultdict(list)
+    for (season, week, team), totals in buckets.items():
+        game_stats = {
+            "pass_yds": totals["pass_yds"],
+            "rush_yds": totals["rush_yds"],
+            "td": totals["pass_td"] + totals["rush_td"],
+            "turnovers": totals["turnovers"],
+        }
+        by_team[team].append((season, week, game_stats))
+    for team_games in by_team.values():
+        team_games.sort(key=lambda item: (item[0], item[1]))
+    return by_team
+
+
+def _recent_player_features(team: str, season: int, week: Optional[int], weekly_games) -> Dict[str, float]:
+    team_games = weekly_games.get(team, [])
+    if week is not None:
+        team_games = [game for game in team_games if game[0] < season or (game[0] == season and game[1] < week)]
+    recent = [game[2] for game in team_games[-ROLLING_WINDOW:]]
+    if not recent:
+        return {}
+    n_games = len(recent)
+    return {
+        "pass_yds_per_game": sum(game["pass_yds"] for game in recent) / n_games,
+        "rush_yds_per_game": sum(game["rush_yds"] for game in recent) / n_games,
+        "td_per_game": sum(game["td"] for game in recent) / n_games,
+        "turnovers_per_game": sum(game["turnovers"] for game in recent) / n_games,
+    }
+
+
+def build_training_examples(rows: Sequence[Any], weekly_rows: Sequence[Any] = ()) -> Tuple[List[Dict[str, float]], List[int], List[float], List[date], List[Optional[float]]]:
+    """Build pregame-only rolling features; all games on a date share prior-day history."""
+    games = _normalize_schedule_rows(rows)
+    weekly_games = _weekly_team_games(weekly_rows)
+    histories: Dict[str, deque] = defaultdict(lambda: deque(maxlen=ROLLING_WINDOW))
+    features: List[Dict[str, float]] = []
+    labels: List[int] = []
+    totals: List[float] = []
+    game_dates: List[date] = []
+    market_probabilities: List[Optional[float]] = []
+
+    index = 0
+    while index < len(games):
+        day = games[index]["date"]
+        end = index
+        while end < len(games) and games[end]["date"] == day:
+            end += 1
+        same_day_games = games[index:end]
+
+        # Features for every game date are captured before adding any same-day outcomes.
+        for game in same_day_games:
+            home_stats = _team_features(histories[game["home"]])
+            away_stats = _team_features(histories[game["away"]])
+            if (game["game_type"] == "REG" and game["home_score"] is not None
+                    and game["away_score"] is not None and home_stats and away_stats):
+                home_weekly = _recent_player_features(game["home"], game["season"], game["week"], weekly_games)
+                away_weekly = _recent_player_features(game["away"], game["season"], game["week"], weekly_games)
+                features.append(_matchup_features(home_stats, away_stats, home_weekly, away_weekly))
+                labels.append(int(game["home_score"] > game["away_score"]))
+                totals.append(game["home_score"] + game["away_score"])
+                game_dates.append(day)
+                home_market = _american_implied_probability(game["home_moneyline"])
+                away_market = _american_implied_probability(game["away_moneyline"])
+                if home_market is not None and away_market is not None and home_market + away_market > 0:
+                    market_probabilities.append(home_market / (home_market + away_market))
+                else:
+                    market_probabilities.append(None)
+
+        # Completed regular/postseason games update form for later dates.
+        for game in same_day_games:
+            if game["game_type"] not in {"REG", "POST"} or game["home_score"] is None or game["away_score"] is None:
+                continue
+            home_win = int(game["home_score"] > game["away_score"])
+            histories[game["home"]].append((game["home_score"], game["away_score"], home_win))
+            histories[game["away"]].append((game["away_score"], game["home_score"], 1 - home_win))
+        index = end
+
+    return features, labels, totals, game_dates, market_probabilities
+
+
+def build_live_features(rows: Sequence[Any], home_team: str, away_team: str, weekly_rows: Sequence[Any] = (),
+                        as_of: Optional[date] = None) -> Dict[str, float]:
+    """Use the same schedule-based feature contract as training for a live matchup."""
+    home = _canonical_team(home_team)
+    away = _canonical_team(away_team)
+    if not home or not away:
+        raise ValueError(f"Unrecognized NFL team name: {home_team!r} or {away_team!r}")
+    cutoff = as_of or date.today()
+    games = _normalize_schedule_rows(rows)
+    histories: Dict[str, deque] = defaultdict(lambda: deque(maxlen=ROLLING_WINDOW))
+    target_game = next((game for game in games if game["date"] >= cutoff
+                        and {game["home"], game["away"]} == {home, away}), None)
+    if target_game is None:
+        target_game = next((game for game in games if game["date"] >= cutoff), None)
+    target_season = target_game["season"] if target_game else cutoff.year
+    target_week = target_game["week"] if target_game else None
+    for game in games:
+        if game["date"] >= cutoff:
+            continue
+        if game["game_type"] not in {"REG", "POST"} or game["home_score"] is None or game["away_score"] is None:
+            continue
+        home_win = int(game["home_score"] > game["away_score"])
+        histories[game["home"]].append((game["home_score"], game["away_score"], home_win))
+        histories[game["away"]].append((game["away_score"], game["home_score"], 1 - home_win))
+
+    home_stats = _team_features(histories[home])
+    away_stats = _team_features(histories[away])
+    if home_stats is None or away_stats is None:
+        raise ValueError(
+            f"Insufficient imported NFL game history for {home_team} vs {away_team}; "
+            f"at least {MIN_HISTORY_GAMES} completed games per team are required"
+        )
+    weekly_games = _weekly_team_games(weekly_rows)
+    home_weekly = _recent_player_features(home, target_season, target_week, weekly_games)
+    away_weekly = _recent_player_features(away, target_season, target_week, weekly_games)
+    return _matchup_features(home_stats, away_stats, home_weekly, away_weekly)
+
+
+async def _fetch_schedule_rows(conn) -> List[Any]:
+    return await conn.fetch("""
+        SELECT r.season, r.game_date, r.home_score, r.away_score, r.metadata
+        FROM results r
+        JOIN sports s ON s.id = r.sport_id
+        WHERE s.name = 'nfl' AND r.series = 'nfl_schedule'
+        ORDER BY r.season, r.game_date
+    """)
+
+
+async def _fetch_weekly_rows(conn) -> List[Any]:
+    return await conn.fetch("""
+        SELECT r.season, r.metadata
+        FROM results r
+        JOIN sports s ON s.id = r.sport_id
+        WHERE s.name = 'nfl' AND r.series = 'nfl_weekly'
+        ORDER BY r.season
+    """)
+
+
+_live_data_cache: Optional[Tuple[float, List[Any], List[Any]]] = None
+_live_data_cache_lock = asyncio.Lock()
+
+
+async def fetch_live_features(home_team: str, away_team: str, as_of: Optional[date] = None) -> Dict[str, float]:
+    if not XGB_AVAILABLE:
+        raise RuntimeError("NFL XGBoost prediction dependencies are unavailable")
+    global _live_data_cache
+    async with _live_data_cache_lock:
+        now = asyncio.get_running_loop().time()
+        if _live_data_cache is None or now - _live_data_cache[0] > 60:
+            conn = await asyncpg.connect(DATABASE_URL)
+            try:
+                schedules = await _fetch_schedule_rows(conn)
+                weekly = await _fetch_weekly_rows(conn)
+                _live_data_cache = (now, schedules, weekly)
+            finally:
+                await conn.close()
+        _, schedules, weekly = _live_data_cache
+    return build_live_features(schedules, home_team, away_team, weekly, as_of)
 
 
 class NFLXGBTrainer:
-    """
-    Trains XGBoost models on NFL game results.
-    Uses team rolling statistics and EPA as features.
-    """
-    
+    """Moneyline and total models trained only from imported PostgreSQL schedules."""
+
     def __init__(self):
-        self.model_ml = None  # Moneyline model
-        self.model_ou = None  # Over/Under model
-        self.feature_names = [
-            'home_ppg', 'home_opp_ppg', 'away_ppg', 'away_opp_ppg',
-            'home_win_pct', 'away_win_pct', 
-            'home_last5_wins', 'away_last5_wins',
-            'home_epa_per_play', 'away_epa_per_play'
-        ]
-        
-        # Ensure models directory exists
-        os.makedirs(MODELS_DIR, exist_ok=True)
-    
-    def _load_training_data(self) -> Tuple[List[Dict], List[int], List[float]]:
-        """
-        Load historical NFL game data for training from nflreadpy.
-        Returns features, win labels, and total points.
-        """
-        logger.info("Loading NFL training data from nflreadpy...")
-        
-        features = []
-        win_labels = []  # 1 = home win, 0 = away win
-        totals = []  # Total points scored
-        
+        self.model_ml = None
+        self.model_ou = None
+        self.feature_names = FEATURE_NAMES.copy()
+        self.loaded_training_metadata: Dict[str, Any] = {}
+        if XGB_AVAILABLE:
+            MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+    def _features_to_matrix(self, features: Sequence[Dict[str, float]]):
+        matrix = np.array([[feature[name] for name in self.feature_names] for feature in features], dtype=np.float32)
+        if not np.isfinite(matrix).all():
+            raise ValueError("NFL feature matrix contains missing or non-finite values")
+        return matrix
+
+    @staticmethod
+    def _atomic_save_model(model, destination: Path) -> None:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        fd, temp_path = tempfile.mkstemp(prefix=f".{destination.stem}-", suffix=".json", dir=destination.parent)
+        os.close(fd)
         try:
-            # Try to load from local CSV first (Phase 1 artifact)
-            local_schedule_path = "/app/data/nflverse/schedules.csv"
-            if not os.path.exists(local_schedule_path):
-                # Fallback for local testing on Windows
-                local_schedule_path = "data/nflverse/schedules.csv"
-            
-            if os.path.exists(local_schedule_path):
-                import pandas as pd
-                logger.info(f"Loading schedules from local file: {local_schedule_path}")
-                schedules_df = pd.read_csv(local_schedule_path)
-                # Ensure filter is appropriate
-                schedules_df = schedules_df[schedules_df['season'].isin(range(2018, 2026))]
-            else:
-                logger.info("Local schedules.csv not found, fetching from nflverse...")
-                # Try nflreadpy first (actively maintained)
-                try:
-                    import nflreadpy as nfl
-                    seasons = list(range(2018, 2026))
-                    schedules_polars = nfl.load_schedules(seasons)
-                    schedules_df = schedules_polars.to_pandas()
-                except ImportError:
-                    import nfl_data_py as nfl
-                    schedules_df = nfl.import_schedules([2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025])
-            
-            # Filter to completed games only
-            games = schedules_df[schedules_df['home_score'].notna()].copy()
-            games = games.sort_values('gameday')
-            
-            logger.info(f"Processing {len(games)} NFL games...")
-            
-            # Calculate rolling stats per team
-            team_history = {}  # team -> list of (pts_scored, pts_allowed, win)
-            
-            for _, game in games.iterrows():
-                home = game['home_team']
-                away = game['away_team']
-                home_pts = game.get('home_score', 0) or 0
-                away_pts = game.get('away_score', 0) or 0
-                home_win = 1 if home_pts > away_pts else 0
-                
-                # Get rolling stats (last 8 games for NFL)
-                def get_rolling_stats(team):
-                    history = team_history.get(team, [])[-8:]
-                    if len(history) < 4:
-                        return None  # Not enough history
-                    ppg = sum(g[0] for g in history) / len(history)
-                    oppg = sum(g[1] for g in history) / len(history)
-                    win_pct = sum(g[2] for g in history) / len(history)
-                    last5_wins = sum(g[2] for g in history[-5:]) if len(history) >= 5 else sum(g[2] for g in history)
-                    # EPA proxy from scoring efficiency differential.
-                    # This keeps feature variability when direct play-by-play EPA is unavailable.
-                    epa_proxy = max(-0.35, min(0.35, (ppg - oppg) / 25.0))
-                    return {
-                        'ppg': ppg,
-                        'oppg': oppg,
-                        'win_pct': win_pct,
-                        'last5_wins': last5_wins,
-                        'epa_proxy': epa_proxy
-                    }
-                
-                home_stats = get_rolling_stats(home)
-                away_stats = get_rolling_stats(away)
-                
-                # Only use games where both teams have history
-                if home_stats and away_stats:
-                    feature = {
-                        'home_ppg': home_stats['ppg'],
-                        'home_opp_ppg': home_stats['oppg'],
-                        'away_ppg': away_stats['ppg'],
-                        'away_opp_ppg': away_stats['oppg'],
-                        'home_win_pct': home_stats['win_pct'],
-                        'away_win_pct': away_stats['win_pct'],
-                        'home_last5_wins': home_stats['last5_wins'],
-                        'away_last5_wins': away_stats['last5_wins'],
-                        'home_epa_per_play': home_stats['epa_proxy'],
-                        'away_epa_per_play': away_stats['epa_proxy'],
-                    }
-                    features.append(feature)
-                    win_labels.append(home_win)
-                    totals.append(home_pts + away_pts)
-                
-                # Update history
-                if home not in team_history:
-                    team_history[home] = []
-                if away not in team_history:
-                    team_history[away] = []
-                team_history[home].append((home_pts, away_pts, home_win))
-                team_history[away].append((away_pts, home_pts, 1 - home_win))
-            
-            logger.info(f"Loaded {len(features)} NFL training samples from real games")
-            
-        except Exception as e:
-            logger.error(f"Error loading NFL training data: {e}")
-            logger.info("Falling back to synthetic data...")
-            return self._generate_synthetic_data()
-        
-        if len(features) < 100:
-            logger.warning("Not enough real NFL data, falling back to synthetic")
-            return self._generate_synthetic_data()
-        
-        return features, win_labels, totals
-    
-    def _generate_synthetic_data(self) -> Tuple[List[Dict], List[int], List[float]]:
-        """Generate synthetic NFL training data as fallback."""
-        import random
-        random.seed(42)
-        
-        features = []
-        win_labels = []
-        totals = []
-        
-        for _ in range(500):
-            home_ppg = random.uniform(17, 30)
-            away_ppg = random.uniform(17, 30)
-            feature = {
-                'home_ppg': home_ppg,
-                'home_opp_ppg': random.uniform(18, 26),
-                'away_ppg': away_ppg,
-                'away_opp_ppg': random.uniform(18, 26),
-                'home_win_pct': random.uniform(0.25, 0.75),
-                'away_win_pct': random.uniform(0.25, 0.75),
-                'home_last5_wins': random.randint(1, 5),
-                'away_last5_wins': random.randint(1, 5),
-                'home_epa_per_play': random.uniform(-0.1, 0.15),
-                'away_epa_per_play': random.uniform(-0.1, 0.15),
-            }
-            home_win = 1 if home_ppg > away_ppg + random.gauss(0, 4) else 0
-            features.append(feature)
-            win_labels.append(home_win)
-            totals.append(home_ppg + away_ppg + random.gauss(0, 6))
-        
-        return features, win_labels, totals
-    
-    def _features_to_matrix(self, features: List[Dict]) -> 'np.ndarray':
-        """Convert feature dicts to numpy matrix."""
+            model.save_model(temp_path)
+            os.replace(temp_path, destination)
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    async def train(self, epochs: int = 500) -> Dict[str, Any]:
         if not XGB_AVAILABLE:
-            raise RuntimeError("XGBoost not installed")
-        
-        matrix = []
-        for f in features:
-            row = [f.get(name, 0) for name in self.feature_names]
-            matrix.append(row)
-        return np.array(matrix, dtype=np.float32)
-    
-    def train(self, epochs: int = 500) -> Dict[str, float]:
-        """
-        Train XGBoost models for moneyline and over/under.
-        Uses TimeSeriesSplit cross-validation to prevent data leaking.
-        Returns accuracy metrics.
-        """
-        if not XGB_AVAILABLE:
-            return {"error": "XGBoost not installed"}
-        
-        logger.info("Starting NFL XGBoost training with TimeSeriesSplit...")
-        
-        # Load data (sorted by date)
-        features, win_labels, totals = self._load_training_data()
+            return {"error": "asyncpg, numpy, or xgboost is not installed"}
+
+        conn = await asyncpg.connect(DATABASE_URL)
+        try:
+            rows = await _fetch_schedule_rows(conn)
+            weekly_rows = await _fetch_weekly_rows(conn)
+        finally:
+            await conn.close()
+
+        features, labels, totals, game_dates, market_probabilities = build_training_examples(rows, weekly_rows)
+        if len(features) < 200:
+            raise ValueError(
+                f"Only {len(features)} usable NFL training games found in imported schedules; "
+                "need at least 200. No model was written."
+            )
+
         X = self._features_to_matrix(features)
-        y_win = np.array(win_labels)
-        y_total = np.array(totals)
-        
-        # Use TimeSeriesSplit to prevent data leaking
-        from sklearn.model_selection import TimeSeriesSplit
-        tscv = TimeSeriesSplit(n_splits=5)
-        
-        ml_accuracies = []
-        ou_maes = []
-        
-        logger.info(f"Running 5-fold TimeSeriesSplit cross-validation on {len(X)} samples...")
-        
-        for fold, (train_idx, test_idx) in enumerate(tscv.split(X)):
-            X_train, X_test = X[train_idx], X[test_idx]
-            y_win_train, y_win_test = y_win[train_idx], y_win[test_idx]
-            y_total_train, y_total_test = y_total[train_idx], y_total[test_idx]
-            
-            # Train moneyline model
-            dtrain_ml = xgb.DMatrix(X_train, label=y_win_train)
-            dtest_ml = xgb.DMatrix(X_test, label=y_win_test)
-            
-            params_ml = {
-                'max_depth': 4,
-                'eta': 0.05,
-                'objective': 'binary:logistic',
-                'eval_metric': 'logloss'
-            }
-            
-            model_ml = xgb.train(params_ml, dtrain_ml, epochs // 5)
-            
-            # Evaluate
-            preds_ml = model_ml.predict(dtest_ml)
-            preds_binary = (preds_ml > 0.5).astype(int)
-            fold_accuracy = (preds_binary == y_win_test).mean()
-            ml_accuracies.append(fold_accuracy)
-            
-            # Train over/under model
-            dtrain_ou = xgb.DMatrix(X_train, label=y_total_train)
-            dtest_ou = xgb.DMatrix(X_test, label=y_total_test)
-            
-            params_ou = {
-                'max_depth': 4,
-                'eta': 0.05,
-                'objective': 'reg:squarederror',
-            }
-            
-            model_ou = xgb.train(params_ou, dtrain_ou, epochs // 5)
-            
-            preds_ou = model_ou.predict(dtest_ou)
-            fold_mae = np.abs(preds_ou - y_total_test).mean()
-            ou_maes.append(fold_mae)
-            
-            logger.info(f"Fold {fold + 1}: ML accuracy={fold_accuracy:.2%}, OU MAE={fold_mae:.1f}")
-        
-        # Average CV scores
-        cv_ml_accuracy = np.mean(ml_accuracies)
-        cv_ou_mae = np.mean(ou_maes)
-        
-        logger.info(f"CV Results: ML accuracy={cv_ml_accuracy:.2%} (±{np.std(ml_accuracies):.2%}), OU MAE={cv_ou_mae:.1f}")
-        
-        # Train final model on ALL data
-        logger.info("Training final model on full dataset...")
-        dtrain_ml_full = xgb.DMatrix(X, label=y_win)
-        dtrain_ou_full = xgb.DMatrix(X, label=y_total)
-        
+        y_win = np.asarray(labels, dtype=np.float32)
+        y_total = np.asarray(totals, dtype=np.float32)
+        unique_dates = sorted(set(game_dates))
+        if len(unique_dates) < 6:
+            raise ValueError("Imported NFL data does not span enough game dates for walk-forward validation")
+
+        # Expanding chronological folds split by full date, never between same-day games.
+        date_chunks = np.array_split(np.asarray(unique_dates, dtype=object), min(5, len(unique_dates) - 1))
+        oof_probs: List[float] = []
+        oof_labels: List[int] = []
+        oof_totals: List[float] = []
+        total_errors: List[float] = []
+        market_oof: List[Tuple[float, int]] = []
+        model_market_oof: List[Tuple[float, int]] = []
+        rounds = max(50, min(int(epochs), 500))
         params_ml = {
-            'max_depth': 4,
-            'eta': 0.05,
-            'objective': 'binary:logistic',
-            'eval_metric': 'logloss'
+            "max_depth": 3, "eta": 0.03, "objective": "binary:logistic",
+            "eval_metric": "logloss", "subsample": 0.85, "colsample_bytree": 0.9,
+            "lambda": 2.0, "seed": 42, "nthread": 2,
         }
-        self.model_ml = xgb.train(params_ml, dtrain_ml_full, epochs)
-        
         params_ou = {
-            'max_depth': 4,
-            'eta': 0.05,
-            'objective': 'reg:squarederror',
+            "max_depth": 3, "eta": 0.03, "objective": "reg:squarederror",
+            "subsample": 0.85, "colsample_bytree": 0.9,
+            "lambda": 2.0, "seed": 42, "nthread": 2,
         }
-        self.model_ou = xgb.train(params_ou, dtrain_ou_full, epochs)
-        
-        # Save models
-        self.model_ml.save_model(f"{MODELS_DIR}/xgb_moneyline.json")
-        self.model_ou.save_model(f"{MODELS_DIR}/xgb_overunder.json")
-        
-        # Save metadata with CV results
+
+        day_values = np.asarray(game_dates, dtype=object)
+        for fold_index in range(1, len(date_chunks)):
+            train_end_day = date_chunks[fold_index][0]
+            train_idx = np.flatnonzero(day_values < train_end_day)
+            test_idx = np.flatnonzero(np.isin(day_values, date_chunks[fold_index]))
+            if len(train_idx) < 100 or not len(test_idx):
+                continue
+            model_ml = xgb.train(params_ml, xgb.DMatrix(X[train_idx], label=y_win[train_idx]), rounds)
+            model_ou = xgb.train(params_ou, xgb.DMatrix(X[train_idx], label=y_total[train_idx]), rounds)
+            probs = model_ml.predict(xgb.DMatrix(X[test_idx]))
+            totals_pred = model_ou.predict(xgb.DMatrix(X[test_idx]))
+            oof_probs.extend(float(value) for value in probs)
+            oof_labels.extend(int(value) for value in y_win[test_idx])
+            oof_totals.extend(float(value) for value in y_total[test_idx])
+            total_errors.extend(abs(float(pred) - float(actual)) for pred, actual in zip(totals_pred, y_total[test_idx]))
+            for test_position, idx in enumerate(test_idx):
+                market_prob = market_probabilities[int(idx)]
+                if market_prob is not None:
+                    market_oof.append((float(market_prob), int(y_win[int(idx)])))
+                    model_market_oof.append((float(probs[test_position]), int(y_win[int(idx)])))
+
+        if not oof_probs:
+            raise ValueError("Walk-forward validation produced no held-out predictions; no model was written")
+
+        probabilities = np.clip(np.asarray(oof_probs), 1e-7, 1 - 1e-7)
+        actuals = np.asarray(oof_labels)
+        brier = float(np.mean((probabilities - actuals) ** 2))
+        log_loss = float(-np.mean(actuals * np.log(probabilities) + (1 - actuals) * np.log(1 - probabilities)))
+        accuracy = float(np.mean((probabilities >= 0.5) == actuals))
+        ou_mae = float(np.mean(total_errors)) if total_errors else None
+        market_metrics = None
+        if market_oof:
+            market_probs = np.clip(np.asarray([item[0] for item in market_oof]), 1e-7, 1 - 1e-7)
+            market_actuals = np.asarray([item[1] for item in market_oof])
+            market_metrics = {
+                "samples": len(market_oof),
+                "brier_score": float(np.mean((market_probs - market_actuals) ** 2)),
+                "log_loss": float(-np.mean(market_actuals * np.log(market_probs) + (1 - market_actuals) * np.log(1 - market_probs))),
+                "accuracy": float(np.mean((market_probs >= 0.5) == market_actuals)),
+            }
+            model_probs_same_games = np.clip(np.asarray([item[0] for item in model_market_oof]), 1e-7, 1 - 1e-7)
+            market_metrics["xgboost_on_same_games"] = {
+                "brier_score": float(np.mean((model_probs_same_games - market_actuals) ** 2)),
+                "log_loss": float(-np.mean(market_actuals * np.log(model_probs_same_games) + (1 - market_actuals) * np.log(1 - model_probs_same_games))),
+                "accuracy": float(np.mean((model_probs_same_games >= 0.5) == market_actuals)),
+            }
+
+        final_ml = xgb.train(params_ml, xgb.DMatrix(X, label=y_win), rounds)
+        final_ou = xgb.train(params_ou, xgb.DMatrix(X, label=y_total), rounds)
+        self._atomic_save_model(final_ml, MODELS_DIR / "xgb_moneyline.json")
+        self._atomic_save_model(final_ou, MODELS_DIR / "xgb_overunder.json")
+
+        latest_game_day = max(game_dates).isoformat()
         metadata = {
-            "trained_at": datetime.now().isoformat(),
-            "samples": len(X),
-            "ml_accuracy": float(cv_ml_accuracy),
-            "ml_accuracy_std": float(np.std(ml_accuracies)),
-            "ou_mae": float(cv_ou_mae),
-            "ou_mae_std": float(np.std(ou_maes)),
-            "epochs": epochs,
-            "cv_folds": 5,
-            "cv_method": "TimeSeriesSplit",
-            "features": self.feature_names
+            "model_version": MODEL_VERSION,
+            "trained_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "data_source": "postgresql.results where series in (nfl_schedule, nfl_weekly)",
+            "seasons": sorted({int(row["season"]) for row in rows if row["season"] is not None}),
+            "latest_training_game_date": latest_game_day,
+            "training_samples": int(len(X)),
+            "validation_samples": int(len(oof_probs)),
+            "validation_dates": len(unique_dates),
+            "validation_method": "expanding walk-forward, split by full game date",
+            "validation_accuracy": accuracy,
+            "validation_brier_score": brier,
+            "validation_log_loss": log_loss,
+            "validation_total_mae": ou_mae,
+            "market_baseline": market_metrics,
+            "features": self.feature_names,
+            "minimum_history_games": MIN_HISTORY_GAMES,
+            "rolling_window_games": ROLLING_WINDOW,
+            "boost_rounds": rounds,
         }
-        with open(f"{MODELS_DIR}/training_metadata.json", "w") as f:
-            json.dump(metadata, f, indent=2)
-        
-        logger.info(f"NFL Training complete: CV ML accuracy={cv_ml_accuracy:.2%}, CV OU MAE={cv_ou_mae:.1f}")
-        
+        metadata_path = MODELS_DIR / "training_metadata.json"
+        metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+        self.model_ml = final_ml
+        self.model_ou = final_ou
+        self.loaded_training_metadata = metadata
+        logger.info(
+            "NFL XGBoost trained from %s imported games; walk-forward accuracy %.3f, Brier %.4f, log-loss %.4f",
+            len(X), accuracy, brier, log_loss,
+        )
         return {
-            "ml_accuracy": round(cv_ml_accuracy * 100, 1),
-            "ou_mae": round(cv_ou_mae, 1),
-            "samples_trained": len(X),
-            "cv_folds": 5,
-            "model_path": MODELS_DIR
+            "status": "success",
+            "samples_trained": int(len(X)),
+            "validation_samples": int(len(oof_probs)),
+            "validation_accuracy": round(accuracy, 4),
+            "validation_brier_score": round(brier, 5),
+            "validation_log_loss": round(log_loss, 5),
+            "validation_total_mae": round(ou_mae, 3) if ou_mae is not None else None,
+            "market_baseline": ({
+                "samples": market_metrics["samples"],
+                "brier_score": round(market_metrics["brier_score"], 5),
+                "log_loss": round(market_metrics["log_loss"], 5),
+                "accuracy": round(market_metrics["accuracy"], 4),
+                "xgboost_on_same_games": {
+                    "brier_score": round(market_metrics["xgboost_on_same_games"]["brier_score"], 5),
+                    "log_loss": round(market_metrics["xgboost_on_same_games"]["log_loss"], 5),
+                    "accuracy": round(market_metrics["xgboost_on_same_games"]["accuracy"], 4),
+                },
+            } if market_metrics else None),
+            "latest_training_game_date": latest_game_day,
+            "model_version": MODEL_VERSION,
+            "model_path": str(MODELS_DIR),
         }
-    
+
     def load_models(self) -> bool:
-        """Load trained models from disk."""
         if not XGB_AVAILABLE:
             return False
-        
-        ml_path = f"{MODELS_DIR}/xgb_moneyline.json"
-        ou_path = f"{MODELS_DIR}/xgb_overunder.json"
-        
-        if os.path.exists(ml_path) and os.path.exists(ou_path):
-            self.model_ml = xgb.Booster()
-            self.model_ml.load_model(ml_path)
-            self.model_ou = xgb.Booster()
-            self.model_ou.load_model(ou_path)
-            logger.info("Loaded trained NFL XGBoost models")
+        ml_path = MODELS_DIR / "xgb_moneyline.json"
+        ou_path = MODELS_DIR / "xgb_overunder.json"
+        if not ml_path.exists():
+            return False
+        try:
+            candidate_ml = xgb.Booster()
+            candidate_ml.load_model(str(ml_path))
+            candidate_ou = None
+            if ou_path.exists():
+                candidate_ou = xgb.Booster()
+                candidate_ou.load_model(str(ou_path))
+            metadata_path = MODELS_DIR / "training_metadata.json"
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path.exists() else {}
+            if metadata.get("model_version") != MODEL_VERSION or metadata.get("features") != self.feature_names:
+                logger.warning("Ignoring NFL XGBoost artifact with missing or incompatible feature metadata")
+                return False
+            self.model_ml = candidate_ml
+            self.model_ou = candidate_ou
+            self.loaded_training_metadata = metadata
             return True
-        return False
-    
-    def predict(self, features: Dict) -> Dict[str, float]:
-        """Make prediction using trained model."""
-        if not self.model_ml or not self.model_ou:
-            if not self.load_models():
-                return {"error": "No trained NFL model available"}
-        
-        X = self._features_to_matrix([features])
-        dmatrix = xgb.DMatrix(X)
-        
-        home_win_prob = float(self.model_ml.predict(dmatrix)[0])
-        predicted_total = float(self.model_ou.predict(dmatrix)[0])
-        
-        return {
-            "home_win_probability": round(home_win_prob, 3),
-            "away_win_probability": round(1 - home_win_prob, 3),
-            "predicted_total": round(predicted_total, 1)
+        except Exception:
+            logger.exception("Failed loading NFL XGBoost model artifacts")
+            return False
+
+    def predict(self, features: Dict[str, float]) -> Dict[str, Any]:
+        if not XGB_AVAILABLE:
+            return {"error": "NFL XGBoost dependencies are unavailable"}
+        if self.model_ml is None and not self.load_models():
+            return {"error": "No compatible NFL XGBoost model is trained from imported data"}
+        matrix = self._features_to_matrix([features])
+        dmatrix = xgb.DMatrix(matrix, feature_names=self.feature_names)
+        home_probability = float(self.model_ml.predict(dmatrix)[0])
+        total = float(self.model_ou.predict(dmatrix)[0]) if self.model_ou is not None else None
+        result = {
+            "home_win_probability": round(home_probability, 4),
+            "away_win_probability": round(1 - home_probability, 4),
+            "model_version": self.loaded_training_metadata.get("model_version", MODEL_VERSION),
+            "training_samples": self.loaded_training_metadata.get("training_samples"),
+            "latest_training_game_date": self.loaded_training_metadata.get("latest_training_game_date"),
         }
+        if total is not None:
+            result["predicted_total"] = round(total, 1)
+        return result
 
 
-# Singleton instance
-_trainer = None
+_trainer: Optional[NFLXGBTrainer] = None
+
 
 def get_trainer() -> NFLXGBTrainer:
     global _trainer
@@ -369,67 +610,28 @@ def get_trainer() -> NFLXGBTrainer:
     return _trainer
 
 
-async def train_nfl_model(epochs: int = 500) -> Dict:
-    """Async wrapper for training."""
+async def train_nfl_model(epochs: int = 250) -> Dict[str, Any]:
+    return await get_trainer().train(epochs)
+
+
+async def predict_nfl_xgb(home_team: str, away_team: str, *_legacy_stats) -> Optional[Dict[str, Any]]:
+    """Predict from current imported game history using the training feature builder."""
     trainer = get_trainer()
-    return trainer.train(epochs)
-
-
-async def predict_nfl_xgb(home_team: str, away_team: str, 
-                          home_stats: Dict, away_stats: Dict) -> Optional[Dict]:
-    """
-    Make NFL prediction using XGBoost model.
-    Returns None if model not available.
-    """
-    trainer = get_trainer()
-    
-    if not trainer.model_ml:
-        if not trainer.load_models():
-            return None
-    
-    home_epa = home_stats.get('off_epa_per_play')
-    if home_epa is None:
-        home_epa = home_stats.get('net_epa')
-    if home_epa is None:
-        home_epa = (home_stats.get('ppg', 22.5) - home_stats.get('oppg', 22.5)) / 25.0
-
-    away_epa = away_stats.get('off_epa_per_play')
-    if away_epa is None:
-        away_epa = away_stats.get('net_epa')
-    if away_epa is None:
-        away_epa = (away_stats.get('ppg', 22.5) - away_stats.get('oppg', 22.5)) / 25.0
-
-    features = {
-        'home_ppg': home_stats.get('ppg', 22.5),
-        'home_opp_ppg': home_stats.get('oppg', 22.5),
-        'away_ppg': away_stats.get('ppg', 22.5),
-        'away_opp_ppg': away_stats.get('oppg', 22.5),
-        'home_win_pct': home_stats.get('win_pct', 0.5),
-        'away_win_pct': away_stats.get('win_pct', 0.5),
-        'home_last5_wins': 2,
-        'away_last5_wins': 2,
-        'home_epa_per_play': float(home_epa),
-        'away_epa_per_play': float(away_epa),
-    }
-    
-    result = trainer.predict(features)
-    if "error" not in result:
-        result["model"] = "xgboost"
-        result["home_team"] = home_team
-        result["away_team"] = away_team
-    
-    return result
+    try:
+        features = await fetch_live_features(home_team, away_team)
+        result = trainer.predict(features)
+        if "error" not in result:
+            result["model"] = "xgboost"
+            result["home_team"] = home_team
+            result["away_team"] = away_team
+            result["features"] = features
+            result["feature_source"] = "nightly imported NFL schedules and weekly player stats in PostgreSQL"
+        return result
+    except Exception as exc:
+        logger.warning("NFL XGBoost prediction unavailable for %s vs %s: %s", home_team, away_team, exc)
+        return {"model": "xgboost", "error": str(exc)}
 
 
 if __name__ == "__main__":
-    # Allow running this script directly to train models
     logging.basicConfig(level=logging.INFO)
-    import asyncio
-    
-    print("Starting manual training run...")
-    try:
-        results = asyncio.run(train_nfl_model(epochs=500))
-        print(f"Training success! metrics: {json.dumps(results, indent=2)}")
-    except Exception as e:
-        print(f"Training failed: {e}")
-
+    print(json.dumps(asyncio.run(train_nfl_model()), indent=2))
