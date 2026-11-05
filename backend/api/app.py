@@ -26,6 +26,7 @@ from api.player_stats_endpoints import router as player_stats_router
 from api.cache_endpoints import router as cache_router
 from api.bet_tracker_endpoints import router as bet_tracker_router
 from api.model_lab_endpoints import router as model_lab_router
+from api.model_governance_endpoints import router as model_governance_router
 from api.nascar_endpoints import router as nascar_router
 from api.espn_endpoints import router as espn_router
 from api.bug_tracker_endpoints import router as bug_tracker_router
@@ -214,6 +215,7 @@ app.include_router(player_stats_router)  # Player stats and hit rates
 app.include_router(cache_router)  # Odds caching for late night games
 app.include_router(bet_tracker_router)  # Bet tracking
 app.include_router(model_lab_router)  # Model Lab testing sandbox
+app.include_router(model_governance_router)  # Model kill-switch / rollback
 app.include_router(nascar_router)  # NASCAR live data & schedule
 app.include_router(espn_router)  # ESPN BPI/FPI predictions
 app.include_router(bug_tracker_router)  # Bug tracking
@@ -610,6 +612,13 @@ def train_model(sport: str, task: str, payload: Optional[TrainPayload] = None, t
         out_dir = MODELS_DIR / sport / label
         out_dir.mkdir(parents=True, exist_ok=True)
 
+        # Governance: snapshot existing model files so operators can roll back
+        try:
+            from src.model_governance import back_up_models
+            back_up_models(sport, label)
+        except Exception as gov_err:
+            logger.warning(f"model governance backup skipped for {sport}: {gov_err}")
+
         # Check if sport has multiple classification targets (e.g., NASCAR)
         target_config = s.get_target_columns()
         classification_targets = target_config.get('classification', None)
@@ -690,6 +699,15 @@ def train_model(sport: str, task: str, payload: Optional[TrainPayload] = None, t
 def predict(sport: str, task: str, payload: dict, series: Optional[str] = None):
     if task not in ('classification', 'regression'):
         raise HTTPException(status_code=400, detail='task must be classification or regression')
+
+    # Governance kill-switch: operator-disabled sports refuse to predict
+    from src.model_governance import is_disabled as _gov_disabled
+    if _gov_disabled(sport):
+        raise HTTPException(
+            status_code=503,
+            detail=f"Predictions disabled by operator for '{sport}'. "
+                   f"Re-enable via POST /governance/models/{sport}/enable."
+        )
 
     try:
         s, label = SportFactory.get_sport(sport, series)
@@ -1897,6 +1915,8 @@ def retrain_model(sport: str, request: RetrainRequest):
     Retrain a model for the specified sport.
     """
     try:
+        from src.model_governance import back_up_models
+        back_up_models(sport)
         # Get sport instance
         sport_instance, series_label = SportFactory.get_sport(sport, request.series)
         
