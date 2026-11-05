@@ -64,12 +64,33 @@ async def cache_games(request: Request):
 async def cache_analysis(request: Request):
     """
     Cache analysis/predictions for a specific game.
-    Call this after running predictions.
+
+    Supports both payload shapes:
+      - Manual style (used by the Blazor live-odds pages):
+        {"sport": ..., "home_team": ..., "away_team": ..., "analysis": {...}}
+      - Legacy cached-game style: {"game_id": ..., "analysis": {...}}
     """
     try:
-        cache = get_cache()
-        success = await cache.store_analysis(request.game_id, request.analysis)
+        data = await request.json()
+    except Exception:
+        data = {}
+
+    try:
+        analysis = data.get("analysis", {})
+        if all(data.get(k) for k in ("sport", "home_team", "away_team")):
+            from src.odds_storage import get_odds_storage
+            storage = get_odds_storage()
+            success = await storage.save_analysis(
+                data["sport"], data["home_team"], data["away_team"], analysis
+            )
+        else:
+            if not data.get("game_id"):
+                raise HTTPException(status_code=400, detail="Missing required fields: sport/home_team/away_team or game_id")
+            cache = get_cache()
+            success = await cache.store_analysis(data["game_id"], analysis)
         return {"success": success}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to cache analysis: {e}")
         raise HTTPException(status_code=500, detail=str(e))
