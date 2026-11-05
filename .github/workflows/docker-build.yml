@@ -64,17 +64,6 @@ jobs:
           echo "Git SHA: ${SHORT_SHA}"
           echo "Branch: ${GITHUB_REF_NAME}"
 
-      - name: Get version from Python
-        id: version
-        run: |
-          cd backend
-          python -c "
-import sys
-sys.path.append('src')
-from version import get_version
-print(f'version={get_version()}')
-" >> $GITHUB_OUTPUT
-
       - name: Build and push Backend
         uses: docker/build-push-action@v5
         with:
