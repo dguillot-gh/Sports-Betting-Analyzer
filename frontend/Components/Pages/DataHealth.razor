@@ -55,15 +55,15 @@
                             }
                             else if (entry.ageHours < 24)
                             {
-                                <TwChip Color="emerald" Size="sm">@entry.ageHours.ToString("F1")h ago</TwChip>
+                                <TwChip Color="emerald" Size="sm">@entry.ageHours.Value.ToString("F1")h ago</TwChip>
                             }
                             else if (entry.ageHours < 24 * 14)
                             {
-                                <TwChip Color="amber" Size="sm">@((entry.ageHours / 24).ToString("F0"))d ago</TwChip>
+                                <TwChip Color="amber" Size="sm">@((entry.ageHours.Value / 24).ToString("F0"))d ago</TwChip>
                             }
                             else
                             {
-                                <TwChip Color="red" Size="sm">stale (@((entry.ageHours / 24).ToString("F0")) days)</TwChip>
+                                <TwChip Color="red" Size="sm">stale (@((entry.ageHours.Value / 24).ToString("F0")) days)</TwChip>
                             }
                         </TwTd>
                     </TwTr>

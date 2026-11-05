@@ -3,7 +3,20 @@ import api.app as app_module
 
 
 def _routes():
-    return [(list(r.methods)[0], r.path) for r in app_module.app.routes if getattr(r, "methods", None)]
+    """Flatten app routes, handling newer FastAPI lazy included routers."""
+    out = []
+
+    def walk(routes):
+        for r in routes:
+            included = getattr(r, "original_router", None)
+            if included is not None:
+                walk(included.routes)
+                continue
+            if getattr(r, "methods", None):
+                out.append((list(r.methods)[0], r.path))
+
+    walk(app_module.app.routes)
+    return out
 
 
 def test_data_health_registered_once() -> None:
