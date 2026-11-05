@@ -3,6 +3,7 @@ from fastapi import APIRouter, Request, HTTPException, Query
 from typing import Dict, Any, List
 import json
 import os
+import time
 from pathlib import Path
 import logging
 from datetime import datetime
@@ -240,3 +241,57 @@ async def get_top_picks(
     except Exception as exc:
         logger.error("Dashboard top picks error: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to build top picks")
+
+
+# ---------- Data Health ----------
+
+def _dir_stats(base: Path) -> List[Dict[str, Any]]:
+    """Summarize a directory tree: top-level sport folders, file counts,
+    total size, and age of the newest file (freshness proxy)."""
+    items: List[Dict[str, Any]] = []
+    if not base.exists():
+        return items
+    try:
+        children = sorted(p for p in base.iterdir() if p.is_dir())
+    except OSError:
+        return items
+
+    for child in children:
+        try:
+            files = [f for f in child.rglob("*") if f.is_file()]
+        except OSError:
+            continue
+        newest = max((f.stat().st_mtime for f in files), default=None)
+        items.append({
+            "name": child.name,
+            "files": len(files),
+            "size_bytes": sum(f.stat().st_size for f in files) if files else 0,
+            "newest_file_age_hours": round((time.time() - newest) / 3600.0, 1) if newest else None,
+        })
+    return items
+
+
+@router.get("/data-health")
+def data_health():
+    """Filesystem-level health of data and model artifacts.
+
+    No database required — reports what is actually on disk so the UI can
+    surface stale/missing data instead of silently returning empty analyses.
+    """
+    data_dirs = _dir_stats(REPO_ROOT / "data")
+    model_dirs = _dir_stats(REPO_ROOT / "models")
+    freshest = min(
+        (d["newest_file_age_hours"] for d in data_dirs if d["newest_file_age_hours"] is not None),
+        default=None,
+    )
+    return {
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "data": data_dirs,
+        "models": model_dirs,
+        "summary": {
+            "total_data_files": sum(d["files"] for d in data_dirs),
+            "freshest_data_hours": freshest,
+            "stale_sports": [d["name"] for d in data_dirs if (d["newest_file_age_hours"] or 0) > 24 * 14],
+            "total_model_dirs": len(model_dirs),
+        },
+    }

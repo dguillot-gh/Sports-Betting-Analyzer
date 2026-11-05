@@ -1,0 +1,191 @@
+@page "/data-health"
+@using System.Text.Json
+@using SportsBettingAnalyzer.Components.Shared.Tailwind
+@inject HttpClient PythonML
+@rendermode InteractiveServer
+
+<PageTitle>Data Health - Sports Betting Analyzer</PageTitle>
+
+<TwContainer>
+    <div class="px-4 flex items-center justify-between mb-8">
+        <div>
+            <h1 class="text-3xl font-bold text-white tracking-tight">Data Health</h1>
+            <p class="text-slate-400 mt-1">Freshness of data and model artifacts on the backend.</p>
+        </div>
+        <TwButton Variant="secondary" OnClick="Load" IsLoading="@_loading">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            Refresh
+        </TwButton>
+    </div>
+
+    @if (_error != null)
+    {
+        <TwAlert Severity="error">@_error</TwAlert>
+    }
+
+    @if (_summary != null)
+    {
+        <TwGrid Columns="1" ColumnsMd="4" Class="mb-6">
+            <TwStatCard Label="Data files" Value="@_summary.Value.totalDataFiles.ToString()" Color="blue" />
+            <TwStatCard Label="Freshest data" Value="@FreshestText(_summary.Value)" Subtext="" Color="@FreshestColor(_summary.Value)" />
+            <TwStatCard Label="Stale sports (&gt;14d)" Value="@_summary.Value.staleCount.ToString()" Color="@(_summary.Value.staleCount == 0 ? "emerald" : "red")" />
+            <TwStatCard Label="Model sets" Value="@_summary.Value.modelDirs.ToString()" Color="slate" />
+        </TwGrid>
+    }
+
+    <h2 class="text-lg font-semibold text-white mb-3">Data directories</h2>
+    <TwCard NoPadding="true" Class="overflow-hidden mb-8">
+        <TwTable TItem="object">
+            <TwTh>Sport / Dataset</TwTh>
+            <TwTh>Files</TwTh>
+            <TwTh>Size</TwTh>
+            <TwTh>Newest file</TwTh>
+            @if (_data != null)
+            {
+                @foreach (var entry in _data)
+                {
+                    <TwTr>
+                        <TwTd><span class="font-medium text-white">@entry.name</span></TwTd>
+                        <TwTd>@entry.files.ToString()</TwTd>
+                        <TwTd>@FormatSize(entry.sizeBytes)</TwTd>
+                        <TwTd>
+                            @if (entry.ageHours == null)
+                            {
+                                <TwChip Color="red" Size="sm">no files</TwChip>
+                            }
+                            else if (entry.ageHours < 24)
+                            {
+                                <TwChip Color="emerald" Size="sm">@entry.ageHours.ToString("F1")h ago</TwChip>
+                            }
+                            else if (entry.ageHours < 24 * 14)
+                            {
+                                <TwChip Color="amber" Size="sm">@((entry.ageHours / 24).ToString("F0"))d ago</TwChip>
+                            }
+                            else
+                            {
+                                <TwChip Color="red" Size="sm">stale (@((entry.ageHours / 24).ToString("F0")) days)</TwChip>
+                            }
+                        </TwTd>
+                    </TwTr>
+                }
+            }
+        </TwTable>
+    </TwCard>
+
+    @if (_models != null && _models.Count > 0)
+    {
+        <h2 class="text-lg font-semibold text-white mb-3">Model sets</h2>
+        <div class="flex flex-wrap gap-2">
+            @foreach (var m in _models)
+            {
+                <TwChip Color="slate">@m</TwChip>
+            }
+        </div>
+    }
+</TwContainer>
+
+@code {
+    private struct DirEntry
+    {
+        public string name { get; init; }
+        public long files { get; init; }
+        public long sizeBytes { get; init; }
+        public double? ageHours { get; init; }
+    }
+
+    private struct Summary
+    {
+        public int totalDataFiles { get; init; }
+        public double? freshestHours { get; init; }
+        public int staleCount { get; init; }
+        public int modelDirs { get; init; }
+    }
+
+    private List<DirEntry>? _data;
+    private List<string>? _models;
+    private Summary? _summary;
+    private string? _error;
+    private bool _loading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var json = await PythonML.GetStringAsync("/dashboard/data-health");
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            var data = new List<DirEntry>();
+            foreach (var d in root.GetProperty("data").EnumerateArray())
+            {
+                data.Add(new DirEntry
+                {
+                    name = d.GetProperty("name").GetString() ?? "?",
+                    files = d.GetProperty("files").GetInt64(),
+                    sizeBytes = d.GetProperty("size_bytes").GetInt64(),
+                    ageHours = d.GetProperty("newest_file_age_hours").ValueKind == JsonValueKind.Null
+                        ? null
+                        : d.GetProperty("newest_file_age_hours").GetDouble(),
+                });
+            }
+            _data = data;
+
+            _models = root.GetProperty("models").EnumerateArray()
+                .Select(m => m.GetProperty("name").GetString() ?? "?").ToList();
+
+            var s = root.GetProperty("summary");
+            _summary = new Summary
+            {
+                totalDataFiles = s.GetProperty("total_data_files").GetInt32(),
+                freshestHours = s.GetProperty("freshest_data_hours").ValueKind == JsonValueKind.Null
+                    ? null
+                    : s.GetProperty("freshest_data_hours").GetDouble(),
+                staleCount = s.GetProperty("stale_sports").EnumerateArray().Count(),
+                modelDirs = s.GetProperty("total_model_dirs").GetInt32(),
+            };
+        }
+        catch (Exception ex)
+        {
+            _data = null;
+            _models = null;
+            _summary = null;
+            _error = $"Could not reach the backend data-health endpoint: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string FreshestText(Summary s)
+    {
+        if (s.freshestHours == null) return "n/a";
+        if (s.freshestHours < 24) return $"{s.freshestHours.Value:0.#}h ago";
+        return $"{(s.freshestHours.Value / 24):0.#}d ago";
+    }
+
+    private static string FreshestColor(Summary s)
+    {
+        if (s.freshestHours == null) return "red";
+        if (s.freshestHours < 24 * 7) return "emerald";
+        if (s.freshestHours < 24 * 14) return "amber";
+        return "red";
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        string[] units = { "B", "KB", "MB", "GB" };
+        double size = bytes;
+        int unit = 0;
+        while (size >= 1024 && unit < units.Length - 1) { size /= 1024; unit++; }
+        return $"{size:0.#} {units[unit]}";
+    }
+}
