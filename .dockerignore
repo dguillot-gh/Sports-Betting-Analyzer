@@ -1,0 +1,16 @@
+# Keep the frontend image context lean: only frontend/ and shared/ are needed
+.git
+.github
+backend
+mobile
+tests
+data
+models
+logs
+tmp
+.venv
+**/__pycache__
+*.rda
+*.parquet
+*.md
+node_modules
