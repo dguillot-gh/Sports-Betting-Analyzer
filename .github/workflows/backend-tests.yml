@@ -35,7 +35,7 @@ jobs:
       - name: Run all backend tests
         working-directory: .
         env:
-          PYTHONPATH: backend
+          PYTHONPATH: backend:backend/src
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres # Placeholder for app.py import
         run: |
           python -m pytest backend/tests/ -v --tb=short
