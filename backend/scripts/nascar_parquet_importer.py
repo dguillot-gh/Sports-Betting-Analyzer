@@ -16,7 +16,11 @@ logger = logging.getLogger(__name__)
 # Database URL
 from src.config import DATABASE_URL
 
-DATA_DIR = Path("/app/data/nascar/raw")
+# Use relative path that works locally, fallback to Docker path
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_local_data_dir = _SCRIPT_DIR.parent / "data" / "nascar" / "raw"
+_docker_data_dir = Path("/app/data/nascar/raw")
+DATA_DIR = _local_data_dir if _local_data_dir.parent.exists() or not _docker_data_dir.parent.exists() else _docker_data_dir
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 PARQUET_URLS = {
