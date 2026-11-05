@@ -14,3 +14,15 @@ fastapi
 uvicorn
 python-multipart
 anyio
+python-dotenv
+pyyaml
+APScheduler>=3.10.4
+pywebpush
+firebase-admin
+google-genai
+nba_api
+sbrscrape
+pynascar
+beautifulsoup4
+shap
+pyreadr
