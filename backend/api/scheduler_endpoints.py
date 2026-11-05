@@ -163,6 +163,99 @@ async def get_data_freshness(request: Request):
         if conn:
             await conn.close()
 
+@router.get("/scheduler/status")
+async def get_scheduler_status(request: Request):
+    """
+    Per-sport scheduler health for the ops dashboard.
+
+    Returns, for every sport seen in import_logs:
+      - last status / run time / duration / rows imported / error
+      - consecutive_failures: how many latest runs have failed in a row
+      - age_minutes: minutes since the last run (None if never)
+    plus a rollup (healthy / degraded / down / never_run counts).
+
+    Sports are flagged `down` on 3+ consecutive failures or staleness > 24h,
+    `degraded` on 1-2 consecutive failures or staleness > 12h.
+    """
+    conn = None
+    try:
+        conn = await get_db_connection()
+        rows = await conn.fetch("""
+            SELECT sport, status, start_time, end_time, duration_seconds,
+                   rows_imported, new_rows_imported, updated_rows_imported,
+                   error_message
+            FROM import_logs
+            ORDER BY sport, start_time DESC
+        """)
+    except Exception as e:
+        logger.warning(f"scheduler/status: database unavailable: {e}")
+        raise HTTPException(status_code=503, detail="Scheduler database unavailable")
+    finally:
+        if conn:
+            await conn.close()
+
+    from datetime import datetime as _dt
+    now = _dt.utcnow()
+
+    # Group keeping newest-first order per sport
+    per_sport: "dict[str, list]" = {}
+    for r in rows:
+        d = dict(r)
+        per_sport.setdefault(d["sport"], []).append(d)
+
+    sports = []
+    counts = {"healthy": 0, "degraded": 0, "down": 0, "never_run": 0}
+
+    for sport, runs in sorted(per_sport.items()):
+        latest = runs[0]
+        streak = 0
+        for r in runs:
+            if str(r["status"]).upper() == "FAILED":
+                streak += 1
+            else:
+                break
+
+        start = latest["start_time"]
+        age_minutes = int((now - start).total_seconds() // 60) if start is not None else None
+
+        if not runs:
+            health = "never_run"
+        elif streak >= 3 or (age_minutes is not None and age_minutes > 1440):
+            health = "down"
+        elif streak >= 1 or (age_minutes is not None and age_minutes > 720):
+            health = "degraded"
+        else:
+            health = "healthy"
+
+        counts[health] = counts.get(health, 0) + 1
+
+        sports.append({
+            "sport": sport,
+            "health": health,
+            "lastStatus": latest["status"],
+            "lastRunAt": start.isoformat() if start else None,
+            "lastRunEnd": latest["end_time"].isoformat() if latest["end_time"] else None,
+            "ageMinutes": age_minutes,
+            "durationSeconds": latest["duration_seconds"],
+            "rowsImported": latest["rows_imported"],
+            "newRows": latest["new_rows_imported"],
+            "updatedRows": latest["updated_rows_imported"],
+            "error": latest["error_message"],
+            "consecutiveFailures": streak,
+            "totalRuns": len(runs),
+        })
+
+    return {
+        "generatedAt": now.isoformat() + "Z",
+        "summary": counts,
+        "sports": sports,
+        "recentRuns": [
+            {"sport": r["sport"], "status": r["status"], "start_time": r["start_time"],
+             "rows_imported": r["rows_imported"], "error": r["error_message"]}
+            for r in rows[:20]
+        ],
+    }
+
 @router.post("/run-cbb-backfill")
 async def trigger_cbb_backfill(request: Request, background_tasks: BackgroundTasks, years: str = "2024,2025"):
     """

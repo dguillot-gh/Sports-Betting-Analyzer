@@ -1596,6 +1596,20 @@ public class PythonMLServiceClient
         }
     }
 
+    public async Task<SchedulerStatus?> GetSchedulerStatusAsync()
+    {
+        try
+        {
+            var response = await _httpClient.GetFromJsonAsync<SchedulerStatus>("/admin/scheduler/status");
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting scheduler status");
+            return null;
+        }
+    }
+
     public async Task<bool> RunImportsAsync()
     {
         try

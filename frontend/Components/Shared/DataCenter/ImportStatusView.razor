@@ -56,10 +56,20 @@
                 <div class="mt-8 pt-6 border-t border-slate-800">
                     <h4 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Service Status</h4>
                     <div class="space-y-3">
-                        <div class="flex items-center gap-3 text-sm">
-                            <TwIcon Icon="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" Class="w-4 h-4 text-emerald-500" />
-                            <span class="text-slate-300">Scheduler Service: <span class="text-emerald-400 font-bold">Active</span></span>
-                        </div>
+                        @if (_schedulerStatus == null)
+                        {
+                            <div class="flex items-center gap-3 text-sm">
+                                <TwIcon Icon="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" Class="w-4 h-4 text-slate-500" />
+                                <span class="text-slate-300">Scheduler Service: <span class="text-slate-400 font-bold">Unreachable</span></span>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="flex items-center gap-3 text-sm">
+                                <TwIcon Icon="@(_overallHealthy ? "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" : "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z")" Class="@(_overallHealthy ? "w-4 h-4 text-emerald-500" : "w-4 h-4 text-red-500")" />
+                                <span class="text-slate-300">Scheduler Service: <span class="@(_overallHealthy ? "text-emerald-400" : "text-red-400") font-bold">@(_overallHealthy ? "Active" : "Attention needed")</span></span>
+                            </div>
+                        }
                         <div class="flex items-center gap-3 text-sm">
                             <TwIcon Icon="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" Class="w-4 h-4 text-emerald-500" />
                             <span class="text-slate-300">Push Notifications: <span class="text-emerald-400 font-bold">Active</span></span>
@@ -69,10 +79,32 @@
                             <span class="text-slate-300">Email Alerts: <span class="text-emerald-400 font-bold">Active</span></span>
                         </div>
                     </div>
+
+                    @if (_schedulerStatus != null)
+                    {
+                        <div class="mt-6 pt-4 border-t border-slate-800">
+                            <h5 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Per-Sport Import Health</h5>
+                            <div class="space-y-2">
+                                @foreach (var sport in _schedulerStatus.Sports)
+                                {
+                                    <div class="flex items-center justify-between gap-2 text-sm">
+                                        <span class="text-slate-300 font-semibold">@sport.Sport.ToUpper()</span>
+                                        <span class="flex items-center gap-2">
+                                            @if (!string.IsNullOrEmpty(sport.Error))
+                                            {
+                                                <span class="text-red-400 text-xs italic max-w-[110px] truncate" title="@sport.Error">@sport.Error</span>
+                                            }
+                                            <TwChip Color="@HealthColor(sport.Health)" Size="sm">@HealthLabel(sport.Health)@@(sport.ConsecutiveFailures > 0 ? $" ({sport.ConsecutiveFailures}x fail)" : "")</TwChip>
+                                        </span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
                 </div>
 
                 <div class="mt-auto pt-4 text-center">
-                    <span class="text-[10px] text-slate-500 font-mono">NEXT RUN: 03:00 AM EST</span>
+                    <span class="text-[10px] text-slate-500 font-mono">SCHEDULE: DAILY 09:00 (SERVER TIME) + MANUAL</span>
                 </div>
             </TwCard>
         </div>
@@ -217,6 +249,10 @@
 
 @code {
     private List<ImportLog> logs;
+    private SchedulerStatus? _schedulerStatus;
+    private bool _overallHealthy =>
+        _schedulerStatus != null &&
+        !_schedulerStatus.Sports.Any(s => s.Health == "down" || s.Health == "degraded");
     private List<ImportTrendPoint> _chartData = new();
     private bool isImporting = false;
     private string _importStatusMessage = "Connecting to data sources...";
@@ -241,6 +277,7 @@
     private async Task LoadLogs()
     {
         logs = await MLClient.GetImportLogsAsync();
+        _schedulerStatus = await MLClient.GetSchedulerStatusAsync();
         ProcessChartData();
     }
     
@@ -282,6 +319,22 @@
         Colors = new List<string> { "#10b981", "#3b82f6", "#f59e0b", "#a855f7" }
     };
     
+    private string HealthColor(string health) => health switch
+    {
+        "healthy" => "emerald",
+        "degraded" => "amber",
+        "down" => "red",
+        _ => "slate"
+    };
+
+    private string HealthLabel(string health) => health switch
+    {
+        "healthy" => "OK",
+        "degraded" => "Degraded",
+        "down" => "Down",
+        _ => "No runs"
+    };
+
     private void CancelImport()
     {
         _importCts?.Cancel();
