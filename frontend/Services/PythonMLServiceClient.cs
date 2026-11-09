@@ -12,7 +12,7 @@ using SportsBettingAnalyzer.Shared.Services;
 
 namespace SportsBettingAnalyzer.Services;
 
-public partial class PythonMLServiceClient
+public partial class PythonMLServiceClient : IPythonMLServiceClient
 {
     private readonly HttpClient _httpClient;
     public HttpClient HttpClient => _httpClient;
