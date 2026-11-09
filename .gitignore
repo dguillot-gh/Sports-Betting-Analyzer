@@ -26,6 +26,7 @@ __pycache__/
 env/
 venv/
 .venv/
+.venv-test/
 .env
 *firebase-adminsdk*.json
 

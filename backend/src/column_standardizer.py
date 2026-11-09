@@ -149,10 +149,13 @@ class ColumnStandardizer:
         if not inplace:
             df = df.copy()
         
-        # Rename columns
+        # Rename columns (avoid the deprecated inplace= kwarg, keep semantics)
         rename_map = report.mapped
         if rename_map:
-            df.rename(columns=rename_map, inplace=True)
+            if inplace:
+                df.columns = pd.Index([rename_map.get(c, c) for c in df.columns])
+            else:
+                df = df.rename(columns=rename_map)
             logger.info(f"Standardized {len(rename_map)} columns for {sport}")
         
         return df, report

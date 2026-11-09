@@ -1,13 +1,13 @@
-name: Build and Deploy Mobile App
+name: Build and Release Mobile APK
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ master, main, develop, development ]
     paths:
       - 'mobile/**'
       - 'shared/**'
   pull_request:
-    branches: [ main ]
+    branches: [ master, main, develop, development ]
     paths:
       - 'mobile/**'
       - 'shared/**'
@@ -24,161 +24,189 @@ env:
 
 jobs:
   build-android:
-    runs-on: windows-latest  # Windows is required for MAUI Android builds
-    
+    # Skip on PRs from forks: their secrets aren't available
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: windows-latest  # MAUI Android builds
+    env:
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
     steps:
     - name: Checkout
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
-        
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
-        
+
     - name: Setup Java JDK
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'microsoft'
-        
+
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
-      
+
+    - name: Install Android workload
+      run: dotnet workload install android
+
     - name: Restore dependencies
-      run: |
-        dotnet restore mobile/SportsBettingAnalyzer.Mobile.csproj
-        
+      run: dotnet restore mobile/SportsBettingAnalyzer.Mobile.csproj
+
     - name: Generate Version
       id: version-gen
       run: |
-        # Generate semantic version based on date and commit count
-        $commitCount = git rev-list --count HEAD
+        $commitCount = [int](git rev-list --count HEAD)
         $date = Get-Date -Format "yyyy.MM.dd"
         $version = "$date.$commitCount"
         $shortSha = git rev-parse --short HEAD
         $branch = $env:GITHUB_REF_NAME
-        
-        Write-Output "version=$version" >> $env:GITHUB_OUTPUT
-        Write-Output "git_sha=$shortSha" >> $env:GITHUB_OUTPUT
-        Write-Output "git_branch=$branch" >> $env:GITHUB_OUTPUT
-        Write-Output "build_time=$(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ')" >> $env:GITHUB_OUTPUT
-        
-        Write-Host "Generated version: $version"
-        Write-Host "Git SHA: $shortSha"
-        Write-Host "Branch: $branch"
+
+        # Monotonic version code from commit count
+        $versionCode = $commitCount * 100
+
+        $out = $env:GITHUB_OUTPUT
+        "version=$version"        | Out-File -FilePath $out -Append
+        "version_code=$versionCode" | Out-File -FilePath $out -Append
+        "git_sha=$shortSha"       | Out-File -FilePath $out -Append
+        "git_branch=$branch"      | Out-File -FilePath $out -Append
+        "build_time=$(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ')" | Out-File -FilePath $out -Append
+
+        Write-Host "Generated version: $version (code: $versionCode)"
       shell: powershell
-        
+
     - name: Update Android Manifest Version
       run: |
-        # Update version in the project file
         $projectPath = "mobile/SportsBettingAnalyzer.Mobile.csproj"
-        $version = "${{ steps.version-gen.outputs.version }}"
-        $versionParts = $version -split '\.'
-        $majorVersion = $versionParts[0]
-        $minorVersion = $versionParts[1]
-        $patchVersion = $versionParts[2]
-        
-        # Calculate Android version code (major * 1000000 + minor * 10000 + patch * 100)
-        $versionCode = [int]$majorVersion * 1000000 + [int]$minorVersion * 10000 + [int]$patchVersion * 100
-        
-        [xml]$projectXml = Get-Content $projectPath
-        $propertyGroup = $projectXml.Project.PropertyGroup | Where-Object { $_.ApplicationDisplayVersion }
-        $propertyGroup.ApplicationDisplayVersion = $version
-        $propertyGroup.ApplicationVersion = $versionCode.ToString()
-        
+        $version = $env:VERSION
+        $versionCode = [int]$env:VERSION_CODE
+
+        [xml]$projectXml = Get-Content -Raw $projectPath
+        foreach ($pg in $projectXml.Project.PropertyGroup) {
+          if ($pg.ApplicationDisplayVersion) {
+            $pg.ApplicationDisplayVersion = $version
+            $pg.ApplicationVersion = $versionCode.ToString()
+          }
+        }
         $projectXml.Save($projectPath)
-        
         Write-Host "Updated Android version to: $version (code: $versionCode)"
+      env:
+        VERSION: ${{ steps.version-gen.outputs.version }}
+        VERSION_CODE: ${{ steps.version-gen.outputs.version_code }}
       shell: powershell
-        
+
+    - name: Restore Signing Keystore
+      if: ${{ env.KEYSTORE_B64 != '' }}
+      run: |
+        $bytes = [Convert]::FromBase64String($env:KEYSTORE_B64)
+        [IO.File]::WriteAllBytes("keystore.keystore", $bytes)
+        Write-Host "Restored keystore.keystore (${bytes.Length} bytes)"
+      shell: powershell
+
     - name: Build Android APK
       run: |
-        dotnet publish mobile/SportsBettingAnalyzer.Mobile.csproj `
-          -c Release `
-          -f net9.0-android `
-          -p:AndroidPackageFormat=apk `
-          -p:AndroidKeyStore=true `
-          -p:AndroidSigningKeyStore=keystore.keystore `
-          -p:AndroidSigningKeyAlias=SportsBettingAnalyzer `
-          -p:AndroidSigningKeyPassword=${{ secrets.ANDROID_KEY_PASSWORD }} `
-          -p:AndroidSigningStorePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }} `
-          --self-contained
-        
+        $publishArgs = @(
+          '-c', 'Release',
+          '-f', 'net9.0-android',
+          '-p:AndroidPackageFormat=apk'
+        )
+        if ($env:HAS_KEYSTORE -eq 'true') {
+          $publishArgs += @(
+            '-p:AndroidKeyStore=true',
+            '-p:AndroidSigningKeyStore=keystore.keystore',
+            '-p:AndroidSigningKeyAlias=SportsBettingAnalyzer',
+            '-p:AndroidSigningKeyPassword=$env:KEY_PASSWORD',
+            '-p:AndroidSigningStorePassword=$env:STORE_PASSWORD'
+          )
+          Write-Host "Signing release APK with release keystore"
+        } else {
+          Write-Host "No keystore secret configured - building debug-signed (installable) APK"
+        }
+        dotnet publish 'mobile/SportsBettingAnalyzer.Mobile.csproj' $publishArgs
+      shell: powershell
+
+    - name: Locate APK
+      id: apk
+      shell: powershell
+      run: |
+        $apk = Get-ChildItem -Recurse -Path mobile/bin -Filter *.apk | Select-Object -First 1
+        if (-not $apk) { Write-Error "No APK produced by publish step"; exit 1 }
+        "path=$($apk.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        Write-Host "APK: $($apk.FullName)"
+
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: sports-betting-analyzer-android
-        path: |
-          mobile/bin/Release/net9.0-android/publish/*.apk
-        retention-days: 30
-        
+        path: ${{ steps.apk.outputs.path }}
+        retention-days: 90
+
     - name: Create GitHub Release
-      if: github.event.inputs.release == 'true' || (github.ref == 'refs/heads/main' && github.event_name == 'push')
+      if: >
+        (github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'))
+        || (github.event_name == 'workflow_dispatch' && github.event.inputs.release == 'true')
       uses: softprops/action-gh-release@v2
       with:
         name: "Sports Betting Analyzer v${{ steps.version-gen.outputs.version }}"
         tag_name: "v${{ steps.version-gen.outputs.version }}"
         body: |
           ## Sports Betting Analyzer Mobile App v${{ steps.version-gen.outputs.version }}
-          
-          ### 🚀 Features
-          - Real-time sports betting analysis
-          - Machine learning predictions
-          - Live odds tracking
-          - Bet tracking and analytics
-          
+
           ### 📱 Installation
           1. Download the APK below
-          2. Enable "Install from unknown sources" on your Android device
+          2. Allow "Install from unknown sources" on your Android device
           3. Install the APK
-          
+
+          ### 📝 What's in this build
+          - Real-time sports betting analysis
+          - ML predictions (NASCAR, NFL, NBA, NCAAB)
+          - Live odds tracking and bet tracking
+
           ### 🔧 Build Information
           - **Version**: ${{ steps.version-gen.outputs.version }}
           - **Git SHA**: ${{ steps.version-gen.outputs.git_sha }}
           - **Branch**: ${{ steps.version-gen.outputs.git_branch }}
           - **Build Time**: ${{ steps.version-gen.outputs.build_time }}
-          - **Environment**: ${{ github.ref == 'refs/heads/main' && 'Production' || 'Development' }}
-          
-          ### ⚠️ Requirements
-          - Android 7.0 (API level 24) or higher
-          - Internet connection for backend services
-          
-        files: |
-          mobile/bin/Release/net9.0-android/publish/*.apk
+          - **Signing**: ${{ env.HAS_KEYSTORE == 'true' && 'release' || 'debug' }}
+
+          > Analysis tool - provides estimates, not guaranteed outcomes.
+        files: ${{ steps.apk.outputs.path }}
         draft: false
-        prerelease: ${{ github.ref != 'refs/heads/main' }}
+        prerelease: ${{ github.ref != 'refs/heads/master' && github.ref != 'refs/heads/main' }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # Optional: Build for iOS (requires macOS runner)
   build-ios:
-    if: false # Disabled by default - enable when you have Apple Developer account
+    if: false # Disabled by default - enable when you have an Apple Developer account
     runs-on: macos-latest
-    
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-      
+      with:
+        fetch-depth: 0
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
-        
+
     - name: Setup Xcode
       uses: maxim-lobanov/setup-xcode@v1
       with:
         xcode-version: latest-stable
-        
+
     - name: Install MAUI Workloads
-      run: |
-        dotnet workload install maui
-        
+      run: dotnet workload install maui
+
     - name: Restore dependencies
-      run: |
-        dotnet restore mobile/SportsBettingAnalyzer.Mobile.csproj
-        
+      run: dotnet restore mobile/SportsBettingAnalyzer.Mobile.csproj
+
     - name: Build iOS
       run: |
         dotnet publish mobile/SportsBettingAnalyzer.Mobile.csproj `
