@@ -70,7 +70,16 @@ jobs:
           if (-not $found) { Write-Error "sdkmanager.bat not found under $env:ANDROID_HOME"; exit 1 }
           $sdk = $found.FullName
         }
-        cmd /c "y | `"$sdk`" --licenses" *> $null
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = "cmd"
+        $psi.Arguments = "/c `"$sdk`" --licenses"
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardInput = $true
+        $p = [System.Diagnostics.Process]::Start($psi)
+        1..8 | ForEach-Object { $p.StandardInput.WriteLine("y") }
+        $p.StandardInput.Close()
+        $p.WaitForExit() | Out-Null
+        if ($p.ExitCode -ne 0) { Write-Error "sdkmanager --licenses failed with $($p.ExitCode)"; exit 1 }
         Write-Host "Android SDK licenses accepted"
 
     - name: Install Android workload
