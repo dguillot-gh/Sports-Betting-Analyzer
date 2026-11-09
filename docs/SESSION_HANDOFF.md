@@ -13,6 +13,7 @@ work in small verified chunks, one branch per feature (from `master`), push each
 unit-test every new piece.
 
 **Convention that emerged (follow it):**
+- **Branching workflow (user decision, 2026-07):** feature branch → merge into `dev` (integration/test baseline) → promote `dev` → `master` only after tests pass on `dev`. Nothing goes to `master` without being tested on `dev`. `dev` was created from `master` @ `26ea1f4`.
 - Branch per feature from `master`; commit; push `-u origin <branch>`; user opens/merges PRs on GitHub.
 - C# tests live in `tests/SportsBettingAnalyzer.Tests` (xunit, net10.0, references **only** `shared/`).
 - Shared logic intended for tests goes in `shared/Services/...` (namespace `SportsBettingAnalyzer.Shared.Services`).

@@ -114,7 +114,8 @@ Root-level scripts (check_*.py, debug_*.py, fix_shared_routes*.py/.ps1, route_ch
 CI workflows: do not change .gitea/workflows/ or .github/workflows/ unless the task is about CI.
 Never force-push, rewrite history, or switch branches without being told to.
 7. Git workflow
-Default branch is master. Work on a feature branch if asked to commit.
+Default branch is `master`, but **`dev` is the integration/test baseline** (user decision, 2026-07): merge feature branches into `dev` first, and promote `dev` → `master` only after tests pass on `dev`. Nothing lands on `master` untested.
+Work on a feature branch if asked to commit.
 Commit messages: short imperative subject (under 72 chars), optional body explaining why. Example: Fix NBA feature loader dropping rookies.
 One logical change per commit.
 Do not commit unless asked. When asked, show git status and git diff --stat first.
