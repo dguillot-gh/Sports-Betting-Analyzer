@@ -1,7 +1,7 @@
 @page "/model-insights"
 @using SportsBettingAnalyzer.Services
 @using System.Text.Json
-@inject PythonMLServiceClient MLService
+@inject IPythonMLServiceClient MLService
 @inject ISnackbar Snackbar
 @inject ILogger<ModelInsights> Logger
 @inject FileExportService FileExportService
