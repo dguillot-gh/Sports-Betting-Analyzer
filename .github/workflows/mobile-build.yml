@@ -27,6 +27,8 @@ jobs:
     # Skip on PRs from forks: their secrets aren't available
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: windows-latest  # MAUI Android builds
+    permissions:
+      contents: write   # GITHUB_TOKEN must be able to create releases/tags
     env:
       HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
       KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
