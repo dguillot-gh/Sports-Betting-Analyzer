@@ -63,14 +63,28 @@ jobs:
     - name: Accept Android SDK licenses
       shell: powershell
       run: |
+        Write-Host "ANDROID_HOME=$env:ANDROID_HOME  JAVA_HOME=$env:JAVA_HOME  PSVersion=$($PSVersionTable.PSVersion)"
         $sdk = Join-Path $env:ANDROID_HOME "cmdline-tools\latest\bin\sdkmanager.bat"
-        if (-not (Test-Path $sdk)) { $sdk = Join-Path $env:ANDROID_HOME "cmdline-tools\16.0\bin\sdkmanager.bat" }
         if (-not (Test-Path $sdk)) {
-          $found = Get-ChildItem -Recurse -Path (Join-Path $env:ANDROID_HOME "cmdline-tools") -Filter sdkmanager.bat -ErrorAction SilentlyContinue | Select-Object -First 1
+          $found = Get-ChildItem -Recurse -Path $env:ANDROID_HOME -Filter sdkmanager.bat -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $found) { Write-Error "sdkmanager.bat not found under $env:ANDROID_HOME"; exit 1 }
           $sdk = $found.FullName
         }
-        cmd /c "y | `"$sdk`" --licenses" *> $null
+        Write-Host "Using sdkmanager: $sdk"
+        if (Get-Command java -ErrorAction SilentlyContinue) { Write-Host (java -version 2>&1 | Select-Object -First 1) }
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = "cmd"
+        $psi.Arguments = "/c `"$sdk`" --licenses"
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardInput = $true
+        $p = [System.Diagnostics.Process]::Start($psi)
+        foreach ($line in ("y","y","y","y","y","y","y","y","y","y","y","y","y","y","y","y","y","y","y","y")) {
+          try { $p.StandardInput.WriteLine($line); Start-Sleep -Milliseconds 200 } catch { break }
+        }
+        $p.StandardInput.Close()
+        $p.WaitForExit() | Out-Null
+        Write-Host "sdkmanager exit code: $($p.ExitCode)"
+        if ($p.ExitCode -ne 0) { Write-Error "sdkmanager --licenses failed with $($p.ExitCode)"; exit 1 }
         Write-Host "Android SDK licenses accepted"
 
     - name: Install Android workload
