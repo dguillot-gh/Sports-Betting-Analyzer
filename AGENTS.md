@@ -6,9 +6,8 @@ Instructions for AI coding agents working in this repo. Read this fully before m
 
 The 2026-07-20 session (mobile UX polish + `PythonMLServiceClient` split) left a full handoff in **`docs/SESSION_HANDOFF.md` — read it first if you continue that work.** Quick state:
 
-- Merged into master: mobile error boundary (PR #66), bottom-nav CSS consolidation (PR #64), theme unification (PR #63).
-- PR #65 (`feature/mobile-bottom-nav`) was mergeable/clean; `feature/mlclient-split` (`d8137b0`) is pushed but had no PR opened yet — check both statuses before assuming.
-- C# test suite baseline (master): 30 tests in `tests/SportsBettingAnalyzer.Tests`; feature branches add their own (up to 70).
+- Merged into master: all five chunks — mobile error boundary (PR #66), CSS consolidation (PR #64), theme unification (PR #63), bottom-nav polish (PR #65), ML client split (PR #67). C# test suite on master now includes their new tests.
+- C# test suite on master: **80 passing** in `tests/SportsBettingAnalyzer.Tests` (30 baseline + tests added by the five merged feature branches).
 - Python tests live in `backend/tests` (168 passing); run with the repo venv (`venv\Scripts\activate` on this Windows box) — plain `python` lacks pytest.
 - Two traps that bit that session (details in the handoff):
   1. MAUI **silently drops `*.razor.css` unless it is in `wwwroot`** — put new mobile styles in `mobile/wwwroot/css/app.css`, not beside the `.razor` file.

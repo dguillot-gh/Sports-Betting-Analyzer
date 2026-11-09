@@ -26,8 +26,10 @@ unit-test every new piece.
 | `feature/mobile-error-boundary` | `58b2ed6` | **Merged** as PR #66 |
 | `feature/shared-theme-unification` | `7c0ab38` | **Merged** as PR #63 |
 | `feature/mobile-css-consolidation` | `e3f4c4a` | **Merged** as PR #64 |
-| `feature/mobile-bottom-nav` | `9f748f3` + merge `abf3474` | **PR #65 open**, `mergeable: clean` (conflict fixed today by merging origin/master into the branch) |
-| `feature/mlclient-split` | `d8137b0` | **Pushed, PR NOT opened yet** |
+| `feature/mobile-bottom-nav` | `9f748f3` + merge `abf3474` | **Merged** as PR #65 |
+| `feature/mlclient-split` | `d8137b0` | **Merged** as PR #67 |
+
+All five chunks are in `master` (remote tip ≥ `be2d832` + handoff doc commits). The local feature branches are fully merged and can be deleted (`git branch -d`) if you want tidy state.
 
 Local `master` is in sync with `origin/master` (was 3 PRs behind during the session — got stale fast because PRs merge while we work; re-fetch before branching).
 
@@ -61,10 +63,8 @@ Pure text relocation of `frontend/Services/PythonMLServiceClient.cs` (1878 → 9
 
 ## 4. Test counts
 
-- Baseline on master before all work: **30** tests.
-- After all chunks: **70** on the bottom-nav branch (includes A+E-adjacent), **40** on mlclient-split (baseline 30 + 10).
+- After all chunks (now all merged): **80 C# tests passing** on master (30 baseline + the tests added by the five merged branches).
 - Backend Python: **168 passing** (`python -m pytest backend/tests -q` *from an activated venv*).
-- Note: test project counts differ per branch because each branch has its own new test files.
 
 ## 5. ⚠️ Landmines discovered (important for next session)
 
@@ -76,14 +76,14 @@ Pure text relocation of `frontend/Services/PythonMLServiceClient.cs` (1878 → 9
 
 ## 6. Known leftovers / candidates for future chunks (suggested order)
 
-1. **Open PR for `feature/mlclient-split`** (pushed, unclaimed).
-2. **Merge PR #65** (already clean) → then all mobile UX chunks are in master.
+1. ~~Open PR for `feature/mlclient-split`~~ — merged as PR #67.
+2. ~~Merge PR #65~~ — merged.
 3. Audit + dedupe the 7+ overlapping data services in `frontend/Services/` (see `grep -l "GetTeams\|GetMatches" frontend/Services/*.cs`).
 4. Split `mobile/Components/Pages/Home.razor` (684 lines, 15 inline `style=` attrs) and `shared/Components/Pages/TodaysSlate.razor` (670) into smaller components.
 5. `tailwind.config.js` exists in both `frontend/` and `mobile/` — check for drift and unify.
 6. Clean stale build dirs: `shared/obj_alt/`, `mobile/mobile/obj_alt/`, `shared/mobile/` (confirm they're junk before deleting).
 7. The mobile app still renders emoji glyphs for nav icons — an SVG icon set would be nicer (optional polish).
-8. Interface extraction for the ML client (`IPythonMLServiceClient` + DI) is the natural follow-up to the partial-file split, if desired.
+8. Interface extraction for the ML client (`IPythonMLServiceClient` + DI) is the natural follow-up to the partial-file split, if desired. **← suggested next chunk**
 
 ## 7. Verify commands that work in this environment
 
