@@ -71,7 +71,7 @@ jobs:
           $sdk = $found.FullName
         }
         Write-Host "Using sdkmanager: $sdk"
-        if (Get-Command java -ErrorAction SilentlyContinue) { Write-Host (java -version 2>&1 | Select-Object -First 1) }
+        if (Get-Command java -ErrorAction SilentlyContinue) { Write-Host "java: $((Get-Command java).Source)" }
         $psi = New-Object System.Diagnostics.ProcessStartInfo
         $psi.FileName = "cmd"
         $psi.Arguments = "/c `"$sdk`" --licenses"
