@@ -49,8 +49,29 @@ jobs:
         java-version: '17'
         distribution: 'microsoft'
 
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
+    - name: Ensure ANDROID_HOME
+      shell: powershell
+      run: |
+        if (-not $env:ANDROID_HOME) {
+          $candidates = @('C:\Android\Sdk', "$env:LOCALAPPDATA\Android\Sdk")
+          $found = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $found) { Write-Error "Android SDK not found on this runner"; exit 1 }
+          $env:ANDROID_HOME = $found
+        }
+        Write-Host "ANDROID_HOME=$env:ANDROID_HOME"
+
+    - name: Accept Android SDK licenses
+      shell: powershell
+      run: |
+        $sdk = Join-Path $env:ANDROID_HOME "cmdline-tools\latest\bin\sdkmanager.bat"
+        if (-not (Test-Path $sdk)) { $sdk = Join-Path $env:ANDROID_HOME "cmdline-tools\16.0\bin\sdkmanager.bat" }
+        if (-not (Test-Path $sdk)) {
+          $found = Get-ChildItem -Recurse -Path (Join-Path $env:ANDROID_HOME "cmdline-tools") -Filter sdkmanager.bat -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $found) { Write-Error "sdkmanager.bat not found under $env:ANDROID_HOME"; exit 1 }
+          $sdk = $found.FullName
+        }
+        cmd /c "y | `"$sdk`" --licenses" *> $null
+        Write-Host "Android SDK licenses accepted"
 
     - name: Install Android workload
       run: dotnet workload install android
