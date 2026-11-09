@@ -5,6 +5,7 @@
 
 /* --- Root Variables --- */
 :root {
+    color-scheme: dark;
     --primary: #60a5fa;
     --primary-dark: #2563eb;
     --primary-glow: rgba(96, 165, 250, 0.25);
@@ -682,5 +683,155 @@ body {
 @media (min-width: 641px) {
     .bottom-nav {
         display: none;
+    }
+}
+
+/* ============================================================
+   Layout shell (was mobile/Components/Layout/MainLayout.razor.css,
+   which the MAUI build pipeline never bundled)
+   ============================================================ */
+.page {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+}
+
+.page main {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.sidebar {
+    background-image: linear-gradient(180deg, rgb(5, 39, 103) 0%, #3a0647 70%);
+}
+
+.mobile-page-safe { padding-bottom: 0; }
+.mobile-bottom-spacer { height: 0; }
+
+@media (max-width: 640.98px) {
+    .mobile-page-safe {
+        /* Global bottom-safe clearance for all pages above fixed nav */
+        padding-bottom: calc(140px + env(safe-area-inset-bottom));
+    }
+
+    .mobile-bottom-spacer {
+        height: calc(72px + env(safe-area-inset-bottom));
+        flex-shrink: 0;
+    }
+
+    .app-header.compact-mobile {
+        height: 45px;
+        padding: 0 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: linear-gradient(135deg, #1e293b, #0f172a);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .app-header.compact-mobile h1 {
+        font-size: 16px;
+        margin: 0;
+    }
+
+    .app-header.compact-mobile .header-emoji {
+        font-size: 16px;
+    }
+
+    .navbar-toggler {
+        margin: 0;
+        width: 34px;
+        height: 34px;
+    }
+
+    .content-wrapper {
+        min-height: 100%;
+        padding-bottom: calc(96px + env(safe-area-inset-bottom));
+    }
+}
+
+@media (min-width: 641px) {
+    .page {
+        flex-direction: row;
+    }
+
+    .page .sidebar {
+        width: 250px;
+        height: 100vh;
+        position: sticky;
+        top: 0;
+    }
+
+    .page,
+    .page article {
+        padding-left: 2rem;
+        padding-right: 1.5rem;
+    }
+}
+
+/* ============================================================
+   Sidebar nav (was mobile/Components/Layout/NavMenu.razor.css,
+   which the MAUI build pipeline never bundled)
+   ============================================================ */
+.navbar-brand {
+    font-size: 1.1rem;
+}
+
+.nav-item {
+    font-size: 0.9rem;
+    padding-bottom: 0.5rem;
+}
+
+.nav-item:first-of-type {
+    padding-top: 1rem;
+}
+
+.nav-item:last-of-type {
+    padding-bottom: 1rem;
+}
+
+.nav-item .nav-link {
+    color: #d7d7d7;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    height: 3rem;
+    display: flex;
+    align-items: center;
+    line-height: 3rem;
+    width: 100%;
+}
+
+.nav-item a.active {
+    background-color: rgba(255, 255, 255, 0.37);
+    color: white;
+}
+
+.nav-item .nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.nav-scrollable {
+    display: none;
+    max-height: calc(100vh - 3.5rem);
+    overflow-y: auto;
+}
+
+.navbar-toggler:checked ~ .nav-scrollable {
+    display: block;
+}
+
+@media (min-width: 641px) {
+    .nav-scrollable {
+        /* Never collapse the sidebar for wide screens */
+        display: block;
+
+        /* Allow sidebar to scroll for tall menus */
+        height: calc(100vh - 3.5rem);
+        overflow-y: auto;
     }
 }
