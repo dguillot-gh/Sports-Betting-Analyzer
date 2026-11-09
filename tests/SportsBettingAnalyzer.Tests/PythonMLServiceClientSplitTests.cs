@@ -19,7 +19,7 @@ public class PythonMLServiceClientSplitTests
         "PythonMLServiceClient.Nfl.cs",
     };
 
-    private static string FindServicesDir()
+    internal static string FindServicesDir()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)

@@ -50,6 +50,10 @@ builder.Services.AddHttpClient<PythonMLServiceClient>()
         client.Timeout = TimeSpan.FromMinutes(10); // Allow long-running training operations
     });
 
+// Expose the typed client through the IPythonMLServiceClient contract
+// (same typed-client proxy, same lifetime as the concrete registration).
+builder.Services.AddTransient(sp => sp.GetRequiredService<PythonMLServiceClient>());
+
 // Named HttpClient for direct usage in Blazor pages
 var pythonServiceUrl = ApiUrlHelper.NormalizeBaseUrl(builder.Configuration["PythonMLService:BaseUrl"], "http://localhost:8000");
 builder.Services.AddHttpClient("PythonML", client =>
