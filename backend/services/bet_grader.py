@@ -106,8 +106,9 @@ class BetGrader:
             ga = result_metadata['goalsagainst']
             team = (result_metadata.get('team') or "").lower()
             
-            # If the bet is on this specific team
-            if team in description or team in game_name:
+            # If the bet is explicitly on this team (game_name always contains
+            # both teams in "X at Y" form, so it cannot be used to disambiguate)
+            if team in description:
                 if gf > ga: return 'win'
                 if ga > gf: return 'loss'
                 return 'pending' # Might be OT/SO in some datasets
@@ -118,7 +119,8 @@ class BetGrader:
             opp_pts = result_metadata['opponent_pts']
             team = (result_metadata.get('team') or "").lower()
             
-            if team in description or team in game_name:
+            # Description only (see NHL note above)
+            if team in description:
                 if pts > opp_pts: return 'win'
                 if opp_pts > pts: return 'loss'
 
