@@ -1,4 +1,6 @@
 @inherits LayoutComponentBase
+@using SportsBettingAnalyzer.Shared.Services
+@inject NavigationManager Nav
 
 <div class="page">
     <NotificationToastHost />
@@ -17,10 +19,41 @@
                         </div>
                     </ChildContent>
                     <ErrorContent Context="ex">
-                        <div class="blazor-error-boundary">
-                            <h3>An unhandled exception occurred!</h3>
-                            <pre>@ex.ToString()</pre>
+                        <div class="friendly-error" role="alert">
+                            <div class="friendly-error-icon">⚠️</div>
+                            <p class="friendly-error-message">@UserFriendlyError.GetMessage(ex)</p>
+                            <p class="friendly-error-id">Error @UserFriendlyError.GetErrorId(ex)</p>
+                            <button type="button" class="friendly-error-retry" @onclick="RetryPage">Try again</button>
                         </div>
+
+                        <style>
+                            .friendly-error {
+                                display: flex;
+                                flex-direction: column;
+                                align-items: center;
+                                text-align: center;
+                                gap: 8px;
+                                padding: 24px 16px;
+                                background: var(--surface, #1e1e2e);
+                                border: 1px solid var(--border, #2e2e44);
+                                border-radius: var(--radius, 12px);
+                                margin: 16px 0;
+                            }
+                            .friendly-error-icon { font-size: 28px; line-height: 1; }
+                            .friendly-error-message { margin: 0; font-size: 14px; color: var(--text-primary, #e2e8f0); }
+                            .friendly-error-id { margin: 0; font-size: 11px; color: var(--text-muted, #64748b); font-family: ui-monospace, monospace; }
+                            .friendly-error-retry {
+                                margin-top: 4px;
+                                padding: 8px 20px;
+                                font-size: 13px;
+                                font-weight: 600;
+                                color: #fff;
+                                background: var(--primary-dark, #2563eb);
+                                border: none;
+                                border-radius: 8px;
+                                cursor: pointer;
+                            }
+                        </style>
                     </ErrorContent>
                 </ErrorBoundary>
             </article>
@@ -32,3 +65,7 @@
 
     <BottomNav />
 </div>
+
+@code {
+    private void RetryPage() => Nav.NavigateTo(Nav.BaseUri);
+}
