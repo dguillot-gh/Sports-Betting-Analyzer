@@ -1,0 +1,104 @@
+# docker-compose.portainer.yml — import this stack file in Portainer
+# (Stacks -> Add stack -> Web editor, paste this file OR add the repo and
+#  select this path; both work since everything is self-contained:
+#  no bind mounts, no env_file, all state in named volumes).
+#
+# Required stack variables (Portainer stack secrets or "Variables" tab):
+#   DB_PASSWORD, PGADMIN_PASSWORD, PGADMIN_EMAIL
+#
+# The backend applies its own schema (CREATE TABLE IF NOT EXISTS at startup),
+# so no db/init SQL mount is needed. pgAdmin is included in the "tools"
+# profile only — enable it if you want the DB GUI.
+
+name: sports-betting
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sports-db
+    environment:
+      POSTGRES_DB: sports_betting
+      POSTGRES_USER: sports_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in stack variables}
+    volumes:
+      - sports_postgres_data:/var/lib/pgdata
+    ports:
+      - "5432:5432"          # remove if you don't need DB access from the host
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sports_user -d sports_betting"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    pull_policy: build            # Portainer standalone: rebuild, don't pull
+    image: sports-betting-ml:latest
+    container_name: sports-ml-backend
+    ports:
+      - "8003:8000"
+    environment:
+      - DATABASE_URL=postgresql://sports_user:${DB_PASSWORD:?}/sports_betting
+      - APP_VERSION=${APP_VERSION:-git}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+    volumes:
+      - sports_backend_data:/app/data       # CSV datasets (persistent, replaces ./backend/data)
+      - sports_models:/app/models          # trained models (persistent, replaces ./backend/scripts/models)
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    pull_policy: build            # Portainer standalone: rebuild, don't pull
+    image: sports-betting-web:latest
+    container_name: sports-betting-frontend
+    ports:
+      - "8080:8080"           # app at http://<server>:8080  (map 80:8080 if you prefer root)
+    environment:
+      - PythonApiUrl=http://backend:8000
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=sports_betting;Username=sports_user;Password=${DB_PASSWORD:?}
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Optional DB GUI — deploy with profile "tools":
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: sports-pgadmin
+    profiles: ["tools"]
+    depends_on:
+      - postgres
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@localhost}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?set PGADMIN_PASSWORD in stack variables}
+      PGADMIN_CONFIG_SERVER_DEFAULT_PORT: 5432
+    volumes:
+      - sports_pgadmin_data:/var/lib/pgadmin
+    ports:
+      - "5050:80"
+    restart: unless-stopped
+
+volumes:
+  sports_postgres_data:
+  sports_backend_data:
+  sports_models:
+  sports_pgadmin_data:
