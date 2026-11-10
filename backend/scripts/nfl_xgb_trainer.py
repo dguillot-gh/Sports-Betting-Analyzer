@@ -616,10 +616,17 @@ async def train_nfl_model(epochs: int = 250) -> Dict[str, Any]:
 
 async def predict_nfl_xgb(home_team: str, away_team: str, *_legacy_stats) -> Optional[Dict[str, Any]]:
     """Predict from current imported game history using the training feature builder."""
-    trainer = get_trainer()
     try:
         features = await fetch_live_features(home_team, away_team)
-        result = trainer.predict(features)
+        # Trainer load + predict are sync and CPU-heavy — keep them off the
+        # event loop so healthchecks and other requests stay responsive.
+        loop = asyncio.get_running_loop()
+
+        def _run():
+            trainer = get_trainer()
+            return trainer.predict(features)
+
+        result = await loop.run_in_executor(None, _run)
         if "error" not in result:
             result["model"] = "xgboost"
             result["home_team"] = home_team
