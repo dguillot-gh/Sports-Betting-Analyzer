@@ -4,6 +4,7 @@ Analyzes team statistics to predict game outcomes and over/under
 Simple statistical model (EPA-ready for future enhancement)
 """
 
+import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
@@ -416,7 +417,13 @@ async def analyze_nfl_matchup(home_team: str, away_team: str,
                               home_ml: int = None, away_ml: int = None) -> Dict[str, Any]:
     """Comprehensive NFL matchup analysis."""
     predictor = NFLPredictor()
-    prediction = predictor.predict_game(home_team, away_team, spread, over_under)
+    # predict_game / get_team_epa are sync and CPU-heavy — run them on worker
+    # threads so the uvicorn event loop (healthchecks, other requests) stays
+    # responsive instead of stalling for seconds at a time.
+    loop = asyncio.get_running_loop()
+    prediction = await loop.run_in_executor(
+        None, predictor.predict_game, home_team, away_team, spread, over_under
+    )
     
     # Add moneyline analysis if provided
     if home_ml and away_ml:
@@ -453,8 +460,9 @@ async def analyze_nfl_matchup(home_team: str, away_team: str,
     prediction['model'] = 'simple'
     
     # Add EPA breakdown for display
-    home_epa = predictor.get_team_epa(home_team)
-    away_epa = predictor.get_team_epa(away_team)
+    home_epa, away_epa = await loop.run_in_executor(
+        None, lambda: (predictor.get_team_epa(home_team), predictor.get_team_epa(away_team))
+    )
     prediction['epa_breakdown'] = {
         'home': {
             'team': home_team,

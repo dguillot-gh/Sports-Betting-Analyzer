@@ -433,4 +433,12 @@ def get_kyleskom_predictor() -> KyleskomPredictor:
     return _predictor
 
 async def predict_with_kyleskom(home, away, total=None, h_ml=None, a_ml=None):
-    return await get_kyleskom_predictor().predict_game(home, away, total, h_ml, a_ml)
+    # Model load (first call) + XGBoost inference are sync and CPU-heavy — run
+    # the whole chain on a worker thread so the uvicorn event loop stays
+    # responsive (healthcheck, other requests).
+    loop = asyncio.get_running_loop()
+
+    def _run():
+        return get_kyleskom_predictor().predict_game(home, away, total, h_ml, a_ml)
+
+    return await loop.run_in_executor(None, _run)

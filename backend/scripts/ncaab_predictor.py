@@ -3,6 +3,7 @@ NCAA Men's Basketball (NCAAB) Game Prediction Service
 Analyzes team statistics to predict game outcomes and over/under
 """
 
+import asyncio
 import logging
 import os
 from datetime import datetime, date
@@ -896,8 +897,13 @@ async def analyze_ncaab_matchup(home_team: str, away_team: str,
                                  spread: float = None, over_under: float = None,
                                  home_ml: int = None, away_ml: int = None) -> Dict[str, Any]:
     """Comprehensive NCAAB matchup analysis."""
-    predictor = NCAABPredictor()
-    prediction = predictor.predict_game(home_team, away_team, spread, over_under)
+    # NCAABPredictor.predict_game is sync and CPU-heavy (per-season XGBoost
+    # passes) — run it on a worker thread so the uvicorn event loop stays
+    # responsive instead of stalling ~30s per request.
+    loop = asyncio.get_running_loop()
+    prediction = await loop.run_in_executor(
+        None, lambda: NCAABPredictor().predict_game(home_team, away_team, spread, over_under)
+    )
     
     if home_ml and away_ml:
         prediction['home_moneyline'] = home_ml
