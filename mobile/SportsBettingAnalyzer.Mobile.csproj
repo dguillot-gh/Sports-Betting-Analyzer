@@ -21,6 +21,13 @@
         <!-- Fix for MSB4018 BrotliCompress: DOTNET_HOST_PATH is not set (.NET SDK 10.0) -->
         <CompressionEnabled>false</CompressionEnabled>
 
+        <!-- Embed managed assemblies into the APK.
+             SDK 36/.NET 10 defaults Debug builds to fast-deployment
+             (EmbedAssembliesIntoApk=false), which ships an APK with NO dlls;
+             outside Visual Studio the app then crashes at startup with
+             "No assemblies found in .../__override__... Assuming Fast Deployment". -->
+        <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+
         <!-- Display name -->
         <ApplicationTitle>SportsBettingAnalyzer.Mobile</ApplicationTitle>
 
