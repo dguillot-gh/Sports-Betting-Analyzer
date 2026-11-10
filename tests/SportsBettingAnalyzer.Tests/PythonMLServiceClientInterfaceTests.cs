@@ -73,4 +73,19 @@ public class PythonMLServiceClientInterfaceTests
 
     private static string Method(Match m) =>
         $"{m.Groups[1].Value}({m.Groups[2].Value.Replace(" ", "")})";
+
+    // --- DI registration guard -------------------------------------------------
+
+    [Fact]
+    [Trait("Category", "Guard")]
+    public void Program_Registers_The_Interface_Itself()
+    {
+        // Guards against a real production incident: AddTransient(sp => sp.GetRequiredService<TClient>())
+        // infers the registered service type from the RETURN value (TClient), so it registers the
+        // concrete class again and the interface silently fails to resolve at runtime
+        // ("There is no registered service of type 'IPythonMLServiceClient'").
+        var dir = PythonMLServiceClientSplitTests.FindServicesDir();
+        var program = File.ReadAllText(dir + "/../Program.cs"); // frontend/Services/../Program.cs
+        Assert.Contains("AddTransient<IPythonMLServiceClient>", program);
+    }
 }

@@ -52,7 +52,11 @@ builder.Services.AddHttpClient<PythonMLServiceClient>()
 
 // Expose the typed client through the IPythonMLServiceClient contract
 // (same typed-client proxy, same lifetime as the concrete registration).
-builder.Services.AddTransient(sp => sp.GetRequiredService<PythonMLServiceClient>());
+// NOTE: explicit <IPythonMLServiceClient> is REQUIRED — AddTransient<T> infers T from the
+// lambda RETURN type, and GetRequiredService<PythonMLServiceClient>() returns the concrete
+// class, so without the type argument this would register the class again and the
+// interface would fail to resolve (InvalidOperationException in pages that inject it).
+builder.Services.AddTransient<IPythonMLServiceClient>(sp => sp.GetRequiredService<PythonMLServiceClient>());
 
 // Named HttpClient for direct usage in Blazor pages
 var pythonServiceUrl = ApiUrlHelper.NormalizeBaseUrl(builder.Configuration["PythonMLService:BaseUrl"], "http://localhost:8000");
