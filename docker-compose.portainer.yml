@@ -3,8 +3,14 @@
 #  select this path; both work since everything is self-contained:
 #  no bind mounts, no env_file, all state in named volumes).
 #
-# Required stack variables (Portainer stack secrets or "Variables" tab):
-#   DB_PASSWORD, PGADMIN_PASSWORD, PGADMIN_EMAIL
+# Variable overrides (all OPTIONAL — sane defaults baked in so the stack
+# deploys even if the Portainer UI doesn't do ${VAR} substitution):
+#   DB_PASSWORD, PGADMIN_EMAIL, PGADMIN_PASSWORD
+#
+# NOTE: if you let it run with the default DB password, change it after first
+# deploy (pgAdmin: ALTER USER sports_user PASSWORD ...; then update the two
+# ConnectionStrings/DATABASE_URL lines in this file or set the variable where
+# your Portainer supports it).
 #
 # The backend applies its own schema (CREATE TABLE IF NOT EXISTS at startup),
 # so no db/init SQL mount is needed. pgAdmin is included in the "tools"
@@ -19,7 +25,7 @@ services:
     environment:
       POSTGRES_DB: sports_betting
       POSTGRES_USER: sports_user
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in stack variables}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-sportsbetting2024}
     volumes:
       - sports_postgres_data:/var/lib/pgdata
     ports:
@@ -33,15 +39,15 @@ services:
 
   backend:
     build:
-      context: .
-      dockerfile: backend/Dockerfile
+      context: ./backend      # Dockerfile resolves COPY paths relative to backend/
+      dockerfile: Dockerfile
     pull_policy: build            # Portainer standalone: rebuild, don't pull
     image: sports-betting-ml:latest
     container_name: sports-ml-backend
     ports:
       - "8003:8000"
     environment:
-      - DATABASE_URL=postgresql://sports_user:${DB_PASSWORD:?}/sports_betting
+      - DATABASE_URL=postgresql://sports_user:${DB_PASSWORD:-sportsbetting2024}/sports_betting
       - APP_VERSION=${APP_VERSION:-git}
       - ENVIRONMENT=${ENVIRONMENT:-production}
     volumes:
@@ -69,7 +75,7 @@ services:
       - "8080:8080"           # app at http://<server>:8080  (map 80:8080 if you prefer root)
     environment:
       - PythonApiUrl=http://backend:8000
-      - ConnectionStrings__DefaultConnection=Host=postgres;Database=sports_betting;Username=sports_user;Password=${DB_PASSWORD:?}
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=sports_betting;Username=sports_user;Password=${DB_PASSWORD:-sportsbetting2024}
     depends_on:
       backend:
         condition: service_healthy
@@ -88,8 +94,8 @@ services:
     depends_on:
       - postgres
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@localhost}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?set PGADMIN_PASSWORD in stack variables}
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@sportsbetting.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
       PGADMIN_CONFIG_SERVER_DEFAULT_PORT: 5432
     volumes:
       - sports_pgadmin_data:/var/lib/pgadmin
