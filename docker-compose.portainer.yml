@@ -47,7 +47,7 @@ services:
     ports:
       - "8003:8000"
     environment:
-      - DATABASE_URL=postgresql://sports_user:${DB_PASSWORD:-sportsbetting2024}/sports_betting
+      - DATABASE_URL=postgresql://sports_user:${DB_PASSWORD:-sportsbetting2024}@postgres/sports_betting    # NOTE: host MUST be in the standard position (@postgres) — asyncpg mis-parses a missing/misplaced host
       - APP_VERSION=${APP_VERSION:-git}
       - ENVIRONMENT=${ENVIRONMENT:-production}
     volumes:      # Reuse the EXISTING data from the previous (non-compose) setup:
