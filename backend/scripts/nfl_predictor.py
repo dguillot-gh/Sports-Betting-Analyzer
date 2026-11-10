@@ -6,6 +6,7 @@ Simple statistical model (EPA-ready for future enhancement)
 
 import asyncio
 import logging
+import threading
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 import math
@@ -52,18 +53,31 @@ class NFLPredictor:
     Simple NFL game predictor using team statistics.
     Uses points per game, home-field advantage, and EPA.
     """
-    
+
+    # EPA stats are shared across ALL instances (and all requests): loading
+    # them imports two seasons of play-by-play data from ESPN, which takes
+    # 20-40s. Must happen once per process, not once per request.
+    _epa_cache: Dict[str, Dict] = {}
+    _epa_loaded = False
+    _epa_lock = threading.Lock()
+
     def __init__(self, db_connection=None):
         self.db = db_connection
         self._team_stats_cache: Dict[str, Dict] = {}
-        self._epa_cache: Dict[str, Dict] = {}
-        self._epa_loaded = False
     
     def _load_epa_stats(self):
         """Load EPA stats from nflreadpy play-by-play data."""
         if self._epa_loaded:
             return
-        
+        # Several worker threads may race on the first load (top-picks fan-out);
+        # serialize it and re-check after acquiring so only one downloads.
+        with self._epa_lock:
+            if self._epa_loaded:
+                return
+            self._load_epa_stats_locked()
+
+    def _load_epa_stats_locked(self):
+        """Actual EPA loading (must be called under _epa_lock)."""
         try:
             pbp = None
             
