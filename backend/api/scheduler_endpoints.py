@@ -2,6 +2,7 @@
 import logging
 from fastapi import APIRouter, Request, HTTPException, BackgroundTasks
 from services.scheduler import SchedulerService
+from services.freshness_mapping import pick_best_import
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
@@ -115,12 +116,13 @@ async def get_data_freshness(request: Request):
             ORDER BY sport, start_time DESC
         """)
         import_map = {r["sport"]: dict(r) for r in last_imports}
+        all_success_logs = list(import_map.values())
 
         now = datetime.now(timezone.utc)
         result = []
         for row in counts:
             sport = row["sport"]
-            imp = import_map.get(sport)
+            imp = pick_best_import(sport, all_success_logs)
 
             last_import_time = None
             days_since_import = None
