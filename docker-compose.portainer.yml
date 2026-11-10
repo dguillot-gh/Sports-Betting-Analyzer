@@ -27,7 +27,7 @@ services:
       POSTGRES_USER: sports_user
       POSTGRES_PASSWORD: ${DB_PASSWORD:-sportsbetting2024}
     volumes:
-      - sports_postgres_data:/var/lib/pgdata
+      - sports_postgres_data:/var/lib/postgresql/data   # pinned to the EXISTING data volume (see volumes: below)
     ports:
       - "5432:5432"          # remove if you don't need DB access from the host
     healthcheck:
@@ -50,9 +50,9 @@ services:
       - DATABASE_URL=postgresql://sports_user:${DB_PASSWORD:-sportsbetting2024}/sports_betting
       - APP_VERSION=${APP_VERSION:-git}
       - ENVIRONMENT=${ENVIRONMENT:-production}
-    volumes:
-      - sports_backend_data:/app/data       # CSV datasets (persistent, replaces ./backend/data)
-      - sports_models:/app/models          # trained models (persistent, replaces ./backend/scripts/models)
+    volumes:      # Reuse the EXISTING data from the previous (non-compose) setup:
+      - /root/apps/Sports-Betting-Analyzer/backend/data:/app/data
+      - /root/apps/Sports-Betting-Analyzer/backend/scripts/models:/app/models
     depends_on:
       postgres:
         condition: service_healthy
@@ -73,6 +73,8 @@ services:
     container_name: sports-betting-frontend
     ports:
       - "8080:8080"           # app at http://<server>:8080  (map 80:8080 if you prefer root)
+    volumes:
+      - sports_frontend_keys:/app/keys      # Blazor server keys from the old frontend container
     environment:
       - PythonApiUrl=http://backend:8000
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=sports_betting;Username=sports_user;Password=${DB_PASSWORD:-sportsbetting2024}
@@ -104,7 +106,11 @@ services:
     restart: unless-stopped
 
 volumes:
+  # All three names are PINNED to the EXISTING volumes on the server so the
+  # new stack reuses your current data (credentials already match: sports_user / sports_betting).
   sports_postgres_data:
-  sports_backend_data:
-  sports_models:
+    name: sports-postgres-data
   sports_pgadmin_data:
+    name: sports-pgadmin-data
+  sports_frontend_keys:
+    name: sports-frontend-keys
