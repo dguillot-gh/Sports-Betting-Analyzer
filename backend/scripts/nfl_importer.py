@@ -894,6 +894,12 @@ async def import_stats_via_nflreadpy(conn, sport_id: int, player_map: dict, prog
         if progress_callback:
             progress_callback("Executing batched database inserts for season stats...")
 
+        from scripts.import_counters import split_by_existing_hashes
+        new_results, upd_results = await split_by_existing_hashes(
+            conn, "results", results_records, hash_index=3, sport_id=sport_id)
+        new_stats, upd_stats = await split_by_existing_hashes(
+            conn, "stats", stats_records, hash_index=3)
+
         imported = await batch_upsert(
             conn, UPSERT_RESULTS, results_records,
             progress_callback=progress_callback,
@@ -906,8 +912,10 @@ async def import_stats_via_nflreadpy(conn, sport_id: int, player_map: dict, prog
             label="NFL player season stats"
         )
         
-        logger.info(f"Imported {imported} player stats via nflreadpy, {stats_computed} stats table entries")
-        return {"imported": imported, "stats_computed": stats_computed, "new": 0, "updated": 0}
+        new_total = len(new_results) + len(new_stats)
+        updated_total = len(upd_results) + len(upd_stats)
+        logger.info(f"Imported {imported} player stats via nflreadpy (new: {new_total}), {stats_computed} stats table entries")
+        return {"imported": imported, "stats_computed": stats_computed, "new": new_total, "updated": updated_total}
         
     except Exception as e:
         logger.error(f"Error loading stats via nflreadpy: {e}")

@@ -90,6 +90,7 @@ async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, sta
     # Process CSV in chunks to save memory
     count = 0
     updated_count = 0
+    new_count = 0
     skipped_count = 0
     batch_size = 5000
     
@@ -174,7 +175,12 @@ async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, sta
                                VALUES ($1, $2, $3, $4, $5)
                                ON CONFLICT (content_hash) 
                                DO UPDATE SET metadata = EXCLUDED.metadata"""
-            updated_count += await batch_upsert(conn, UPSERT_RESULTS, result_records)
+            from scripts.import_counters import split_by_existing_hashes
+            new_recs, upd_recs = await split_by_existing_hashes(
+                conn, "results", result_records, hash_index=4, sport_id=sport_id)
+            new_count += len(new_recs)
+            updated_count += len(upd_recs)
+            await batch_upsert(conn, UPSERT_RESULTS, result_records)
 
         if limit and count >= limit:
             break
@@ -186,9 +192,8 @@ async def import_moneypuck_game_data(conn, sport_id: int, limit: int = None, sta
 
     if count == 0:
         logger.warning(f"NHL import produced 0 results. Skipped: {skipped_count}. Check season filter (start_year={start_year}) and data format.")
-    logger.info(f"Finished MoneyPuck import. Total: {count} (Upserted: {updated_count})")
-    # For large batch updates, exact new vs updated is less critical than speed; we label all as updated/upserted for simplicity here.
-    return {"total": count, "new": 0, "updated": updated_count}
+    logger.info(f"Finished MoneyPuck import. Total: {count} (new: {new_count}, updated: {updated_count})")
+    return {"total": count, "new": new_count, "updated": updated_count}
 
 async def import_player_bios(conn, sport_id: int) -> dict:
     """Import player metadata from MoneyPuck."""
@@ -219,6 +224,7 @@ async def import_player_bios(conn, sport_id: int) -> dict:
     df = pd.read_csv(local_file)
     count = 0
     updated_count = 0
+    new_count = 0
     
     player_records = []
     
@@ -245,10 +251,15 @@ async def import_player_bios(conn, sport_id: int) -> dict:
                                    VALUES ($1, $2, $3, $4, $5, $6)
                                    ON CONFLICT (content_hash) 
                                    DO UPDATE SET metadata = EXCLUDED.metadata"""
-            updated_count += await batch_upsert(conn, UPSERT_PLAYER_BIOS, chunk)
+            from scripts.import_counters import split_by_existing_hashes
+            new_recs, upd_recs = await split_by_existing_hashes(
+                conn, "entities", chunk, hash_index=5, sport_id=sport_id)
+            new_count += len(new_recs)
+            updated_count += len(upd_recs)
+            await batch_upsert(conn, UPSERT_PLAYER_BIOS, chunk)
         
-    logger.info(f"Imported {count} NHL players (Upserted: {updated_count}).")
-    return {"total": count, "new": 0, "updated": updated_count}
+    logger.info(f"Imported {count} NHL players (new: {new_count}, updated: {updated_count}).")
+    return {"total": count, "new": new_count, "updated": updated_count}
 
 async def sync_live_standings(conn, sport_id: int):
     """Fetch current standings from NHL API."""
