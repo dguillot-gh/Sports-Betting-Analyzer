@@ -164,8 +164,27 @@ async def lifespan(app: FastAPI):
         logger.info("Connection pool and lifecycle initialized successfully")
     except Exception as e:
         logger.error(f"Startup initialization failed: {e}")
-    
+
+    # Pre-warm the NFL EPA cache in a background worker thread. Loading it
+    # downloads ~2 seasons of play-by-play data (20-40s); doing it at startup
+    # keeps the first /odds/nfl* request fast instead of waiting through it.
+    async def _prefetch_nfl_epa():
+        try:
+            from scripts.nfl_predictor import NFLPredictor
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                None, lambda: NFLPredictor().get_team_epa("Kansas City Chiefs")
+            )
+            logger.info("NFL EPA cache pre-warmed at startup")
+        except Exception as exc:
+            logger.warning("NFL EPA pre-warm skipped: %s", exc)
+
+    epa_warm_task = asyncio.create_task(_prefetch_nfl_epa())
+
     yield
+
+    if not epa_warm_task.done():
+        epa_warm_task.cancel()
     
     # Close pool on shutdown
     if db_pool:
