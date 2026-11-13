@@ -21,6 +21,68 @@ logger = logging.getLogger(__name__)
 ESPN_SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/baseball/college-baseball/scoreboard"
 
 
+def extract_completed_games(events: List[Dict[str, Any]], game_date: date) -> List[Dict[str, Any]]:
+    """Parse ESPN scoreboard events into completed game dicts.
+
+    Pure (no network) so the ESPN payload shape is pinned by a unit test:
+    a regression in this filter silently imports 0 rows for the whole season.
+    """
+    games: List[Dict[str, Any]] = []
+
+    for event in events:
+        competitions = event.get("competitions", [])
+        if not competitions:
+            continue
+        comp = competitions[0]
+
+        # Only completed games
+        status = comp.get("status", {}).get("type", {})
+        if status.get("completed") != True:
+            continue
+
+        competitors = comp.get("competitors", [])
+        if len(competitors) < 2:
+            continue
+
+        # Parse home/away
+        home_team = None
+        away_team = None
+        home_score = 0
+        away_score = 0
+
+        for c in competitors:
+            team_data = c.get("team", {})
+            team_name = team_data.get("displayName", team_data.get("shortDisplayName", "Unknown"))
+            try:
+                score = int(c.get("score", "0") or 0)
+            except (TypeError, ValueError):
+                score = 0
+
+            if c.get("homeAway") == "home":
+                home_team = team_name
+                home_score = score
+            else:
+                away_team = team_name
+                away_score = score
+
+        if not home_team or not away_team:
+            continue
+
+        games.append({
+            "event_date": game_date.isoformat(),
+            "season": game_date.year,
+            "home_team": home_team,
+            "away_team": away_team,
+            "home_score": home_score,
+            "away_score": away_score,
+            "venue": comp.get("venue", {}).get("fullName", ""),
+            "neutral_site": comp.get("neutralSite", False),
+            "espn_id": event.get("id"),
+        })
+
+    return games
+
+
 async def fetch_college_baseball_scores(
     target_date: date = None,
     days_back: int = 1
@@ -54,59 +116,8 @@ async def fetch_college_baseball_scores(
             
             data = resp.json()
             events = data.get("events", [])
-            
-            for event in events:
-                competitions = event.get("competitions", [])
-                if not competitions:
-                    continue
-                    
-                comp = competitions[0]
-                
-                # Only completed games
-                status = comp.get("status", {}).get("type", {})
-                if status.get("completed") != True:
-                    continue
-                
-                competitors = comp.get("competitors", [])
-                if len(competitors) < 2:
-                    continue
-                
-                # Parse home/away
-                home_team = None
-                away_team = None
-                home_score = 0
-                away_score = 0
-                
-                for c in competitors:
-                    team_data = c.get("team", {})
-                    team_name = team_data.get("displayName", team_data.get("shortDisplayName", "Unknown"))
-                    score = int(c.get("score", "0"))
-                    
-                    if c.get("homeAway") == "home":
-                        home_team = team_name
-                        home_score = score
-                    else:
-                        away_team = team_name
-                        away_score = score
-                
-                if not home_team or not away_team:
-                    continue
-                
-                game_result = {
-                    "event_date": game_date.isoformat(),
-                    "season": game_date.year,
-                    "home_team": home_team,
-                    "away_team": away_team,
-                    "home_score": home_score,
-                    "away_score": away_score,
-                    "venue": comp.get("venue", {}).get("fullName", ""),
-                    "neutral_site": comp.get("neutralSite", False),
-                    "espn_id": event.get("id"),
-                }
-                all_games.append(game_result)
-            
-            logger.info(f"Fetched {len(events)} events for {date_str}, "
-                       f"{sum(1 for e in events if e.get('competitions', [{}])[0].get('status', {}).get('type', {}).get('completed'))} completed")
+            all_games.extend(extract_completed_games(events, game_date))
+            logger.info(f"Fetched {len(events)} events for {date_str}, {len(extract_completed_games(events, game_date))} completed")
             
         except Exception as e:
             logger.error(f"Error fetching scores for {date_str}: {e}")
